@@ -311,7 +311,7 @@ Löscht eine Datei aus der Dateiliste eines Items oder einen eigenen Upload, den
 
 ### `pages`
 
-Das Wiki eines Projekts: der Baum, eine Seite mit ihrem Text, die Versionen einer Seite. (Braucht `read`.)
+Das Wiki eines Projekts: der Baum, eine Seite mit ihrem Text, die Versionen einer Seite, die Seiten, die ein Work Item nennen. (Braucht `read`.)
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
@@ -319,6 +319,7 @@ Das Wiki eines Projekts: der Baum, eine Seite mit ihrem Text, die Versionen eine
 | `get` | Eine Seite mit ihrem Text. | `page` | `GET /pages/{page}` |
 | `versions` | Die Versionen einer Seite, neueste zuerst, ohne Text. | `page` | `GET /pages/{page}/versions` |
 | `version` | Eine Version einer Seite mit ihrem Text. | `page`, `page_version` | `GET /pages/{page}/versions/{pageVersion}` |
+| `item` | Die Seiten, die ein Work Item nennen, nach Titel, ohne Text. | `item` | `GET /work-items/{item}/pages` |
 
 ### `manage-pages`
 

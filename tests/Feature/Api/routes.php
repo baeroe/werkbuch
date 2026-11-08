@@ -134,6 +134,7 @@ return [
         'source_id' => $w->item('project_admin')->id,
         'target_id' => $w->item('project_admin')->id,
     ])->id]],
+    'list the wiki pages that name a work item' => ['GET', '/api/v1/work-items/{item}/pages', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
     'list the comments of a work item' => ['GET', '/api/v1/work-items/{item}/comments', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key]],
     'comment on a work item' => ['POST', '/api/v1/work-items/{item}/comments', 'params' => fn (MatrixWorld $w) => ['item' => $w->item('project_admin')->key], 'body' => ['body' => 'Matrix']],
     'show a comment' => ['GET', '/api/v1/comments/{comment}', 'params' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create()->id]],

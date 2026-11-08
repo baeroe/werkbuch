@@ -174,6 +174,8 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
         Route::post('work-items/{item}/relations', [RelationsController::class, 'store']);
         Route::get('work-items/{item}/history', [HistoryController::class, 'index']);
         Route::get('work-items/{item}/comments', [CommentsController::class, 'index']);
+        // the wiki pages that name the item (A456)
+        Route::get('work-items/{item}/pages', [PagesController::class, 'item']);
         Route::post('work-items/{item}/comments', [CommentsController::class, 'store']);
     });
     Route::get('comments/{comment}', [CommentsController::class, 'show']);

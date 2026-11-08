@@ -52,6 +52,7 @@ use App\Actions\Pages\CreatePage;
 use App\Actions\Pages\DeletePage;
 use App\Actions\Pages\GetPage;
 use App\Actions\Pages\GetPageVersion;
+use App\Actions\Pages\ListItemPages;
 use App\Actions\Pages\ListPages;
 use App\Actions\Pages\ListPageVersions;
 use App\Actions\Pages\MovePage;
@@ -930,6 +931,13 @@ return [
     'ListPages' => [
         'action' => ListPages::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListPages::run($a, $w->project($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    // the pages that name an item: whoever sees the item (only the pages of projects they see, A456)
+    'ListItemPages' => [
+        'action' => ListItemPages::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListItemPages::run($a, $w->item($column), []),
         'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
         'hidden' => ['outsider_private'],
     ],

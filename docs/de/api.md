@@ -131,6 +131,7 @@ Ohne `sort` behält jede Liste ihre eigene Ordnung (der Standard in der Tabelle)
 | `GET /favorites` | – | – | deine Reihenfolge | – |
 | `GET /work-items/{item}/comments` | – | – | älteste zuerst | – |
 | `GET /work-items/{item}/history` | – | – | älteste zuerst | – |
+| `GET /work-items/{item}/pages` | – | – | Titel (nur Seiten von Projekten, die du siehst) | – |
 | `GET /pages/{page}/versions` | – | – | neueste zuerst | – |
 | `GET /templates/{template}/runs` | – | – | neueste zuerst | – |
 <!-- lists:end -->

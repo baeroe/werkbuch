@@ -5,16 +5,20 @@ namespace App\Http\Controllers\Api;
 use App\Actions\Pages\CreatePage;
 use App\Actions\Pages\DeletePage;
 use App\Actions\Pages\GetPage;
+use App\Actions\Pages\ListItemPages;
 use App\Actions\Pages\ListPages;
 use App\Actions\Pages\MovePage;
 use App\Actions\Pages\UpdatePage;
 use App\Http\Api\Answer;
+use App\Http\Api\ApiList;
 use App\Http\Api\Body;
+use App\Http\Api\ListOf;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PageNodeResource;
 use App\Http\Resources\PageResource;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\WorkItem;
 use App\OpenApi\OperationsSchemas;
 use App\Support\Actor;
 use Illuminate\Http\JsonResponse;
@@ -22,8 +26,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 /**
- * The pages of the wikis. `{project}` is bound by ULID, identifier or a former identifier, `{page}` by its ULID only
- * (routes/api.php); whether the account sees them, the actions decide.
+ * The pages of the wikis. `{project}` is bound by ULID, identifier or a former identifier, `{item}` by ULID or key,
+ * `{page}` by its ULID only (routes/api.php); whether the account sees them, the actions decide.
  */
 final class PagesController extends Controller
 {
@@ -37,6 +41,17 @@ final class PagesController extends Controller
         $pages = ListPages::run(Actor::fromRequest($request), $project);
 
         return PageNodeResource::tree($pages)->additional(['meta' => ['total' => $pages->count()]]);
+    }
+
+    /**
+     * List the wiki pages that name a work item.
+     *
+     * The pages whose current text references the item, lean (without text), by title, a page at a time (`cursor`, `per_page`). Only pages of projects you see, archived ones too; `meta.total` counts only those. A former key of the item answers 301 to the current one.
+     */
+    #[ListOf(ListItemPages::class)]
+    public function item(Request $request, WorkItem $item): JsonResponse
+    {
+        return ApiList::respond(ListItemPages::run(Actor::fromRequest($request), $item, $request->query()), PageResource::class);
     }
 
     /**

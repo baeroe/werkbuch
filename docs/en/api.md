@@ -131,6 +131,7 @@ Without `sort`, every list keeps its own order (the default in the table). Fixed
 | `GET /favorites` | – | – | your order | – |
 | `GET /work-items/{item}/comments` | – | – | oldest first | – |
 | `GET /work-items/{item}/history` | – | – | oldest first | – |
+| `GET /work-items/{item}/pages` | – | – | title (only pages of projects you see) | – |
 | `GET /pages/{page}/versions` | – | – | newest first | – |
 | `GET /templates/{template}/runs` | – | – | newest first | – |
 <!-- lists:end -->

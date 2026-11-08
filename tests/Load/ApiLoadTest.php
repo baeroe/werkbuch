@@ -55,11 +55,21 @@ const SMALLER_PAGE = 25;
 /**
  * What the rows ask: the reader (load-01, the org admin), a member (load-05: some projects, private ones among them,
  * and the public ones), the project L07 of the rows that name one, its epic with 40 children, its item with 40
- * comments, the wiki of L01 and the label the counts name.
+ * comments, the wiki of L01, the label the counts name, and the item of L01 the most pages name with an item one page
+ * names (both looked up here: a lookup inside a request would count as one of its queries).
  *
- * @return array{admin: User, member: User, project: string, identifier: string, epic: string, busy: string, pages: string, label: string}
+ * @return array{admin: User, member: User, project: string, identifier: string, epic: string, busy: string, pages: string, label: string, named: string, namedOnce: string}
  */
 $world = function (): array {
+    // the key of the item of L01 most (or fewest) pages name, by count, then its ULID
+    $named = fn (string $direction): string => (string) DB::table('page_item_references')
+        ->join('work_items', 'work_items.id', '=', 'page_item_references.work_item_id')
+        ->join('projects', 'projects.id', '=', 'work_items.project_id')
+        ->where('projects.identifier', 'L01')
+        ->groupBy('work_items.id', 'projects.identifier', 'work_items.number')
+        ->orderByRaw("count(*) {$direction}")->orderBy('work_items.id')
+        ->selectRaw("concat(projects.identifier, '-', work_items.number) as item_key")
+        ->value('item_key');
     $identifier = 'L07';
     $project = (string) DB::table('projects')->where('identifier', $identifier)->value('id');
 
@@ -72,6 +82,8 @@ $world = function (): array {
         'busy' => "{$identifier}-2",
         'pages' => 'L01',
         'label' => (string) DB::table('labels')->orderBy('id')->value('id'),
+        'named' => $named('desc'),
+        'namedOnce' => $named('asc'),
     ];
 };
 
@@ -282,6 +294,27 @@ $rows['pages of a project'] = [
     },
 ];
 
+// the wiki pages that name an item (A456): its pages are lean, read through the index on `work_item_id`; the small world
+// keeps only the 20 top pages of L01, so the baseline is the same request for an item one page names
+$itemPages = fn (string $which) => fn (LoadTestCase $t, array $w) => $t->actingAs($w['admin'])->getJson("/api/v1/work-items/{$w[$which]}/pages");
+$rows['pages that name an item'] = [
+    'request' => $itemPages('named'),
+    'check' => function (TestResponse $answer): void {
+        $answer->assertOk();
+        expect($answer->json('meta.total'))->toBeGreaterThan(1)
+            ->and($answer->json('data'))->toHaveCount($answer->json('meta.total'));
+    },
+    'baseline' => [
+        'reason' => 'the small world keeps only the top pages of L01',
+        'request' => $itemPages('namedOnce'),
+        'check' => function (TestResponse $answer): void {
+            $answer->assertOk();
+            // fewer pages than the row, or a query per page would count the same in both
+            expect($answer->json('meta.total'))->toBe(1);
+        },
+    ],
+];
+
 // a member sees the projects they belong to and the public ones (Visibility::projectIds), never every project
 $memberQuery = fn (int $page) => fn (LoadTestCase $t, array $w) => $t->actingAs($w['member'])->postJson('/api/v1/work-items/query', ['lean' => true, 'per_page' => $page]);
 $rows['query rank asc as a member'] = [
@@ -463,6 +496,7 @@ it('checks a smaller answer wherever the small world answers as much', function 
         'counts of 10 filters',
         'search',
         'pages of a project',
+        'pages that name an item',
     ]);
 });
 

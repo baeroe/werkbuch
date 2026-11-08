@@ -4,6 +4,7 @@ use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Label;
 use App\Models\Notification;
+use App\Models\Page;
 use App\Models\PageVersion;
 use App\Models\Property;
 use App\Models\RelationType;
@@ -13,7 +14,10 @@ use App\Models\WebhookDelivery;
 use App\Models\Workflow;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
+use App\RichText\Document;
+use App\Support\PageItemReferences;
 use Tests\Feature\Access\MatrixWorld;
+use Tests\Support\RichTextFixtures as F;
 use Tests\Support\WorkflowFixtures;
 
 /*
@@ -177,6 +181,16 @@ return [
     'pages:version' => ['arguments' => fn (MatrixWorld $w) => [
         'page' => ($page = $w->page('project_admin'))->id, 'page_version' => PageVersion::factory()->create(['page_id' => $page->id])->id,
     ]],
+    // two pages of WEB that name an item: the list has more than one entry to page through
+    'pages:item' => ['arguments' => function (MatrixWorld $w) {
+        $item = $w->item('project_admin');
+        foreach (['Plan', 'Ablauf'] as $title) {
+            $page = Page::factory()->create(['project_id' => $w->web->id, 'title' => $title, 'content' => F::doc(F::p('Siehe ', F::reference($item->id)))]);
+            PageItemReferences::sync($page, Document::fromJson($page->content));
+        }
+
+        return ['item' => $item->key, 'per_page' => 5];
+    }],
     'manage-pages:create' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'input' => ['title' => 'Matrix']]],
     'manage-pages:update' => ['arguments' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id, 'input' => ['title' => 'Matrix']]],
     'manage-pages:move' => ['arguments' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id, 'input' => ['parent_id' => null, 'before_id' => null]]],

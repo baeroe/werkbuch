@@ -311,7 +311,7 @@ Deletes a file of the file list of an item, or an own upload no text names yet. 
 
 ### `pages`
 
-The wiki of a project: the tree, a page with its text, the versions of a page. (Needs `read`.)
+The wiki of a project: the tree, a page with its text, the versions of a page, the pages that name a work item. (Needs `read`.)
 
 | Action | Purpose | Required | REST twin |
 |---|---|---|---|
@@ -319,6 +319,7 @@ The wiki of a project: the tree, a page with its text, the versions of a page. (
 | `get` | One page with its text. | `page` | `GET /pages/{page}` |
 | `versions` | The kept versions of a page, newest first, without text. | `page` | `GET /pages/{page}/versions` |
 | `version` | One version of a page with its text. | `page`, `page_version` | `GET /pages/{page}/versions/{pageVersion}` |
+| `item` | The pages that name a work item, by title, without text. | `item` | `GET /work-items/{item}/pages` |
 
 ### `manage-pages`
 

@@ -4,10 +4,15 @@ use App\Access\ProjectRole;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
+use App\Models\WorkItem;
+use App\RichText\Document;
+use App\Support\PageItemReferences;
+use Tests\Support\RichTextFixtures as F;
 
 /*
  * The wiki over REST, reading (Task 3): `GET /api/v1/projects/{project}/pages` (the whole tree without text, A315) and
- * `GET /api/v1/pages/{page}` (`{page}` by its ULID only). WEB (public) with Mara as its admin and Lene as a viewer.
+ * `GET /api/v1/pages/{page}` (`{page}` by its ULID only); the pages that name an item (Task 21u, A456,
+ * `GET /api/v1/work-items/{item}/pages`). WEB (public) with Mara as its admin and Lene as a viewer.
  */
 
 $world = function (): array {
@@ -138,4 +143,61 @@ it('moves a page with its place in the answer and refuses a cycle at parent_id',
         ->assertJsonPath('errors.before_id.0', __('field.required'));
     $this->actingAs($lene)->postJson("/api/v1/pages/{$root->id}/move", ['parent_id' => null, 'before_id' => null])->assertForbidden()
         ->assertJsonPath('detail', __('problem.detail.wiki_members_only'));
+});
+
+/** A page of the project whose text references the item, recorded as CreatePage records it. */
+$naming = function (Project $project, string $title, WorkItem $item): Page {
+    $page = Page::factory()->create(['project_id' => $project->id, 'title' => $title, 'content' => F::doc(F::p('Siehe ', F::reference($item->id)))]);
+    PageItemReferences::sync($page, Document::fromJson($page->content));
+
+    return $page;
+};
+
+it('lists the pages that name an item, lean, with the envelope of a list', function () use ($world, $naming) {
+    [$web, $mara, $lene] = $world();
+    $item = WorkItem::factory()->for($web)->create(['created_by' => $mara->id]);
+    $plan = $naming($web, 'Plan', $item);
+    $naming($web, 'Ablaufplan', $item);
+    $ops = Project::factory()->identifier('OPS')->private()->member($mara, ProjectRole::Admin)->create();
+    $naming($ops, 'Geheim', $item);
+
+    $response = $this->actingAs($lene)->getJson("/api/v1/work-items/{$item->key}/pages?per_page=1")->assertOk()
+        ->assertJsonPath('data.0.title', 'Ablaufplan')
+        ->assertJsonPath('meta.total', 2)
+        ->assertJsonPath('meta.per_page', 1);
+    $next = $this->actingAs($lene)->getJson((string) $response->json('links.next'))->assertOk()
+        ->assertJsonPath('data.0.id', $plan->id)
+        ->assertJsonPath('data.0.project_id', $web->id)
+        ->assertJsonPath('meta.next_cursor', null);
+
+    expect(array_keys($response->json()))->toBe(['data', 'links', 'meta'])
+        ->and(array_keys($next->json('data.0')))->not->toContain('content')
+        ->and(array_keys($next->json('data.0')))->not->toContain('content_json')
+        ->and((string) json_encode($response->json()).json_encode($next->json()))->not->toContain('Geheim')
+        ->and($this->actingAs($mara)->getJson("/api/v1/work-items/{$item->id}/pages")->assertOk()->json('meta.total'))->toBe(3);
+    $this->actingAs($lene)->getJson("/api/v1/work-items/{$item->key}/pages?sort=title")->assertUnprocessable();
+});
+
+it('answers the pages of an item nobody shows the reader with 404 and lets a read token list them', function () use ($world, $naming) {
+    [$web, $mara, $lene] = $world();
+    $ops = Project::factory()->identifier('OPS')->private()->member($mara, ProjectRole::Admin)->create();
+    $secret = WorkItem::factory()->for($ops)->create(['created_by' => $mara->id]);
+    $item = WorkItem::factory()->for($web)->create(['created_by' => $mara->id]);
+    $naming($web, 'Plan', $item);
+
+    $this->actingAs($lene)->getJson("/api/v1/work-items/{$secret->key}/pages")->assertNotFound()->assertJsonMissingPath('detail');
+    $this->actingAs($lene)->getJson('/api/v1/work-items/NOPE-1/pages')->assertNotFound()->assertJsonMissingPath('detail');
+    $this->withToken(apiToken($lene, ['read']))->getJson("/api/v1/work-items/{$item->key}/pages")->assertOk()->assertJsonPath('meta.total', 1);
+});
+
+it('redirects the pages of a former key with 301', function () use ($world, $naming) {
+    [$web, $mara, $lene] = $world();
+    $item = WorkItem::factory()->for($web)->create(['created_by' => $mara->id]);
+    $naming($web, 'Plan', $item);
+    $web->update(['identifier' => 'NEW']);
+    $web->identifiers()->create(['identifier' => 'WEB']);
+
+    $this->actingAs($lene)->getJson("/api/v1/work-items/WEB-{$item->number}/pages?per_page=5")->assertStatus(301)
+        ->assertHeader('Location', url("/api/v1/work-items/NEW-{$item->number}/pages").'?per_page=5');
+    $this->actingAs($lene)->getJson("/api/v1/work-items/NEW-{$item->number}/pages")->assertOk()->assertJsonPath('data.0.title', 'Plan');
 });
