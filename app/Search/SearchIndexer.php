@@ -138,25 +138,38 @@ final class SearchIndexer
     /**
      * Writes the documents of the items of these projects again (`null`: of every project), as a catalog change or a
      * new identifier changes what they hold; with `$itemIds` only of those items (a deleted label names the items that
-     * carried it), read a block of ids at a time, so no statement binds more ids than a block holds.
+     * carried it), read a block of ids at a time, so no statement binds more ids than a block holds. In id order after
+     * `$after` (the items of projects) and at most `$limit` of them (ReindexWorkItems writes a block per job): returns
+     * the id of the last item written when items after it remain, otherwise `null`.
      *
      * @param  list<string>|null  $projectIds
      * @param  list<string>|null  $itemIds
      */
-    public function reindexItems(?array $projectIds, ?array $itemIds = null): void
+    public function reindexItems(?array $projectIds, ?array $itemIds = null, ?string $after = null, ?int $limit = null): ?string
     {
         $query = fn () => $this->query(WorkItem::class)
-            ->when($projectIds !== null, fn (Builder $query) => $query->whereIn('work_items.project_id', $projectIds));
+            ->when($projectIds !== null, fn (Builder $query) => $query->whereIn('work_items.project_id', $projectIds))
+            ->when($after !== null, fn (Builder $query) => $query->where('work_items.id', '>', $after));
 
-        if ($itemIds === null) {
-            $query()->chunkById(self::CHUNK, fn (Collection $chunk) => (new WorkItem)->syncMakeSearchable($chunk), 'work_items.id', 'id');
+        if ($itemIds !== null) {
+            foreach (array_chunk($itemIds, self::CHUNK) as $block) {
+                (new WorkItem)->syncMakeSearchable($query()->whereIn('work_items.id', $block)->get());
+            }
 
-            return;
+            return null;
         }
 
-        foreach (array_chunk($itemIds, self::CHUNK) as $block) {
-            (new WorkItem)->syncMakeSearchable($query()->whereIn('work_items.id', $block)->get());
-        }
+        $written = 0;
+        $last = null;
+        $query()->chunkById(self::CHUNK, function (Collection $chunk) use (&$written, &$last, $limit): bool {
+            (new WorkItem)->syncMakeSearchable($chunk);
+            $written += $chunk->count();
+            $last = $chunk->last()?->getKey();
+
+            return $limit === null || $written < $limit;
+        }, 'work_items.id', 'id');
+
+        return $limit !== null && $written >= $limit && $query()->where('work_items.id', '>', $last)->exists() ? $last : null;
     }
 
     /** Sends the settings of config/scout.php to every index, when the engine takes settings (Meilisearch does). */
