@@ -1458,7 +1458,7 @@ describe('MyItemsEmpty', () => {
     renderWith(<MyItemsEmpty />);
     const button = await screen.findByRole('button', { name: /^Neues Item/ });
     await waitFor(() => expect(button.getAttribute('aria-describedby')).toBeTruthy());
-    expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent).toBe('Items anlegen darfst du in keinem Projekt.');
+    expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent).toBe('Items anlegen darfst du in keinem Projekt. Bitte eine Projekt-Admin, dich als Mitglied aufzunehmen.');
     await user.click(button);
     expect(useUiStore.getState().createOpen).toBe(false);
   });

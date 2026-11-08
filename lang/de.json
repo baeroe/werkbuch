@@ -1417,7 +1417,7 @@
     "permissions.reason.archived": "Das Projekt :project ist archiviert und schreibgeschützt.",
     "permissions.reason.failed": "Die Rechte konnten nicht geladen werden.",
     "permissions.reason.item_comment.nowhere": "Kommentieren darfst du in keinem Projekt.",
-    "permissions.reason.item_create.nowhere": "Items anlegen darfst du in keinem Projekt.",
+    "permissions.reason.item_create.nowhere": "Items anlegen darfst du in keinem Projekt. Bitte eine Projekt-Admin, dich als Mitglied aufzunehmen.",
     "permissions.reason.item_create.read_only": "Im Projekt :project darfst du nur lesen. Items anlegen dürfen Member und Admins.",
     "permissions.reason.item_delete.admins_only": "Items löschen dürfen nur Admins des Projekts :project.",
     "permissions.reason.item_delete.nowhere": "Items löschen darfst du in keinem Projekt.",

@@ -1417,7 +1417,7 @@
     "permissions.reason.archived": "The project :project is archived and read-only.",
     "permissions.reason.failed": "The permissions could not be loaded.",
     "permissions.reason.item_comment.nowhere": "You may not comment in any project.",
-    "permissions.reason.item_create.nowhere": "You may not create items in any project.",
+    "permissions.reason.item_create.nowhere": "You may not create items in any project. Ask a project admin to add you as a member.",
     "permissions.reason.item_create.read_only": "You may only read in the project :project. Members and admins create items.",
     "permissions.reason.item_delete.admins_only": "Only admins of the project :project delete items.",
     "permissions.reason.item_delete.nowhere": "You may not delete items in any project.",
