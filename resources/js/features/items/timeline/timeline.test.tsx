@@ -748,3 +748,64 @@ describe('dragging', () => {
     expect(patches('wi_web_30')).toEqual([]);
   });
 });
+
+describe('where the timeline starts', () => {
+  /** A stand-in for the browser's ResizeObserver (jsdom has none): the test says when an observed box changed size. */
+  const observers: { callback: ResizeObserverCallback; targets: Element[] }[] = [];
+  let measured = 0;
+
+  beforeEach(() => {
+    observers.length = 0;
+    measured = 0;
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        private entry: (typeof observers)[number];
+        constructor(callback: ResizeObserverCallback) {
+          this.entry = { callback, targets: [] };
+          observers.push(this.entry);
+        }
+        observe(target: Element) {
+          this.entry.targets.push(target);
+        }
+        unobserve() {}
+        disconnect() {
+          this.entry.targets = [];
+        }
+      },
+    );
+    const stubbed = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (this.hasAttribute('data-timeline-scroller')) measured += 1;
+      return stubbed.call(this);
+    };
+    const top = BOX.top;
+    onTestFinished(() => {
+      Element.prototype.getBoundingClientRect = stubbed;
+      BOX.top = top;
+      vi.unstubAllGlobals();
+    });
+  });
+
+  it('reads where its box starts not on every render (T21-M9)', async () => {
+    renderTimeline();
+    await focusRow('WEB-30');
+
+    // the selection changes: a render with the same rows reads no box
+    measured = 0;
+    press('x');
+    await waitFor(() => expect(useUiStore.getState().selection).toEqual([web30.id]));
+    expect(measured).toBe(0);
+  });
+
+  it('fills the window below a bar above it that grows', async () => {
+    renderTimeline();
+    await findRow('WEB-30');
+    expect(scroller().style.maxHeight).toContain(`- ${BOX.top}px`);
+
+    // the bulk bar pushes the box down: the page grows, the box keeps to the window
+    BOX.top += 40;
+    act(() => observers.filter((entry) => entry.targets.includes(document.body)).forEach((entry) => entry.callback([], {} as ResizeObserver)));
+    expect(scroller().style.maxHeight).toContain(`- ${BOX.top}px`);
+  });
+});

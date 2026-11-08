@@ -19,7 +19,7 @@
  */
 
 import { defaultRangeExtractor, useWindowVirtualizer, type Range } from '@tanstack/react-virtual';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { ItemRowBase } from '@/components/items/ItemRowBase';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
@@ -30,6 +30,7 @@ import { useIsWide } from '@/lib/media';
 import { useUiStore } from '@/store/ui';
 import type { LayoutProps } from '../layouts';
 import { revealBelowToolbar, useSelection } from '../selection/useSelection';
+import { useDocumentTop } from '../useDocumentTop';
 import { GroupHeader } from './GroupHeader';
 import { listRows, rowKey, type ListRow } from './rows';
 
@@ -73,16 +74,7 @@ export function ListLayout({ groups, groupBy, display, selection, onSelect, onSe
   }, [groups, rows, grouped, collapsed]);
 
   // the list starts below the bars of the screen; their height changes with the filter chips
-  const [scrollMargin, setScrollMargin] = useState(0);
-  const measure = useCallback(() => {
-    const top = (container.current?.getBoundingClientRect().top ?? 0) + window.scrollY;
-    setScrollMargin((previous) => (Math.abs(previous - top) < 1 ? previous : top));
-  }, []);
-  useLayoutEffect(measure);
-  useEffect(() => {
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [measure]);
+  const scrollMargin = useDocumentTop(container, [rows.length, wide]);
 
   // the cursor row stays rendered while it scrolls away, so it keeps the focus (13c)
   const cursorIndex = useMemo(() => rows.findIndex((row) => row.kind === 'item' && row.item.id === cursorId), [rows, cursorId]);

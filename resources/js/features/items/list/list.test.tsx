@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type MouseEvent, type ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ApiError } from '@/api/client';
 import { mockApi, type MockApi } from '@/test/api';
 import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, standard, types } from '@/test/fixtures';
@@ -556,5 +556,80 @@ describe('GroupIcon', () => {
         if (shown) expect(mark.firstElementChild!.getAttribute('aria-hidden')).toBe('true');
       }
     });
+  });
+});
+
+describe('where the list starts', () => {
+  /** Where the list stands in the page (the bars of the screen above it), and how often the list asked. */
+  let top = 0;
+  let measured = 0;
+  /** A stand-in for the browser's ResizeObserver (jsdom has none): the test says when an observed box changed size. */
+  const observers: { callback: ResizeObserverCallback; targets: Element[] }[] = [];
+  const resized = (target: Element) =>
+    act(() => observers.filter((entry) => entry.targets.includes(target)).forEach((entry) => entry.callback([], {} as ResizeObserver)));
+
+  beforeEach(() => {
+    top = 0;
+    measured = 0;
+    observers.length = 0;
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        private entry: (typeof observers)[number];
+        constructor(callback: ResizeObserverCallback) {
+          this.entry = { callback, targets: [] };
+          observers.push(this.entry);
+        }
+        observe(target: Element) {
+          this.entry.targets.push(target);
+        }
+        unobserve(target: Element) {
+          this.entry.targets = this.entry.targets.filter((entry) => entry !== target);
+        }
+        disconnect() {
+          this.entry.targets = [];
+        }
+      },
+    );
+    const stubbed = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (this.tagName !== 'UL') return stubbed.call(this);
+      measured += 1;
+      return new DOMRect(0, top - scrollY, 1024, 0);
+    };
+    onTestFinished(() => {
+      Element.prototype.getBoundingClientRect = stubbed;
+      vi.unstubAllGlobals();
+    });
+  });
+
+  it('measures where it starts when its rows change, not on every render (T13-M7)', async () => {
+    const loaded = items('w', 60);
+    const { rerenderList } = renderList({ groups: [group('todo', loaded)] });
+    await waitFor(() => expect(rowOf('w1')).not.toBeNull());
+
+    // the cursor moves: a render with the same rows reads no box
+    measured = 0;
+    act(() => rowOf('w1')!.focus());
+    press('j');
+    press('j');
+    expect(cursor()).toBe('wi_w3');
+    expect(measured).toBe(0);
+
+    // a row more: the list measures again
+    rerenderList({ groups: [group('todo', [...loaded, ...items('w', 1, 61)])] });
+    expect(measured).toBeGreaterThan(0);
+  });
+
+  it('follows a bar above it that grows, which changes the height of the page', async () => {
+    renderList({ groups: [group('todo', items('w', 60))] });
+    await waitFor(() => expect(rowOf('w1')).not.toBeNull());
+    const shown = document.querySelectorAll('[data-row-id]').length;
+
+    // the bulk bar and a second line of filter chips push the list far down: fewer of its rows are in the window
+    top = 2000;
+    resized(document.body);
+    await waitFor(() => expect(document.querySelectorAll('[data-row-id]').length).toBeLessThan(shown));
+    expect(rowOf('w1')).not.toBeNull();
   });
 });

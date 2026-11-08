@@ -47,6 +47,7 @@ import type { ListedItem } from '@/types';
 import type { LayoutProps } from '../layouts';
 import { ListSkeleton } from '../ListStates';
 import { focusIsNeutral, revealBelowToolbar, useSelection } from '../selection/useSelection';
+import { useDocumentTop } from '../useDocumentTop';
 import { AXIS_HEIGHT, TimelineAxis, TimelineGrid } from './TimelineAxis';
 import { TimelineBar } from './TimelineBar';
 import { TimelineRows, useTimelineRows, type TimelineSection } from './TimelineRows';
@@ -189,16 +190,7 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
   }
 
   // the box fills the window below the bars of the screen
-  const [top, setTop] = useState(0);
-  const measure = useCallback(() => {
-    const next = Math.round((scroller.current?.getBoundingClientRect().top ?? 0) + window.scrollY);
-    setTop((previous) => (previous === next ? previous : next));
-  }, []);
-  useLayoutEffect(measure);
-  useEffect(() => {
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [measure]);
+  const top = useDocumentTop(scroller, [entries.length, width]);
 
   /* --------------------------------------------------------------------------- focus */
 
