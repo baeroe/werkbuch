@@ -336,9 +336,23 @@ describe('General', () => {
     expect(screen.queryByRole('button', { name: /Speichern/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Bild wählen … Logo' })).toBeNull();
     await waitFor(() => expect(screen.getByRole('group', { name: 'Logo' }).querySelector('img')?.getAttribute('src')).toBe('/media/logo'));
-    // a member's click on a day changes nothing
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Sonntag' }));
-    expect(screen.getByRole('button', { name: 'Montag' }).getAttribute('aria-pressed')).toBe('true');
+    // language, zone and week start are values to read, as in the project settings (19a-M6): focusable, the value in
+    // their name, the reason why in their description, nothing greyed out
+    const reason = 'Organisation, Personen, Bots und Webhooks verwalten nur Org-Admins.';
+    const described = (element: Element) =>
+      (element.getAttribute('aria-describedby') ?? '')
+        .split(' ')
+        .map((id) => document.getElementById(id)?.textContent ?? '')
+        .join(' ');
+    for (const name of ['Standardsprache: Deutsch', /^Zeitzone: Europe\/Berlin/, 'Wochenbeginn: Montag']) {
+      const value = screen.getByRole('button', { name });
+      expect(value.getAttribute('aria-disabled')).toBe('true');
+      expect(value.tabIndex).toBe(0);
+      expect(described(value)).toContain(reason);
+    }
+    expect(screen.queryByRole('combobox', { name: /Standardsprache|Zeitzone/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sonntag' })).toBeNull();
+    expect(document.body.querySelectorAll(':disabled')).toHaveLength(0);
   });
 
   it('says when the organisation could not be loaded, with "Erneut versuchen"', async () => {

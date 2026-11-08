@@ -507,7 +507,11 @@ describe('Members', () => {
     const { unmount } = renderSettings('members', { 'GET /api/v1/projects/p_web/members': () => ({ body: list([]) }) });
 
     expect(await screen.findByText('Noch keine Mitglieder')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Person oder Bot hinzufügen' }));
+    // it only moves the focus to the form above: the one primary action is that form's own (19a-M2)
+    const toForm = screen.getByRole('button', { name: 'Person oder Bot hinzufügen' });
+    expect(toForm.className).not.toContain('bg-accent');
+    expect(toForm.className).toContain('border-line-strong');
+    await user.click(toForm);
     expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Person oder Bot' }));
     unmount();
     api?.restore();

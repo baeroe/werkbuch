@@ -130,7 +130,7 @@ function MemberList({ project, canManage, readOnlyReason, members, users }: Proj
             description={canManage ? t('settings.project.members.empty_description') : t('settings.project.members.empty_readers')}
             actions={
               canManage && (
-                <Button variant="primary" icon={UserPlus} onClick={() => document.getElementById(personFieldId)?.focus()}>
+                <Button variant="secondary" icon={UserPlus} onClick={() => document.getElementById(personFieldId)?.focus()}>
                   {t('settings.project.members.empty_add')}
                 </Button>
               )
