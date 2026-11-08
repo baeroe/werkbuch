@@ -91,8 +91,9 @@ final class LiveConsumer implements EventConsumer, RetriesConsumption
     /**
      * The own channels of the people who see a project but do not listen to it yet (A451): nobody holds the channel of
      * a new project, and that of a project that turned public only its members and the org admins. Every active person
-     * whom Visibility lets see the project now, but the actor (its own tab is left out anyway, A282): a private project
-     * reaches its members and the org admins, one being deleted (or gone) nobody. Members who hold the project channel
+     * whom Visibility lets see the project now, the actor too: Reverb leaves out the tab of the socket (A282), the
+     * actor's other tabs (and every tab, when the change came over a token) hear it. A private project reaches its
+     * members and the org admins, one being deleted (or gone) nobody. Members who hold the project channel
      * hear it twice; the browser keeps one per `event_id`. Asks the same queries however many people there are (the
      * project, the people, the org roles and the members, the last two only for a private project).
      *
@@ -108,8 +109,7 @@ final class LiveConsumer implements EventConsumer, RetriesConsumption
         }
 
         Visibility::forget();
-        $people = User::query()->where('type', AccountType::Person)->whereNull('disabled_at')
-            ->whereKeyNot($event->actor_id)->orderBy('id')->get();
+        $people = User::query()->where('type', AccountType::Person)->whereNull('disabled_at')->orderBy('id')->get();
 
         return array_map(fn (User $user) => new PresenceChannel("user.{$user->id}"), Visibility::seeing($project, $people));
     }
