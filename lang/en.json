@@ -2981,7 +2981,7 @@
     "shortcuts.widget.table.edit": "Edit the cell (first column: open the item)",
     "shortcuts.widget.table.extend": "Extend the selection",
     "shortcuts.widget.table.row": "Change row",
-    "shortcuts.widget.table.stop": "Stop editing",
+    "shortcuts.widget.table.stop": "Take back what you typed, then stop editing",
     "shortcuts.widget.tree.collapse": "Fold subpages away, or go to the parent page",
     "shortcuts.widget.tree.delete": "Delete the row’s page (asks first)",
     "shortcuts.widget.tree.edge": "First or last page",

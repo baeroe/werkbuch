@@ -148,7 +148,7 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>Pos1</kbd> / <kbd>Ende</kbd> | Erste bzw. letzte Spalte |
 | <kbd>⌘ / Strg</kbd>+<kbd>Pos1</kbd> / <kbd>⌘ / Strg</kbd>+<kbd>Ende</kbd> | Erste bzw. letzte Zeile |
 | <kbd>↵ / Eingabe</kbd> | Zelle bearbeiten (erste Spalte: Item öffnen) |
-| <kbd>Esc</kbd> | Bearbeiten beenden |
+| <kbd>Esc</kbd> | Getipptes zurücknehmen, dann Bearbeiten beenden |
 
 ## Gruppenköpfe (Liste und Tabelle)
 

@@ -148,7 +148,7 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>Home</kbd> / <kbd>End</kbd> | First or last column |
 | <kbd>⌘ / Ctrl</kbd>+<kbd>Home</kbd> / <kbd>⌘ / Ctrl</kbd>+<kbd>End</kbd> | First or last row |
 | <kbd>↵ / Enter</kbd> | Edit the cell (first column: open the item) |
-| <kbd>Esc</kbd> | Stop editing |
+| <kbd>Esc</kbd> | Take back what you typed, then stop editing |
 
 ## Group headers (list and table)
 

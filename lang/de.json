@@ -2981,7 +2981,7 @@
     "shortcuts.widget.table.edit": "Zelle bearbeiten (erste Spalte: Item öffnen)",
     "shortcuts.widget.table.extend": "Auswahl erweitern",
     "shortcuts.widget.table.row": "Zeile wechseln",
-    "shortcuts.widget.table.stop": "Bearbeiten beenden",
+    "shortcuts.widget.table.stop": "Getipptes zurücknehmen, dann Bearbeiten beenden",
     "shortcuts.widget.tree.collapse": "Unterseiten zuklappen bzw. zur Eltern-Seite",
     "shortcuts.widget.tree.delete": "Seite der Zeile löschen (mit Rückfrage)",
     "shortcuts.widget.tree.edge": "Erste bzw. letzte Seite",
