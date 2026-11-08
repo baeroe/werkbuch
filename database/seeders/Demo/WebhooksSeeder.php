@@ -25,7 +25,9 @@ use RuntimeException;
  * changed stays, and a second run adds nothing. Berlin wall clock as everywhere in the demo data; the CRM's attempts are
  * UTC stamps, as in the file.
  *
- * The names (`webhook.<key>.name`) and the error of a timeout (`webhook.timeout`) come from DemoTexts; the hosts of
+ * The names (`webhook.<key>.name`) come from DemoTexts; a timeout stores TIMEOUT_ERROR in either language, the form the app
+ * stores (`<reason>: <detail>`, DeliverWebhook), which the log reads as `settings.webhooks.log.error.timeout` in the
+ * reader's language; the hosts of
  * Deploy-Bot and Kira are subdomains of the organization's mail domain (`feldwerk.example.com`, `fieldwork.example.com`),
  * the CRM is the client's and keeps its host.
  *
@@ -35,8 +37,11 @@ class WebhooksSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    /** An attempt without an answer: its error is `webhook.timeout`. */
+    /** An attempt without an answer: its error is TIMEOUT_ERROR. */
     private const TIMEOUT = 'timeout';
+
+    /** The error the app stores for a call that ran past its 10 s: the reason, then the redacted message of curl. */
+    public const TIMEOUT_ERROR = 'timeout: cURL error 28: Operation timed out after 10000 milliseconds with 0 bytes received';
 
     /**
      * key of the texts, url (`{domain}` the organization's mail domain), `project` (identifier), events, `bot` (handle),
@@ -167,7 +172,7 @@ class WebhooksSeeder extends Seeder
                 'status_code' => $status,
                 'duration_ms' => $duration,
                 'response_excerpt' => $excerpt,
-                'error' => $error === self::TIMEOUT ? DemoTexts::get('webhook.timeout') : $error,
+                'error' => $error === self::TIMEOUT ? self::TIMEOUT_ERROR : $error,
                 'attempted_at' => $this->at($when),
             ])->save();
         }

@@ -245,7 +245,7 @@ final class English
         'page.web_typography.title' => 'Typography and colours',
         'page.web_typography.content' => "## Type\n\nHeadings in a strong grotesque, body copy in a calm sans.\n\n## Colours\n\n- Deep blue for accents and links\n- Warm grey for surfaces\n- A muted yellow for highlights only",
         'page.web_editorial.title' => 'Editorial and tone of voice',
-        'page.web_editorial.content' => "We write directly and in a friendly way, without jargon. Sentences stay short.\n\n## Process\n\n1. The client delivers the raw copy.\n2. The editors cut and structure it.\n3. The client signs it off.\n4. The copy goes into the CMS.",
+        'page.web_editorial.content' => "We write in a direct, friendly way, without jargon. Sentences stay short.\n\n## Process\n\n1. The client delivers the raw copy.\n2. The editors cut and structure it.\n3. The client signs it off.\n4. The copy goes into the CMS.",
         'page.web_tech.title' => 'Technology',
         'page.web_tech.content' => 'Technical decisions and operational know-how for the new website.',
         'page.web_contactform.title' => 'Contact form – technical notes',
@@ -265,7 +265,7 @@ final class English
         'page.app_api.title' => 'API integration',
         'page.app_api.content' => "The app talks to the client’s shop API. Every call goes through a proxy that manages the tokens.\n\n```\nGET /v2/orders?status=open\n```\n\nThe credentials live in the password manager, not in the repository.",
         'page.app_approval.title' => 'Approval process',
-        'page.app_approval.content' => "In the “Agency approval” workflow, items first go through an internal check (Review) and then through Client approval.\n\n1. Review by a second person on the team\n2. Client approval with a test build\n3. Wrapped up in Done\n\nFrom Todo, an item can only move to In Progress or Cancelled.",
+        'page.app_approval.content' => "In the “Agency approval” workflow, items first go through an internal check (Review) and then through Client approval.\n\n1. Review by a second person on the team\n2. Client approval with a test build\n3. Finished in Done\n\nFrom Todo, an item can only move to In Progress or Cancelled.",
         'page.app_release.title' => 'Release checklist',
         'page.app_release.content' => "- Release notes written (APP-16)\n- TestFlight group set up (APP-18)\n- Store screenshots updated\n- Privacy policy checked",
         'page.ops_servers.title' => 'Server overview',
@@ -280,13 +280,12 @@ final class English
         'template.web_maintenance.description' => 'Install updates, check the backups and go through last week’s logs.',
         'template.app_report.name' => 'Monthly report',
         'template.app_report.title' => 'Monthly report {month_name} {year}',
-        'template.app_report.description' => 'Put together the figures of the month: installs, active users, crashes and feedback.',
+        'template.app_report.description' => 'Compile the month’s figures: installs, active users, crashes and feedback.',
         'template.ops_certs.name' => 'Check certificates',
         'template.ops_certs.title' => 'Check certificates',
 
         'webhook.deploy.name' => 'Deploy bot',
         'webhook.kira.name' => 'Kira',
         'webhook.crm.name' => 'Legacy CRM',
-        'webhook.timeout' => 'Timed out after 10 s',
     ];
 }

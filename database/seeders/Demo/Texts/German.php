@@ -285,6 +285,5 @@ final class German
         'webhook.deploy.name' => 'Deploy-Bot',
         'webhook.kira.name' => 'Kira',
         'webhook.crm.name' => 'Altes CRM',
-        'webhook.timeout' => 'Zeitüberschreitung nach 10 s',
     ];
 }

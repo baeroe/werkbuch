@@ -20,6 +20,7 @@ use App\RichText\Document;
 use Database\Seeders\Demo\Texts\DemoTexts;
 use Database\Seeders\Demo\Texts\English;
 use Database\Seeders\Demo\Texts\German;
+use Database\Seeders\Demo\WebhooksSeeder;
 use Database\Seeders\DemoSeeder;
 use Database\Seeders\DemoSeederEn;
 use Illuminate\Support\Facades\DB;
@@ -236,7 +237,7 @@ it('seeds the same webhooks and attempts', function () use ($both, $stamp) {
             ['Deploy bot', 'https://deploy.fieldwork.example.com/hooks/werkbuch'],
             ['Kira', 'https://kira.fieldwork.example.com/werkbuch/webhook'],
         ])
-        ->and(WebhookAttempt::query()->whereNotNull('error')->pluck('error')->unique()->values()->all())->toBe([English::TEXTS['webhook.timeout']]);
+        ->and(WebhookAttempt::query()->whereNotNull('error')->pluck('error')->unique()->values()->all())->toBe([WebhooksSeeder::TIMEOUT_ERROR]);
 });
 
 it('writes no German into the wiki, templates and webhooks', function () use ($germanIn, $contentKeys) {
