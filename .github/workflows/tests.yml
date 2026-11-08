@@ -432,13 +432,14 @@ jobs:
           E2E_EXEC: ''
 
       # the raw files (well over a thousand of about 2 MB) mapped back to the sources once, as one file of a few MB;
-      # also after failed tests, so the merge reports the coverage; `setup` counts with every project, as in a local run
+      # also after failed tests, so the merge reports the coverage, but not in a run a newer push cancelled;
+      # `setup` counts with every project, as in a local run
       - name: Remap the coverage
-        if: always() && steps.tests.outcome != 'skipped'
+        if: "!cancelled() && steps.tests.outcome != 'skipped'"
         run: node scripts/coverage-merge.mjs --remap-only --out "coverage/e2e-$E2E_PROJECT.json"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always() && steps.tests.outcome != 'skipped'
+        if: "!cancelled() && steps.tests.outcome != 'skipped'"
         with:
           name: e2e-coverage-${{ matrix.project }}
           path: coverage/e2e-${{ matrix.project }}.json
@@ -461,12 +462,13 @@ jobs:
 
   # Vitest and the four projects as one map over resources/js: fails below 100 % lines and when a project left no
   # coverage. It runs after failed projects too (their coverage is uploaded all the same), and its last step fails
-  # with them: the coverage can reach 100 % while tests failed.
+  # with them: the coverage can reach 100 % while tests failed. A run a newer push cancelled merges nothing: it
+  # would hold the next run of the concurrency group back.
   e2e-coverage:
     name: e2e coverage (merge, 100 % lines)
     # needs.e2e-build is only readable for a job that needs it
     needs: [e2e-build, e2e]
-    if: always() && needs.e2e-build.result == 'success'
+    if: "!cancelled() && needs.e2e-build.result == 'success'"
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -500,14 +502,14 @@ jobs:
         run: pnpm coverage:merge --expect-shards=desktop-light,desktop-dark,phone-light,phone-dark
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: "!cancelled()"
         with:
           name: frontend-coverage
           path: coverage/merged
           if-no-files-found: warn
 
       - name: The projects passed
-        if: always() && needs.e2e.result != 'success'
+        if: "!cancelled() && needs.e2e.result != 'success'"
         run: |
           echo "::error::At least one Playwright project failed (result: $E2E_RESULT)."
           exit 1

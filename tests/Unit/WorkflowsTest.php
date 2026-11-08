@@ -278,8 +278,15 @@ it('runs the e2e suite once per Playwright project', function () use ($playwrigh
 
     // a database, a search, a mailbox, a Reverb and workers of its own per project
     expect(array_keys($e2e['services']))->toEqualCanonicalizing(['mariadb', 'mailpit', 'meilisearch']);
-    expect(implode("\n", $runs($e2e)))->toContain('php artisan reverb:start')
-        ->and(implode("\n", $runs($e2e)))->toContain('php artisan queue:work --queue=webhooks');
+    expect(implode("\n", $runs($e2e)))->toContain('php artisan queue:work --queue=webhooks');
+
+    // Reverb listens on the port the app sends to and the browser connects to (e2e/ci.env)
+    $reverb = collect($runs($e2e))->first(fn (string $run): bool => str_contains($run, 'php artisan reverb:start'));
+    expect(preg_match('/reverb:start --host=127\.0\.0\.1 --port=(\d+) /', (string) $reverb, $port))->toBe(1, 'the step that starts Reverb');
+    expect($reverb)->toContain("http://127.0.0.1:{$port[1]}/up");
+    foreach (['REVERB_PORT', 'REVERB_SERVER_PORT', 'REVERB_PUBLIC_PORT'] as $name) {
+        expect(RepoFiles::text('e2e/ci.env'))->toContain("\n{$name}={$port[1]}\n");
+    }
 });
 
 it('uploads one remapped coverage file per project', function () use ($stepUsing) {
@@ -287,7 +294,7 @@ it('uploads one remapped coverage file per project', function () use ($stepUsing
 
     $remap = collect($e2e['steps'])->first(fn (array $step): bool => str_contains((string) ($step['run'] ?? ''), '--remap-only'));
     expect($remap['run'])->toBe('node scripts/coverage-merge.mjs --remap-only --out "coverage/e2e-$E2E_PROJECT.json"')
-        ->and($remap['if'])->toContain('always()');
+        ->and($remap['if'])->toBe("!cancelled() && steps.tests.outcome != 'skipped'");
 
     $upload = $stepUsing($e2e, 'actions/upload-artifact', ['name' => 'e2e-coverage-${{ matrix.project }}']);
     // the one mapped file, never the raw files of coverage/e2e (hundreds of MB per project)
@@ -303,7 +310,7 @@ it('merges the coverage of every project by name with the gate', function () use
 
     // needs.e2e-build is only readable for a job that needs it
     expect($merge['needs'])->toEqualCanonicalizing(['e2e-build', 'e2e'])
-        ->and($merge['if'])->toBe("always() && needs.e2e-build.result == 'success'");
+        ->and($merge['if'])->toBe("!cancelled() && needs.e2e-build.result == 'success'");
 
     expect($stepUsing($merge, 'actions/download-artifact', ['name' => 'unit-coverage'])['with']['path'])->toBe('coverage/unit');
     expect($stepUsing($merge, 'actions/download-artifact', ['pattern' => 'e2e-coverage-*'])['with'])
@@ -311,11 +318,13 @@ it('merges the coverage of every project by name with the gate', function () use
 
     expect($runs($merge))->toContain('pnpm coverage:merge --expect-shards='.implode(',', $playwrightProjects()));
 
-    expect($stepUsing($merge, 'actions/upload-artifact', ['name' => 'frontend-coverage'])['with']['path'])->toBe('coverage/merged');
+    $report = $stepUsing($merge, 'actions/upload-artifact', ['name' => 'frontend-coverage']);
+    expect($report['with']['path'])->toBe('coverage/merged')
+        ->and($report['if'])->toBe('!cancelled()');
 
     // the coverage can reach 100 % while tests failed: the last step fails with the projects
     $last = end($merge['steps']);
-    expect($last['if'])->toBe("always() && needs.e2e.result != 'success'")
+    expect($last['if'])->toBe("!cancelled() && needs.e2e.result != 'success'")
         ->and($last['run'])->toContain('exit 1');
 });
 
