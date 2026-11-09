@@ -2,8 +2,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, pressMod, tr } from '../helpers';
-import type { DocsLocale } from './docs-seed.setup';
+import { allEntries, api, pressMod, tr, type DocsLocale } from '../helpers';
 
 /*
  * Screenshots of the docs, committed under docs/public/screenshots/{en,de}/<name>.png: the demo data of each language
@@ -23,6 +22,12 @@ import type { DocsLocale } from './docs-seed.setup';
 
 const OUT = path.resolve(import.meta.dirname, '../../docs/public/screenshots');
 const NOW = '2026-10-28T09:30:00+01:00';
+
+/** The server the API reference names in its shot: an address of the example domain, never the host of the dev setup. */
+const DOCS_API_SERVER = 'https://werkbuch.example.com/api/v1';
+
+/** The host of DDEV (a real public domain, every name on 127.0.0.1): no shot shows it. */
+const DEV_HOST = 'ddev.site';
 
 /** Names of the demo data the shots open, in each language (database/seeders/Demo/Texts). */
 const DEMO = {
@@ -75,14 +80,28 @@ async function pageOf(page: Page, title: string): Promise<string> {
 }
 
 /**
+ * The API reference reads the server of the instance from /api/openapi.json, here the host of DDEV: the shot shows an
+ * address of the example domain instead (the document of the server, only `servers` replaced).
+ */
+async function answerOpenApiWithTheExampleServer(page: Page): Promise<void> {
+  await page.route('**/api/openapi.json', async (route) => {
+    const response = await route.fetch();
+    const document = (await response.json()) as { servers?: { url: string }[] };
+    expect(document.servers?.length, 'the OpenAPI document names its server').toBeGreaterThan(0);
+    return route.fulfill({ response, json: { ...document, servers: [{ url: DOCS_API_SERVER }] } });
+  });
+}
+
+/**
  * The next runs of a schedule and the title of the next run come from the server's clock, which a spec cannot stop: on
  * the page of the weekly maintenance (Mondays 09:00 in Berlin) the preview answers what the server would have answered
  * at the browser's 2026-10-28 09:30. Any other schedule goes to the server.
  */
-async function answerPreviewOnTheDayOfTheSeed(page: Page): Promise<void> {
+async function answerPreviewOnTheDayOfTheSeed(page: Page, locale: DocsLocale): Promise<void> {
   const monday = new Date('2026-11-02T08:00:00Z');
   const runs = [0, 7, 14, 21, 28].map((days) => new Date(monday.getTime() + days * 86_400_000).toISOString().replace('.000Z', '.000000Z'));
-  const filled: Record<string, string> = { date: '2026-11-02', week: '45', month: '11', month_name: 'November', quarter: '4', year: '2026' };
+  // the month names the server fills in come from the language of the organisation, the demo's (A353)
+  const filled: Record<string, string> = { date: '2026-11-02', week: '45', month: '11', month_name: tr(locale, 'schedule.month.november'), quarter: '4', year: '2026' };
   await page.route('**/api/v1/templates/preview', async (route) => {
     const body = route.request().postDataJSON() as { schedule?: { frequency?: string; weekdays?: number[]; time?: string; paused?: boolean }; title?: string };
     const schedule = body.schedule ?? {};
@@ -96,8 +115,9 @@ async function answerPreviewOnTheDayOfTheSeed(page: Page): Promise<void> {
 
 const SHOTS: Shot[] = [
   {
-    // the board of WEB by status
+    // the board of WEB by status, also dark (the hero of the landing page follows the theme)
     name: 'board',
+    dark: true,
     open: async (page) => {
       await page.goto('/projects/WEB?layout=board');
       await expect(page.locator('[data-card-id]').filter({ hasText: 'WEB-47' })).toBeVisible();
@@ -130,6 +150,8 @@ const SHOTS: Shot[] = [
       await page.keyboard.type('WEB');
       const dialog = page.getByRole('dialog');
       await expect(dialog.getByRole('option', { name: /WEB-\d+/ }).first()).toBeVisible();
+      // the index swaps its parts one after another: the pages may come later than the items
+      await expect(dialog.getByRole('group', { name: tr(locale, 'palette.section.pages') }).getByRole('option').first()).toBeVisible();
       await expect(dialog.getByText(tr(locale, 'palette.searching'))).toHaveCount(0);
     },
   },
@@ -137,7 +159,7 @@ const SHOTS: Shot[] = [
     // the editor of the weekly maintenance with its schedule, the template active
     name: 'templates',
     open: async (page, locale) => {
-      await answerPreviewOnTheDayOfTheSeed(page);
+      await answerPreviewOnTheDayOfTheSeed(page, locale);
       await page.goto('/projects/WEB/templates');
       const id = await idOf(page, 'projects/WEB/templates', DEMO[locale].template);
       await page.goto(`/projects/WEB/templates/${id}`);
@@ -241,8 +263,10 @@ const SHOTS: Shot[] = [
     name: 'api-docs',
     only: 'en',
     open: async (page) => {
+      await answerOpenApiWithTheExampleServer(page);
       await page.goto('/api/docs');
       await expect(page.getByText('werkbuch API').first()).toBeVisible();
+      await expect(page.getByText(DOCS_API_SERVER).first()).toBeVisible();
     },
   },
 ];
@@ -265,6 +289,7 @@ for (const locale of ['de', 'en'] as const) {
           await page.evaluate(() => document.fonts.ready);
           await expect(page.locator('.animate-toast-in')).toHaveCount(0);
           await expect(page.getByText(tr(locale, 'shell.live.paused_title'))).toHaveCount(0);
+          expect(await page.locator('body').innerText(), `the shot ${shot.name} names the host of DDEV`).not.toContain(DEV_HOST);
           await page.screenshot({
             path: path.join(OUT, locale, theme === 'light' ? `${shot.name}.png` : `${shot.name}-dark.png`),
             animations: 'disabled',

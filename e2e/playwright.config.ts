@@ -1,6 +1,5 @@
-import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
-import { AUTH_FILE } from './helpers';
+import { AUTH_FILE, docsAuthFile } from './helpers';
 
 // The app runs in DDEV, Playwright on the Mac. WERKBUCH_URL points it at another instance, e.g. `php artisan serve` in
 // CI (with MAILPIT_URL, E2E_ARTISAN and E2E_EXEC, see global-setup.ts and global-teardown.ts).
@@ -30,7 +29,7 @@ const docsShots = (language: 'de' | 'en') => {
       deviceScaleFactor: 1,
       colorScheme: 'light' as const,
       locale,
-      storageState: path.join(import.meta.dirname, `.auth/docs-${language}.json`),
+      storageState: docsAuthFile(language),
       launchOptions: { args: [`--lang=${locale}`] },
     },
   };

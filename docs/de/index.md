@@ -6,10 +6,15 @@ hero:
   text: Projektmanagement zum Selbst-Hosten.
   tagline: Work Items mit eigenen Typen, Feldern und Workflows, ein Wiki pro Projekt und Views über alles hinweg. Gebaut für die Tastatur und offen für Skripte und KI-Agenten über eine REST-API, MCP und Webhooks.
   image:
-    src: /screenshots/de/board.png
+    light:
+      src: /screenshots/de/board.png
+      width: 1440
+      height: 900
+    dark:
+      src: /screenshots/de/board-dark.png
+      width: 1440
+      height: 900
     alt: Das Board eines Projekts, die Work Items in einer Spalte je Status
-    width: 1440
-    height: 900
   actions:
     - theme: brand
       text: Einrichtung
@@ -20,7 +25,7 @@ hero:
 
 features:
   - title: Typen und Workflows
-    details: Aufgabe, Bug, Kundenwunsch – du legst fest, welche Typen es gibt, welche Felder jeder hat und durch welche Status ein Item läuft. Wenn du willst, regelt eine Matrix, welche Wechsel erlaubt sind.
+    details: Task, Bug, Kundenwunsch – du legst fest, welche Typen es gibt, welche Felder jeder hat und durch welche Status ein Item läuft. Wenn du willst, regelt eine Matrix, welche Wechsel erlaubt sind.
     link: /de/concepts/types-and-properties
     linkText: Typen und Properties
   - title: Views
@@ -63,4 +68,4 @@ Und dieselbe Seite im Dunkeln.
 
 ## Stand
 
-Gebaut ist alles. Vor v0.1.0 wird noch einmal von Hand getestet, darum gibt es noch kein Release – bis dahin baust du das Image selbst, wie, steht unter [Einrichtung](/de/setup). Wie werkbuch auf einem Server läuft, steht unter [Einrichtung](/de/setup), [Reverse Proxy](/de/reverse-proxy), [Betrieb](/de/operations), [Aktualisieren](/de/upgrading) und [Sicherung](/de/backup), die Arbeit am Code auf der [Entwicklungsseite](/de/development). Wie alles funktioniert, steht unter [Konzepte](/de/concepts/permissions).
+Gebaut ist alles. Vor v0.1.0 wird noch einmal von Hand getestet, darum gibt es noch kein Release. Bis dahin baust du das Image selbst. Wie das geht und wie werkbuch auf einem Server läuft, steht unter [Einrichtung](/de/setup), [Reverse Proxy](/de/reverse-proxy), [Betrieb](/de/operations), [Aktualisieren](/de/upgrading) und [Sicherung](/de/backup), die Arbeit am Code auf der [Entwicklungsseite](/de/development). Wie alles funktioniert, steht unter [Konzepte](/de/concepts/permissions).

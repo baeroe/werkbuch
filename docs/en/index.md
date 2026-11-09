@@ -6,10 +6,15 @@ hero:
   text: Project management you host yourself.
   tagline: Work items with your own types, fields and workflows, a wiki per project and views across all of them. Made for the keyboard, and open to scripts and AI agents through a REST API, MCP and webhooks.
   image:
-    src: /screenshots/en/board.png
+    light:
+      src: /screenshots/en/board.png
+      width: 1440
+      height: 900
+    dark:
+      src: /screenshots/en/board-dark.png
+      width: 1440
+      height: 900
     alt: The board of a project, its work items in one column per status
-    width: 1440
-    height: 900
   actions:
     - theme: brand
       text: Setup
@@ -63,4 +68,4 @@ And the same page in the dark.
 
 ## Status
 
-The build is done. Before v0.1.0 everything gets one more round of testing by hand, so there is no release yet – until then you build the image yourself, [Setup](/en/setup) says how. Running werkbuch on a server is covered by [Setup](/en/setup), [Reverse proxy](/en/reverse-proxy), [Operations](/en/operations), [Upgrading](/en/upgrading) and [Backup](/en/backup), working on the code by the [development page](/en/development). How everything works is under [Concepts](/en/concepts/permissions).
+The build is done. Before v0.1.0 everything gets one more round of testing by hand, so there is no release yet. Until then you build the image yourself. How to do that and how to run werkbuch on a server is covered by [Setup](/en/setup), [Reverse proxy](/en/reverse-proxy), [Operations](/en/operations), [Upgrading](/en/upgrading) and [Backup](/en/backup), working on the code by the [development page](/en/development). How everything works is under [Concepts](/en/concepts/permissions).

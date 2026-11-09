@@ -311,7 +311,7 @@ it('has the same screenshots in English and German', function () use ($screensho
     $english = array_values(array_filter($screenshots('en'), fn (string $file): bool => ! str_starts_with($file, 'api-docs')));
 
     expect($screenshots('en'))->toContain(
-        'board.png', 'item.png', 'item-dark.png', 'palette.png', 'templates.png', 'webhooks.png', 'my-items.png', 'table.png',
+        'board.png', 'board-dark.png', 'item.png', 'item-dark.png', 'palette.png', 'templates.png', 'webhooks.png', 'my-items.png', 'table.png',
         'timeline.png', 'inbox.png', 'wiki.png', 'views.png', 'settings-workflow.png', 'automations.png', 'api-docs.png',
     )
         ->and($english)->toEqualCanonicalizing($screenshots('de'));
@@ -421,8 +421,12 @@ it('links the screenshots of the README to files that exist', function () {
 it('shows screenshots on the landing page', function () use ($frontMatter) {
     foreach (['en', 'de'] as $l) {
         $home = $frontMatter("{$l}/index");
-        expect($home['hero']['image']['src'] ?? null)->toBe("/screenshots/{$l}/board.png")
-            ->and(trim((string) ($home['hero']['image']['alt'] ?? '')))->not->toBe('');
+        // the board in the theme of the reader: VitePress shows `light` or `dark`, each with its size (no layout shift)
+        $image = $home['hero']['image'] ?? [];
+        foreach (['light' => 'board.png', 'dark' => 'board-dark.png'] as $theme => $file) {
+            expect($image[$theme] ?? null)->toBe(['src' => "/screenshots/{$l}/{$file}", 'width' => 1440, 'height' => 900], "{$l}/index shows no {$theme} hero");
+        }
+        expect(trim((string) ($image['alt'] ?? '')))->not->toBe('');
 
         // six areas, each leading to its page of the docs
         expect($home['features'] ?? [])->toHaveCount(6);

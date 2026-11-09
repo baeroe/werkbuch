@@ -1,14 +1,17 @@
 import { execFileSync } from 'node:child_process';
 import { COVERAGE } from './fixtures';
-import { ROOT, syncMutagen } from './helpers';
+import { ROOT, schedulerDaemon, syncMutagen } from './helpers';
 
 /**
  * After the run: the coverage of the browser and of Vitest merged, with the gate of 100 % lines over resources/js
  * (scripts/coverage-merge.mjs). It runs where Vitest ran: `E2E_EXEC ?? 'ddev exec'` (empty in CI). `E2E_MERGE=0` leaves
  * the coverage in coverage/e2e/<project>/ unmerged: a CI job of one project remaps and uploads it, the merge of all
- * projects runs elsewhere (one project alone never reaches the gate).
+ * projects runs elsewhere (one project alone never reaches the gate). The run of the docs screenshots merges nothing.
  */
 export default function globalTeardown(): void {
+  // the run of the docs screenshots stopped the scheduler daemon of DDEV (tests/docs-seed.setup.ts); docs-reset starts it
+  // again, this once more for a run that ended before it
+  if (process.env.DOCS_SCREENSHOTS) return schedulerDaemon('start');
   if (!COVERAGE || process.env.E2E_MERGE === '0') return;
 
   const [command, ...prefix] = (process.env.E2E_EXEC ?? 'ddev exec').split(/\s+/).filter(Boolean);

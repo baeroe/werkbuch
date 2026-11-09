@@ -417,8 +417,9 @@ it('deploys the docs only from main', function () {
 
     expect(array_keys($workflow['on']))->toEqualCanonicalizing(['push', 'workflow_dispatch'])
         ->and($workflow['on']['push']['branches'])->toBe(['main'])
-        // the compose files are embedded in the setup, the lockfile holds VitePress
-        ->and($workflow['on']['push']['paths'])->toEqualCanonicalizing(['docs/**', 'docker-compose.yml', 'docker-compose.standalone.yml', 'pnpm-lock.yaml', '.github/workflows/docs.yml'])
+        // the compose files are embedded in the setup, the lockfile holds VitePress; plans and notes under docs/ are not
+        // published (a negated pattern only takes out what a pattern before it took in)
+        ->and($workflow['on']['push']['paths'])->toBe(['docs/**', '!docs/superpowers/**', '!docs/history/**', 'docker-compose.yml', 'docker-compose.standalone.yml', 'pnpm-lock.yaml', '.github/workflows/docs.yml'])
         ->and($workflow['permissions'])->toBe(['contents' => 'read'])
         ->and($workflow['concurrency'])->toBe(['group' => 'pages', 'cancel-in-progress' => false]);
 
@@ -445,7 +446,11 @@ it('skips the deploy with a notice while Pages is off', function () use ($runs) 
     $check = collect($jobs['pages']['steps'])->firstWhere('id', 'pages');
     expect($check['env'])->toMatchArray(['GH_TOKEN' => '${{ github.token }}', 'REPOSITORY' => '${{ github.repository }}'])
         ->and($check['run'])->toContain('gh api --include "repos/$REPOSITORY/pages"')
-        ->toContain('200) echo "enabled=true"')
+        ->toContain('200)')
+        // only a site that deploys from GitHub Actions takes the deployment; one from a branch gets a notice
+        ->toContain('build_type=$(gh api "repos/$REPOSITORY/pages" --jq .build_type)')
+        ->toContain('if [ "$build_type" = workflow ]; then'."\n".'      echo "enabled=true"')
+        ->toContain('::notice title=GitHub Pages::Pages deploys from a branch')
         ->toContain('404)')
         ->toContain('echo "enabled=false"')
         ->toContain('::notice title=GitHub Pages::Pages is not enabled for this repository')

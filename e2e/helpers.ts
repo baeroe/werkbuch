@@ -2,7 +2,7 @@
  * What the specs share: the texts of the app, the people of the seeders, the keyboard sign-in and the mails in Mailpit.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, createHmac } from 'node:crypto';
 import { crc32, deflateSync } from 'node:zlib';
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
@@ -14,6 +14,28 @@ export const ROOT = path.resolve(import.meta.dirname, '..');
 
 /** Session of the setup project (git-ignored), shared by every test that does not sign in itself. */
 export const AUTH_FILE = path.join(import.meta.dirname, '.auth/user.json');
+
+/** The languages of the docs screenshots (tests/docs-seed.setup.ts, tests/docs-screenshots.spec.ts). */
+export type DocsLocale = 'en' | 'de';
+
+/** The session of Mara in the demo of a language for the docs screenshots (git-ignored, like the other sessions). */
+export const docsAuthFile = (locale: DocsLocale): string => path.join(import.meta.dirname, `.auth/docs-${locale}.json`);
+
+/** The scheduler of DDEV (`schedule:work`, a daemon of .ddev/config.yaml) as supervisord names it in the web container. */
+const SCHEDULER_DAEMON = 'webextradaemons:scheduler';
+
+/**
+ * Stops or starts the scheduler daemon of DDEV, and waits until supervisord reports it so (throws otherwise): the run of
+ * the docs screenshots holds it for its whole length, so neither a template, the night, a reminder nor a prune touches
+ * the demo between seeding and shot. `supervisorctl` answers 0 even when it refuses, so the state is read back.
+ */
+export function schedulerDaemon(action: 'stop' | 'start'): void {
+  execFileSync('ddev', ['exec', 'supervisorctl', action, SCHEDULER_DAEMON], { cwd: ROOT, stdio: 'ignore' });
+  // `status` exits with 3 for a stopped program: read its output, not its code
+  const status = spawnSync('ddev', ['exec', 'supervisorctl', 'status', SCHEDULER_DAEMON], { cwd: ROOT, encoding: 'utf8' }).stdout;
+  const wanted = action === 'stop' ? 'STOPPED' : 'RUNNING';
+  if (!status.includes(wanted)) throw new Error(`The scheduler daemon is not ${wanted} after supervisorctl ${action}: ${status.trim()}`);
+}
 
 /** The sessions of `signedInContext()`, one file per account (`<email>.json`, git-ignored). */
 const ACCOUNT_AUTH_DIR = path.join(import.meta.dirname, '.auth');

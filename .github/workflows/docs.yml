@@ -6,7 +6,8 @@ name: Docs
 on:
   push:
     branches: [main]
-    paths: ['docs/**', 'docker-compose.yml', 'docker-compose.standalone.yml', 'pnpm-lock.yaml', '.github/workflows/docs.yml'] # the compose files are embedded in the setup
+    # the compose files are embedded in the setup; the plans and notes under docs/ are no part of the site
+    paths: ['docs/**', '!docs/superpowers/**', '!docs/history/**', 'docker-compose.yml', 'docker-compose.standalone.yml', 'pnpm-lock.yaml', '.github/workflows/docs.yml']
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # whether Pages is on: without it the docs are built, but not deployed, and the run stays green
+  # whether Pages is on and deploys from GitHub Actions: otherwise the docs are built, but not deployed, and the run
+  # stays green (a site that deploys from a branch would refuse the deployment of a workflow)
   pages:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -35,7 +37,15 @@ jobs:
         run: |
           status=$(gh api --include "repos/$REPOSITORY/pages" 2>/dev/null | head -n 1 | cut -d ' ' -f 2) || true
           case "$status" in
-            200) echo "enabled=true" >> "$GITHUB_OUTPUT" ;;
+            200)
+              build_type=$(gh api "repos/$REPOSITORY/pages" --jq .build_type)
+              if [ "$build_type" = workflow ]; then
+                echo "enabled=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "::notice title=GitHub Pages::Pages deploys from a branch (build_type ${build_type:-unknown}), not from GitHub Actions (Settings → Pages → Source 'GitHub Actions'); the docs were built but not deployed."
+                echo "enabled=false" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
             404)
               echo "::notice title=GitHub Pages::Pages is not enabled for this repository (Settings → Pages → Source 'GitHub Actions', custom domain werkbuch.dev); the docs were built but not deployed."
               echo "enabled=false" >> "$GITHUB_OUTPUT"
