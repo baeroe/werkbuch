@@ -22,12 +22,6 @@ export type A11yException = {
 
 export const A11Y_EXCEPTIONS: readonly A11yException[] = [
   {
-    rule: 'dlitem',
-    target: 'dl[role="group"]',
-    reason: 'axe: Ensures <dt> and <dd> elements are contained by a <dl>. The facts of the system page stand in a <dl role="group">: the role takes the list semantics away.',
-    until: 'Task 16',
-  },
-  {
     rule: 'aria-hidden-focus',
     target: '[data-base-ui-focus-guard]',
     reason:

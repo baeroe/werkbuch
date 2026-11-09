@@ -26,12 +26,15 @@ import type { SectionProps } from '../sections';
 
 const count = (value: number): string => new Intl.NumberFormat(intlLocale()).format(value);
 
-/** The facts of the instance as terms and their definitions (T19-M5), named as a group. */
+/**
+ * The facts of the instance as terms and their definitions (T19-M5), named as a group. The group is an element of its
+ * own: a role on the <dl> would take its list semantics, and the terms would stand outside a list (axe dlitem).
+ */
 function Facts({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <dl role="group" aria-label={label} className="divide-y divide-line">
-      {children}
-    </dl>
+    <div role="group" aria-label={label}>
+      <dl className="divide-y divide-line">{children}</dl>
+    </div>
   );
 }
 
