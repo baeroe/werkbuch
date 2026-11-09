@@ -141,10 +141,12 @@ test('saves a page at once with mod+enter and deletes a page from its row on the
     await tabTo(page, editor, { max: 120 });
     await page.keyboard.type('Retro on Friday.');
 
-    // mod+enter saves at once, before the pause of the autosave runs out
-    const saved = page.waitForResponse((response) => response.url().endsWith(`/api/v1/pages/${agenda.id}`) && response.request().method() === 'PATCH', { timeout: 1_000 });
+    // mod+enter sends at once, before the pause of the autosave runs out (only the request has the deadline: the answer
+    // may take longer under load)
+    const sent = page.waitForRequest((request) => request.url().endsWith(`/api/v1/pages/${agenda.id}`) && request.method() === 'PATCH', { timeout: 1_000 });
     await pressMod(page, 'Enter');
-    expect((await saved).status()).toBe(200);
+    const response = await (await sent).response();
+    expect(response?.status()).toBe(200);
     await expect(page.locator('[data-save-status]').getByRole('status')).toHaveText(tr('en', 'wiki.save.saved'));
     expect((await storedPage(page, agenda.id)).content).toBe('Retro on Friday.');
 

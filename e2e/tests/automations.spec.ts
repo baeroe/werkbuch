@@ -96,6 +96,8 @@ test('switches Assignee beim Start on with the keyboard; a person who starts an 
 });
 
 test('relates an item it references, keyboard only', async ({ page }) => {
+  // the relation waits on the queue (up to 90 s, as the acceptance specs do, K18): a full run backs it up
+  test.setTimeout(150_000);
   // "Erwähnte Items verknüpfen" is on in a new project (A452): a # in a comment relates both items after the commit
   const project = await createE2eProject(page, projectName('link references'), { types: ['Task'] });
   try {
@@ -118,7 +120,7 @@ test('relates an item it references, keyboard only', async ({ page }) => {
     await expect(page.getByRole('status').filter({ hasText: tr('en', 'items.comments.sent') })).toBeVisible();
 
     // the relation comes from the queue, live on the page, and stands on both ends
-    await expect(relations.getByText(target.key)).toBeVisible({ timeout: 30_000 });
+    await expect(relations.getByText(target.key)).toBeVisible({ timeout: 90_000 });
     const relationsOf = async (key: string) => ((await (await api(page, 'GET', `/api/v1/work-items/${key}/relations`)).json()) as { data: unknown[] }).data.length;
     expect(await relationsOf(item.key)).toBe(1);
     expect(await relationsOf(target.key)).toBe(1);

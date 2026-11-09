@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { allEntries, api, arrowTo, createE2eProject, createItem, isPhone, PEOPLE, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { typeId } from '../timelineHelpers';
 
 // The page of an item with the keyboard only, signed in as the e2e person (playwright.config.ts), in English. Each test
 // works in a project of its own (`E2E …`, removed in `finally`); its items come over the API. The item commands (s, a,
@@ -44,13 +45,6 @@ async function openItem(page: Page, key: string, title: string) {
 async function cleanUp(page: Page, identifier: string) {
   await page.goto('/my-items');
   await removeE2eProject(page, identifier);
-}
-
-/** The id of the work item type named `name`. */
-async function typeIdOf(page: Page, name: string): Promise<string> {
-  const entry = (await allEntries(page, 'work-item-types')).find((type) => type.name === name);
-  if (!entry) throw new Error(`No type "${name}"`);
-  return String(entry.id);
 }
 
 /** The field editor `label` with its value, as the panel names it ("Status: Done"). */
@@ -328,10 +322,10 @@ test('changes the type with t through the dialog and the parent with shift+p', a
     const environment = (await allEntries(page, 'properties')).find((property) => property.key === 'environment') as { options: { id: string; label: string }[] } | undefined;
     if (!environment) throw new Error('No property "environment" in the demo catalog');
     const staging = environment.options.find((option) => option.label === 'Staging')!;
-    const epic = await createItem(page, { project_id: id, type_id: await typeIdOf(page, 'Epic'), title: 'E2E Relaunch' });
+    const epic = await createItem(page, { project_id: id, type_id: await typeId(page, 'Epic'), title: 'E2E Relaunch' });
     const item = await createItem(page, {
       project_id: id,
-      type_id: await typeIdOf(page, 'Bug'),
+      type_id: await typeId(page, 'Bug'),
       title: 'E2E Menü springt',
       values: { environment: staging.id, browser: 'Firefox 140' },
     });

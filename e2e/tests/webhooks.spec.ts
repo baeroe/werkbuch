@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, artisanEval, createE2eProject, createE2eWebhook, createItem, isPhone, pressMod, removeE2eProject, removeE2eWebhook, runId, tabTo, tr, variant, waitForNotification } from '../helpers';
+import { artisanEval, createE2eProject, createE2eWebhook, createItem, isPhone, pressMod, removeE2eProject, removeE2eWebhook, runId, tabTo, tr, variant, waitForNotification } from '../helpers';
 import { startReceiver, type ReceivedRequest } from '../webhookReceiver';
 
 // Settings → Webhooks (spec 6.3) as the e2e person (Erik Ende, org admin), in English. The receiver is a small server on
@@ -203,13 +203,16 @@ test('sends a delivery of the log again with the keyboard', async ({ page }) => 
   const hook = await createE2eWebhook(page, { name: 'again', url: receiver.url, events: ['work_item.created'], project_id: project.id });
   const title = name('again');
   try {
-    await createItem(page, { project_id: project.id, title: 'E2E webhook nochmal' });
-    const created = () => receiver.requests.filter((request) => request.headers['x-werkbuch-event'] === 'work_item.created');
-    await expect.poll(() => created().length, { timeout: WEBHOOK }).toBe(1);
-    // the log lists the attempt once the queue has written it
-    await expect
-      .poll(async () => ((await (await api(page, 'GET', `/api/v1/webhooks/${hook.id}/deliveries`)).json()) as { data: unknown[] }).data.length, { timeout: WEBHOOK })
-      .toBe(1);
+    // a delivery with its first attempt, written before the first key: the test does not wait on the queue (a backlog
+    // of the full run held the first delivery longer than any sensible wait); "send again" itself runs in the request
+    const delivery = artisanEval(
+      [
+        `$delivery = App\\Models\\WebhookDelivery::create(['webhook_id' => '${hook.id}', 'event_id' => strtolower((string) Illuminate\\Support\\Str::ulid()), 'event' => 'work_item.created', 'body' => '{}', 'status' => 'succeeded', 'attempts' => 1]);`,
+        `App\\Models\\WebhookAttempt::create(['delivery_id' => $delivery->id, 'webhook_id' => '${hook.id}', 'attempt' => 1, 'kind' => 'scheduled', 'status_code' => 200, 'duration_ms' => 120, 'attempted_at' => now()]);`,
+        'echo $delivery->id;',
+      ].join(' '),
+    );
+    expect(delivery).toMatch(/^[0-9a-z]{26}$/);
 
     await page.goto(`/settings/webhooks?deliveries=${hook.id}`);
     await expect(page.getByRole('heading', { name: label('settings.webhooks.deliveries_of', { name: title }) })).toBeVisible();
@@ -218,9 +221,10 @@ test('sends a delivery of the log again with the keyboard', async ({ page }) => 
     await page.keyboard.press('Enter');
     await expect(page.getByText(label('settings.webhooks.toast.arrived', { subject: label('settings.webhooks.log.subject_delivery'), name: title }))).toBeVisible({ timeout: WEBHOOK });
 
-    // the same delivery once more: its id, a new attempt in the log
-    expect(created()).toHaveLength(2);
-    expect(created()[1]!.headers['x-werkbuch-delivery']).toBe(created()[0]!.headers['x-werkbuch-delivery']);
+    // the same delivery once more: its id at the receiver, a new attempt in the log
+    const sent = receiver.requests.filter((request) => request.headers['x-werkbuch-event'] === 'work_item.created');
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.headers['x-werkbuch-delivery']).toBe(delivery);
     await expect(page.getByRole('list', { name: label('settings.webhooks.deliveries') }).getByRole('listitem')).toHaveCount(2);
   } finally {
     await removeE2eWebhook(page, hook.id);

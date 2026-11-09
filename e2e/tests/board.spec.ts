@@ -54,10 +54,10 @@ test('moves the cursor to the column before and after with ← and →', async (
   await page.goto('/my-items');
   const { identifier, keys } = await boardProject(page, 'columns', ['Password reset']);
   const [login, password] = keys as [string, string];
-  const workflow = (await allEntries(page, 'workflows')).find((entry) => entry.name === 'Agentur-Freigabe') as { states: { id: string; name: string }[] };
-  const response = await api(page, 'POST', `/api/v1/work-items/${password}/transition`, { to_state_id: workflow.states.find((state) => state.name === 'In Progress')!.id });
-  expect(response.status(), await response.text()).toBe(200);
   try {
+    const workflow = (await allEntries(page, 'workflows')).find((entry) => entry.name === 'Agentur-Freigabe') as { states: { id: string; name: string }[] };
+    const response = await api(page, 'POST', `/api/v1/work-items/${password}/transition`, { to_state_id: workflow.states.find((state) => state.name === 'In Progress')!.id });
+    expect(response.status(), await response.text()).toBe(200);
     await openBoard(page, identifier, login);
     // → goes past the empty columns to the next card, ← back; nothing moves
     await page.keyboard.press('ArrowRight');
