@@ -199,6 +199,9 @@ export function DayValue({ value, today, overdue, short = false, empty }: DaySho
     <>
       <Icon className={cx('shrink-0', short ? 'size-3.5' : 'size-4', overdue ? 'text-danger' : 'text-muted')} aria-hidden="true" />
       <span className={cx('tabular-nums', overdue && 'font-medium text-danger')}>{short ? formatShortDay(value) : formatDay(value)}</span>
+      {/* a space between the words, which the flex gap does not draw: read as text, the day and the word stay two
+          words (axe joins the text of elements as it stands, "31.10.2026überfällig") */}
+      {(overdue || !short) && ' '}
       {/* overdue is never colour alone: the word stands beside the day, in chips and cards too */}
       {overdue ? (
         <span className="truncate font-medium text-danger">{t('items.fields.date.overdue')}</span>
