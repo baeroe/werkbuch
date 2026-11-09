@@ -1,11 +1,12 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, createE2ePage, createE2eProject, createItem, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
+import { api, arrowTo, createE2ePage, createE2eProject, createItem, pasteFile, pngBytes, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
 
-// The rich text editor in the description of an item, signed in as the e2e person in English: pictures pasted, files
-// chosen over `/`, code highlighting, `@` and `#` with the keyboard. jsdom knows no ClipboardEvent and no file choice,
-// so pasting and choosing files are only checked here. Each test works in a project of its own (`E2E …`, removed in
-// `finally`); its items and files are made by the test.
+// The rich text editor in the description of an item, signed in as the e2e person in English: pictures pasted (and
+// their alternative text), files chosen over `/`, code highlighting, `@` and `#` with the keyboard, and on a wiki page a
+// table from `/` with its menu (alt+F10). jsdom knows no ClipboardEvent and no file choice, so pasting and choosing
+// files are only checked here. Each test works in a project of its own (`E2E …`, removed in `finally`); its items, pages
+// and files are made by the test.
 
 const name = (what: string) => `E2E ${what} ${variant()} ${runId()}`;
 
@@ -174,6 +175,101 @@ test('refers to a wiki page with # in a description', async ({ page }) => {
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/wiki/${target.id}$`));
     await expect(page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') })).toHaveValue(`E2E Leuchtfeuer ${searchToken()}`);
+  } finally {
+    await page.goto('/my-items');
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('inserts a table over /, moves and closes the list with the keyboard and edits the table from alt+F10', async ({ page }) => {
+  // the `/` list offers a table on a wiki page (`slashTable`)
+  const { id, identifier } = await createE2eProject(page, name('table'), { types: ['Task'] });
+  try {
+    const prices = await createE2ePage(page, id, { title: 'Preise' });
+    await page.goto(`/projects/${identifier}/wiki/${prices.id}`);
+    const section = page.getByRole('main');
+    const editor = section.getByRole('textbox', { name: tr('en', 'editor.label.page') });
+    await tabTo(page, editor, { max: 120 });
+    const blocks = page.getByRole('listbox', { name: tr('en', 'editor.slash.label') });
+
+    // Escape closes the list and keeps what was typed
+    await page.keyboard.type('/tab');
+    await expect(blocks.getByRole('option', { name: new RegExp(`^${tr('en', 'editor.slash.table')}`) })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(blocks).toBeHidden();
+    await expect(editor).toHaveText('/tab');
+    for (let typed = 0; typed < 4; typed += 1) await page.keyboard.press('Backspace');
+
+    // ↓ and ↑ walk the list (the editor keeps the focus and names the active entry), Enter takes it
+    await page.keyboard.type('/');
+    await expect(blocks).toBeVisible();
+    const active = () => editor.getAttribute('aria-activedescendant');
+    const first = await active();
+    await page.keyboard.press('ArrowDown');
+    await expect.poll(active).not.toBe(first);
+    await page.keyboard.press('ArrowUp');
+    await expect.poll(active).toBe(first);
+    await page.keyboard.type('table');
+    await expect(blocks.getByRole('option', { name: new RegExp(`^${tr('en', 'editor.slash.table')}`) })).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('Enter');
+    await expect(blocks).toBeHidden();
+    const table = section.locator('table');
+    await expect(table).toBeVisible();
+    const rows = await table.locator('tr').count();
+
+    // alt+F10 in the table: its menu, the first entry focused; a row below, then a header column
+    await page.keyboard.press('Alt+F10');
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await arrowTo(page, menu.getByRole('menuitem', { name: tr('en', 'editor.table.row_after') }));
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeHidden();
+    await expect(table.locator('tr')).toHaveCount(rows + 1);
+    await expect(section.locator('[data-editor-announcer]')).toHaveText(tr('en', 'editor.table.done.row_added'));
+    // the focus is back in the text: typing goes into the cell
+    await expect(editor).toBeFocused();
+
+    await page.keyboard.press('Alt+F10');
+    await expect(menu).toBeVisible();
+    await arrowTo(page, menu.getByRole('menuitemcheckbox', { name: new RegExp(`^${tr('en', 'editor.table.header_column')}`) }));
+    await page.keyboard.press('Enter');
+    await expect(section.locator('[data-editor-announcer]')).toHaveText(tr('en', 'editor.table.done.header_column_on'));
+    await expect(table.locator('tr').nth(1).locator('th')).toHaveCount(1);
+
+    // saved with the rows it has now
+    await expect
+      .poll(async () => {
+        const { data } = (await (await api(page, 'GET', `/api/v1/pages/${prices.id}`)).json()) as { data: { content_json: { content?: { type: string; content?: unknown[] }[] } | null } };
+        return data.content_json?.content?.find((node) => node.type === 'table')?.content?.length ?? 0;
+      }, { timeout: 10_000 })
+      .toBe(rows + 1);
+  } finally {
+    await page.goto('/my-items');
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('edits the alternative text of a pasted image with Enter', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('alt'), { types: ['Task'] });
+  try {
+    const item = await createItem(page, { project_id: id, title: 'E2E Lageplan beschreiben' });
+    const { section, editor } = await editDescription(page, item.key, 'E2E Lageplan beschreiben');
+    await page.keyboard.type('Lageplan');
+    await pasteFile(editor, { name: 'lageplan.png', type: 'image/png', bytes: pngBytes(40, 30) });
+    await expect(section.getByRole('img', { name: 'lageplan.png' })).toBeVisible();
+    await expect(section.getByRole('progressbar')).toHaveCount(0);
+
+    // the arrows select the image as a whole; Enter edits its alternative text, Enter again saves it
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    const alt = section.getByRole('textbox', { name: tr('en', 'editor.image.alt') });
+    await expect(alt).toBeFocused();
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.type('Lageplan mit Zufahrt');
+    await page.keyboard.press('Enter');
+    await expect(alt).toHaveCount(0);
+    await expect(section.getByRole('img', { name: 'Lageplan mit Zufahrt' })).toBeVisible();
+    await expect.poll(() => storedDescription(page, item.id)).toMatch(/!\[Lageplan mit Zufahrt\]\(attachment:[0-9a-z]{26}\)/);
   } finally {
     await page.goto('/my-items');
     await removeE2eProject(page, identifier);

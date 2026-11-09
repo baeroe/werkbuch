@@ -152,6 +152,11 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   'editor:mention': { file: 'editor.spec.ts', test: 'mentions over @ and refers over #' },
   'editor:reference': { file: 'editor.spec.ts', test: 'mentions over @ and refers over #' },
   'editor:list_take': { file: 'editor.spec.ts', test: 'mentions over @ and refers over #' },
+  'editor:slash': { file: 'editor.spec.ts', test: 'inserts a table over /, moves and closes the list with the keyboard and edits the table from alt+F10' },
+  'editor:list_move': { file: 'editor.spec.ts', test: 'inserts a table over /, moves and closes the list with the keyboard and edits the table from alt+F10' },
+  'editor:list_close': { file: 'editor.spec.ts', test: 'inserts a table over /, moves and closes the list with the keyboard and edits the table from alt+F10' },
+  'editor:table_menu': { file: 'editor.spec.ts', test: 'inserts a table over /, moves and closes the list with the keyboard and edits the table from alt+F10' },
+  'editor:image_alt': { file: 'editor.spec.ts', test: 'edits the alternative text of a pasted image with Enter' },
 };
 
 /**
@@ -188,6 +193,9 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'edit the description', file: 'item-description.spec.ts', test: 'writes a heading and a checklist with Markdown shortcuts' },
   { flow: 'write a comment', file: 'comments.spec.ts', test: 'writes a comment with m and mod+enter' },
   { flow: 'paste an image', file: 'editor.spec.ts', test: 'pastes an image into the description and shows it after a reload' },
+  { flow: 'upload a file', file: 'attachments.spec.ts', test: 'uploads a file to the list and downloads it' },
+  { flow: 'download a file', file: 'attachments.spec.ts', test: 'uploads a file to the list and downloads it' },
+  { flow: 'edit a table in the editor', file: 'editor.spec.ts', test: 'inserts a table over /, moves and closes the list with the keyboard and edits the table from alt+F10' },
   { flow: 'edit several items at once', file: 'bulk.spec.ts', test: 'selects three items with x and sets their priority with p' },
   { flow: 'archive with undo', file: 'bulk.spec.ts', test: 'selects a range with shift+x, archives with mod+backspace and undoes with mod+z' },
   { flow: 'delete with undo', file: 'items.spec.ts', test: 'deletes an item with mod+backspace and undoes it with mod+z' },
@@ -293,18 +301,8 @@ export const PROJECT_GAPS: { key: string; projects: string[]; reason: string }[]
  * with a space is a flow of `FLOW_TESTS`, one without a key of the catalog or the widgets.
  */
 export const GAPS: Record<string, { file: 'TODO'; test: string }> = {
-  'editor:slash': { file: 'TODO', test: '/ in an editor opens the block menu and inserts a block with the keyboard' },
-  'editor:list_move': { file: 'TODO', test: '↑/↓ choose an entry of the @, # or / list' },
-  'editor:list_close': { file: 'TODO', test: 'Escape closes the @, # or / list and keeps the text' },
-  'editor:image_alt': { file: 'TODO', test: 'Enter on a selected image edits its alternative text' },
-  // the test of Task 21s ('edits a table with the keyboard only', editor.spec.ts) waits for Rafael's OK (Task 17b)
-  'editor:table_menu': { file: 'TODO', test: 'alt+F10 opens the menu of the table and adds a row with the keyboard' },
 
   // flows (named in words)
-  // attachments.spec.ts › uploads a file to the list and downloads it uploads with the keyboard but clicks the link to
-  // download: with Tab and Enter on the link it proves both
-  'upload a file': { file: 'TODO', test: 'uploads a file to the list with Enter on "Upload file" and the file chooser' },
-  'download a file': { file: 'TODO', test: 'downloads a file of the list with Tab and Enter on its link' },
   // comments.spec.ts and content-acceptance.spec.ts click through these
   'edit a comment': { file: 'TODO', test: 'edits an own comment from its menu with the keyboard and saves it with mod+enter' },
   'delete a comment': { file: 'TODO', test: 'deletes a comment from its menu with the keyboard and brings it back with mod+z' },
@@ -317,5 +315,4 @@ export const GAPS: Record<string, { file: 'TODO'; test: string }> = {
   'switch a schedule on': { file: 'TODO', test: 'switches "Create on a schedule" on in the editor of a template and saves it' },
   // Phase 15 after Task 17
   'link a referenced item': { file: 'TODO', test: 'refers to another item over # in a comment; the automation relates both' },
-  'edit a table in the editor': { file: 'TODO', test: 'inserts a table over /, adds a row and a header column from the menu of alt+F10' },
 };
