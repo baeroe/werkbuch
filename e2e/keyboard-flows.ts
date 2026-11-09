@@ -9,8 +9,8 @@
  * which skips a project proves nothing there. A proof of a flow writes over the API only before its first key or in
  * `finally` (API_AFTER names the exceptions).
  *
- * A new shortcut, widget key or flow needs its entry here in the same commit: a test, or for now a gap; a new flow also
- * comes into `FLOWS` of scripts/keyboard-flows.test.mjs.
+ * A new shortcut, widget key or flow needs its entry here in the same commit, with its test (`GAPS` stays empty); a new
+ * flow also comes into `FLOWS` of scripts/keyboard-flows.test.mjs.
  */
 
 /** A Playwright test that presses a key with the keyboard only. Without `projects` it holds wherever the test runs. */
@@ -127,8 +127,11 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   'table:edge_column': { file: 'table.spec.ts', test: 'jumps to the edges of the grid with Home, End and mod, and extends the selection with shift' },
   'table:edge_row': { file: 'table.spec.ts', test: 'jumps to the edges of the grid with Home, End and mod, and extends the selection with shift' },
 
-  // widgets: group headers (← on a row goes to its header, Enter folds and unfolds)
-  'groups:collapse': { file: 'items-list.spec.ts', test: 'collapses a group from the keyboard' },
+  // widgets: group headers (← on a row goes to its header, ← on the header folds it, Enter folds and unfolds)
+  'groups:collapse': [
+    { file: 'items-list.spec.ts', test: 'collapses a group from the keyboard' },
+    { file: 'items-list.spec.ts', test: 'unfolds a group with → and goes from header to header with ↑ and ↓' },
+  ],
   'groups:toggle': { file: 'items-list.spec.ts', test: 'collapses a group from the keyboard' },
   'groups:expand': { file: 'items-list.spec.ts', test: 'unfolds a group with → and goes from header to header with ↑ and ↓' },
   'groups:header': { file: 'items-list.spec.ts', test: 'unfolds a group with → and goes from header to header with ↑ and ↓' },
@@ -230,11 +233,13 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   // templates, automations, webhooks
   { flow: 'create a template', file: 'templates.spec.ts', test: 'creates a template with the keyboard and runs it now' },
   { flow: 'run a template', file: 'templates.spec.ts', test: 'creates a template with the keyboard and runs it now' },
-  // changes a schedule that came over the API; switching it on is a gap
+  // changes a schedule that came over the API; the next test switches one on
   { flow: 'set a schedule', file: 'templates.spec.ts', test: 'shows the next five runs of a monthly schedule on the first Monday' },
+  { flow: 'switch a schedule on', file: 'templates.spec.ts', test: 'switches a schedule on in the editor and saves it' },
   { flow: 'link a referenced item', file: 'automations.spec.ts', test: 'relates an item it references, keyboard only' },
   { flow: 'switch an automation', file: 'automations.spec.ts', test: 'switches Assignee beim Start on with the keyboard; a person who starts an item becomes its assignee' },
   { flow: 'create a webhook', file: 'webhooks.spec.ts', test: 'creates a webhook with the keyboard, copies its secret once and pings the receiver' },
+  { flow: 'redeliver a webhook delivery', file: 'webhooks.spec.ts', test: 'sends a delivery of the log again with the keyboard' },
   { flow: 'ping a webhook', file: 'webhooks.spec.ts', test: 'creates a webhook with the keyboard, copies its secret once and pings the receiver' },
 
   // settings
@@ -242,6 +247,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'set up a second factor', file: 'settings-personal.spec.ts', test: 'sets up two-factor sign-in with a real code and turns it off again' },
   { flow: 'change the organization', file: 'settings-organization.spec.ts', test: 'changes the name of the organization with the keyboard' },
   { flow: 'open the system page', file: 'system.spec.ts', test: 'opens the system page with the keyboard and sends a test mail that arrives in Mailpit' },
+  { flow: 'retry failed jobs', file: 'system.spec.ts', test: 'retries the failed jobs with the keyboard' },
 
   // the shell: from md on the sidebar folds to the rail, below md it is the drawer
   { flow: 'change the theme', file: 'shell.spec.ts', test: 'switches the theme from the profile menu and keeps it after reload' },
@@ -302,15 +308,8 @@ export const API_AFTER: { file: string; test: string; call: string; reason: stri
 export const PROJECT_GAPS: { key: string; projects: string[]; reason: string }[] = [];
 
 /**
- * Keys and flows without a keyboard-only test yet: `test` says what the missing test does. Task 18 closes them. A name
- * with a space is a flow of `FLOW_TESTS`, one without a key of the catalog or the widgets.
+ * Keys and flows without a keyboard-only test: `test` says what the missing test would do. A name with a space is a flow
+ * of `FLOW_TESTS`, one without a key of the catalog or the widgets. Task 18 closed every gap; keyboard-flows.test.mjs
+ * keeps it empty ("has no gaps"): a new key or flow comes with its test.
  */
-export const GAPS: Record<string, { file: 'TODO'; test: string }> = {
-
-  // flows (named in words)
-  // no e2e test yet
-  'retry failed jobs': { file: 'TODO', test: 'retries the failed jobs on the system page with the keyboard' },
-  'redeliver a webhook delivery': { file: 'TODO', test: 'sends a delivery of the log of a webhook again with the keyboard' },
-  // the template of templates.spec.ts comes with its schedule over the API
-  'switch a schedule on': { file: 'TODO', test: 'switches "Create on a schedule" on in the editor of a template and saves it' },
-};
+export const GAPS: Record<string, { file: 'TODO'; test: string }> = {};

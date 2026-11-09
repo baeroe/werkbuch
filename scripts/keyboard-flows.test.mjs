@@ -700,9 +700,8 @@ describe('keyboard manifest', () => {
     }
   });
 
-  it.each(Object.entries(GAPS))('gap for Task 18: %s', (key, gap) => {
-    expect(gap.file).toBe('TODO');
-    expect(gap.test.trim(), key).not.toBe('');
+  it('has no gaps', () => {
+    expect(Object.entries(GAPS).map(([key, gap]) => `${key}: ${gap.test}`)).toEqual([]);
   });
 });
 

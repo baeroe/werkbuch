@@ -60,7 +60,7 @@ const TEXT = {
     tested: [
       '`e2e/keyboard-flows.ts` maps every shortcut on this page and every key of a widget to a Playwright test that presses it with the keyboard only, and every flow of the list `FLOWS` (taken from chapters 4 and 5.2 of the spec) to a test that goes through it without a mouse.',
       '`scripts/keyboard-flows.test.mjs` checks that the test exists and uses no mouse, for a shortcut that it presses one of the keys, for a flow that it writes over the API only before its first key, and that the tests cover the desktop and the phone widths.',
-      'Where a test is still missing, for every width or for one, the manifest names the gap and its reason.',
+      'Where a width has no such test, the manifest names the reason.',
     ].join(' '),
   },
   de: {
@@ -75,7 +75,7 @@ const TEXT = {
     tested: [
       '`e2e/keyboard-flows.ts` ordnet jedes Kürzel dieser Seite und jede Taste eines Widgets einem Playwright-Test zu, der sie nur mit der Tastatur drückt, und jeden Ablauf der Liste `FLOWS` (aus Kapitel 4 und 5.2 der Spec) einem Test, der ihn ohne Maus durchläuft.',
       '`scripts/keyboard-flows.test.mjs` prüft, dass es den Test gibt und er keine Maus benutzt, bei einem Kürzel, dass er eine der Tasten drückt, bei einem Ablauf, dass er nur vor der ersten Taste über die API schreibt, und dass die Tests die Breiten von Desktop und Handy abdecken.',
-      'Fehlt ein Test noch, für alle Breiten oder für eine, nennt das Manifest die Lücke mit Grund.',
+      'Fehlt einer Breite ein solcher Test, nennt das Manifest den Grund.',
     ].join(' '),
   },
 };

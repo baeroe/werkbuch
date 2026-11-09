@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { artisanEval, createE2eProject, createE2eWebhook, createItem, isPhone, pressMod, removeE2eProject, removeE2eWebhook, runId, tabTo, tr, variant, waitForNotification } from '../helpers';
+import { api, artisanEval, createE2eProject, createE2eWebhook, createItem, isPhone, pressMod, removeE2eProject, removeE2eWebhook, runId, tabTo, tr, variant, waitForNotification } from '../helpers';
 import { startReceiver, type ReceivedRequest } from '../webhookReceiver';
 
 // Settings → Webhooks (spec 6.3) as the e2e person (Erik Ende, org admin), in English. The receiver is a small server on
@@ -190,6 +190,38 @@ test('shows a switched-off webhook in the inbox and turns it on again', async ({
     await expect(page.getByText(label('settings.webhooks.reenable.title'))).toHaveCount(0);
     // the button went with the notice: the heading of the log takes the focus, not the page
     await expect(page.getByRole('heading', { name: label('settings.webhooks.deliveries_of', { name: title }) })).toBeFocused();
+  } finally {
+    await removeE2eWebhook(page, hook.id);
+    await removeE2eProject(page, project.identifier);
+    await receiver.close();
+  }
+});
+
+test('sends a delivery of the log again with the keyboard', async ({ page }) => {
+  const receiver = await startReceiver();
+  const project = await createE2eProject(page, `E2E webhook again ${variant()} ${runId()}`, { types: ['Task'] });
+  const hook = await createE2eWebhook(page, { name: 'again', url: receiver.url, events: ['work_item.created'], project_id: project.id });
+  const title = name('again');
+  try {
+    await createItem(page, { project_id: project.id, title: 'E2E webhook nochmal' });
+    const created = () => receiver.requests.filter((request) => request.headers['x-werkbuch-event'] === 'work_item.created');
+    await expect.poll(() => created().length, { timeout: WEBHOOK }).toBe(1);
+    // the log lists the attempt once the queue has written it
+    await expect
+      .poll(async () => ((await (await api(page, 'GET', `/api/v1/webhooks/${hook.id}/deliveries`)).json()) as { data: unknown[] }).data.length, { timeout: WEBHOOK })
+      .toBe(1);
+
+    await page.goto(`/settings/webhooks?deliveries=${hook.id}`);
+    await expect(page.getByRole('heading', { name: label('settings.webhooks.deliveries_of', { name: title }) })).toBeVisible();
+    const again = page.getByRole('button', { name: label('settings.webhooks.log.resend_named', { event: label('webhooks.event.work_item_created'), n: 1 }) });
+    await tabTo(page, again, { max: 80 });
+    await page.keyboard.press('Enter');
+    await expect(page.getByText(label('settings.webhooks.toast.arrived', { subject: label('settings.webhooks.log.subject_delivery'), name: title }))).toBeVisible({ timeout: WEBHOOK });
+
+    // the same delivery once more: its id, a new attempt in the log
+    expect(created()).toHaveLength(2);
+    expect(created()[1]!.headers['x-werkbuch-delivery']).toBe(created()[0]!.headers['x-werkbuch-delivery']);
+    await expect(page.getByRole('list', { name: label('settings.webhooks.deliveries') }).getByRole('listitem')).toHaveCount(2);
   } finally {
     await removeE2eWebhook(page, hook.id);
     await removeE2eProject(page, project.identifier);

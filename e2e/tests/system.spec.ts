@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { mailpit, openNavigation, PEOPLE, tabTo, tr } from '../helpers';
+import { api, artisanEval, mailpit, openNavigation, PEOPLE, tabTo, tr } from '../helpers';
 
 // Settings → System (spec 5.2) as the e2e person (Erik Ende, org admin; playwright.config.ts), in English. The test mail
 // goes out synchronously to his own address; it counts as arrived once Mailpit holds a mail to him it did not hold
@@ -38,4 +38,33 @@ test('opens the system page with the keyboard and sends a test mail that arrives
   await expect.poll(() => mailpit.newTo(email, before), { timeout: 15_000 }).not.toBeNull();
   const { html } = (await mailpit.newTo(email, before))!;
   expect(html).toContain(tr('en', 'mail.test.heading'));
+});
+
+test('retries the failed jobs with the keyboard', async ({ page }) => {
+  // tinker goes through ddev (seconds, more under load)
+  test.setTimeout(90_000);
+  // a failed job that does nothing when it runs again: the reminders of an hour three days ago remind nobody
+  const uuid = artisanEval(
+    [
+      '$job = new App\\Jobs\\SendDueRemindersJob(now()->utc()->subDays(3)->startOfHour()->toImmutable());',
+      "$payload = (fn () => $this->createPayload($job, 'notifications'))->call(Illuminate\\Support\\Facades\\Queue::connection('database'));",
+      "app('queue.failer')->log('database', 'notifications', $payload, new RuntimeException('E2E failed on purpose.'));",
+      'echo json_decode($payload)->uuid, PHP_EOL;',
+    ].join('\n'),
+  );
+  // whether the system page of the API still lists it among the failed jobs
+  const stillFailed = async () => ((await (await api(page, 'GET', '/api/v1/system')).json()) as { data: { failed_jobs: { id: string }[] } }).data.failed_jobs.some((job) => job.id === uuid);
+  await page.goto('/my-items');
+  expect(await stillFailed()).toBe(true);
+
+  await page.goto('/settings/system');
+  const failed = page.getByRole('region', { name: new RegExp(`^${tr('en', 'settings.system.failed.title')}`) });
+  await expect(failed.getByText('E2E failed on purpose.')).toBeVisible();
+  const retry = failed.getByRole('button', { name: tr('en', 'settings.system.failed.retry') });
+  await tabTo(page, retry, { max: 150 });
+  await page.keyboard.press('Enter');
+  // queued again: the toast says how many, the list empties once the status is read anew
+  await expect(page.getByText(/ queued again$/)).toBeVisible();
+  await expect(failed.getByText('E2E failed on purpose.')).toHaveCount(0);
+  expect(await stillFailed()).toBe(false);
 });
