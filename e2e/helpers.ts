@@ -84,6 +84,18 @@ export function tr(locale: Locale, key: string, params: Record<string, string | 
   return Object.entries(params).reduce((result, [name, value]) => result.replaceAll(`:${name}`, String(value)), text);
 }
 
+/**
+ * The name of the inbox link for `count` unread notifications, as the shell says it in English: the badge shows "99+"
+ * above 99, so the name says that and the whole number; none without a count.
+ */
+export function inboxName(count: number): string {
+  if (count === 0) return tr('en', 'shell.nav.inbox');
+  return count > 99 ? tr('en', 'shell.nav.inbox_unread_over', { shown: '99+', count }) : tr('en', 'shell.nav.inbox_unread', { count });
+}
+
+/** Any name of the inbox link (`inboxName`), to find it before the count is known. */
+export const INBOX_NAMED = /^Inbox(, \S+ unread.*)?$/;
+
 const frameworkTexts: Partial<Record<string, Record<string, string>>> = {};
 
 /** The text of `key` in the framework group lang/<locale>/<group>.php (single-quoted strings, as Laravel writes them). */
