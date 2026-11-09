@@ -483,6 +483,7 @@
     "inbox.empty.unread.description": "Es gibt keine ungelesenen Benachrichtigungen.",
     "inbox.empty.unread.title": "Alles gelesen",
     "inbox.empty.unread_mentions.title": "Keine ungelesenen Erwähnungen",
+    "inbox.excerpt": "„:text“",
     "inbox.field.attachment": "Dateien",
     "inbox.field.description": "Beschreibung",
     "inbox.field.fallback": "Felder",

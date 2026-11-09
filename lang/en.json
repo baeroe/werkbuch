@@ -483,6 +483,7 @@
     "inbox.empty.unread.description": "There are no unread notifications.",
     "inbox.empty.unread.title": "All read",
     "inbox.empty.unread_mentions.title": "No unread mentions",
+    "inbox.excerpt": "“:text”",
     "inbox.field.attachment": "Files",
     "inbox.field.description": "Description",
     "inbox.field.fallback": "fields",

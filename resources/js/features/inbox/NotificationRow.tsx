@@ -233,7 +233,7 @@ export function NotificationRow({ notification, ctx, subject, current, tabStop, 
             </>
           )}
           <span id={sentenceId}>{sentence}</span>
-          {excerpt && <span className="mt-0.5 line-clamp-2 block max-w-[65ch] text-sm break-words text-muted">„{excerpt}“</span>}
+          {excerpt && <span className="mt-0.5 line-clamp-2 block max-w-[65ch] text-sm break-words text-muted">{t('inbox.excerpt', { text: excerpt })}</span>}
         </a>
         <time dateTime={notification.created_at} title={stamp} className="mt-0.5 block text-sm text-muted tabular-nums md:hidden">
           {ago}
