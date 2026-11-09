@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { A11Y_EXCEPTIONS } from '../a11y-exceptions';
 import { A11Y_PAGES, type A11yEntry, type A11yIds } from '../a11y-pages';
 import { expect, test } from '../fixtures';
-import { api, runId, variant } from '../helpers';
+import { api, PEOPLE, runId, signedInContext, variant } from '../helpers';
 
 /*
  * axe on every page and state of e2e/a11y-pages.ts (A441, K15): the rules of WCAG 2.2 AA (`best-practice` stays out, it
@@ -99,25 +99,32 @@ async function report(entry: A11yEntry, found: Violation[]): Promise<void> {
 }
 
 for (const entry of A11Y_PAGES) {
-  test(`${entry.name} has no violation of WCAG 2.2 AA`, async ({ page, allowedErrors }) => {
+  test(`${entry.name} has no violation of WCAG 2.2 AA`, async ({ page, browser, allowedErrors }) => {
     test.skip(entry.projects !== undefined && !entry.projects.includes(variant()), 'states run in desktop-light, desktop-dark and phone-light (A441)');
     // the browser reports a page that answers 403 or 404 as a console error
     if (entry.status) allowedErrors.push(new RegExp(`status of ${entry.status} `));
 
     const known = await ids(page);
     if (entry.guest) await page.context().clearCookies();
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    if (entry.before) await entry.before(page);
-    await page.goto(entry.path(known));
-    await settle(page);
-    if (entry.state) {
-      await entry.state(page);
-      await settle(page);
-    }
+    const other = entry.person ? await signedInContext(browser, PEOPLE[entry.person]) : null;
+    const target = other?.page ?? page;
+    try {
+      await target.emulateMedia({ reducedMotion: 'reduce' });
+      if (entry.before) await entry.before(target);
+      await target.goto(entry.path(known));
+      await settle(target);
+      if (entry.state) {
+        await entry.state(target);
+        await settle(target);
+      }
 
-    const found = await violations(page, entry);
-    await report(entry, found);
-    const open = found.filter((violation) => !violation.excepted);
-    expect(open.map((violation) => `${violation.rule} (${violation.impact}): ${violation.help}\n    ${violation.target}\n    ${violation.html.slice(0, 200)}`), `axe on ${entry.name}`).toEqual([]);
+      const found = await violations(target, entry);
+      await report(entry, found);
+      const open = found.filter((violation) => !violation.excepted);
+      expect(open.map((violation) => `${violation.rule} (${violation.impact}): ${violation.help}\n    ${violation.target}\n    ${violation.html.slice(0, 200)}`), `axe on ${entry.name}`).toEqual([]);
+    } finally {
+      if (entry.cleanup) await entry.cleanup(target);
+      await other?.context.close();
+    }
   });
 }

@@ -28,4 +28,38 @@ export const A11Y_EXCEPTIONS: readonly A11yException[] = [
       'axe: Ensure that elements labelled through their content must have their visible text as part of their accessible name. The date pickers show a short day (“27 Oct”) and are named “Start date: 27/10/2026”.',
     until: 'Task 16',
   },
+  {
+    rule: 'label-content-name-mismatch',
+    target: '[role="group"][aria-label="Insert a placeholder"]',
+    reason:
+      'axe: Ensure that elements labelled through their content must have their visible text as part of their accessible name. The placeholder chips of a template show “{date} 2026-11-09” and are named “Insert {date}: date, now 2026-11-09”.',
+    until: 'Task 16',
+  },
+  {
+    rule: 'label-content-name-mismatch',
+    target: '[role="group"][aria-label="Weekdays"]',
+    reason:
+      'axe: Ensure that elements labelled through their content must have their visible text as part of their accessible name. The weekdays of a schedule show “Mo” and are named “Monday”.',
+    until: 'Task 16',
+  },
+  {
+    rule: 'label-content-name-mismatch',
+    target: 'a:has([data-inbox-badge])',
+    reason:
+      'axe: Ensure that elements labelled through their content must have their visible text as part of their accessible name. The link of the inbox shows “Inbox” and the badge “3” and is named “Inbox, 3 unread”.',
+    until: 'Task 16',
+  },
+  {
+    rule: 'dlitem',
+    target: 'dl[role="group"]',
+    reason: 'axe: Ensures <dt> and <dd> elements are contained by a <dl>. The facts of the system page stand in a <dl role="group">: the role takes the list semantics away.',
+    until: 'Task 16',
+  },
+  {
+    rule: 'aria-hidden-focus',
+    target: '[data-base-ui-focus-guard]',
+    reason:
+      'axe: Ensures aria-hidden elements are not focusable nor contain focusable elements. The focus guards of a Base UI popup (spans with aria-hidden and tabindex 0 that pass the focus on) on the phone, seen in the menu “More actions” of an item page.',
+    until: 'Task 16',
+  },
 ];

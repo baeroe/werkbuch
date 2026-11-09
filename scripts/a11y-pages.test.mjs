@@ -25,8 +25,21 @@ function files(dir) {
 /** The values of `<key>: '<value>'` in the list, e.g. every `page: 'Items/Show'`. */
 const literals = (key) => [...LIST.matchAll(new RegExp(`\\b${key}: '([^']+)'`, 'g'))].map((match) => match[1]);
 
-/** The names the list gives its entries. */
-const names = () => literals('name');
+/** The calls `settings(kind, slug[, name])` of the list: a section of a settings screen as an entry. */
+const settingsCalls = () => [...LIST.matchAll(/settings\('([a-z]+)', '([a-z-]+)'(?:, '([^']+)')?\)/g)].map(([, kind, slug, name]) => ({ kind, slug, name: name ?? `${kind} settings: ${slug}` }));
+
+/** The names the list gives: `name: '…'`, and those of `settings(…)` (its third argument, else `<kind> settings: <slug>`). */
+const names = () => [...literals('name'), ...settingsCalls().map((call) => call.name)];
+
+/** The start view of each settings screen, by the path of its entry. */
+const START_PATHS = { organization: /'\/settings\/([a-z-]+)'/g, personal: /'\/me\/([a-z-]+)'/g, project: /'\/projects\/WEB\/settings\/([a-z-]+)'/g };
+
+/** The slugs of a settings screen: the strings of its `SECTIONS`. */
+function slugs(file) {
+  const list = /const SECTIONS[^=]*=\s*\[([\s\S]*?)\]/.exec(read(file))?.[1] ?? '';
+  const found = [...list.matchAll(/slug: '([a-z-]+)'/g)].map((match) => match[1]);
+  return found.length > 0 ? found : [...list.matchAll(/'([a-z-]+)'/g)].map((match) => match[1]);
+}
 
 describe('a11y pages', () => {
   it('lists every page of the app', () => {
@@ -46,6 +59,51 @@ describe('a11y pages', () => {
   it('gives every entry its own name', () => {
     const all = names();
     expect(all.filter((name, index) => all.indexOf(name) !== index)).toEqual([]);
+  });
+
+  it('lists the states of the screens', () => {
+    const listed = new Set(names());
+    const states = [
+      'palette',
+      'shortcut help',
+      'item preview',
+      'create dialog',
+      'item menu',
+      'display menu',
+      'board',
+      'table',
+      'timeline',
+      'filter menu',
+      'bulk bar',
+      'wiki page in the editor',
+      'versions dialog',
+      'template editor with a schedule',
+      'token dialog with the plain text',
+      'webhook dialog',
+      'webhook secret',
+      'inbox with cards',
+      'system page',
+    ];
+    expect(states.filter((state) => !listed.has(state))).toEqual([]);
+  });
+
+  it('lists every section of every settings screen', () => {
+    const sections = (kind) => [
+      ...settingsCalls()
+        .filter((call) => call.kind === kind)
+        .map((call) => call.slug),
+      ...[...LIST.matchAll(START_PATHS[kind])].map((match) => match[1]),
+    ];
+    const expected = {
+      organization: slugs('resources/js/features/settings/org/sections.ts'),
+      personal: slugs('resources/js/features/settings/personal/PersonalSettings.tsx'),
+      project: slugs('resources/js/features/settings/project/ProjectSettings.tsx'),
+    };
+    for (const [kind, all] of Object.entries(expected)) {
+      expect(all.length, kind).toBeGreaterThan(3);
+      const listed = new Set(sections(kind));
+      expect(all.filter((slug) => !listed.has(slug)), kind).toEqual([]);
+    }
   });
 });
 
