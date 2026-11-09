@@ -140,7 +140,7 @@ it('pushes only in steps or jobs that run for version tags', function () use ($w
 });
 
 it('passes expressions to scripts through the environment', function () {
-    foreach (['.github/workflows/docker.yml', '.github/workflows/dockerhub.yml'] as $file) {
+    foreach (['.github/workflows/docker.yml', '.github/workflows/dockerhub.yml', '.github/workflows/docs.yml'] as $file) {
         $runs = 0;
 
         foreach (RepoFiles::yaml($file)['jobs'] as $name => $job) {
@@ -410,4 +410,73 @@ it('gives the MariaDB of every job that runs the app the max_allowed_packet of t
             ->and($jobs[$id]['steps'][$packet]['run'])->toContain('exit($size === '.(64 * 1_048_576).' ? 0 : 1)')
             ->and($packet)->toBeLessThan(array_search($first, $names, true), "{$id} sets the packet after {$first}");
     }
+});
+
+it('deploys the docs only from main', function () {
+    $workflow = RepoFiles::yaml('.github/workflows/docs.yml');
+
+    expect(array_keys($workflow['on']))->toEqualCanonicalizing(['push', 'workflow_dispatch'])
+        ->and($workflow['on']['push']['branches'])->toBe(['main'])
+        // the compose files are embedded in the setup, the lockfile holds VitePress
+        ->and($workflow['on']['push']['paths'])->toEqualCanonicalizing(['docs/**', 'docker-compose.yml', 'docker-compose.standalone.yml', 'pnpm-lock.yaml', '.github/workflows/docs.yml'])
+        ->and($workflow['permissions'])->toBe(['contents' => 'read'])
+        ->and($workflow['concurrency'])->toBe(['group' => 'pages', 'cancel-in-progress' => false]);
+
+    // started by hand on another branch it builds, but never deploys
+    expect($workflow['jobs']['deploy']['if'])->toContain("github.ref == 'refs/heads/main'");
+});
+
+it('pins the pages actions', function () use ($stepUsing) {
+    $jobs = RepoFiles::yaml('.github/workflows/docs.yml')['jobs'];
+    $text = RepoFiles::text('.github/workflows/docs.yml');
+
+    expect($stepUsing($jobs['build'], 'actions/upload-pages-artifact')['with']['path'])->toBe('docs/.vitepress/dist')
+        ->and($stepUsing($jobs['deploy'], 'actions/deploy-pages'))->toHaveKey('id')
+        ->and($text)->toMatch('/uses: actions\/upload-pages-artifact@[0-9a-f]{40} # v\d+\.\d+\.\d+\n/')
+        ->and($text)->toMatch('/uses: actions\/deploy-pages@[0-9a-f]{40} # v\d+\.\d+\.\d+\n/');
+});
+
+it('skips the deploy with a notice while Pages is off', function () use ($runs) {
+    $jobs = RepoFiles::yaml('.github/workflows/docs.yml')['jobs'];
+
+    // the job asks GitHub whether Pages is on, with the token of the run and only the right to read Pages
+    expect($jobs['pages']['permissions'])->toBe(['pages' => 'read'])
+        ->and($jobs['pages']['outputs']['enabled'])->toBe('${{ steps.pages.outputs.enabled }}');
+    $check = collect($jobs['pages']['steps'])->firstWhere('id', 'pages');
+    expect($check['env'])->toMatchArray(['GH_TOKEN' => '${{ github.token }}', 'REPOSITORY' => '${{ github.repository }}'])
+        ->and($check['run'])->toContain('gh api --include "repos/$REPOSITORY/pages"')
+        ->toContain('200) echo "enabled=true"')
+        ->toContain('404)')
+        ->toContain('echo "enabled=false"')
+        ->toContain('::notice title=GitHub Pages::Pages is not enabled for this repository')
+        ->toContain('exit 1');
+
+    expect($jobs['deploy']['needs'])->toBe(['pages', 'build'])
+        ->and($jobs['deploy']['if'])->toContain("needs.pages.outputs.enabled == 'true'")
+        ->and($jobs['deploy']['permissions'])->toBe(['pages' => 'write', 'id-token' => 'write'])
+        ->and($jobs['deploy']['environment']['name'])->toBe('github-pages');
+
+    // the build runs either way: a broken page on main shows as a red run
+    expect($jobs['build'])->not->toHaveKey('if')
+        ->and($jobs['build'])->not->toHaveKey('needs')
+        ->and(implode("\n", $runs($jobs['build'])))->toContain('pnpm --dir docs build');
+});
+
+it('publishes the docs at werkbuch.dev from the root', function () use ($runs) {
+    $text = RepoFiles::text('.github/workflows/docs.yml');
+    $build = RepoFiles::yaml('.github/workflows/docs.yml')['jobs']['build'];
+    $env = collect($build['steps'])->first(fn (array $step): bool => str_contains((string) ($step['run'] ?? ''), 'pnpm --dir docs build'))['env'];
+
+    expect($env)->toBe(['DOCS_BASE' => '/', 'DOCS_URL' => 'https://werkbuch.dev'])
+        ->and($text)->not->toContain('vars.')
+        ->and($build['steps'][0]['with']['fetch-depth'])->toBe(0);
+
+    // the build checks what makes the domain and the search engines work
+    $checks = implode("\n", $runs($build));
+    expect($checks)->toContain('grep -qx werkbuch.dev docs/.vitepress/dist/CNAME')
+        ->toContain('test -f docs/.vitepress/dist/sitemap.xml');
+
+    // the CI job still builds below a sub-path, so a copy there keeps working
+    $ci = RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['docs'];
+    expect(collect($ci['steps'])->first(fn (array $step): bool => ($step['run'] ?? '') === 'pnpm --dir docs build')['env']['DOCS_BASE'])->toBe('/werkbuch/');
 });

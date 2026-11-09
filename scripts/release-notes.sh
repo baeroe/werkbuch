@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Release notes of one version for the GitHub release (.github/workflows/docker.yml): the section "### <version>" of
-# docs/en/upgrading.md. Every tag needs that section in docs/en/upgrading.md and docs/de/upgrading.md, so
-# this fails without one – the workflow runs it before anything is pushed. Pre-releases (0.2.0-rc.1) use the section
-# of their final version.
+# docs/en/upgrading.md, then a line with the address of the published guide. Every tag needs that section in
+# docs/en/upgrading.md and docs/de/upgrading.md, so this fails without one – the workflow runs it before anything is
+# pushed. Pre-releases (0.2.0-rc.1) use the section of their final version.
 #
 #   scripts/release-notes.sh 0.1.0
 set -euo pipefail
@@ -31,3 +31,6 @@ awk -v heading="### ${VERSION}" '
         for (i = first; i <= last; i++) print lines[i]
     }
 ' "$ROOT/docs/en/upgrading.md"
+
+# the published guide, for everything around the version (backup, how to update)
+printf '\nDocs: https://werkbuch.dev/en/upgrading\n'

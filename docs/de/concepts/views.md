@@ -19,6 +19,8 @@ Eine eingebaute Liste ist eine View, die nie gespeichert wird. Du kannst sie fil
 
 Gespeicherte Views stehen unter **Views** (`/views`) und unter `/views/<id>`. Ein Stern legt eine View in die Seitenleiste, in deiner eigenen Reihenfolge; wird eine View gelöscht, verschwindet sie aus allen Seitenleisten.
 
+![Die Übersicht der Views des Teams, je mit Layout und Ersteller](/screenshots/de/views.png)
+
 ## Rechte
 
 | Aktion | Wer |
@@ -39,6 +41,8 @@ Ein Filter darf ein Projekt, eine Person oder ein Item nennen, das der Leser nic
 
 Items in Gruppen, die sich einklappen lassen, die Felder der Anzeige als Chips hinter dem Titel, Kind-Items eingerückt unter ihrem Epic. Jede Gruppe zeigt die Zahl ihrer Items vom Server und lädt ihre Items seitenweise beim Scrollen; eingeklappte oder weit entfernte Gruppen laden nichts.
 
+![Meine Items als Liste, nach Kategorie gruppiert, weil die Items in zwei Workflows liegen](/screenshots/de/my-items.png)
+
 ### Board
 
 Jede Gruppe ist eine Spalte, leere eingeschlossen. Eine Karte ziehen oder `shift+left` und `shift+right` ändert das gruppierte Feld:
@@ -50,13 +54,19 @@ Jede Gruppe ist eine Spalte, leere eingeschlossen. Eine Karte ziehen oder `shift
 
 Die Reihenfolge in einer Spalte folgt der Sortierung der Anzeige. Mit der Sortierung **Manuell** verschieben `alt+up` und `alt+down` oder Ziehen innerhalb der Spalte eine Karte zwischen ihre Nachbarn; mit jeder anderen Sortierung sagt werkbuch, dass die Reihenfolge der Sortierung folgt. Ist zwischen zwei Nachbarn kein Platz mehr, verteilt werkbuch zuerst die Ordnung des Projekts der Karte neu (die Reihenfolge bleibt, die Ränge werden wieder kurz, siehe [Items von Hand ordnen](./work-items.md#items-von-hand-ordnen)) und verschiebt die Karte dann; Züge anderer Karten des Projekts warten darauf. Die Karte bleibt, wo sie war, und ein Toast sagt warum: Es ist kein Platz mehr da, wenn die beiden Nachbarn zu einem anderen Projekt gehören. Die Ordnung hat sich geändert, wenn inzwischen andere Karten zwischen den beiden Nachbarn stehen (in einer Liste mehrerer Projekte nach der Neuverteilung oder nach einer anderen Änderung der Spalte); dann verschiebst du die Karte von der neuen Ordnung aus noch einmal. Die neue Ordnung ist noch nicht geladen, wenn sie länger als fünf Sekunden lädt. Einen Zug, den der Server ablehnt, nimmt werkbuch zurück, und die Zahlen der Spalten stimmen wieder. **+** im Kopf einer Spalte legt ein Item an, das zur Spalte passt.
 
+![Das Board eines Projekts, die Work Items in einer Spalte je Status](/screenshots/de/board.png)
+
 ### Tabelle
 
 Eine Zeile je Item, eine Spalte je Feld der Anzeige, Properties eingeschlossen. Der Kopf und die erste Spalte (Key und Titel) bleiben beim Scrollen stehen. Zellen lassen sich direkt ändern: `enter` öffnet den Editor einer Zelle, `escape` schließt ihn. Zellen von Properties, die der Typ des Items nicht hat, zeigen „—“. Projekt, angelegt und geändert lassen sich hier nicht ändern.
 
+![Eine View als Tabelle, mit den Properties Kunde und Aufwand als Spalten](/screenshots/de/table.png)
+
 ### Timeline
 
 Die Timeline zeigt die Epics der Liste (Items eines Typs mit Häkchen „Epic“), nach Projekt gruppiert und nach Start-Date geordnet, egal was Gruppierung und Sortierung der Anzeige sagen. Ein Balken reicht vom Start- bis zum Due-Date und ist nach dem Anteil geschlossener Kind-Items gefüllt. Einen Balken ziehen verschiebt ihn, seine Enden ziehen ändert ein Datum. Epics ohne Daten stehen in der Seitenliste **Ohne Datum**; zieh sie auf die Achse oder nimm **Ab heute einplanen** (zwei Wochen ab heute). Der Zoom (Woche, Monat, Quartal) steht als `?zoom=week` bzw. `?zoom=quarter` in der Adresse; **Heute** scrollt zu heute.
+
+![Die Roadmap als Timeline: drei Epics mit ihrem Fortschritt und der Marker für heute](/screenshots/de/timeline.png)
 
 ## Gruppierung
 

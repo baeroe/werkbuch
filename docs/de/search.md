@@ -44,6 +44,8 @@ Der Dialog **Relation hinzufügen** (<kbd>R</kbd> an einem Item) findet das ande
 
 Alle Tasten der Palette stehen auf der Seite [Tastatur](/de/keyboard).
 
+![Die Befehlspalette mit der Suche nach WEB: Work Items, Wiki-Seiten und das Projekt](/screenshots/de/palette.png)
+
 ## REST
 
 `GET /api/v1/search` braucht ein Token mit `read` (oder die Sitzung der Oberfläche); Tokens, Fehler und Grenzen erklärt die Seite [REST-API](/de/api).

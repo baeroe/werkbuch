@@ -197,7 +197,7 @@ WERKBUCH_IMAGE=werkbuch:local scripts/compose-smoke.sh
 
 ## Dokumentation
 
-Diese Doku liegt in `docs/` (VitePress) auf Englisch (`docs/en/`) und Deutsch (`docs/de/`). Jede Seite gibt es in beiden Sprachen unter demselben Dateinamen und mit denselben Überschriften, in der Seitenleiste in derselben Reihenfolge. Keine Seite nennt eine Phase des Baus, vorerst außer dem Stand auf der Startseite. `tests/Unit/DocsTest.php` prüft das. Die Specs und Pläne in `docs/superpowers/` gehören nicht zur Seite.
+Diese Doku liegt in `docs/` (VitePress) auf Englisch (`docs/en/`) und Deutsch (`docs/de/`). Jede Seite gibt es in beiden Sprachen unter demselben Dateinamen und mit denselben Überschriften, in der Seitenleiste in derselben Reihenfolge. Keine Seite nennt eine Phase des Baus. `tests/Unit/DocsTest.php` prüft das. Die Specs und Pläne in `docs/superpowers/` gehören nicht zur Seite. Jeder Push auf `main`, der die Doku ändert, veröffentlicht sie unter https://werkbuch.dev (`.github/workflows/docs.yml`, GitHub Pages); solange Pages für das Repository aus ist, baut der Workflow sie nur und sagt das in einem Hinweis. Der CI-Job `docs` baut jeden Pull Request unter `/werkbuch/`, damit auch eine Kopie unter einem Unterpfad funktioniert (`DOCS_BASE`).
 
 ```bash
 ddev exec pnpm --dir docs dev       # https://werkbuch.ddev.site:5174/de/

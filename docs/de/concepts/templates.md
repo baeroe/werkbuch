@@ -2,6 +2,8 @@
 
 Eine Vorlage legt [Work Items](/de/concepts/work-items) mit festen Feldern an: die wöchentliche Wartung, den Monatsbericht, die Checkliste für einen neuen Kunden. Du wendest sie von Hand im Anlegen-Dialog an oder gibst ihr einen Zeitplan, dann legt der Standard-Bot „Automation“ das Item zur eingestellten Zeit an. Jedes Projekt hat eigene Vorlagen unter **Vorlagen** in der Seitenleiste (`/projects/WEB/templates`).
 
+![Der Editor der Vorlage für die wöchentliche Wartung, mit der Vorschau des Titels, dem Zeitplan und den nächsten fünf Läufen](/screenshots/de/templates.png)
+
 ## Eine Vorlage anlegen
 
 **Neue Vorlage** öffnet den Editor. Eine Vorlage hält, was ein Item bekommt:

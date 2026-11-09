@@ -1,8 +1,16 @@
 # werkbuch
 
-Open, self-hosted project management for teams: projects, work items with your own types, properties and workflows, a wiki per project, team-wide views across projects, recurring work items and switchable automations. Built to be driven from the keyboard, and fully controllable over a REST API, an MCP server for AI agents and webhooks.
+Project management you host yourself: work items with your own types, fields and workflows, a wiki per project, team-wide views across projects, recurring work from templates and switchable automations. Made for the keyboard, and open to scripts and AI agents through a REST API, an MCP server and webhooks. The docs are at https://werkbuch.dev.
 
-> **Status:** in development: phase 14 of 15 (Docker) is done, phase 15 (polish) is next. There is no release yet. Sign-in, people and bots, roles, projects, the catalogs (workflows with transition matrix, item types, properties, labels, relation types, resolutions), work items with relations and history, item lists (filters, saved views, list, board, table and timeline, bulk changes), search in the command palette and over REST, rich text with mentions, references, images, files and comments, notifications (inbox, collected mails, reminders, live updates over Reverb), the wiki per project, templates with schedules, automations, signed webhooks, the complete REST API with its OpenAPI reference under `/api/docs`, the MCP server for AI agents and the Docker image with its Compose stack are in place. The concept is in [`docs/superpowers/specs/2026-10-28-werkbuch-design.md`](docs/superpowers/specs/2026-10-28-werkbuch-design.md) (German). A clickable prototype with demo data lives in [`prototypes/clickdummy/`](prototypes/clickdummy/) (German UI).
+> **Status:** the build is done. Before v0.1.0 everything gets one more round of testing by hand, so there is no release yet – until then you build the image yourself (see below). The concept is in [`docs/superpowers/specs/2026-10-28-werkbuch-design.md`](docs/superpowers/specs/2026-10-28-werkbuch-design.md) (German), a clickable prototype with demo data in [`prototypes/clickdummy/`](prototypes/clickdummy/) (German UI).
+
+## Screenshots
+
+![The board of a project, its work items in one column per status](https://raw.githubusercontent.com/baeroe/werkbuch/main/docs/public/screenshots/en/board.png)
+
+![The page of a work item with its description, fields, relations and activity](https://raw.githubusercontent.com/baeroe/werkbuch/main/docs/public/screenshots/en/item.png)
+
+![The command palette searching work items, wiki pages and projects](https://raw.githubusercontent.com/baeroe/werkbuch/main/docs/public/screenshots/en/palette.png)
 
 ## Self-hosting
 
@@ -19,13 +27,13 @@ Put a reverse proxy with HTTPS in front, set `APP_URL` to its address and sign i
 
 Until the first release, the image and the files on `main` are not published yet: build the image from a clone with `docker buildx build --load -t werkbuch:local .` and set `WERKBUCH_IMAGE=werkbuch:local` in `.env`.
 
-- [Setup](docs/en/setup.md) and [Reverse proxy](docs/en/reverse-proxy.md)
-- [Operations](docs/en/operations.md), [Upgrading](docs/en/upgrading.md) and [Backup](docs/en/backup.md)
-- [REST API](docs/en/api.md), [MCP](docs/en/mcp.md) and [Webhooks](docs/en/webhooks.md)
+- [Setup](https://werkbuch.dev/en/setup) and [Reverse proxy](https://werkbuch.dev/en/reverse-proxy)
+- [Operations](https://werkbuch.dev/en/operations), [Upgrading](https://werkbuch.dev/en/upgrading) and [Backup](https://werkbuch.dev/en/backup)
+- [REST API](https://werkbuch.dev/en/api), [MCP](https://werkbuch.dev/en/mcp) and [Webhooks](https://werkbuch.dev/en/webhooks)
 
 ## Development
 
-Local development runs in [DDEV](https://ddev.com) (PHP 8.4, MariaDB 11.4, Meilisearch, Node 24 with pnpm); the guide is [`docs/en/development.md`](docs/en/development.md). The docs live in [`docs/`](docs) (VitePress, English and German): `ddev exec pnpm --dir docs dev`.
+Local development runs in [DDEV](https://ddev.com) (PHP 8.4, MariaDB 11.4, Meilisearch, Node 24 with pnpm); the guide is the [development page](https://werkbuch.dev/en/development). The docs live in [`docs/`](docs) (VitePress, English and German) and are published at https://werkbuch.dev; locally: `ddev exec pnpm --dir docs dev`.
 
 ## Stack
 

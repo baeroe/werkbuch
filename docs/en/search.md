@@ -44,6 +44,8 @@ The dialog **Add relation** (<kbd>R</kbd> on an item) finds the other item throu
 
 All keys of the palette are on the [keyboard page](/en/keyboard).
 
+![The command palette searching for WEB: work items, wiki pages and the project](/screenshots/en/palette.png)
+
 ## REST
 
 `GET /api/v1/search` needs a token with `read` (or the session of the interface); tokens, errors and limits are explained on the page [REST API](/en/api).

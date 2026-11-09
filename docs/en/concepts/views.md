@@ -19,6 +19,8 @@ A built-in list is a view that is never saved. You can filter and change its dis
 
 Saved views live under **Views** (`/views`) and at `/views/<id>`. A star puts a view into the sidebar, in your own order; deleting a view takes it out of everybody's sidebar.
 
+![The overview of the views of the team, with layout and creator of each](/screenshots/en/views.png)
+
 ## Permissions
 
 | Action | Who |
@@ -39,6 +41,8 @@ A filter may name a project, person or item the reader does not see. werkbuch ke
 
 Items in groups that fold, the fields of the display as chips behind the title, child items indented below their epic. Each group shows the number of its items from the server and loads its items page by page while you scroll; groups that are folded or far away load nothing.
 
+![My items as a list, grouped by category because the items lie in two workflows](/screenshots/en/my-items.png)
+
 ### Board
 
 Every group is a column, empty ones included. Dragging a card, or `shift+left` and `shift+right`, changes the grouped field:
@@ -50,13 +54,19 @@ Every group is a column, empty ones included. Dragging a card, or `shift+left` a
 
 The order within a column follows the sort of the display. With the sort **Manual**, `alt+up` and `alt+down` or dragging within the column move a card between its neighbours; with any other sort, werkbuch says that the order follows the sort. When there is no room left between two neighbours, werkbuch first redistributes the order of the card's project (the order stays, the ranks get short again, see [Order items by hand](./work-items.md#order-items-by-hand)) and then moves the card; moves of other cards of the project wait for it. The card stays where it was, and a toast says why: there is no room left when the two neighbours belong to another project; the order has changed when other cards now stand between the two neighbours (in a list of several projects after the redistribution, or after another change of the column), so move the card again from the new order; and the new order has not loaded when it takes longer than five seconds. A move the server refuses puts the card back, and the numbers of the columns are right again. **+** in the head of a column creates an item that fits the column.
 
+![The board of a project, its work items in one column per status](/screenshots/en/board.png)
+
 ### Table
 
 One row per item, one column per field of the display, properties included. The head and the first column (key and title) stay in place while you scroll. Cells can be changed in place: `enter` opens the editor of a cell, `escape` closes it. Cells of properties the type of the item does not have show "—". Project, created and changed cannot be changed here.
 
+![A view as a table, with the properties client and effort as columns](/screenshots/en/table.png)
+
 ### Timeline
 
 The timeline shows the epics of the list (items of a type marked "Epic"), grouped by project and ordered by start date, whatever the grouping and the sort of the display say. A bar runs from the start date to the due date and is filled by the share of closed child items. Drag a bar to move it and its ends to change one date. Epics without dates stand in the side list **No dates**; drag them onto the axis, or use **Plan from today** (two weeks from today). The zoom (week, month, quarter) stays in the address as `?zoom=week` or `?zoom=quarter`; **Today** scrolls to today.
+
+![The roadmap as a timeline: three epics with their progress, and the marker for today](/screenshots/en/timeline.png)
 
 ## Grouping
 

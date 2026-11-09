@@ -4,6 +4,8 @@ A work item is one piece of work in a project: a task, a bug, an epic, or whatev
 
 Anyone who sees a project reads its items. Members and admins of the project create and change them; viewers only read. Only project admins delete items. Who sees a project, and who has which role, is described under [roles and permissions](/en/concepts/permissions).
 
+![The page of the work item WEB-47: description, fields, relations, wiki pages and activity](/screenshots/en/item.png)
+
 ## Fields
 
 | Field | Notes |

@@ -1,5 +1,7 @@
 <?php
 
+use Symfony\Component\Finder\Finder;
+use Symfony\Component\Yaml\Yaml;
 use Tests\Support\RepoFiles;
 
 /** The text below `## $heading` of a docs page up to the next heading of level 2: a check of one section, not of the page. */
@@ -173,10 +175,9 @@ it('reads a phase of the build, but no number on a line of its own', function ()
 });
 
 it('names no phase in the docs', function () use ($namesPhase) {
-    // the plan of the build is history, a reader of the docs needs no phase; for now the landing page says in its status
-    // where the project stands
+    // the plan of the build is history, a reader of the docs needs no phase, the landing page included
     foreach (['en', 'de'] as $l) {
-        foreach (array_diff(docsPages($l), ['index']) as $page) {
+        foreach (docsPages($l) as $page) {
             $named = $namesPhase(RepoFiles::text("docs/{$l}/{$page}.md"));
 
             expect($named)->toBeNull("docs/{$l}/{$page}.md names {$named}");
@@ -322,14 +323,21 @@ it('reads the screenshots a page names', function () use ($namedScreenshots) {
 });
 
 it('shows only screenshots that exist, in the language of the page', function () use ($namedScreenshots) {
+    $count = 0;
     foreach (['en', 'de'] as $language) {
         foreach (docsPages($language) as $page) {
-            foreach ($namedScreenshots(RepoFiles::text("docs/{$language}/{$page}.md")) as [$shown, $file]) {
+            $text = RepoFiles::text("docs/{$language}/{$page}.md");
+            foreach ($namedScreenshots($text) as [$shown, $file]) {
                 expect($shown)->toBe($language, "{$language}/{$page}.md shows {$shown}/{$file}")
                     ->and(is_file(repo_path("docs/public/screenshots/{$shown}/{$file}")))->toBeTrue("{$language}/{$page}.md shows {$shown}/{$file}, which is missing");
+                $count++;
             }
+            // an image in the text says what it shows
+            expect(preg_match('#!\[\s*\]\(/screenshots/#', $text))->toBe(0, "{$language}/{$page}.md shows a screenshot without alt text");
         }
     }
+    // the landing page and the concept pages show the screenshots: a scan that finds none reads the pages wrong
+    expect($count)->toBeGreaterThan(20);
 });
 
 it('keeps every screenshot under 400 KB, at 1440 × 900', function () use ($screenshots) {
@@ -343,4 +351,102 @@ it('keeps every screenshot under 400 KB, at 1440 × 900', function () use ($scre
                 ->and(array_slice((array) getimagesize($path), 0, 2))->toBe([1440, 900], "{$language}/{$file}");
         }
     }
+});
+
+/** The front matter of a docs page (`en/index`) as YAML. */
+$frontMatter = function (string $page): array {
+    expect(preg_match('/\A---\n(.*?)\n---\n/s', RepoFiles::text("docs/{$page}.md"), $match))->toBe(1, "docs/{$page}.md has no front matter");
+
+    return (array) Yaml::parse($match[1]);
+};
+
+/** @return list<array{0: string, 1: string}> the links of a Markdown text as `[text, target]`, images left out */
+$markdownLinks = fn (string $text): array => preg_match_all('/(?<!!)\[([^\]]*)\]\(([^)\s]+)\)/', $text, $m, PREG_SET_ORDER)
+    ? array_map(fn (array $match): array => [$match[1], $match[2]], $m)
+    : [];
+
+it('keeps the custom domain werkbuch.dev', function () {
+    // GitHub ignores the file when Actions deploy the site; it records the domain the Pages settings name
+    expect(RepoFiles::text('docs/public/CNAME'))->toBe("werkbuch.dev\n");
+
+    expect(RepoFiles::text('docs/.vitepress/config.ts'))
+        ->toContain("sitemap: { hostname: 'https://werkbuch.dev' }")
+        ->toContain("const base = process.env.DOCS_BASE ?? '/';");
+});
+
+it('names the docs only at werkbuch.dev', function () {
+    $finder = Finder::create()->files()->ignoreDotFiles(false)->ignoreVCS(true)
+        ->in(array_map(repo_path(...), ['docs/en', 'docs/de', 'docs/.vitepress', 'lang', 'resources', 'app', 'scripts', '.github']))
+        ->exclude(['dist', 'cache', 'node_modules'])
+        ->notName(['*.png', '*.jpg', '*.webp', '*.gif', '*.ico', '*.woff', '*.woff2']);
+    $files = [repo_path('README.md'), repo_path('CLAUDE.md'), ...array_map(fn ($file): string => $file->getPathname(), iterator_to_array($finder, false))];
+
+    foreach ($files as $file) {
+        expect(str_contains((string) file_get_contents($file), 'baeroe.github.io'))->toBeFalse(substr($file, strlen(repo_path()) + 1).' names baeroe.github.io');
+    }
+    // the app, the docs and the workflows: a scan that finds a handful of files looks in the wrong place
+    expect(count($files))->toBeGreaterThan(500);
+});
+
+it('links the README to the published docs', function () use ($markdownLinks) {
+    $published = 0;
+    foreach ($markdownLinks(RepoFiles::text('README.md')) as [$text, $target]) {
+        // a page of the docs is read on the site: a link into docs/en or docs/de goes nowhere on Docker Hub
+        expect(preg_match('#^(\./)?docs/(en|de)/#', $target))->toBe(0, "the README links [{$text}]({$target}) into the docs folder");
+
+        if (preg_match('#^https://werkbuch\.dev/(en|de)/([a-z/-]+)$#', $target, $page)) {
+            expect(is_file(repo_path("docs/{$page[1]}/{$page[2]}.md")))->toBeTrue("the README links [{$text}]({$target}), a page that does not exist");
+            $published++;
+        }
+    }
+    expect($published)->toBeGreaterThanOrEqual(6);
+});
+
+it('links the screenshots of the README to files that exist', function () {
+    preg_match_all('/!\[([^\]]*)\]\(([^)\s]+)\)/', RepoFiles::text('README.md'), $images, PREG_SET_ORDER);
+    $raw = 'https://raw.githubusercontent.com/baeroe/werkbuch/main/';
+    $shown = [];
+
+    foreach ($images as [, $alt, $target]) {
+        // absolute, so they load in the description on Docker Hub as well
+        expect($target)->toStartWith($raw.'docs/public/screenshots/en/')
+            ->and(is_file(repo_path(substr($target, strlen($raw)))))->toBeTrue("the README shows {$target}, which is missing")
+            ->and(trim($alt))->not->toBe('', "the README shows {$target} without alt text");
+        $shown[] = basename($target);
+    }
+
+    expect($shown)->toBe(['board.png', 'item.png', 'palette.png']);
+});
+
+it('shows screenshots on the landing page', function () use ($frontMatter) {
+    foreach (['en', 'de'] as $l) {
+        $home = $frontMatter("{$l}/index");
+        expect($home['hero']['image']['src'] ?? null)->toBe("/screenshots/{$l}/board.png")
+            ->and(trim((string) ($home['hero']['image']['alt'] ?? '')))->not->toBe('');
+
+        // six areas, each leading to its page of the docs
+        expect($home['features'] ?? [])->toHaveCount(6);
+        foreach ($home['features'] as $feature) {
+            expect(preg_match('#^/'.$l.'/([a-z/-]+)$#', (string) ($feature['link'] ?? ''), $page))->toBe(1, "a feature of {$l}/index has no link into the docs")
+                ->and(is_file(repo_path("docs/{$l}/{$page[1]}.md")))->toBeTrue("{$l}/index links {$feature['link']}, which does not exist")
+                ->and(trim((string) ($feature['title'] ?? '')))->not->toBe('')
+                ->and(trim((string) ($feature['details'] ?? '')))->not->toBe('');
+        }
+
+        $actions = array_column($home['hero']['actions'] ?? [], 'link');
+        expect($actions)->toBe(["/{$l}/setup", 'https://github.com/baeroe/werkbuch']);
+    }
+});
+
+it('says no phase in the status of the landing page', function () use ($section, $namesPhase) {
+    foreach (['en/index' => 'Status', 'de/index' => 'Stand'] as $page => $heading) {
+        $status = $section("docs/{$page}.md", $heading);
+
+        expect($namesPhase($status))->toBeNull("the status of docs/{$page}.md names a phase")
+            ->and($status)->toContain('v0.1.0');
+    }
+
+    preg_match('/^> \*\*Status:\*\*(.*)$/m', RepoFiles::text('README.md'), $readme);
+    expect($readme[1] ?? '')->toContain('v0.1.0')
+        ->and($namesPhase($readme[1] ?? ''))->toBeNull();
 });

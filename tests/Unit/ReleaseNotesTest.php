@@ -76,3 +76,11 @@ it('refuses a tag that is not the version of config/werkbuch.php', function () {
     $accepted = releaseScript('release-version.sh', configVersion());
     expect($accepted->getExitCode())->toBe(0, $accepted->getErrorOutput());
 });
+
+it('names the docs at werkbuch.dev', function () {
+    $lines = explode("\n", rtrim(releaseNotes('0.1.0')->getOutput(), "\n"));
+
+    // the last line, after a blank one: the notes of the version stay as they are in docs/en/upgrading.md
+    expect(end($lines))->toBe('Docs: https://werkbuch.dev/en/upgrading')
+        ->and($lines[count($lines) - 2])->toBe('');
+});

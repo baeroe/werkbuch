@@ -44,6 +44,8 @@ The inbox (`/inbox`, <kbd>G</kbd> <kbd>I</kbd>) groups the notifications by item
 
 An excerpt always comes from the current text: an edited comment shows its new wording, a deleted one none. A reference to an item you do not see reads as hidden. When the item of a notification is no longer there, its card says "No longer available".
 
+![The inbox with three unread notifications, grouped by work item](/screenshots/en/inbox.png)
+
 ## Mail
 
 - **Collected.** Notifications about one item are collected for `NOTIFICATION_MAIL_DELAY` minutes (5 by default) and then go out as one mail per person and item, the oldest first. Its subject is `[WEB-47] Title of the item`, the footer links to the notification settings. Failed runs of a template are collected per template instead: the subject names the project and the template, the button leads to the template. A webhook switched off has a mail of its own (subject `Webhook “…” switched off`), whose button leads to its deliveries; in the inbox, the row leads there too.

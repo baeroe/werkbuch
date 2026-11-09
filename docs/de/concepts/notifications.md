@@ -44,6 +44,8 @@ Die Inbox (`/inbox`, <kbd>G</kbd> <kbd>I</kbd>) gruppiert die Benachrichtigungen
 
 Ein Auszug kommt immer aus dem aktuellen Text: ein bearbeiteter Kommentar zeigt seine neue Fassung, ein gelöschter keine. Ein Verweis auf ein Item, das du nicht siehst, liest sich als verborgen. Gibt es das Item einer Benachrichtigung nicht mehr, sagt ihre Karte „Nicht mehr verfügbar“.
 
+![Die Inbox mit drei ungelesenen Benachrichtigungen, nach Work Item gruppiert](/screenshots/de/inbox.png)
+
 ## Mail
 
 - **Gesammelt.** Benachrichtigungen zu einem Item werden `NOTIFICATION_MAIL_DELAY` Minuten gesammelt (standardmäßig 5) und gehen dann als eine Mail je Person und Item raus, die älteste zuerst. Der Betreff ist `[WEB-47] Titel des Items`, der Fuß verlinkt die Einstellungen der Benachrichtigungen. Gescheiterte Läufe einer Vorlage werden stattdessen je Vorlage gesammelt: Der Betreff nennt Projekt und Vorlage, der Knopf führt zur Vorlage. Ein abgeschalteter Webhook hat eine eigene Mail (Betreff `Webhook „…“ abgeschaltet`), deren Knopf zu seinen Zustellungen führt; in der Inbox führt die Zeile ebenfalls dorthin.

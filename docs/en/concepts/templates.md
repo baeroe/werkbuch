@@ -2,6 +2,8 @@
 
 A template creates [work items](/en/concepts/work-items) with fixed fields: a weekly maintenance, the monthly report, the checklist for a new client. You apply it by hand in the create dialog, or give it a schedule, and the default bot "Automation" creates the item at the set time. Every project has its own templates under **Templates** in the sidebar (`/projects/WEB/templates`).
 
+![The editor of the weekly maintenance template, with the title preview, the schedule and the next five runs](/screenshots/en/templates.png)
+
 ## Creating a template
 
 **New template** opens the editor. A template holds what an item gets:

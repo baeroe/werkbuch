@@ -4,6 +4,8 @@ Ein Work Item ist ein Stück Arbeit in einem Projekt: ein Task, ein Bug, ein Epi
 
 Wer ein Projekt sieht, liest seine Items. Member und Admins des Projekts legen sie an und ändern sie; Viewer lesen nur. Löschen dürfen nur Admins des Projekts. Wer ein Projekt sieht und wer welche Rolle hat, steht unter [Rollen und Rechte](/de/concepts/permissions).
 
+![Die Seite des Work Items WEB-47: Beschreibung, Felder, Relationen, Wiki-Seiten und Aktivität](/screenshots/de/item.png)
+
 ## Felder
 
 | Feld | Hinweise |

@@ -4,6 +4,8 @@ Jedes Projekt hat ein Wiki: einen Baum aus Seiten für das, was das Team wissen 
 
 Das Wiki eines Projekts liegt unter `/projects/WEB/wiki`; in der Seitenleiste ist es **Wiki** unter einem Projekt. Ohne offene Seite zeigt es die sechs zuletzt geänderten Seiten.
 
+![Eine Wiki-Seite mit dem Baum der Seiten daneben und einem Verweis auf ein Work Item](/screenshots/de/wiki.png)
+
 ## Der Baum
 
 Der Baum nennt jede Seite des Projekts: auf breiten Bildschirmen links neben der Seite, auf kleineren auf der Übersicht des Wikis.

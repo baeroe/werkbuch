@@ -4,6 +4,8 @@ Automations do small, recurring steps of a project for you. Every project has fi
 
 They act as the default bot "Automation", keep to the transitions the workflow allows and appear in the history with their reason, such as "Automation: auto-archive".
 
+![The automations of a project, three of the five switched on](/screenshots/en/automations.png)
+
 ## The five automations
 
 | Automation | What it does | When |

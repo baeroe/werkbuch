@@ -4,6 +4,8 @@ Every project has a wiki: a tree of pages for what the team needs to know, such 
 
 The wiki of a project lives under `/projects/WEB/wiki`; in the sidebar it is **Wiki** below a project. Without a page open, it shows the six pages that changed last.
 
+![A wiki page with the tree of pages next to it and a reference to a work item](/screenshots/en/wiki.png)
+
 ## The tree
 
 The tree lists every page of the project: on wide screens to the left of the page, on smaller ones on the overview of the wiki.

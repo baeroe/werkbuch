@@ -185,6 +185,8 @@ When a webhook has failed for 24 hours (a scheduled attempt fails, and the first
 
 An error text masks user, password and query of every URL in it, but not the path: a receiver that carries its token in the path, as Slack and Discord do, shows it to org admins in the log. Deliveries and their attempts are deleted 30 days after their last change. A delivery still waiting 36 hours after its last attempt (its job got lost) becomes `failed`, but never while the queue `webhooks` still holds jobs that are due: after a worker was down, its waiting attempts still go out.
 
+![The delivery log of a webhook, each attempt with its answer and duration](/screenshots/en/webhooks.png)
+
 ## Test ping and send again
 
 **Test ping** sends the event `ping` right away, also to a webhook that is switched off, and tells you what the receiver answered. Its body is `{id, event: "ping", occurred_at, actor, project, data: {webhook: {id, name}}, changes: null}`, signed like every delivery. A failed ping is not tried again.

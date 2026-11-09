@@ -41,6 +41,8 @@ A workflow is either free or has a transition matrix.
 
 Staying in the same state is always allowed. The rule applies everywhere alike: in the interface and over the REST API, for [automations](/en/concepts/automations) and runs of [templates](/en/concepts/templates), and over [MCP](/en/mcp). An item created directly in another state goes through the same check as a transition from the start status.
 
+![The editor of a workflow with its states and the matrix of allowed transitions](/screenshots/en/settings-workflow.png)
+
 ## The default workflow
 
 Exactly one workflow is the default. A new project gets it unless you choose another one. werkbuch ships the workflow "Standard" as the default: free, with Backlog (Backlog), Todo (Unstarted), In Progress and Pending (both Started), Done (Completed) and Cancelled (Canceled), starting in Backlog.

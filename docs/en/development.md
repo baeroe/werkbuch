@@ -197,7 +197,7 @@ WERKBUCH_IMAGE=werkbuch:local scripts/compose-smoke.sh
 
 ## Documentation
 
-These docs live in `docs/` (VitePress) in English (`docs/en/`) and German (`docs/de/`). Every page exists in both languages under the same file name and with the same headings, in the same order in the sidebar. No page names a phase of the build, for now except the status on the landing page. `tests/Unit/DocsTest.php` checks that. The specs and plans in `docs/superpowers/` are not part of the site.
+These docs live in `docs/` (VitePress) in English (`docs/en/`) and German (`docs/de/`). Every page exists in both languages under the same file name and with the same headings, in the same order in the sidebar. No page names a phase of the build. `tests/Unit/DocsTest.php` checks that. The specs and plans in `docs/superpowers/` are not part of the site. Every push to `main` that changes the docs publishes them at https://werkbuch.dev (`.github/workflows/docs.yml`, GitHub Pages); while Pages is off for the repository, the workflow only builds them and says so in a notice. The CI job `docs` builds every pull request below `/werkbuch/`, so a copy under a sub-path keeps working (`DOCS_BASE`).
 
 ```bash
 ddev exec pnpm --dir docs dev       # https://werkbuch.ddev.site:5174/en/

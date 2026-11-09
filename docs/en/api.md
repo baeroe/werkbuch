@@ -9,6 +9,8 @@ Every instance describes its API itself:
 
 Both are public: they hold no data of the instance, only the shape of the API, so an integration can be built before it has a token. Generating the document is costly, so both allow 30 requests a minute per address. The reference page loads its scripts from the instance itself, not from a CDN. This page explains what the reference cannot: how to sign in, errors, lists, limits and how the API changes. AI agents reach the same operations through the [MCP server](/en/mcp).
 
+![The API reference of an instance under /api/docs, with the endpoints grouped by area](/screenshots/en/api-docs.png)
+
 ## Authentication
 
 ### Tokens

@@ -185,6 +185,8 @@ Ist ein Webhook 24 Stunden lang gescheitert (ein geplanter Versuch scheitert, un
 
 Ein Fehlertext maskiert Benutzer, Passwort und Query jeder URL darin, aber nicht den Pfad: ein Empfänger, der sein Token im Pfad trägt wie Slack und Discord, zeigt es Org-Admins im Protokoll. Zustellungen und ihre Versuche werden 30 Tage nach ihrer letzten Änderung gelöscht. Eine Zustellung, die 36 Stunden nach ihrem letzten Versuch noch wartet (ihr Job ging verloren), wird `failed`, aber nie, solange die Queue `webhooks` noch fällige Jobs hält: nach einem Ausfall des Workers gehen ihre wartenden Versuche noch raus.
 
+![Das Zustellprotokoll eines Webhooks, jeder Versuch mit Antwort und Dauer](/screenshots/de/webhooks.png)
+
 ## Test-Ping und erneut senden
 
 **Test-Ping** schickt das Ereignis `ping` sofort, auch an einen abgeschalteten Webhook, und sagt dir, was der Empfänger geantwortet hat. Sein Body ist `{id, event: "ping", occurred_at, actor, project, data: {webhook: {id, name}}, changes: null}`, signiert wie jede Zustellung. Ein gescheiterter Ping wird nicht wiederholt.

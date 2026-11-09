@@ -4,6 +4,8 @@ Automatisierungen erledigen kleine, wiederkehrende Schritte eines Projekts für 
 
 Sie handeln als Standard-Bot „Automation“, halten sich an die Übergänge, die der Workflow erlaubt, und stehen mit ihrem Grund in der History, etwa „Automatisierung: Auto-Archiv“.
 
+![Die Automatisierungen eines Projekts, drei der fünf eingeschaltet](/screenshots/de/automations.png)
+
 ## Die fünf Automatisierungen
 
 | Automatisierung | Was sie tut | Wann |
