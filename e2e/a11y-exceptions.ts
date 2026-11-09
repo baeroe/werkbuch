@@ -26,7 +26,7 @@ export const A11Y_EXCEPTIONS: readonly A11yException[] = [
     rule: 'aria-hidden-focus',
     target: '[data-base-ui-focus-guard]',
     reason:
-      'axe is wrong here: the focus guards of a Base UI popup (@base-ui/react 1.9 utils/FocusGuard: a visually hidden span with aria-hidden and tabindex 0, role button under VoiceOver) take the focus only to pass it on at once, into the popup or to the next control, so the focus never rests on an aria-hidden element (Menu.test.tsx "passes the focus on from every focus guard of an open menu"). axe sees them while a menu or popover is open, on the phone not in every run.',
-    pages: ['item menu', 'display menu', 'filter menu'],
+      'axe is wrong here: the focus guards of a Base UI popup (@base-ui/react 1.9 utils/FocusGuard: a visually hidden span with aria-hidden and tabindex 0, role button under VoiceOver) take the focus only to pass it on at once, into the popup or to the next control, so the focus never rests on an aria-hidden element (Menu.test.tsx "passes the focus on from every focus guard of an open menu"). axe saw them while the menu "More actions" of an item page was open, on the phone not in every run; the evidence covers menus, so the exception stays on that entry.',
+    pages: ['item menu'],
   },
 ];
