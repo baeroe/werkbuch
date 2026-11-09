@@ -21,7 +21,7 @@ export type A11yIds = {
   wikiPage: string;
   /** A template of WEB with a schedule. */
   template: string;
-  /** A fresh invitation link of this project and run (the E2eSeeder removes open invitations to …@example.com). */
+  /** A fresh invitation link, only for an entry with `invites` (empty for the others). */
   invitation: string;
 };
 
@@ -45,6 +45,10 @@ export type A11yEntry = {
   projects?: readonly string[];
   /** Signed in as this person of the demo instead of Erik Ende (`signedInContext`). */
   person?: 'mara';
+  /** The path of a section of a settings screen: the spec checks that its link in the list of sections is current. */
+  section?: string;
+  /** Visits a fresh invitation link (`ids.invitation`), which the spec makes before and takes away after the test. */
+  invites?: true;
 };
 
 /** Where the states run (A441): the dark theme and the phone layout are covered by the pages in all four projects. */
@@ -52,7 +56,10 @@ export const STATE_PROJECTS = ['desktop-light', 'desktop-dark', 'phone-light'] a
 
 const en = (key: string, params?: Record<string, string | number>) => tr('en', key, params);
 
-/** The name of what a state creates: `E2E <variant> <run> a11y`, removed by the E2eSeeder before the next run too. */
+/**
+ * The name of what a state creates: `E2E <variant> <run> a11y`. Its `cleanup` takes it away; should that fail, the
+ * E2eSeeder removes a webhook of that name before the next run, a token stays with Erik (the seeder keeps tokens).
+ */
 const e2eName = () => `E2E ${variant()} ${runId()} a11y`;
 
 /** A state of a screen: runs in `STATE_PROJECTS`. */
@@ -62,7 +69,7 @@ const state = (entry: Omit<A11yEntry, 'projects'>): A11yEntry => ({ ...entry, pr
 function settings(kind: 'organization' | 'personal' | 'project', slug: string, name = `${kind} settings: ${slug}`): A11yEntry {
   const page = { organization: 'Settings/Organization', personal: 'Settings/Personal', project: 'Projects/Settings' }[kind];
   const path = { organization: `/settings/${slug}`, personal: `/me/${slug}`, project: `/projects/WEB/settings/${slug}` }[kind];
-  return { name, page, path: () => path, projects: STATE_PROJECTS };
+  return { name, page, path: () => path, projects: STATE_PROJECTS, section: path };
 }
 
 /** Presses Enter on `target` (the files beside the specs stay without the mouse, scripts/keyboard-flows.test.mjs). */
@@ -101,7 +108,7 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
       await page.waitForURL(/\/two-factor-challenge$/);
     },
   },
-  { name: 'invitation', page: 'Auth/Invitation', guest: true, path: (ids) => ids.invitation },
+  { name: 'invitation', page: 'Auth/Invitation', guest: true, invites: true, path: (ids) => ids.invitation },
   // a link of an invitation without its signature: 403
   { name: 'error page', page: 'Errors/Error', guest: true, status: 403, path: () => '/invitations/a11y' },
 

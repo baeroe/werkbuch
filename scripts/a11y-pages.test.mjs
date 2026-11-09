@@ -112,8 +112,16 @@ describe('a11y exceptions', () => {
     expect(A11Y_EXCEPTIONS.filter((exception) => !/^[a-z0-9-]+$/.test(exception.rule) || exception.reason.trim() === '')).toEqual([]);
   });
 
+  // ids React makes with useId: `:r12:` up to React 18, `_r_lt_` from React 19 on; they change with every render
+  const GENERATED = [/:r[0-9a-z]+\\?:/i, /_r_[0-9a-z]+_/i, /#\\?:/, /\[id\^=/];
+
   it('names no generated id in a selector', () => {
-    expect(A11Y_EXCEPTIONS.filter((exception) => exception.target.trim() === '' || exception.target.includes('#:r') || exception.target.includes('[id^='))).toEqual([]);
+    expect(A11Y_EXCEPTIONS.filter((exception) => exception.target.trim() === '' || GENERATED.some((pattern) => pattern.test(exception.target)))).toEqual([]);
+  });
+
+  it('knows the generated ids of React 18 and 19', () => {
+    expect(['#\\:r12\\:', '#_r_lt_', '[data-picker-trigger="_r_m0_"]', '[aria-controls=":r3:"]', '[id^="base-ui"]'].filter((target) => !GENERATED.some((pattern) => pattern.test(target)))).toEqual([]);
+    expect(['[data-base-ui-focus-guard]', '[role="group"][aria-label="Weekdays"]', 'dl[role="group"]'].filter((target) => GENERATED.some((pattern) => pattern.test(target)))).toEqual([]);
   });
 
   it('knows only Task 16 as an end', () => {
