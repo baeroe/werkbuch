@@ -1,8 +1,8 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { Locator, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, pressMod, tr } from '../helpers';
+import { allEntries, api, pressMod, tr } from '../helpers';
 import type { DocsLocale } from './docs-seed.setup';
 
 /*
@@ -14,7 +14,7 @@ import type { DocsLocale } from './docs-seed.setup';
  *
  * The demo lives in October 2026: the browser's clock stands still at 2026-10-28 09:30 in Berlin (the "today" of the
  * seed), so "overdue", "today" and "3 hours ago" read the same on every run. The server keeps its own clock: what it
- * computes from now (the next runs of a schedule, the title of the next run) is answered for that day or masked.
+ * computes from now (the next runs of a schedule, the title of the next run) is answered for that day in the spec.
  *
  * Only helpers without `variant()` and `PEOPLE` (VARIANT_CODE, PEOPLE.inbox[variant()], createE2eProject …): they know
  * the four e2e projects, not docs-screenshots-<language>. A type check cannot tell; keep to `api`, `allEntries`, `tr`,
@@ -26,15 +26,33 @@ const NOW = '2026-10-28T09:30:00+01:00';
 
 /** Names of the demo data the shots open, in each language (database/seeders/Demo/Texts). */
 const DEMO = {
-  de: { item: 'Kontaktformular sendet doppelt', template: 'Wöchentliche Wartung', webhook: 'Deploy-Bot' },
-  en: { item: 'Contact form sends twice', template: 'Weekly maintenance', webhook: 'Deploy bot' },
+  de: {
+    item: 'Kontaktformular sendet doppelt',
+    template: 'Wöchentliche Wartung',
+    webhook: 'Deploy-Bot',
+    table: 'Studio Nordlicht',
+    timeline: 'Roadmap',
+    page: 'Seitenstruktur',
+    workflow: 'Agentur-Freigabe',
+  },
+  en: {
+    item: 'Contact form sends twice',
+    template: 'Weekly maintenance',
+    webhook: 'Deploy bot',
+    table: 'Studio Northlight',
+    timeline: 'Roadmap',
+    page: 'Page structure',
+    workflow: 'Agency approval',
+  },
 } satisfies Record<DocsLocale, Record<string, string>>;
 
 type Shot = {
   name: string;
   dark?: boolean;
-  /** Opens the page and waits until it shows what the shot is about; returns what to mask. */
-  open(page: Page, locale: DocsLocale): Promise<Locator[] | void>;
+  /** Only in these languages (the API reference has no German). */
+  only?: DocsLocale;
+  /** Opens the page and waits until it shows what the shot is about. */
+  open(page: Page, locale: DocsLocale): Promise<void>;
 };
 
 /** The id of the entry of a list of the API whose `name` is `name`. */
@@ -42,6 +60,18 @@ async function idOf(page: Page, list: string, name: string): Promise<string> {
   const entry = (await allEntries(page, list)).find((row) => row.name === name);
   expect(entry, `${list} has no "${name}"`).toBeTruthy();
   return String(entry!.id);
+}
+
+type PageNode = { id: string; title: string; children: PageNode[] };
+
+/** The id of the wiki page of WEB whose title is `title` (the tree of the API, every level). */
+async function pageOf(page: Page, title: string): Promise<string> {
+  const response = await api(page, 'GET', '/api/v1/projects/WEB/pages');
+  expect(response.status(), await response.text()).toBe(200);
+  const find = (nodes: PageNode[]): PageNode | undefined => nodes.map((node) => (node.title === title ? node : find(node.children))).find(Boolean);
+  const found = find(((await response.json()) as { data: PageNode[] }).data);
+  expect(found, `WEB has no page "${title}"`).toBeTruthy();
+  return found!.id;
 }
 
 /**
@@ -128,6 +158,93 @@ const SHOTS: Shot[] = [
       await expect(page.getByText(tr(locale, 'settings.webhooks.log.resend'), { exact: true }).first()).toBeVisible();
     },
   },
+  {
+    // my items as a list, grouped by status (by category: Mara's items run through two workflows)
+    name: 'my-items',
+    open: async (page) => {
+      await page.goto('/my-items');
+      await expect(page.locator('[data-nav-target]').filter({ hasText: 'APP-18' })).toBeVisible();
+    },
+  },
+  {
+    // the view of the client as a table with its properties
+    name: 'table',
+    open: async (page, locale) => {
+      await page.goto('/views');
+      await page.goto(`/views/${await idOf(page, 'views', DEMO[locale].table)}`);
+      const grid = page.getByRole('grid');
+      await expect(grid.getByRole('gridcell').filter({ hasText: 'WEB-47' })).toBeVisible();
+    },
+  },
+  {
+    // the roadmap: the epics on the timeline, today on the 28th
+    name: 'timeline',
+    open: async (page, locale) => {
+      await page.goto('/views');
+      await page.goto(`/views/${await idOf(page, 'views', DEMO[locale].timeline)}`);
+      await expect(page.locator('[data-timeline-scroller]').getByText('WEB-30').first()).toBeVisible();
+      await expect(page.locator('[data-layout-skeleton]')).toHaveCount(0);
+    },
+  },
+  {
+    // the inbox of Mara, three unread
+    name: 'inbox',
+    open: async (page, locale) => {
+      await page.goto('/inbox');
+      await expect(page.getByRole('article', { name: /WEB-42/ })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: tr(locale, 'inbox.title') })).toBeVisible();
+    },
+  },
+  {
+    // the page structure in the wiki of WEB, with its tree
+    name: 'wiki',
+    open: async (page, locale) => {
+      await page.goto('/projects/WEB/wiki');
+      await page.goto(`/projects/WEB/wiki/${await pageOf(page, DEMO[locale].page)}`);
+      await expect(page.getByRole('textbox', { name: tr(locale, 'wiki.page.title_label') })).toHaveValue(DEMO[locale].page);
+      await expect(page.getByRole('treeitem', { name: new RegExp(DEMO[locale].page) })).toBeVisible();
+      // the reference to WEB-48 in the text is read
+      await expect(page.locator('.rt-editor').getByText('WEB-48', { exact: true })).toBeVisible();
+    },
+  },
+  {
+    // the views of the team
+    name: 'views',
+    open: async (page, locale) => {
+      await page.goto('/views');
+      await expect(page.getByRole('link', { name: DEMO[locale].table, exact: true })).toBeVisible();
+    },
+  },
+  {
+    // the editor of the agency workflow with its matrix of transitions
+    name: 'settings-workflow',
+    open: async (page, locale) => {
+      await page.goto('/settings/workflows');
+      await page.goto(`/settings/workflows?workflow=${await idOf(page, 'workflows', DEMO[locale].workflow)}`);
+      const matrix = page.getByRole('grid', { name: tr(locale, 'settings.workflows.matrix.label') });
+      await expect(matrix).toBeVisible();
+      // the matrix is the subject: it stands below the states, so the page scrolls to it
+      await matrix.evaluate((grid) => grid.scrollIntoView({ block: 'center' }));
+      await expect(matrix).toBeInViewport({ ratio: 1 });
+    },
+  },
+  {
+    // the automations of WEB, the demo's switched on
+    name: 'automations',
+    open: async (page, locale) => {
+      await page.goto('/projects/WEB/settings/automations');
+      await expect(page.getByRole('switch', { name: tr(locale, 'automations.auto_archive.title') })).toBeChecked();
+    },
+  },
+  {
+    // the API reference (Stoplight), in English only
+    name: 'api-docs',
+    only: 'en',
+    open: async (page) => {
+      await page.goto('/api/docs');
+      await expect(page.getByText('werkbuch API').first()).toBeVisible();
+    },
+  },
 ];
 
 for (const locale of ['de', 'en'] as const) {
@@ -138,11 +255,11 @@ for (const locale of ['de', 'en'] as const) {
       await page.clock.setFixedTime(new Date(NOW));
     });
 
-    for (const shot of SHOTS) {
+    for (const shot of SHOTS.filter((shot) => !shot.only || shot.only === locale)) {
       test(shot.name, async ({ page }) => {
         for (const theme of shot.dark ? (['light', 'dark'] as const) : (['light'] as const)) {
           await page.emulateMedia({ colorScheme: theme });
-          const mask = (await shot.open(page, locale)) ?? [];
+          await shot.open(page, locale);
           // nothing loads any more, the fonts are in, neither a toast nor the banner of paused live updates stands
           await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
           await page.evaluate(() => document.fonts.ready);
@@ -152,7 +269,6 @@ for (const locale of ['de', 'en'] as const) {
             path: path.join(OUT, locale, theme === 'light' ? `${shot.name}.png` : `${shot.name}-dark.png`),
             animations: 'disabled',
             caret: 'hide',
-            mask,
           });
         }
       });

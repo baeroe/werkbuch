@@ -309,7 +309,10 @@ it('has the same screenshots in English and German', function () use ($screensho
     // the API reference is English only (Stoplight has no German): its shot exists in English alone
     $english = array_values(array_filter($screenshots('en'), fn (string $file): bool => ! str_starts_with($file, 'api-docs')));
 
-    expect($screenshots('en'))->toContain('board.png', 'item.png', 'item-dark.png', 'palette.png', 'templates.png', 'webhooks.png')
+    expect($screenshots('en'))->toContain(
+        'board.png', 'item.png', 'item-dark.png', 'palette.png', 'templates.png', 'webhooks.png', 'my-items.png', 'table.png',
+        'timeline.png', 'inbox.png', 'wiki.png', 'views.png', 'settings-workflow.png', 'automations.png', 'api-docs.png',
+    )
         ->and($english)->toEqualCanonicalizing($screenshots('de'));
 });
 
