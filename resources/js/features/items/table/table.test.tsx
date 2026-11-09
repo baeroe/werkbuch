@@ -963,6 +963,8 @@ describe('cells of the table', () => {
     press('ArrowRight');
     await waitFor(() => expect(document.activeElement).toBe(cell('wi_1', column('due_date'))));
     expect(cell('wi_1', column('due_date'))!.textContent).toMatch(/überfällig/);
+    // the cell shows the day without its year; its name says the whole day
+    expect(within(cell('wi_1', column('due_date'))!).getByRole('button', { name: 'Due-Date: 01.01. (1. Januar 2000), überfällig' })).toBeTruthy();
     press('Enter');
     await waitFor(() => expect(document.activeElement?.hasAttribute('data-day')).toBe(true));
     // the calendar starts on the day it has; the next one

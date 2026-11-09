@@ -287,14 +287,15 @@ describe('rows and cards', () => {
     // one tab stop: the title; every chip is reached with the item shortcuts
     expect(tabStops(row)).toEqual([screen.getByRole('link')]);
     const controls = [...within(row as HTMLElement).getAllByRole('combobox'), ...within(row as HTMLElement).getAllByRole('button')];
-    // the date chips by what they show (WCAG 2.5.3): the short day, and that the due date has passed
+    // the date chips by what they show (WCAG 2.5.3): the short day with the whole day in brackets, and that the due
+    // date has passed
     expect(controls.map((control) => control.getAttribute('aria-label') ?? control.textContent)).toEqual([
       'Status: In Progress',
       'Priorität: Urgent',
       'Labels: Formulare, Produktion',
       'Assignee: Ida Brenner',
-      'Start-Date: 27.10.',
-      'Due-Date: 31.10., überfällig',
+      'Start-Date: 27.10. (27. Oktober 2026)',
+      'Due-Date: 31.10. (31. Oktober 2026), überfällig',
     ]);
     for (const control of controls) expect(control.tabIndex).toBe(-1);
     for (const control of controls.slice(-2)) expectLabelInName(control);

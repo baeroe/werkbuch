@@ -20,7 +20,7 @@ import { t } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import type { ListedItem } from '@/types';
-import { formatDay, formatShortDay, relativeDay } from './format';
+import { formatDay, formatLongDay, formatShortDay, relativeDay } from './format';
 import { useEditReason, useItemWorkflow, useToday } from './itemData';
 import { PendingMark, ReadOnlyTrigger, triggerClass, useFocusSwap, withTooltip, type PickerExtras } from './Picker';
 
@@ -175,11 +175,13 @@ type DayShown = { value: string | null; today: string; overdue: boolean; short?:
 
 /**
  * The words DayValue shows, for the name of its trigger (`displayText`): a control's visible text stands in its name
- * (WCAG 2.5.3), so a chip reads "Due date: 31/10, overdue" and a field "Due date: 31/10/2026, in 3 days".
+ * (WCAG 2.5.3), so a field reads "Due date: 31/10/2026, in 3 days". A chip shows the day without its year: its name
+ * adds the whole day in brackets, "Due date: 31/10 (31 October 2026), overdue" (axe leaves out what is in brackets
+ * when it compares the visible text with the name).
  */
 export function dayText({ value, today, overdue, short = false, empty }: DayShown): string {
   if (!value) return empty;
-  const day = short ? formatShortDay(value) : formatDay(value);
+  const day = short ? t('items.fields.date.short_text', { day: formatShortDay(value), full: formatLongDay(value) }) : formatDay(value);
   if (overdue) return t('items.fields.date.overdue_text', { day });
   return short ? day : t('items.fields.date.relative_text', { day, relative: relativeDay(value, today) });
 }

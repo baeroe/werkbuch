@@ -735,7 +735,7 @@ describe('DateField', () => {
     expect(due.getAttribute('aria-keyshortcuts')).toBe('D');
     // the start is no deadline, and a done item is overdue no more
     expect(screen.getByRole('button', { name: 'Start-Date: 20.10.2026, vor 11 Tagen' }).textContent).toContain('vor 11 Tagen');
-    const done = screen.getByRole('button', { name: 'Due-Date: 28.10.' });
+    const done = screen.getByRole('button', { name: 'Due-Date: 28.10. (28. Oktober 2026)' });
     expect(done.textContent).toBe('28.10.');
     expect(done.hasAttribute('aria-keyshortcuts')).toBe(false);
   });
@@ -763,8 +763,9 @@ describe('DateField', () => {
     // the words in order: the day as shown, then what the field says beside it
     expect(screen.getByRole('button', { name: 'Due-Date: 28.10.2026, überfällig' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Start-Date: 20.10.2026, vor 11 Tagen' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Due-Date: 28.10., überfällig' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Due-Date: 28.10.' })).toBeTruthy();
+    // a chip shows the day without its year; the name says the whole day after it (axe leaves out what is in brackets)
+    expect(screen.getByRole('button', { name: 'Due-Date: 28.10. (28. Oktober 2026), überfällig' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Due-Date: 28.10. (28. Oktober 2026)' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Due-Date: Kein Due-Date' })).toBeTruthy();
   });
 
