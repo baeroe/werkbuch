@@ -799,12 +799,12 @@ describe('default value', () => {
     renderProperty(launch);
 
     let dialog = await openEdit(user, launch);
-    await user.click(within(dialog).getByRole('button', { name: 'Standardwert: 02.01.2026' }));
+    await user.click(within(dialog).getByRole('button', { name: /^Standardwert: 02\.01\.2026, / }));
     await user.click(document.querySelector<HTMLElement>('[data-day="2026-01-05"]')!);
     expect(await save(user, dialog)).toBe('2026-01-05');
 
     dialog = await openEdit(user, launch);
-    await user.click(within(dialog).getByRole('button', { name: 'Standardwert: 02.01.2026' }));
+    await user.click(within(dialog).getByRole('button', { name: /^Standardwert: 02\.01\.2026, / }));
     await user.click(await screen.findByRole('button', { name: 'Entfernen' }));
     expect(await save(user, dialog)).toBeNull();
   });
