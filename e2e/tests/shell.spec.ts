@@ -235,9 +235,11 @@ test('counts a new notification up live', async ({ page, browser }) => {
     await held;
     await other.page.evaluate(() => ((window as Window & { __badge?: boolean }).__badge = true));
     // the inbox link that shows: in the sidebar, on the phone in the top bar
-    const link = other.page.getByRole('link', { name: /^Inbox(, \d+ unread)?$/ }).filter({ visible: true });
+    const link = other.page.getByRole('link', { name: /^Inbox(, \S+ unread.*)?$/ }).filter({ visible: true });
+    // the name holds what the badge shows: above 99 "99+" and the whole number
+    const named = (count: number) => (count > 99 ? tr('en', 'shell.nav.inbox_unread_over', { shown: '99+', count }) : tr('en', 'shell.nav.inbox_unread', { count }));
     const before = (await unread()).meta.total;
-    await expect(link).toHaveAccessibleName(tr('en', 'shell.nav.inbox_unread', { count: before }));
+    await expect(link).toHaveAccessibleName(named(before));
     await expect(link.locator('[data-inbox-badge]')).toHaveText(before > 99 ? '99+' : String(before));
 
     // a comment on the watched item: the badge counts up without a reload
@@ -246,7 +248,7 @@ test('counts a new notification up live', async ({ page, browser }) => {
     await expect.poll(() => has(item.id, 'comment'), { timeout: 20_000 }).toBe(true);
     const after = (await unread()).meta.total;
     expect(after).toBeGreaterThan(before);
-    await expect(link).toHaveAccessibleName(tr('en', 'shell.nav.inbox_unread', { count: after }), { timeout: 20_000 });
+    await expect(link).toHaveAccessibleName(named(after), { timeout: 20_000 });
     await expect(link.locator('[data-inbox-badge]')).toHaveText(after > 99 ? '99+' : String(after));
     expect(await other.page.evaluate(() => (window as Window & { __badge?: boolean }).__badge)).toBe(true);
   } finally {
