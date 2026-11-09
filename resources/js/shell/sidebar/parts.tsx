@@ -52,6 +52,9 @@ export function SideLink({ href, children, leading, end = false, also = [], inde
     >
       {leading && <span className={cx('inline-flex shrink-0', active ? 'text-accent-text' : 'text-muted')}>{leading}</span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
+      {/* a space the flex row does not draw: as text, the name and what trails it ("Inbox" and its count) stay two
+          words, and the label of the link holds them (WCAG 2.5.3) */}
+      {trailing && ' '}
       {trailing}
     </Link>
   );

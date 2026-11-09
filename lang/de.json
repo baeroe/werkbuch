@@ -2856,6 +2856,7 @@
     "shell.nav.create_view": "View anlegen",
     "shell.nav.inbox": "Inbox",
     "shell.nav.inbox_unread": "Inbox, :count ungelesen",
+    "shell.nav.inbox_unread_over": "Inbox, :shown ungelesen (insgesamt :count)",
     "shell.nav.my_items": "Meine Items",
     "shell.nav.organization_settings": "Einstellungen der Organisation",
     "shell.nav.project_items": "Items",

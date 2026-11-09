@@ -24,11 +24,19 @@ const LOOK = {
 
 const formatCount = (count: number) => new Intl.NumberFormat(intlLocale()).format(count);
 
-/** The name of an inbox link: "Inbox", with unread notifications "Inbox, 3 ungelesen". */
+/**
+ * The name of an inbox link: "Inbox", with unread notifications "Inbox, 3 ungelesen". It holds what the link shows
+ * (WCAG 2.5.3): above 99 the "99+" of the badge, then the whole number ("Inbox, 99+ ungelesen (insgesamt 120)").
+ */
 export function useInboxName(): string {
   const count = useUnreadCount();
-  return count > 0 ? t('shell.nav.inbox_unread', { count: formatCount(count) }) : t('shell.nav.inbox');
+  if (count === 0) return t('shell.nav.inbox');
+  if (count > MAX_SHOWN) return t('shell.nav.inbox_unread_over', { shown: shownCount(count), count: formatCount(count) });
+  return t('shell.nav.inbox_unread', { count: formatCount(count) });
 }
+
+/** What the badge says: the count, above 99 "99+". */
+const shownCount = (count: number) => (count > MAX_SHOWN ? `${formatCount(MAX_SHOWN)}+` : formatCount(count));
 
 export function InboxBadge({ look }: { look: keyof typeof LOOK }) {
   const count = useUnreadCount();
@@ -39,7 +47,7 @@ export function InboxBadge({ look }: { look: keyof typeof LOOK }) {
       aria-hidden="true"
       className={cx('inline-flex items-center justify-center rounded-full bg-accent text-2xs font-semibold text-on-accent tabular-nums', LOOK[look])}
     >
-      {count > MAX_SHOWN ? `${MAX_SHOWN}+` : formatCount(count)}
+      {shownCount(count)}
     </span>
   );
 }

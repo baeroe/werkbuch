@@ -9,6 +9,7 @@ import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { listCommands } from '@/lib/commands';
 import { drafts } from '@/lib/drafts';
 import { useUiStore } from '@/store/ui';
+import { expectLabelInName } from '@/test/a11y';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { list, makeView, project } from '@/test/fixtures';
 import { pauseLive } from '@/api/live';
@@ -189,10 +190,13 @@ describe('Inbox badge', () => {
 
     // the sidebar and the phone bar: the name says it, the badge shows it
     const full = await within(sidebar()).findByRole('link', { name: 'Inbox, 3 ungelesen' });
-    expect(full.textContent).toBe('Inbox3');
+    // the word and the count stay two words for anyone reading the text (WCAG 2.5.3)
+    expect(full.textContent).toBe('Inbox 3');
+    expectLabelInName(full);
     expect(full.getAttribute('href')).toBe('/inbox');
     const bar = within(header).getByRole('link', { name: 'Inbox, 3 ungelesen' });
     expect(bar.textContent).toBe('3');
+    expectLabelInName(bar);
     // the badge is a picture of the name: read once, through the link
     expect(full.querySelector('[data-inbox-badge]')?.getAttribute('aria-hidden')).toBe('true');
 
@@ -200,6 +204,7 @@ describe('Inbox badge', () => {
     act(() => useUiStore.getState().toggleSidebar());
     const rail = await within(sidebar()).findByRole('link', { name: 'Inbox, 3 ungelesen' });
     expect(rail.textContent).toBe('3');
+    expectLabelInName(rail);
 
     // the count follows the inbox: `notifications.changed` makes it stale, the badge asks again (Task 14)
     unread(4);
@@ -218,11 +223,18 @@ describe('Inbox badge', () => {
 
     unread(120);
     await act(() => client.invalidateQueries({ queryKey: ['notifications'] }));
-    const full = await within(sidebar()).findByRole('link', { name: 'Inbox, 120 ungelesen' });
+    // the name says what the badge shows, and keeps the whole number
+    const many = 'Inbox, 99+ ungelesen (insgesamt 120)';
+    const full = await within(sidebar()).findByRole('link', { name: many });
     expect(full.querySelector('[data-inbox-badge]')?.textContent).toBe('99+');
-    expect(within(screen.getByRole('banner')).getByRole('link', { name: 'Inbox, 120 ungelesen' }).textContent).toBe('99+');
+    expectLabelInName(full);
+    const bar = within(screen.getByRole('banner')).getByRole('link', { name: many });
+    expect(bar.textContent).toBe('99+');
+    expectLabelInName(bar);
     act(() => useUiStore.getState().toggleSidebar());
-    expect((await within(sidebar()).findByRole('link', { name: 'Inbox, 120 ungelesen' })).textContent).toBe('99+');
+    const rail = await within(sidebar()).findByRole('link', { name: many });
+    expect(rail.textContent).toBe('99+');
+    expectLabelInName(rail);
   });
 });
 
