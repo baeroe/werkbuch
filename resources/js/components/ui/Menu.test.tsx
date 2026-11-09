@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Pencil, Trash2, UserRound } from 'lucide-react';
 import { useState } from 'react';
@@ -50,6 +50,39 @@ describe('Menu', () => {
     expect(onRename).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Aktionen' }));
+  });
+
+  // e2e/a11y-exceptions.ts keeps axe's aria-hidden-focus on these guards: they take the focus only to pass it on
+  it('passes the focus on from every focus guard of an open menu, so it never rests on one', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">Davor</button>
+        <Menu>
+          <MenuTrigger render={<Button variant="secondary">Aktionen</Button>} />
+          <MenuContent>
+            <MenuItem icon={Pencil}>Umbenennen</MenuItem>
+            <MenuItem icon={Trash2}>Löschen</MenuItem>
+          </MenuContent>
+        </Menu>
+        <button type="button">Danach</button>
+      </>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Aktionen' }));
+    await screen.findByRole('menu');
+    const guards = [...document.querySelectorAll<HTMLElement>('[data-base-ui-focus-guard]')];
+    // the spans axe names: hidden from screen readers, in the tab order
+    expect(guards.length).toBeGreaterThan(0);
+    for (const guard of guards) {
+      expect(guard.getAttribute('aria-hidden')).toBe('true');
+      expect(guard.tabIndex).toBe(0);
+    }
+    for (const guard of guards) {
+      if (!guard.isConnected) continue;
+      act(() => guard.focus());
+      await waitFor(() => expect(document.activeElement?.hasAttribute('data-base-ui-focus-guard')).toBe(false));
+      expect(document.activeElement).not.toBe(document.body);
+    }
   });
 
   it('moves through the entries with the arrow keys and closes on Escape', async () => {

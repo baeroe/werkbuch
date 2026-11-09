@@ -3,7 +3,8 @@
  * the check when its rule is `rule` and the element axe names matches `target` or lies inside an element that does
  * (`Element.closest`); `pages` narrows it to entries of the list by name. `target` is a stable selector: a `data-*`
  * attribute or the role of the component, never an id Base UI generates (`:r12:`), which changes with every render.
- * `until: 'Task 16'` marks what Task 16 fixes; scripts/a11y-pages.test.mjs keeps the list honest.
+ * An exception stays only where axe is wrong, with the evidence in its reason; scripts/a11y-pages.test.mjs keeps the list
+ * honest.
  *
  * Plain data without imports: the Vitest of the app reads it as it is.
  */
@@ -25,7 +26,7 @@ export const A11Y_EXCEPTIONS: readonly A11yException[] = [
     rule: 'aria-hidden-focus',
     target: '[data-base-ui-focus-guard]',
     reason:
-      'axe: Ensures aria-hidden elements are not focusable nor contain focusable elements. The focus guards of a Base UI popup (spans with aria-hidden and tabindex 0 that pass the focus on) on the phone, seen in the menu “More actions” of an item page.',
-    until: 'Task 16',
+      'axe is wrong here: the focus guards of a Base UI popup (@base-ui/react 1.9 utils/FocusGuard: a visually hidden span with aria-hidden and tabindex 0, role button under VoiceOver) take the focus only to pass it on at once, into the popup or to the next control, so the focus never rests on an aria-hidden element (Menu.test.tsx "passes the focus on from every focus guard of an open menu"). axe sees them while a menu or popover is open, on the phone not in every run.',
+    pages: ['item menu', 'display menu', 'filter menu'],
   },
 ];

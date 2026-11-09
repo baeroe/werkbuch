@@ -125,8 +125,8 @@ describe('a11y exceptions', () => {
     expect(A11Y_EXCEPTIONS.flatMap((exception) => exception.pages ?? []).filter((name) => !listed.has(name))).toEqual([]);
   });
 
-  // turned on by Task 16, which fixes what axe found: from then on an exception stays only with a reason of its own
-  it.skip('leaves no exception for Task 16', () => {
+  // Task 16 fixed what axe found: an exception stays only with a reason of its own (axe is wrong there)
+  it('leaves no exception for Task 16', () => {
     expect(A11Y_EXCEPTIONS.filter((exception) => exception.until === 'Task 16')).toEqual([]);
   });
 });
