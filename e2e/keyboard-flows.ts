@@ -192,6 +192,10 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'remove a relation', file: 'item-sections.spec.ts', test: 'relates two items with r and removes the relation again' },
   { flow: 'edit the description', file: 'item-description.spec.ts', test: 'writes a heading and a checklist with Markdown shortcuts' },
   { flow: 'write a comment', file: 'comments.spec.ts', test: 'writes a comment with m and mod+enter' },
+  { flow: 'edit a comment', file: 'comments.spec.ts', test: 'edits and deletes a comment with undo (mod+z)' },
+  { flow: 'delete a comment', file: 'comments.spec.ts', test: 'edits and deletes a comment with undo (mod+z)' },
+  { flow: 'react to a comment', file: 'comments.spec.ts', test: 'reacts with an emoji from the picker and takes it back' },
+  { flow: 'paste an image into a comment', file: 'comments.spec.ts', test: 'pastes an image into a comment and sends it with mod+enter' },
   { flow: 'paste an image', file: 'editor.spec.ts', test: 'pastes an image into the description and shows it after a reload' },
   { flow: 'upload a file', file: 'attachments.spec.ts', test: 'uploads a file to the list and downloads it' },
   { flow: 'download a file', file: 'attachments.spec.ts', test: 'uploads a file to the list and downloads it' },
@@ -228,6 +232,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'run a template', file: 'templates.spec.ts', test: 'creates a template with the keyboard and runs it now' },
   // changes a schedule that came over the API; switching it on is a gap
   { flow: 'set a schedule', file: 'templates.spec.ts', test: 'shows the next five runs of a monthly schedule on the first Monday' },
+  { flow: 'link a referenced item', file: 'automations.spec.ts', test: 'relates an item it references, keyboard only' },
   { flow: 'switch an automation', file: 'automations.spec.ts', test: 'switches Assignee beim Start on with the keyboard; a person who starts an item becomes its assignee' },
   { flow: 'create a webhook', file: 'webhooks.spec.ts', test: 'creates a webhook with the keyboard, copies its secret once and pings the receiver' },
   { flow: 'ping a webhook', file: 'webhooks.spec.ts', test: 'creates a webhook with the keyboard, copies its secret once and pings the receiver' },
@@ -303,16 +308,9 @@ export const PROJECT_GAPS: { key: string; projects: string[]; reason: string }[]
 export const GAPS: Record<string, { file: 'TODO'; test: string }> = {
 
   // flows (named in words)
-  // comments.spec.ts and content-acceptance.spec.ts click through these
-  'edit a comment': { file: 'TODO', test: 'edits an own comment from its menu with the keyboard and saves it with mod+enter' },
-  'delete a comment': { file: 'TODO', test: 'deletes a comment from its menu with the keyboard and brings it back with mod+z' },
-  'react to a comment': { file: 'TODO', test: 'adds a reaction from the emoji picker with the keyboard and takes it back' },
-  'paste an image into a comment': { file: 'TODO', test: 'pastes an image into the comment composer (m) and sends it with mod+enter' },
   // no e2e test yet
   'retry failed jobs': { file: 'TODO', test: 'retries the failed jobs on the system page with the keyboard' },
   'redeliver a webhook delivery': { file: 'TODO', test: 'sends a delivery of the log of a webhook again with the keyboard' },
   // the template of templates.spec.ts comes with its schedule over the API
   'switch a schedule on': { file: 'TODO', test: 'switches "Create on a schedule" on in the editor of a template and saves it' },
-  // Phase 15 after Task 17
-  'link a referenced item': { file: 'TODO', test: 'refers to another item over # in a comment; the automation relates both' },
 };
