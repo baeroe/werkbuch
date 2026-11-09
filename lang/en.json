@@ -51,6 +51,7 @@
     "catalog.usage.one": ":count item",
     "catalog.usage.other": ":count items",
     "catalog.usage_failed": "Count not loaded",
+    "catalog.usage_loading": "Counts loading …",
     "commands.create.denied": "No new item possible",
     "commands.create.keywords": "create add",
     "commands.create.label": "New item",

@@ -20,7 +20,7 @@ import type { WorkItemType } from '@/types';
 import { fieldErrors, useDraft, useFieldErrors, useSaveShortcut } from '../frame/form';
 import { LeaveGuard } from '../frame/LeaveGuard';
 import { Badge, FormActions, RuledList, RuledRow, SettingsCard, SettingsError, SettingsSkeleton } from '../frame/parts';
-import { UsageCount, useGroupUsage, type Usage } from '../catalog/usage';
+import { UsageCount, UsageStatus, useGroupUsage, type Usage } from '../catalog/usage';
 import type { ProjectSectionProps } from './sectionProps';
 
 type RowProps = {
@@ -186,6 +186,8 @@ export function Types({ project, canManage }: ProjectSectionProps) {
           aria-invalid={problem ? true : undefined}
           tabIndex={problem ? -1 : undefined}
         >
+          {/* one status for the counts of the whole list (T23-M8) */}
+          <UsageStatus usage={usage} />
           <RuledList label={t('settings.project.types.list_label')}>
             {shown.map((type) => {
               const on = enabled.includes(type.id);

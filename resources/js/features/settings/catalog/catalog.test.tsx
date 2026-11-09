@@ -2,15 +2,17 @@
  * The shared parts of the catalog screens: the tone menu, the local ids of new rows, and the names of the fixed choices.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { SKELETON_DELAY_MS } from '@/components/ui/Skeleton';
 import { TYPE_ICONS } from '@/components/ui/TypeTab';
 import { t, type TranslationKey } from '@/lib/i18n';
 import type { TypeTone } from '@/types';
 import { CATEGORY_HINTS, CATEGORY_LABELS, FIELD_TYPE_HINTS, FIELD_TYPE_LABELS, FIELD_TYPES, STATE_ICON_LABELS, STATE_ICONS, TONE_LABELS, TONES, TYPE_ICON_LABELS } from './choices';
 import { localId } from './localId';
+import { UsageCount, UsageStatus, type Usage } from './usage';
 import { ToneSelect } from './ToneSelect';
 
 function Picker({ onChange }: { onChange: (tone: TypeTone) => void }) {
@@ -100,5 +102,44 @@ describe('choices', () => {
     expect(t(STATE_ICON_LABELS['three-quarter'])).toBe('Dreiviertel gefüllt');
     expect(t(TYPE_ICON_LABELS['square-check'])).toBe('Häkchen im Quadrat');
     expect(t(FIELD_TYPE_LABELS.rich_text)).toBe('Rich Text');
+  });
+});
+
+describe('usage counts', () => {
+  const rows = (usage: Usage) => (
+    <>
+      <UsageStatus usage={usage} />
+      <ul>
+        {['a', 'b', 'c'].map((id) => (
+          <li key={id} data-row={id}>
+            <UsageCount usage={usage} id={id} />
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+
+  it('says once for the whole list that the counts load, the skeletons of the rows say nothing (T23-M8)', () => {
+    vi.useFakeTimers();
+    try {
+      const view = render(rows({ counts: undefined, pending: true, failed: false }));
+      const status = screen.getByRole('status');
+      // there from the start, so what it says later is announced; it speaks only once skeletons show (M3)
+      expect(status.textContent).toBe('');
+      act(() => vi.advanceTimersByTime(SKELETON_DELAY_MS));
+      expect(screen.getAllByRole('status')).toEqual([status]);
+      expect(status.textContent).toBe('Anzahlen werden geladen …');
+      for (const row of document.querySelectorAll('[data-row]')) {
+        expect(row.querySelector('[role="status"]')).toBeNull();
+        expect(row.querySelector('[aria-hidden="true"]')).not.toBeNull();
+      }
+
+      // the answer: the counts in the rows, the status silent again
+      view.rerender(rows({ counts: { a: 3, b: 1 }, pending: false, failed: false }));
+      expect(status.textContent).toBe('');
+      expect([...document.querySelectorAll('[data-row]')].map((row) => row.textContent)).toEqual(['3 Items', '1 Item', '0 Items']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

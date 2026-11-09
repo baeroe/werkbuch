@@ -24,7 +24,7 @@ import { fieldMessage, noticeOf } from '../../frame/form';
 import { FieldGroup, Loaded, Panel, Row, Rows, RowsSkeleton, SectionHeader } from '../../frame/parts';
 import { useDialogRound } from '../../frame/useDialogRound';
 import { useRemoval } from '../../frame/useRemoval';
-import { UsageCount, useGroupUsage } from '../../catalog/usage';
+import { UsageCount, UsageStatus, useGroupUsage } from '../../catalog/usage';
 import type { SectionProps } from '../sections';
 
 type LabelDialogProps = {
@@ -126,6 +126,8 @@ export default function Labels({ readOnlyReason }: SectionProps) {
           }
           return (
             <Panel>
+              {/* one status for the counts of the whole list (T23-M8) */}
+              <UsageStatus usage={usage} />
               <Rows label={t('settings.org.section.labels')}>
                 {shown.map((label) => (
                   <Row key={label.id}>
