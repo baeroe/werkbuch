@@ -12,12 +12,6 @@ import { InboxBadge, useInboxName } from './InboxBadge';
 import { openSearch } from './SearchButton';
 import { SidebarContent } from './Sidebar';
 
-/** Mounted while the drawer is open: it is modal, so the page's shortcuts pause (all but mod+k, escape, mod+enter). */
-function DrawerScope() {
-  useDialogScope();
-  return null;
-}
-
 /** Below md: menu (drawer with the sidebar), wordmark, the search (the one way into the palette on a phone) and the inbox. */
 export function MobileBar() {
   const [open, setOpen] = useState(false);
@@ -31,6 +25,9 @@ export function MobileBar() {
   // command that leads nowhere (theme, help) does not leave the drawer behind the closed palette
   const paletteOpen = useUiStore((state) => state.paletteOpen);
   const inbox = useInboxName();
+  // the drawer is modal: while it is open the page's shortcuts pause (all but mod+k, escape, mod+enter), not while it
+  // slides out
+  useDialogScope(open);
   useEffect(() => {
     if (paletteOpen) setOpen(false);
   }, [paletteOpen]);
@@ -46,7 +43,6 @@ export function MobileBar() {
             className="tracing fixed top-2 bottom-2 left-2 z-50 flex w-[min(18rem,calc(100vw-1rem))] flex-col rounded-card p-2 outline-none transition-transform duration-160 data-ending-style:-translate-x-[110%] data-starting-style:-translate-x-[110%]"
           >
             <BaseDialog.Title className="sr-only">{t('shell.mobile.navigation')}</BaseDialog.Title>
-            <DrawerScope />
             {/* a chosen link closes it too, also one to the page it is on or to the same page with another query; one
                 opened in a new tab or window (⌘, Strg, ⇧, middle button) leaves this page where it is (20b-M6) */}
             <nav

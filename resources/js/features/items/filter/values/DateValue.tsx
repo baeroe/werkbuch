@@ -14,18 +14,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Select } from '@/components/ui/Select';
 import { t } from '@/lib/i18n';
-import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import { DAY, dateValueLabel, readRelative, relativeValue } from '../fieldOps';
 import { chipPart, type ValueEditorProps } from './shared';
 
 const PRESETS = ['today', 'this_week', 'this_month'] as const;
 const PRESET_KEYS = { today: 'items.filter.date.preset.today', this_week: 'items.filter.date.preset.this_week', this_month: 'items.filter.date.preset.this_month' } as const;
-
-/** Mounted while the popover is open: the page's shortcuts (f, j, 1–4) wait. */
-function PausePageShortcuts() {
-  useDialogScope();
-  return null;
-}
 
 type DateChoiceProps = { label: string; value: unknown; onChoose: (value: unknown) => void; open: boolean; onOpenChange: (open: boolean) => void };
 
@@ -65,8 +58,8 @@ function DateChoice({ label, value, onChoose, open, onOpenChange }: DateChoicePr
       >
         <span className="truncate tabular-nums">{words}</span>
       </PopoverTrigger>
-      <PopoverContent title={label} className="w-[min(21rem,calc(100vw-2rem))] p-3">
-        {open && <PausePageShortcuts />}
+      {/* while it is open the page's shortcuts (f, j, 1–4) wait */}
+      <PopoverContent title={label} className="w-[min(21rem,calc(100vw-2rem))] p-3" pauseShortcuts>
         <div className="mt-3 flex flex-col gap-4">
           <SegmentedControl
             label={t('items.filter.date.presets')}

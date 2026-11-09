@@ -3,10 +3,10 @@ import { Dialog as BaseDialog } from '@base-ui/react/dialog';
 import { X } from 'lucide-react';
 import { useRef, useState, type ReactElement, type ReactNode, type RefObject } from 'react';
 import { t } from '@/lib/i18n';
-import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import { Button } from './Button';
 import { cx } from './cx';
 import { IconButton } from './IconButton';
+import { pauseWhileOpen } from './pauseWhileOpen';
 
 const WIDTHS = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' };
 
@@ -36,15 +36,6 @@ type FrameProps = {
 };
 
 /**
- * Mounted inside the open popup: meanwhile only `dialog` shortcuts and the global mod+k, escape and mod+enter run; the
- * shortcuts of the page behind it pause.
- */
-function PausePageShortcuts() {
-  useDialogScope();
-  return null;
-}
-
-/**
  * Portal, scrim and popup on strong tracing paper. Shared by Dialog and AlertDialog: Base UI's alert dialog
  * re-exports these dialog parts.
  */
@@ -59,10 +50,11 @@ export function DialogFrame({ title, description, children, footer, size = 'md',
         <BaseDialog.Popup
           initialFocus={initialFocus}
           finalFocus={finalFocus}
+          // while it is open the page's shortcuts pause; while it animates out they work again
+          render={pauseWhileOpen}
           data-focus-ring="none"
           className={cx('tracing-strong popup-motion relative w-full rounded-card text-ui text-ink outline-none', WIDTHS[size])}
         >
-          <PausePageShortcuts />
           <div className={cx('px-5 pt-4', closable && 'pr-14', !children && !footer && 'pb-5')}>
             <BaseDialog.Title className="font-display text-xl font-bold tracking-title text-balance text-ink">{title}</BaseDialog.Title>
             {description && <BaseDialog.Description className="mt-1 max-w-[65ch] text-ui text-pretty text-muted">{description}</BaseDialog.Description>}

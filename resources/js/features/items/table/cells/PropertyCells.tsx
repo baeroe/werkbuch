@@ -32,7 +32,6 @@ import { useUpdateWorkItem } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t, tx } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
-import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import type { ListedItem, Property, PropertyValue } from '@/types';
 import { typePropertyOf } from '../columns';
 import type { EditProps } from './CoreCells';
@@ -271,12 +270,6 @@ function BooleanCell({ item, property, editing, onEditingChange, saving, reason 
   );
 }
 
-/** Mounted while the editor of a cell is open: the page's shortcuts wait, as they do behind a dialog. */
-function PausePageShortcuts() {
-  useDialogScope();
-  return null;
-}
-
 /**
  * Text, number, link and plain rich text: a small editor in a popover, saved on Enter (or when the focus leaves). A text
  * it cannot read keeps the popover open on a click beside it, with its error, as Enter does (T20-M10); Escape takes the
@@ -336,8 +329,8 @@ function TypedCell({ item, property, editing, onEditingChange, saving, reason, r
       >
         {shown}
       </PopoverTrigger>
-      <PopoverContent title={property.label} className="w-[min(20rem,calc(100vw-2rem))] p-3">
-        <PausePageShortcuts />
+      {/* while the editor of a cell is open the page's shortcuts wait, as they do behind a dialog */}
+      <PopoverContent title={property.label} className="w-[min(20rem,calc(100vw-2rem))] p-3" pauseShortcuts>
         <div ref={field} className="mt-2">
           <PropertyValueInput
             property={property}

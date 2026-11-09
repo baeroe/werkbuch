@@ -18,7 +18,6 @@ import { useSettle } from '@/hooks/mutation';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
-import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import type { ListedItem } from '@/types';
 import { formatDay, formatLongDay, formatShortDay, relativeDay } from './format';
 import { useEditReason, useItemWorkflow, useToday } from './itemData';
@@ -39,15 +38,6 @@ type DatePopoverProps = PickerExtras & {
   invalid?: boolean;
   className?: string;
 };
-
-/**
- * Mounted while the calendar is open: its days hold the focus like a dialog does, so the page's shortcuts (p, s,
- * mod+backspace of the item) wait instead of acting on the item behind it.
- */
-function PausePageShortcuts() {
-  useDialogScope();
-  return null;
-}
 
 /** A date trigger with its calendar; DateField and date properties use it. */
 export function DatePopover({
@@ -130,10 +120,12 @@ export function DatePopover({
         shortcut ? t('items.fields.date.set', { label }) : null,
         shortcut,
       )}
-      {/* the focus starts on the chosen day (or today), so the arrows work at once */}
+      {/* the focus starts on the chosen day (or today), so the arrows work at once; its days hold the focus like a
+          dialog does, so while it is open the page's shortcuts (p, s, mod+backspace of the item) wait */}
       <PopoverContent
         keepSide={keepSide}
         {...popup}
+        pauseShortcuts
         className="w-auto p-3"
         initialFocus={() => {
           if (startsOpen.current) {
@@ -143,7 +135,6 @@ export function DatePopover({
           return days.current?.querySelector<HTMLElement>('[data-day][tabindex="0"]') ?? true;
         }}
       >
-        <PausePageShortcuts />
         <div ref={days}>
           <Calendar
             value={value}

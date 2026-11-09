@@ -41,7 +41,7 @@ import { useCommand } from '@/lib/commands';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
-import { useDialogScope, useShortcut } from '@/lib/shortcuts/useShortcut';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 import type { Page as WikiPage } from '@/types';
 import { ConflictBanner } from './ConflictBanner';
@@ -52,12 +52,6 @@ import { ParkedDraft } from './ParkedDraft';
 import { SaveStatus } from './SaveStatus';
 import { MAX_TITLE, usePageSave } from './usePageSave';
 import { VersionsDialog } from './VersionsDialog';
-
-/** Mounted while the emoji choice is open: its grid takes letters, so the page's single-key shortcuts wait. */
-function PausePageShortcuts() {
-  useDialogScope();
-  return null;
-}
 
 export function PageSheet({ page, projectId, identifier, ancestors, rights, focusTitle = false, onMove, onDelete, onCreateChild }: PageViewProps & { page: WikiPage }) {
   const canEdit = rights.denied === null;
@@ -179,8 +173,8 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
             >
               {draft.emoji ?? <SmilePlus className="size-6 text-muted" aria-hidden="true" />}
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-3" title={t('wiki.page.emoji.title')}>
-              <PausePageShortcuts />
+            {/* its grid takes letters, so the page's single-key shortcuts wait while it is open */}
+            <PopoverContent className="w-auto p-3" title={t('wiki.page.emoji.title')} pauseShortcuts>
               <EmojiPicker className="mt-2" onPick={pickEmoji} />
               {draft.emoji && (
                 <Button variant="ghost" size="sm" icon={X} className="mt-2" onClick={() => pickEmoji(null)}>

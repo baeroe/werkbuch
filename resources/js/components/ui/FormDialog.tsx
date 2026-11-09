@@ -13,7 +13,7 @@ import { Banner } from './Banner';
 import { Button } from './Button';
 import { Dialog, DialogClose } from './Dialog';
 
-/** Registers ⌘↵ for the dialog's form. Rendered inside the open dialog, so the shortcut lives exactly as long. */
+/** Registers ⌘↵ for the dialog's form while the dialog is open (not while it animates out: the page's ⌘↵ again). */
 function SubmitShortcut({ formId }: { formId: string }) {
   useShortcut('dialog.submit', () => (document.getElementById(formId) as HTMLFormElement | null)?.requestSubmit());
   return null;
@@ -103,7 +103,7 @@ export function FormDialog({ open, onOpenChange, title, description, size = 'md'
         }}
         className="flex flex-col gap-4"
       >
-        <SubmitShortcut formId={formId} />
+        {open && <SubmitShortcut formId={formId} />}
         <FocusFirstInvalid formId={formId} pending={pending} />
         {notice && (
           <Banner tone="danger" role="alert" title={t('ui.form_dialog.error_title')}>
