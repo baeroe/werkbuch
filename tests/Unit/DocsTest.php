@@ -296,3 +296,48 @@ it('stops the stack before it updates', function () {
             ->toContain('### 0.1.0');
     }
 });
+
+/** The screenshots of the docs in one language (docs/public/screenshots/<language>/*.png), by file name. */
+$screenshots = fn (string $language): array => array_map('basename', glob(repo_path("docs/public/screenshots/{$language}/*.png")) ?: []);
+
+/** Every screenshot a text names, as `[language, file]`: `/screenshots/en/board.png` in Markdown or in the front matter. */
+$namedScreenshots = fn (string $text): array => preg_match_all('#/screenshots/([a-z]{2})/([a-z0-9-]+\.png)#', $text, $m, PREG_SET_ORDER)
+    ? array_map(fn (array $match): array => [$match[1], $match[2]], $m)
+    : [];
+
+it('has the same screenshots in English and German', function () use ($screenshots) {
+    // the API reference is English only (Stoplight has no German): its shot exists in English alone
+    $english = array_values(array_filter($screenshots('en'), fn (string $file): bool => ! str_starts_with($file, 'api-docs')));
+
+    expect($screenshots('en'))->toContain('board.png', 'item.png', 'item-dark.png', 'palette.png', 'templates.png', 'webhooks.png')
+        ->and($english)->toEqualCanonicalizing($screenshots('de'));
+});
+
+it('reads the screenshots a page names', function () use ($namedScreenshots) {
+    expect($namedScreenshots("image: /screenshots/en/board.png\n\n![Board](/screenshots/de/item-dark.png) /screenshots/EN/x.png"))
+        ->toBe([['en', 'board.png'], ['de', 'item-dark.png']]);
+});
+
+it('shows only screenshots that exist, in the language of the page', function () use ($namedScreenshots) {
+    foreach (['en', 'de'] as $language) {
+        foreach (docsPages($language) as $page) {
+            foreach ($namedScreenshots(RepoFiles::text("docs/{$language}/{$page}.md")) as [$shown, $file]) {
+                expect($shown)->toBe($language, "{$language}/{$page}.md shows {$shown}/{$file}")
+                    ->and(is_file(repo_path("docs/public/screenshots/{$shown}/{$file}")))->toBeTrue("{$language}/{$page}.md shows {$shown}/{$file}, which is missing");
+            }
+        }
+    }
+});
+
+it('keeps every screenshot under 400 KB, at 1440 × 900', function () use ($screenshots) {
+    $files = [...$screenshots('en'), ...$screenshots('de')];
+    expect($files)->not->toBeEmpty();
+
+    foreach (['en', 'de'] as $language) {
+        foreach ($screenshots($language) as $file) {
+            $path = repo_path("docs/public/screenshots/{$language}/{$file}");
+            expect(filesize($path))->toBeLessThan(400 * 1024, "{$language}/{$file}")
+                ->and(array_slice((array) getimagesize($path), 0, 2))->toBe([1440, 900], "{$language}/{$file}");
+        }
+    }
+});

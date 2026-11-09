@@ -7,9 +7,12 @@ import { artisan, flushCache, forgetAccountSessions, ROOT, runId, syncMutagen } 
  * Before the run: against DDEV (no WERKBUCH_URL) the app has to serve the Istanbul build from this working copy, checked
  * on the Mac once Mutagen has caught up with the build in the container; the coverage of earlier runs goes; the cache
  * (and with it the limits of sign-in and reset links) is emptied and the e2e data are seeded, the kept sessions of single
- * accounts (`signedInContext`) go with the old data; the id of the run is drawn for all workers.
+ * accounts (`signedInContext`) go with the old data; the id of the run is drawn for all workers. The run of the docs
+ * screenshots (DOCS_SCREENSHOTS) seeds its own demo data in its projects (tests/docs-seed.setup.ts) and skips all this.
  */
 export default function globalSetup(): void {
+  if (process.env.DOCS_SCREENSHOTS) return;
+
   if (!process.env.WERKBUCH_URL && COVERAGE) {
     syncMutagen();
     if (existsSync(path.join(ROOT, 'public/hot'))) {

@@ -203,3 +203,16 @@ These docs live in `docs/` (VitePress) in English (`docs/en/`) and German (`docs
 ddev exec pnpm --dir docs dev       # https://werkbuch.ddev.site:5174/en/
 ddev exec pnpm --dir docs build     # the site in docs/.vitepress/dist
 ```
+
+### Screenshots
+
+The screenshots of these docs lie in `docs/public/screenshots/en/` and `docs/public/screenshots/de/` (1440 × 900, light; a few also as `<name>-dark.png`). Playwright takes them from the demo data, the English ones from the English demo with the English interface, the German ones from the German demo, signed in as Mara each time. When the interface changes visibly, take them again and commit them in the same pull request.
+
+```bash
+ddev exec pnpm build                 # a normal build, no coverage build
+pnpm --dir e2e docs:screenshots      # seeds, takes every shot, sets the database back, compresses the images
+```
+
+The run uses the development database: it sets it up afresh with `DemoSeeder`, takes the German shots, does the same with `DemoSeederEn` for the English ones and ends with `migrate:fresh --seed --seeder=E2eSeeder`. Whatever you had in the database is gone afterwards. While it runs, the scheduler of DDEV keeps working on the demo (a template may add an item, the night may archive), which can show in a shot now and then. Neither the CI nor `pnpm --dir e2e test` runs these projects (`DOCS_SCREENSHOTS`).
+
+The demo lives in October 2026, so the browser's clock stands still at 28 October 2026, 09:30 in Berlin: "overdue", "yesterday" and "2 hours ago" read the same on every run. The server keeps its own clock, so what it computes from now is answered for that day in the spec, such as the next runs of the weekly maintenance. `e2e/optimize-screenshots.sh` compresses the images losslessly with oxipng in Docker; every image stays below 400 KB, and `DocsTest` checks that both languages have the same images (the API reference only in English) and that a page shows only images of its own language that exist. Look at every image before you commit it: the language of the interface and of the data, the clock, nothing half loaded.

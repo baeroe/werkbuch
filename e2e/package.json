@@ -5,7 +5,8 @@
   "packageManager": "pnpm@12.8.1",
   "scripts": {
     "test": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "docs:screenshots": "DOCS_SCREENSHOTS=1 E2E_COVERAGE=0 playwright test && ./optimize-screenshots.sh"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",

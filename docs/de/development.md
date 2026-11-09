@@ -203,3 +203,16 @@ Diese Doku liegt in `docs/` (VitePress) auf Englisch (`docs/en/`) und Deutsch (`
 ddev exec pnpm --dir docs dev       # https://werkbuch.ddev.site:5174/de/
 ddev exec pnpm --dir docs build     # die Seite in docs/.vitepress/dist
 ```
+
+### Screenshots
+
+Die Screenshots dieser Doku liegen in `docs/public/screenshots/en/` und `docs/public/screenshots/de/` (1440 × 900, hell; einige zusätzlich als `<name>-dark.png`). Playwright nimmt sie aus den Demo-Daten auf, die englischen aus der englischen Demo mit englischer Oberfläche, die deutschen aus der deutschen Demo, jeweils angemeldet als Mara. Ändert sich die Oberfläche sichtbar, nimm sie neu auf und committe sie im selben Pull Request.
+
+```bash
+ddev exec pnpm build                 # ein normaler Build, kein Abdeckungs-Build
+pnpm --dir e2e docs:screenshots      # seedet, nimmt jedes Bild auf, setzt die Datenbank zurück, komprimiert die Bilder
+```
+
+Der Lauf benutzt die Entwicklungsdatenbank: Er setzt sie mit `DemoSeeder` neu auf, nimmt die deutschen Bilder auf, macht dasselbe mit `DemoSeederEn` für die englischen und endet mit `migrate:fresh --seed --seeder=E2eSeeder`. Was vorher in der Datenbank stand, ist danach weg. Während er läuft, arbeitet der Scheduler von DDEV weiter auf der Demo (eine Vorlage legt vielleicht ein Item an, die Nacht archiviert), was ab und zu in einem Bild zu sehen sein kann. Weder die CI noch `pnpm --dir e2e test` führen diese Projekte aus (`DOCS_SCREENSHOTS`).
+
+Die Demo liegt im Oktober 2026, darum steht die Uhr des Browsers am 28. Oktober 2026 um 09:30 in Berlin still: „überfällig“, „gestern“ und „vor 2 Std.“ lesen sich bei jedem Lauf gleich. Der Server hat seine eigene Uhr; was er ab jetzt rechnet, beantwortet die Spec für diesen Tag, etwa die nächsten Läufe der wöchentlichen Wartung. `e2e/optimize-screenshots.sh` komprimiert die Bilder verlustfrei mit oxipng in Docker; jedes Bild bleibt unter 400 KB, und `DocsTest` prüft, dass beide Sprachen dieselben Bilder haben (die API-Referenz nur auf Englisch) und dass eine Seite nur vorhandene Bilder ihrer eigenen Sprache zeigt. Sieh dir jedes Bild an, bevor du es committest: die Sprache der Oberfläche und der Daten, die Uhr, nichts halb geladen.
