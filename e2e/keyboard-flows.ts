@@ -107,6 +107,7 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
 
   // wiki, templates, preview
   'wiki.delete': { file: 'wiki.spec.ts', test: 'moves a page with Verschieben nach … and deletes a subtree with undo', projects: EVERYWHERE },
+  'wiki.save': { file: 'wiki.spec.ts', test: 'saves a page at once with mod+enter and deletes a page from its row on the overview' },
   'template.save': { file: 'templates.spec.ts', test: 'creates a template with the keyboard and runs it now' },
   // the preview opened with space closes with Escape (on the phone the first Escape leaves the panel's focus)
   'peek.close': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter', projects: EVERYWHERE },
@@ -122,6 +123,9 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   'table:row': { file: 'table.spec.ts', test: 'edits the priority of an item in the table with the keyboard' },
   'table:edit': { file: 'table.spec.ts', test: 'edits the priority of an item in the table with the keyboard' },
   'table:stop': { file: 'table.spec.ts', test: 'edits the priority of an item in the table with the keyboard' },
+  'table:extend': { file: 'table.spec.ts', test: 'jumps to the edges of the grid with Home, End and mod, and extends the selection with shift' },
+  'table:edge_column': { file: 'table.spec.ts', test: 'jumps to the edges of the grid with Home, End and mod, and extends the selection with shift' },
+  'table:edge_row': { file: 'table.spec.ts', test: 'jumps to the edges of the grid with Home, End and mod, and extends the selection with shift' },
 
   // widgets: group headers (← on a row goes to its header, Enter folds and unfolds)
   'groups:collapse': { file: 'items-list.spec.ts', test: 'collapses a group from the keyboard' },
@@ -135,8 +139,11 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   'tree:collapse': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard', projects: EVERYWHERE },
   'tree:edge': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard', projects: EVERYWHERE },
   'tree:open': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard', projects: EVERYWHERE },
-  // beside a page the tree shows from lg on; the test deletes from a row there only
-  'tree:delete': { file: 'wiki.spec.ts', test: 'moves a page with Verschieben nach … and deletes a subtree with undo', projects: DESKTOP },
+  // beside a page the tree shows from lg on, the first test deletes from a row there; the second on the overview, on every width
+  'tree:delete': [
+    { file: 'wiki.spec.ts', test: 'moves a page with Verschieben nach … and deletes a subtree with undo', projects: DESKTOP },
+    { file: 'wiki.spec.ts', test: 'saves a page at once with mod+enter and deletes a page from its row on the overview' },
+  ],
 
   // widgets: editors and fields
   'editor:submit': { file: 'comments.spec.ts', test: 'writes a comment with m and mod+enter' },
@@ -205,6 +212,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'edit a wiki page', file: 'wiki.spec.ts', test: 'types into a page, saves by itself and keeps the text after reloading' },
   { flow: 'move a wiki page', file: 'wiki.spec.ts', test: 'moves a page with Verschieben nach … and deletes a subtree with undo', projects: EVERYWHERE },
   { flow: 'delete a wiki page', file: 'wiki.spec.ts', test: 'moves a page with Verschieben nach … and deletes a subtree with undo', projects: EVERYWHERE },
+  { flow: 'open a wiki page of an item', file: 'item-sections.spec.ts', test: 'opens a wiki page that names the item from its section' },
   { flow: 'restore a page version', file: 'wiki.spec.ts', test: 'opens the versions with the keyboard and restores one' },
 
   // templates, automations, webhooks
@@ -278,23 +286,13 @@ export const API_AFTER: { file: string; test: string; call: string; reason: stri
 ];
 
 /** Projects where nothing proves a key, with the reason (a phone has no such widget, …). */
-export const PROJECT_GAPS: { key: string; projects: string[]; reason: string }[] = [
-  {
-    key: 'tree:delete',
-    projects: PHONE,
-    reason: 'below lg the tree shows on the overview only, the test presses mod+backspace on a row beside a page; open for Task 18',
-  },
-];
+export const PROJECT_GAPS: { key: string; projects: string[]; reason: string }[] = [];
 
 /**
  * Keys and flows without a keyboard-only test yet: `test` says what the missing test does. Task 18 closes them. A name
  * with a space is a flow of `FLOW_TESTS`, one without a key of the catalog or the widgets.
  */
 export const GAPS: Record<string, { file: 'TODO'; test: string }> = {
-  'wiki.save': { file: 'TODO', test: 'mod+enter saves a wiki page at once' },
-  'table:extend': { file: 'TODO', test: 'shift+↑/↓ in the grid of the table extends the selection' },
-  'table:edge_column': { file: 'TODO', test: 'Home/End in the grid go to the first and last column' },
-  'table:edge_row': { file: 'TODO', test: 'mod+Home/End in the grid go to the first and last row' },
   'editor:slash': { file: 'TODO', test: '/ in an editor opens the block menu and inserts a block with the keyboard' },
   'editor:list_move': { file: 'TODO', test: '↑/↓ choose an entry of the @, # or / list' },
   'editor:list_close': { file: 'TODO', test: 'Escape closes the @, # or / list and keeps the text' },
@@ -319,6 +317,5 @@ export const GAPS: Record<string, { file: 'TODO'; test: string }> = {
   'switch a schedule on': { file: 'TODO', test: 'switches "Create on a schedule" on in the editor of a template and saves it' },
   // Phase 15 after Task 17
   'link a referenced item': { file: 'TODO', test: 'refers to another item over # in a comment; the automation relates both' },
-  'open a wiki page of an item': { file: 'TODO', test: 'reaches a wiki page that names the item from the section of the item, with Tab and Enter' },
   'edit a table in the editor': { file: 'TODO', test: 'inserts a table over /, adds a row and a header column from the menu of alt+F10' },
 };

@@ -131,6 +131,45 @@ test('types into a page, saves by itself and keeps the text after reloading', as
   }
 });
 
+test('saves a page at once with mod+enter and deletes a page from its row on the overview', async ({ page }) => {
+  const project = await createE2eProject(page, projectName('wiki keys'));
+  try {
+    const agenda = await createE2ePage(page, project.id, { title: 'Agenda' });
+    await createE2ePage(page, project.id, { title: 'Minutes' });
+    await page.goto(`/projects/${project.identifier}/wiki/${agenda.id}`);
+    const editor = page.getByRole('textbox', { name: tr('en', 'editor.label.page') });
+    await tabTo(page, editor, { max: 120 });
+    await page.keyboard.type('Retro on Friday.');
+
+    // mod+enter saves at once, before the pause of the autosave runs out
+    const saved = page.waitForResponse((response) => response.url().endsWith(`/api/v1/pages/${agenda.id}`) && response.request().method() === 'PATCH', { timeout: 1_000 });
+    await pressMod(page, 'Enter');
+    expect((await saved).status()).toBe(200);
+    await expect(page.locator('[data-save-status]').getByRole('status')).toHaveText(tr('en', 'wiki.save.saved'));
+    expect((await storedPage(page, agenda.id)).content).toBe('Retro on Friday.');
+
+    // on the overview the tree shows on every width: mod+backspace on a row asks, deletes, and mod+z brings it back
+    await page.goto(`/projects/${project.identifier}/wiki`);
+    const tree = page.getByRole('tree', { name: tr('en', 'wiki.tree.label') });
+    const minutes = tree.getByRole('treeitem', { name: 'Minutes', exact: true });
+    await tabTo(page, tree.getByRole('treeitem', { name: 'Agenda', exact: true }), { max: 80 });
+    await page.keyboard.press('ArrowDown');
+    await expect(minutes).toBeFocused();
+    await pressMod(page, 'Backspace');
+    const ask = page.getByRole('alertdialog', { name: tr('en', 'wiki.delete.title', { title: 'Minutes' }) });
+    await tabTo(page, ask.getByRole('button', { name: tr('en', 'wiki.delete.confirm') }));
+    await page.keyboard.press('Enter');
+    await expect(minutes).toHaveCount(0);
+    await expect(page.getByText(tr('en', 'wiki.delete.done', { title: 'Minutes' }))).toBeVisible();
+    // a page of the top level: the focus goes to the heading once the question has closed
+    await expect(page.getByRole('heading', { level: 1, name: tr('en', 'wiki.title') })).toBeFocused();
+    await pressMod(page, 'z');
+    await expect(minutes).toBeVisible();
+  } finally {
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
 test('pastes an image into a page', async ({ page }) => {
   const project = await createE2eProject(page, projectName('wiki image'));
   try {

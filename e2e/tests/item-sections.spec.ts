@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, artisanEval, createE2eProject, createItem, pressMod, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
+import { allEntries, api, artisanEval, createE2ePage, createE2eProject, createItem, pressMod, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
 
 // The relations of an item on its page, with the keyboard only, signed in as the e2e person in English. Each test works
 // in a project of its own (`E2E …`, removed in `finally`); its items come over the API. The item to relate is found
@@ -156,5 +156,31 @@ test('finds the target by a word of its title', async ({ page }) => {
   } finally {
     await page.goto('/my-items');
     await removeE2eProject(page, identifier);
+  }
+});
+
+test('opens a wiki page that names the item from its section', async ({ page }) => {
+  await page.goto('/my-items');
+  const project = await createE2eProject(page, name('wiki pages'), { types: ['Task'] });
+  try {
+    const item = await createItem(page, { project_id: project.id, title: 'E2E Newsletter versenden' });
+    const reference = { type: 'reference', attrs: { id: item.id, label: null, mentionSuggestionChar: '#', kind: 'item' } };
+    const plan = await createE2ePage(page, project.id, {
+      title: 'Release plan',
+      content_json: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Before the release: ' }, reference] }] },
+    });
+
+    await page.goto(`/items/${item.key}`);
+    await expect(page.getByRole('heading', { level: 1, name: 'E2E Newsletter versenden' })).toBeVisible();
+    const section = page.getByRole('region', { name: tr('en', 'items.detail.pages.title') });
+    const link = section.getByRole('link', { name: /Release plan/ });
+    await expect(link).toBeVisible();
+    await tabTo(page, link, { max: 120 });
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.identifier}/wiki/${plan.id}$`));
+    await expect(page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') })).toHaveValue('Release plan');
+  } finally {
+    await page.goto('/my-items');
+    await removeE2eProject(page, project.identifier);
   }
 });
