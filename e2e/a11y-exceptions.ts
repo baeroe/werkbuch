@@ -23,13 +23,6 @@ export type A11yException = {
 export const A11Y_EXCEPTIONS: readonly A11yException[] = [
   {
     rule: 'label-content-name-mismatch',
-    target: '[role="group"][aria-label="Weekdays"]',
-    reason:
-      'axe: Ensure that elements labelled through their content must have their visible text as part of their accessible name. The weekdays of a schedule show “Mo” and are named “Monday”.',
-    until: 'Task 16',
-  },
-  {
-    rule: 'label-content-name-mismatch',
     target: 'a:has([data-inbox-badge])',
     reason:
       'axe: Ensure that elements labelled through their content must have their visible text as part of their accessible name. The link of the inbox shows “Inbox” and the badge “3” and is named “Inbox, 3 unread”.',

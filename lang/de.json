@@ -1739,6 +1739,7 @@
     "schedule.editor.unit.yearly.other": "Jahre",
     "schedule.editor.week_of_month": "Woche im Monat",
     "schedule.editor.weekday": "Wochentag",
+    "schedule.editor.weekday_name": ":short (:day)",
     "schedule.editor.weekday_short.friday": "Fr",
     "schedule.editor.weekday_short.monday": "Mo",
     "schedule.editor.weekday_short.saturday": "Sa",
