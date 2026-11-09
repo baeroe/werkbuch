@@ -44,8 +44,17 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   // the item: c opens the dialog (a helper of the spec presses it), the field keys open the palette's sub-lists
   'item.create': { file: 'create-item.spec.ts', test: 'creates an item of a type with a required property' },
   'item.state': { file: 'items.spec.ts', test: 'sets a closing status with the resolution prefilled' },
-  // on the phone the test sets the assignee through the field editors (spec 5.1)
-  'item.assignee': { file: 'items.spec.ts', test: 'changes assignee and priority with a and p', projects: DESKTOP },
+  // on the phone the first test sets the assignee through the field editors (spec 5.1), the second presses a everywhere
+  'item.assignee': [
+    { file: 'items.spec.ts', test: 'changes assignee and priority with a and p', projects: DESKTOP },
+    { file: 'items.spec.ts', test: 'assigns with i and a, sets a label with l and the dates with shift+d and d' },
+  ],
+  'item.assign_me': { file: 'items.spec.ts', test: 'assigns with i and a, sets a label with l and the dates with shift+d and d' },
+  'item.labels': { file: 'items.spec.ts', test: 'assigns with i and a, sets a label with l and the dates with shift+d and d' },
+  'item.start': { file: 'items.spec.ts', test: 'assigns with i and a, sets a label with l and the dates with shift+d and d' },
+  'item.due': { file: 'items.spec.ts', test: 'assigns with i and a, sets a label with l and the dates with shift+d and d' },
+  'item.type': { file: 'items.spec.ts', test: 'changes the type with t through the dialog and the parent with shift+p' },
+  'item.parent': { file: 'items.spec.ts', test: 'changes the type with t through the dialog and the parent with shift+p' },
   'item.priority': [
     { file: 'bulk.spec.ts', test: 'selects three items with x and sets their priority with p' },
     { file: 'items.spec.ts', test: 'changes assignee and priority with a and p', projects: DESKTOP },
@@ -58,6 +67,14 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   // the list: cursor, selection, preview, filter bar, layouts
   'list.next': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter', projects: EVERYWHERE },
   'list.prev': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter', projects: EVERYWHERE },
+  'list.next_arrow': { file: 'items-list.spec.ts', test: 'moves with the arrows, extends the selection with shift, selects all with mod+a and clears it with Escape' },
+  'list.prev_arrow': { file: 'items-list.spec.ts', test: 'moves with the arrows, extends the selection with shift, selects all with mod+a and clears it with Escape' },
+  'list.extend_next': { file: 'items-list.spec.ts', test: 'moves with the arrows, extends the selection with shift, selects all with mod+a and clears it with Escape' },
+  'list.extend_next_arrow': { file: 'items-list.spec.ts', test: 'moves with the arrows, extends the selection with shift, selects all with mod+a and clears it with Escape' },
+  'list.extend_prev': { file: 'items-list.spec.ts', test: 'moves with the arrows, extends the selection with shift, selects all with mod+a and clears it with Escape' },
+  'list.extend_prev_arrow': { file: 'items-list.spec.ts', test: 'moves with the arrows, extends the selection with shift, selects all with mod+a and clears it with Escape' },
+  'list.select_all': { file: 'items-list.spec.ts', test: 'moves with the arrows, extends the selection with shift, selects all with mod+a and clears it with Escape' },
+  'list.clear': { file: 'items-list.spec.ts', test: 'moves with the arrows, extends the selection with shift, selects all with mod+a and clears it with Escape' },
   'list.select': { file: 'bulk.spec.ts', test: 'selects three items with x and sets their priority with p' },
   'list.select_range': { file: 'bulk.spec.ts', test: 'selects a range with shift+x, archives with mod+backspace and undoes with mod+z' },
   'list.open': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter', projects: EVERYWHERE },
@@ -77,6 +94,10 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   'list.move_right': { file: 'board.spec.ts', test: 'moves a card with shift+arrow to the next allowed column' },
   'list.move_up': { file: 'board.spec.ts', test: 'changes the place of a card in its column with alt+arrow and keeps the focus on it' },
   'list.move_down': { file: 'board.spec.ts', test: 'changes the place of a card in its column with alt+arrow and keeps the focus on it' },
+  'board.column_prev': { file: 'board.spec.ts', test: 'moves the cursor to the column before and after with ← and →' },
+  'board.column_next': { file: 'board.spec.ts', test: 'moves the cursor to the column before and after with ← and →' },
+  'list.shorter': { file: 'timeline.spec.ts', test: 'moves the due date of an epic with alt+right and alt+left' },
+  'list.longer': { file: 'timeline.spec.ts', test: 'moves the due date of an epic with alt+right and alt+left' },
 
   // the inbox
   'inbox.read': { file: 'inbox.spec.ts', test: 'works the inbox with the keyboard only' },
@@ -105,6 +126,8 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   // widgets: group headers (← on a row goes to its header, Enter folds and unfolds)
   'groups:collapse': { file: 'items-list.spec.ts', test: 'collapses a group from the keyboard' },
   'groups:toggle': { file: 'items-list.spec.ts', test: 'collapses a group from the keyboard' },
+  'groups:expand': { file: 'items-list.spec.ts', test: 'unfolds a group with → and goes from header to header with ↑ and ↓' },
+  'groups:header': { file: 'items-list.spec.ts', test: 'unfolds a group with → and goes from header to header with ↑ and ↓' },
 
   // widgets: the page tree of the wiki (on the overview it shows on every width)
   'tree:move': { file: 'wiki.spec.ts', test: 'opens the wiki from the sidebar and walks the tree with the keyboard', projects: EVERYWHERE },
@@ -149,6 +172,10 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'change the priority', file: 'bulk.spec.ts', test: 'selects three items with x and sets their priority with p' },
   // in addition: one item from its page (on the phone the test returns after the assignee)
   { flow: 'change the priority', file: 'items.spec.ts', test: 'changes assignee and priority with a and p', projects: DESKTOP },
+  { flow: 'change the labels', file: 'items.spec.ts', test: 'assigns with i and a, sets a label with l and the dates with shift+d and d' },
+  { flow: 'change the dates', file: 'items.spec.ts', test: 'assigns with i and a, sets a label with l and the dates with shift+d and d' },
+  { flow: 'change the type', file: 'items.spec.ts', test: 'changes the type with t through the dialog and the parent with shift+p' },
+  { flow: 'change the parent', file: 'items.spec.ts', test: 'changes the type with t through the dialog and the parent with shift+p' },
   { flow: 'add a relation', file: 'item-sections.spec.ts', test: 'relates two items with r and removes the relation again' },
   { flow: 'remove a relation', file: 'item-sections.spec.ts', test: 'relates two items with r and removes the relation again' },
   { flow: 'edit the description', file: 'item-description.spec.ts', test: 'writes a heading and a checklist with Markdown shortcuts' },
@@ -162,6 +189,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'filter a list', file: 'filter.spec.ts', test: 'filters by priority with f' },
   { flow: 'save a list as a view', file: 'views-acceptance.spec.ts', test: 'filters with f, saves as a view, stars it and opens it from the sidebar' },
   { flow: 'move a card on the board', file: 'board.spec.ts', test: 'moves a card with shift+arrow to the next allowed column' },
+  { flow: 'move a card where the ranks ran out', file: 'board.spec.ts', test: 'moves a card where the ranks ran out' },
   { flow: 'edit a cell of the table', file: 'table.spec.ts', test: 'edits the priority of an item in the table with the keyboard' },
   { flow: 'move an epic on the timeline', file: 'timeline.spec.ts', test: 'moves an epic by a week with shift+right at month zoom' },
   { flow: 'plan an epic on the timeline', file: 'timeline.spec.ts', test: 'plans an epic without dates from the side list' },
@@ -252,11 +280,6 @@ export const API_AFTER: { file: string; test: string; call: string; reason: stri
 /** Projects where nothing proves a key, with the reason (a phone has no such widget, …). */
 export const PROJECT_GAPS: { key: string; projects: string[]; reason: string }[] = [
   {
-    key: 'item.assignee',
-    projects: PHONE,
-    reason: 'the phone branch of the test assigns through the field editors (spec 5.1); a keyboard test of a on the phone is open for Task 18',
-  },
-  {
     key: 'tree:delete',
     projects: PHONE,
     reason: 'below lg the tree shows on the overview only, the test presses mod+backspace on a row beside a page; open for Task 18',
@@ -268,30 +291,10 @@ export const PROJECT_GAPS: { key: string; projects: string[]; reason: string }[]
  * with a space is a flow of `FLOW_TESTS`, one without a key of the catalog or the widgets.
  */
 export const GAPS: Record<string, { file: 'TODO'; test: string }> = {
-  'item.assign_me': { file: 'TODO', test: 'i assigns the item of the page (or the cursor) to oneself' },
-  'item.labels': { file: 'TODO', test: 'l opens the labels of the item in the palette and sets one' },
-  'item.type': { file: 'TODO', test: 't changes the type of an item, with the dialog for lost values' },
-  'item.due': { file: 'TODO', test: 'd sets the due date from the palette' },
-  'item.start': { file: 'TODO', test: 'shift+d sets the start date from the palette' },
-  'item.parent': { file: 'TODO', test: 'shift+p sets the parent epic from the palette' },
-  'list.next_arrow': { file: 'TODO', test: '↓ moves the cursor of a list' },
-  'list.prev_arrow': { file: 'TODO', test: '↑ moves the cursor of a list' },
-  'list.extend_next': { file: 'TODO', test: 'shift+j extends the selection of a list' },
-  'list.extend_next_arrow': { file: 'TODO', test: 'shift+↓ extends the selection of a list' },
-  'list.extend_prev': { file: 'TODO', test: 'shift+k extends the selection of a list' },
-  'list.extend_prev_arrow': { file: 'TODO', test: 'shift+↑ extends the selection of a list' },
-  'list.select_all': { file: 'TODO', test: 'mod+a selects every item of a list, also on pages not loaded yet' },
-  'list.clear': { file: 'TODO', test: 'Escape clears the selection of a list and the bulk bar goes' },
-  'board.column_prev': { file: 'TODO', test: '← moves the cursor of the board to the column before' },
-  'board.column_next': { file: 'TODO', test: '→ moves the cursor of the board to the next column' },
-  'list.shorter': { file: 'TODO', test: 'alt+← moves the due date of an epic on the timeline one unit earlier' },
-  'list.longer': { file: 'TODO', test: 'alt+→ moves the due date of an epic on the timeline one unit later' },
   'wiki.save': { file: 'TODO', test: 'mod+enter saves a wiki page at once' },
   'table:extend': { file: 'TODO', test: 'shift+↑/↓ in the grid of the table extends the selection' },
   'table:edge_column': { file: 'TODO', test: 'Home/End in the grid go to the first and last column' },
   'table:edge_row': { file: 'TODO', test: 'mod+Home/End in the grid go to the first and last row' },
-  'groups:expand': { file: 'TODO', test: '→ on a group header unfolds it, a second → goes to its first row' },
-  'groups:header': { file: 'TODO', test: '↑/↓ on a group header go to the previous and next header' },
   'editor:slash': { file: 'TODO', test: '/ in an editor opens the block menu and inserts a block with the keyboard' },
   'editor:list_move': { file: 'TODO', test: '↑/↓ choose an entry of the @, # or / list' },
   'editor:list_close': { file: 'TODO', test: 'Escape closes the @, # or / list and keeps the text' },
@@ -300,10 +303,6 @@ export const GAPS: Record<string, { file: 'TODO'; test: string }> = {
   'editor:table_menu': { file: 'TODO', test: 'alt+F10 opens the menu of the table and adds a row with the keyboard' },
 
   // flows (named in words)
-  'change the labels': { file: 'TODO', test: 'sets and removes a label of an item with l from the palette or its field' },
-  'change the type': { file: 'TODO', test: 'changes the type of an item with t, answering the dialog for lost and required values' },
-  'change the dates': { file: 'TODO', test: 'sets the start and due date of an item with shift+d and d, the calendar with the keyboard' },
-  'change the parent': { file: 'TODO', test: 'moves an item under another epic with shift+p and takes the parent away again' },
   // attachments.spec.ts › uploads a file to the list and downloads it uploads with the keyboard but clicks the link to
   // download: with Tab and Enter on the link it proves both
   'upload a file': { file: 'TODO', test: 'uploads a file to the list with Enter on "Upload file" and the file chooser' },
@@ -318,4 +317,8 @@ export const GAPS: Record<string, { file: 'TODO'; test: string }> = {
   'redeliver a webhook delivery': { file: 'TODO', test: 'sends a delivery of the log of a webhook again with the keyboard' },
   // the template of templates.spec.ts comes with its schedule over the API
   'switch a schedule on': { file: 'TODO', test: 'switches "Create on a schedule" on in the editor of a template and saves it' },
+  // Phase 15 after Task 17
+  'link a referenced item': { file: 'TODO', test: 'refers to another item over # in a comment; the automation relates both' },
+  'open a wiki page of an item': { file: 'TODO', test: 'reaches a wiki page that names the item from the section of the item, with Tab and Enter' },
+  'edit a table in the editor': { file: 'TODO', test: 'inserts a table over /, adds a row and a header column from the menu of alt+F10' },
 };

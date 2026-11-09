@@ -46,6 +46,13 @@ async function cleanUp(page: Page, identifier: string) {
   await removeE2eProject(page, identifier);
 }
 
+/** The id of the work item type named `name`. */
+async function typeIdOf(page: Page, name: string): Promise<string> {
+  const entry = (await allEntries(page, 'work-item-types')).find((type) => type.name === name);
+  if (!entry) throw new Error(`No type "${name}"`);
+  return String(entry.id);
+}
+
 /** The field editor `label` with its value, as the panel names it ("Status: Done"). */
 const field = (scope: Locator, label: string, value: string) =>
   scope.getByRole('combobox', { name: new RegExp(`^${tr('en', 'items.fields.picker.name', { label, value })}`) });
@@ -251,5 +258,133 @@ test('opens a former key at the current address', async ({ page }) => {
     await expect(page.getByRole('navigation', { name: tr('en', 'items.detail.path') }).getByText(`${renamed}-1`, { exact: true })).toBeVisible();
   } finally {
     await cleanUp(page, renamed);
+  }
+});
+
+test('assigns with i and a, sets a label with l and the dates with shift+d and d', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('fields'), { types: ['Task'] });
+  try {
+    const item = await createItem(page, { project_id: id, title: 'E2E Footer anpassen' });
+    const { fields } = await openItem(page, item.key, 'E2E Footer anpassen');
+    const done = (what: string) => page.getByText(tr('en', 'items.commands.done', { key: item.key, what }), { exact: true });
+    const assignee = tr('en', 'items.fields.assignee.label');
+
+    // i: to oneself at once, the server confirms
+    await page.keyboard.press('i');
+    await expect(done(tr('en', 'items.commands.what.assigned', { name: PEOPLE.e2e.name }))).toBeVisible();
+    await expect(field(fields, assignee, PEOPLE.e2e.name)).toBeVisible();
+
+    // a: the palette's people, nobody among them
+    const people = await subList(page, 'a', 'shortcuts.item.assignee');
+    await page.keyboard.type(tr('en', 'items.fields.assignee.nobody'));
+    await page.keyboard.press('Enter');
+    await expect(people).toBeHidden();
+    await expect(done(tr('en', 'items.commands.what.unassigned'))).toBeVisible();
+    await expect(field(fields, assignee, tr('en', 'items.fields.assignee.nobody'))).toBeVisible();
+
+    // l: a label comes, and the same entry ("set") takes it away again
+    const labels = await subList(page, 'l', 'shortcuts.item.labels');
+    await page.keyboard.type('UX');
+    await page.keyboard.press('Enter');
+    await expect(labels).toBeHidden();
+    await expect(done(tr('en', 'items.commands.what.label_added', { label: 'UX' }))).toBeVisible();
+    await expect(fields.getByRole('combobox', { name: new RegExp(`^${tr('en', 'items.fields.labels.label')}: UX`) })).toBeVisible();
+
+    const again = await subList(page, 'l', 'shortcuts.item.labels');
+    await expect(again.getByRole('option', { name: new RegExp(`^UX.*${tr('en', 'items.commands.label_set')}`) })).toBeVisible();
+    await page.keyboard.type('UX');
+    await page.keyboard.press('Enter');
+    await expect(again).toBeHidden();
+    await expect(done(tr('en', 'items.commands.what.label_removed', { label: 'UX' }))).toBeVisible();
+
+    // shift+d and d: the start today, the due date in a week
+    const start = await subList(page, 'Shift+D', 'shortcuts.item.start');
+    await page.keyboard.type(tr('en', 'items.commands.date.today'));
+    await page.keyboard.press('Enter');
+    await expect(start).toBeHidden();
+    await expect(page.getByText(new RegExp(`^${item.key}: ${tr('en', 'items.fields.date.start')} `))).toBeVisible();
+
+    const due = await subList(page, 'd', 'shortcuts.item.due');
+    await page.keyboard.type(tr('en', 'items.commands.date.week'));
+    await page.keyboard.press('Enter');
+    await expect(due).toBeHidden();
+    await expect(page.getByText(new RegExp(`^${item.key}: ${tr('en', 'items.fields.date.due')} `))).toBeVisible();
+
+    // stored: the server has both days, a week apart
+    await expect
+      .poll(async () => {
+        const { data } = (await (await api(page, 'GET', `/api/v1/work-items/${item.id}`)).json()) as { data: { start_date: string | null; due_date: string | null; label_ids: string[]; assignee_id: string | null } };
+        return data.start_date && data.due_date ? (Date.parse(data.due_date) - Date.parse(data.start_date)) / 86_400_000 : null;
+      })
+      .toBe(7);
+  } finally {
+    await cleanUp(page, identifier);
+  }
+});
+
+test('changes the type with t through the dialog and the parent with shift+p', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('type'), { types: ['Task', 'Bug', 'Epic'] });
+  try {
+    const environment = (await allEntries(page, 'properties')).find((property) => property.key === 'environment') as { options: { id: string; label: string }[] } | undefined;
+    if (!environment) throw new Error('No property "environment" in the demo catalog');
+    const staging = environment.options.find((option) => option.label === 'Staging')!;
+    const epic = await createItem(page, { project_id: id, type_id: await typeIdOf(page, 'Epic'), title: 'E2E Relaunch' });
+    const item = await createItem(page, {
+      project_id: id,
+      type_id: await typeIdOf(page, 'Bug'),
+      title: 'E2E Menü springt',
+      values: { environment: staging.id, browser: 'Firefox 140' },
+    });
+    const { fields, heading } = await openItem(page, item.key, 'E2E Menü springt');
+    const type = tr('en', 'items.fields.type.label');
+
+    // t to Task: the dialog names the values the type loses, mod+enter changes it
+    const types = await subList(page, 't', 'shortcuts.item.type');
+    await page.keyboard.type('Task');
+    await page.keyboard.press('Enter');
+    await expect(types).toBeHidden();
+    const toTask = page.getByRole('dialog', { name: tr('en', 'items.fields.type.title', { key: item.key, type: 'Task' }) });
+    await expect(toTask).toBeVisible();
+    await expect(toTask.getByText('Firefox 140')).toBeVisible();
+    await pressMod(page, 'Enter');
+    await expect(toTask).toBeHidden();
+    await expect(field(fields, type, 'Task')).toBeVisible();
+
+    // t back to Bug: its required environment is asked for in the dialog
+    await subList(page, 't', 'shortcuts.item.type');
+    await page.keyboard.type('Bug');
+    await page.keyboard.press('Enter');
+    const toBug = page.getByRole('dialog', { name: tr('en', 'items.fields.type.title', { key: item.key, type: 'Bug' }) });
+    await expect(toBug).toBeVisible();
+    await tabTo(page, toBug.getByRole('combobox', { name: /^Umgebung/ }), { max: 10 });
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('combobox', { name: tr('en', 'items.fields.property.search_option') })).toBeFocused();
+    await page.keyboard.type('Staging');
+    await page.keyboard.press('Enter');
+    await expect(toBug.getByRole('combobox', { name: /^Umgebung: Staging/ })).toBeVisible();
+    await pressMod(page, 'Enter');
+    await expect(toBug).toBeHidden();
+    await expect(field(fields, type, 'Bug')).toBeVisible();
+    await expect(page.getByText(tr('en', 'items.fields.type.changed', { key: item.key, type: 'Bug' }))).toBeVisible();
+
+    // shift+p: under the epic, then no parent again
+    const parents = await subList(page, 'Shift+P', 'shortcuts.item.parent');
+    await page.keyboard.type(epic.key);
+    await expect(parents.getByRole('option', { name: new RegExp(epic.key) })).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(parents).toBeHidden();
+    await expect(page.getByText(tr('en', 'items.commands.done', { key: item.key, what: tr('en', 'items.commands.what.parent', { parent: epic.key }) }))).toBeVisible();
+    const path = page.getByRole('navigation', { name: tr('en', 'items.detail.path') });
+    await expect(path.getByText(epic.key)).toBeVisible();
+
+    const none = await subList(page, 'Shift+P', 'shortcuts.item.parent');
+    await page.keyboard.type(tr('en', 'items.fields.parent.none'));
+    await page.keyboard.press('Enter');
+    await expect(none).toBeHidden();
+    await expect(page.getByText(tr('en', 'items.commands.done', { key: item.key, what: tr('en', 'items.commands.what.no_parent') }))).toBeVisible();
+    await expect(path.getByText(epic.key)).toHaveCount(0);
+    await expect(heading).toBeVisible();
+  } finally {
+    await cleanUp(page, identifier);
   }
 });

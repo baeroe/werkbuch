@@ -109,6 +109,11 @@ const FLOWS = [
   'change the display of a list', // 4.11, 5.2 Item-Listen
   'star a view', // 4.11, 5.2 Seitenleiste
   'paste an image into a wiki page', // 4.15, 4.16
+  // what Phase 15 brought after Task 17
+  'link a referenced item', // 4.13, A452 (Erwähnte Items verknüpfen)
+  'move a card where the ranks ran out', // 4.11, A448
+  'open a wiki page of an item', // 4.8, 4.15, A456
+  'edit a table in the editor', // 4.16, A454
 ];
 /** A name of `GAPS` with a space is a flow, one without a key of the catalog or the widgets. */
 const isFlow = (name) => /\s/.test(name);

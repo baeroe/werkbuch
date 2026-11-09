@@ -71,6 +71,32 @@ test('keeps the focus on an epic that moves past another of its project', async 
   }
 });
 
+test('moves the due date of an epic with alt+right and alt+left', async ({ page }) => {
+  await page.goto('/my-items');
+  const project = await createE2eProject(page, name('length'), { types: ['Task', 'Epic'] });
+  try {
+    const epic = await createItem(page, { project_id: project.id, type_id: await typeId(page, 'Epic'), title: 'Migration', start_date: '2026-10-01', due_date: '2026-10-20' });
+    await page.goto(`/projects/${project.identifier}?layout=timeline`);
+    await expect(row(page, epic.key)).toBeVisible();
+    await tabTo(page, row(page, epic.key), { max: 80 });
+
+    // at month zoom a unit is a week: alt+→ moves the due date only, alt+← takes it back
+    await page.keyboard.press('Alt+ArrowRight');
+    await expect(status(page)).toHaveText(tr('en', 'items.timeline.saved', { key: epic.key, range: range('2026-10-01', '2026-10-27') }));
+    await expect(row(page, epic.key)).toBeFocused();
+    await page.keyboard.press('Alt+ArrowLeft');
+    await page.keyboard.press('Alt+ArrowLeft');
+    await expect(status(page)).toHaveText(tr('en', 'items.timeline.saved', { key: epic.key, range: range('2026-10-01', '2026-10-13') }));
+    await expect(row(page, epic.key)).toHaveAccessibleName(`${epic.key} Migration, ${range('2026-10-01', '2026-10-13')}`);
+
+    // the server has the shorter epic
+    await page.reload();
+    await expect(row(page, epic.key)).toHaveAccessibleName(`${epic.key} Migration, ${range('2026-10-01', '2026-10-13')}`);
+  } finally {
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
 test('plans an epic without dates from the side list', async ({ page }) => {
   await page.goto('/my-items');
   const project = await createE2eProject(page, name('plan'), { types: ['Task', 'Epic'] });

@@ -50,6 +50,28 @@ test('moves a card with shift+arrow to the next allowed column', async ({ page }
   }
 });
 
+test('moves the cursor to the column before and after with ← and →', async ({ page }) => {
+  await page.goto('/my-items');
+  const { identifier, keys } = await boardProject(page, 'columns', ['Password reset']);
+  const [login, password] = keys as [string, string];
+  const workflow = (await allEntries(page, 'workflows')).find((entry) => entry.name === 'Agentur-Freigabe') as { states: { id: string; name: string }[] };
+  const response = await api(page, 'POST', `/api/v1/work-items/${password}/transition`, { to_state_id: workflow.states.find((state) => state.name === 'In Progress')!.id });
+  expect(response.status(), await response.text()).toBe(200);
+  try {
+    await openBoard(page, identifier, login);
+    // → goes past the empty columns to the next card, ← back; nothing moves
+    await page.keyboard.press('ArrowRight');
+    await expect(card(page, 'In Progress', password)).toBeFocused();
+    await page.keyboard.press('ArrowLeft');
+    await expect(card(page, 'Todo', login)).toBeFocused();
+    await page.reload();
+    await expect(card(page, 'Todo', login)).toBeVisible();
+    await expect(card(page, 'In Progress', password)).toBeVisible();
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
 test('refuses a move the workflow does not allow and names it', async ({ page }) => {
   await page.goto('/my-items');
   const { identifier, key } = await boardProject(page, 'refuse');
