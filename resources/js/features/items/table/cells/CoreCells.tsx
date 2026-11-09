@@ -6,7 +6,7 @@
  */
 
 import { useEditReason, useItemWorkflow, useToday } from '@/components/fields/itemData';
-import { DatePopover, DayValue, useOverdue } from '@/components/fields/DateField';
+import { DatePopover, DayValue, dayText, useOverdue } from '@/components/fields/DateField';
 import { formatDay } from '@/components/fields/format';
 import { LabelsPicker } from '@/components/fields/LabelsPicker';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
@@ -49,7 +49,7 @@ export function CoreDateCell({ item, field, editing, onEditingChange }: { item: 
       value={value}
       onChoose={choose}
       display={value ? <DayValue value={value} today={today} overdue={overdue} short empty="" /> : <span className="text-muted">—</span>}
-      displayText={value ? (overdue ? t('items.fields.date.overdue_text', { day: formatDay(value) }) : formatDay(value)) : t('items.fields.date.unset')}
+      displayText={value ? dayText({ value, today, overdue, short: true, empty: '' }) : t('items.fields.date.unset')}
       disabledReason={reason}
       pending={update.isPending}
       tabIndex={-1}

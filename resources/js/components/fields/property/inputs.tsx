@@ -21,8 +21,8 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { t } from '@/lib/i18n';
 import { docToText } from '@/lib/richtext';
 import type { Property, PropertyValue, RichText } from '@/types';
-import { DatePopover, DayValue } from '../DateField';
-import { botWord, formatDay } from '../format';
+import { DatePopover, DayValue, dayText } from '../DateField';
+import { botWord } from '../format';
 import { useProjectPeople, useToday, useUserMap } from '../itemData';
 import { Picker, PendingMark, type PickerOption } from '../Picker';
 import { idsOf, parseTyped, shownText, type Parsed } from './parse';
@@ -178,6 +178,7 @@ function BooleanEditor({ value, id, label, describedById, invalid, pending, onAc
 function DateEditor({ property, value, id, label, describedById, invalid, required, pending, onAccept }: EditorProps) {
   const { today } = useToday();
   const day = typeof value === 'string' ? value : null;
+  const shown = { value: day, today, overdue: false, empty: t('items.fields.property.choose_date') };
   return (
     <DatePopover
       look="form"
@@ -187,8 +188,8 @@ function DateEditor({ property, value, id, label, describedById, invalid, requir
       describedBy={describedById}
       invalid={invalid}
       pending={pending}
-      display={<DayValue value={day} today={today} overdue={false} empty={t('items.fields.property.choose_date')} />}
-      displayText={day ? formatDay(day) : t('items.fields.property.no_date')}
+      display={<DayValue {...shown} />}
+      displayText={dayText(shown)}
       onChoose={(next) => {
         if (next === null && required && day) return t('items.fields.property.required_kept', { label: property.label });
         onAccept(next);

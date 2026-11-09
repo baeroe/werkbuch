@@ -1014,6 +1014,7 @@
     "items.fields.date.no_start": "Kein Start-Date",
     "items.fields.date.overdue": "überfällig",
     "items.fields.date.overdue_text": ":day, überfällig",
+    "items.fields.date.relative_text": ":day, :relative",
     "items.fields.date.set": ":label setzen",
     "items.fields.date.start": "Start-Date",
     "items.fields.date.start_after_due": "Der Start liegt nach dem Due-Date (:day). Wähle einen Tag bis dahin oder verschiebe zuerst das Due-Date.",

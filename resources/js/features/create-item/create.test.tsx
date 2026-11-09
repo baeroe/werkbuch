@@ -21,6 +21,7 @@ import { MyItemsEmpty } from '@/features/items/MyItemsEmpty';
 import { canUndo, undoLatest } from '@/lib/undo';
 import { CreateHost } from '@/shell/CreateHost';
 import { useUiStore, type CreateDefaults } from '@/store/ui';
+import { expectLabelInName } from '@/test/a11y';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { agency, ida, labels, lene, list, makeAttachment, makeTemplate, makeWorkItem, mara, organization, project, properties, queryItems, standard, types, web30, web47, web48 } from '@/test/fixtures';
 import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
@@ -738,9 +739,12 @@ describe('CreateItemDialog', () => {
     const { dialog, title } = await openDialog();
     const day = (iso: string) => document.querySelector<HTMLButtonElement>(`[data-day="${iso}"]`)!;
 
-    await user.click(within(dialog).getByRole('button', { name: 'Due-Date: nicht gesetzt' }));
+    // a date without a day names what it shows (WCAG 2.5.3)
+    expectLabelInName(within(dialog).getByRole('button', { name: 'Start-Date: Kein Start-Date' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Due-Date: Kein Due-Date' }));
     await user.click(day('2026-11-04'));
-    await user.click(within(dialog).getByRole('button', { name: 'Start-Date: nicht gesetzt' }));
+    expectLabelInName(within(dialog).getByRole('button', { name: 'Due-Date: 04.11.2026, in 4 Tagen' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Start-Date: Kein Start-Date' }));
     await user.click(day('2026-11-06'));
     expect(await screen.findByText('Der Start läge nach dem Due-Date (04.11.2026). Verschiebe zuerst das Due-Date.')).toBeTruthy();
     await user.click(day('2026-11-02'));

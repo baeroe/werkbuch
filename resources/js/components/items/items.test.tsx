@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useRelationTypes } from '@/hooks/catalog';
 import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItem } from '@/hooks/workItems';
+import { expectLabelInName } from '@/test/a11y';
 import { mockApi, type MockApi } from '@/test/api';
 import {
   agency,
@@ -286,16 +287,17 @@ describe('rows and cards', () => {
     // one tab stop: the title; every chip is reached with the item shortcuts
     expect(tabStops(row)).toEqual([screen.getByRole('link')]);
     const controls = [...within(row as HTMLElement).getAllByRole('combobox'), ...within(row as HTMLElement).getAllByRole('button')];
-    // the date chips by their whole name: the day, and that the due date has passed
+    // the date chips by what they show (WCAG 2.5.3): the short day, and that the due date has passed
     expect(controls.map((control) => control.getAttribute('aria-label') ?? control.textContent)).toEqual([
       'Status: In Progress',
       'Priorität: Urgent',
       'Labels: Formulare, Produktion',
       'Assignee: Ida Brenner',
-      'Start-Date: 27.10.2026',
-      'Due-Date: 31.10.2026, überfällig',
+      'Start-Date: 27.10.',
+      'Due-Date: 31.10., überfällig',
     ]);
     for (const control of controls) expect(control.tabIndex).toBe(-1);
+    for (const control of controls.slice(-2)) expectLabelInName(control);
   });
 
   it('makes the row the element of the cursor in a list with one, opens the page with Enter and the preview with a click', async () => {

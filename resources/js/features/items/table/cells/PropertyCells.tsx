@@ -15,9 +15,9 @@ import { Check, CircleAlert } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError } from '@/api/client';
 import { personOption } from '@/components/fields/AssigneePicker';
-import { DatePopover, DayValue } from '@/components/fields/DateField';
+import { DatePopover, DayValue, dayText } from '@/components/fields/DateField';
 import { cachedItems } from '@/components/fields/commands/context';
-import { formatDay, formatPropertyValue } from '@/components/fields/format';
+import { formatPropertyValue } from '@/components/fields/format';
 import { useEditReason, useProjectPeople, useToday, useUserMap } from '@/components/fields/itemData';
 import { Picker, ReadOnlyTrigger, triggerClass, type PickerOption } from '@/components/fields/Picker';
 import { idsOf, sameValue } from '@/components/fields/property/parse';
@@ -212,7 +212,7 @@ function DateCell({ item, property, editing, onEditingChange, saving, reason }: 
       value={day}
       onChoose={(next) => saving.save(next)}
       display={day ? <DayValue value={day} today={today} overdue={false} short empty="" /> : <span className="text-muted">—</span>}
-      displayText={day ? formatDay(day) : t('items.fields.property.no_date')}
+      displayText={day ? dayText({ value: day, today, overdue: false, short: true, empty: '' }) : t('items.fields.property.no_date')}
       disabledReason={reason}
       pending={saving.pending}
       tabIndex={-1}

@@ -171,8 +171,21 @@ export function DatePopover({
   );
 }
 
+type DayShown = { value: string | null; today: string; overdue: boolean; short?: boolean; empty: string };
+
+/**
+ * The words DayValue shows, for the name of its trigger (`displayText`): a control's visible text stands in its name
+ * (WCAG 2.5.3), so a chip reads "Due date: 31/10, overdue" and a field "Due date: 31/10/2026, in 3 days".
+ */
+export function dayText({ value, today, overdue, short = false, empty }: DayShown): string {
+  if (!value) return empty;
+  const day = short ? formatShortDay(value) : formatDay(value);
+  if (overdue) return t('items.fields.date.overdue_text', { day });
+  return short ? day : t('items.fields.date.relative_text', { day, relative: relativeDay(value, today) });
+}
+
 /** A day as the trigger shows it: long with the distance to today, or short in a chip. Overdue in the danger colour. */
-export function DayValue({ value, today, overdue, short = false, empty }: { value: string | null; today: string; overdue: boolean; short?: boolean; empty: string }) {
+export function DayValue({ value, today, overdue, short = false, empty }: DayShown) {
   const Icon = overdue ? CalendarX2 : CalendarDays;
   if (!value) {
     return (
@@ -225,6 +238,7 @@ export function DateField({ item, field, look = 'field', shortcut, ...extras }: 
   const overdue = useOverdue(item) && field === 'due_date';
   const label = t(FIELDS[field].label);
   const value = item[field];
+  const shown: DayShown = { value, today, overdue, short: look !== 'field' && look !== 'form', empty: t(FIELDS[field].empty) };
 
   function choose(next: string | null): string | null {
     if (next === value) return null;
@@ -255,8 +269,8 @@ export function DateField({ item, field, look = 'field', shortcut, ...extras }: 
         label={label}
         value={value}
         onChoose={choose}
-        display={<DayValue value={value} today={today} overdue={overdue} short={look !== 'field' && look !== 'form'} empty={t(FIELDS[field].empty)} />}
-        displayText={value ? (overdue ? t('items.fields.date.overdue_text', { day: formatDay(value) }) : formatDay(value)) : t('items.fields.date.unset')}
+        display={<DayValue {...shown} />}
+        displayText={dayText(shown)}
         describedBy={refusal ? errorId : undefined}
         invalid={refusal !== null}
         disabledReason={reason}

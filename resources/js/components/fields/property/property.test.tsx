@@ -14,6 +14,7 @@ import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { initI18n } from '@/lib/i18n';
 import type { WorkItemPatch } from '@/api/workItems';
 import { useWorkItems } from '@/hooks/workItems';
+import { expectLabelInName } from '@/test/a11y';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, lene, list, makeWorkItem, organization, person, project, properties, standard, theo, web47 } from '@/test/fixtures';
 import type { ListedItem, Organization, Project, ProjectMember, Property, PropertyValue, RichText, User, WorkItem } from '@/types';
@@ -499,7 +500,7 @@ describe('PropertyField, chosen', () => {
     const user = userEvent.setup();
     renderWith(<PropertyField item={item({ launch: '2026-11-02' })} property={launch} required={false} />);
 
-    const trigger = await writable('Go-Live: 02.11.2026');
+    const trigger = await writable(/^Go-Live: 02\.11\.2026, /);
     await user.click(trigger);
     await waitFor(() => expect(document.activeElement).toBe(day('2026-11-02')));
     await user.click(day('2026-11-05'));
@@ -514,7 +515,7 @@ describe('PropertyField, chosen', () => {
     const user = userEvent.setup();
     renderWith(<PropertyField item={item({ launch: '2026-11-02' })} property={launch} required />);
 
-    const trigger = await writable('Go-Live: 02.11.2026');
+    const trigger = await writable(/^Go-Live: 02\.11\.2026, /);
     await user.click(trigger);
     await user.click(await screen.findByRole('button', { name: 'Entfernen' }));
     expect(await screen.findByText('„Go-Live“ ist ein Pflichtfeld und lässt sich nicht leeren.')).toBeTruthy();
@@ -733,10 +734,38 @@ describe('DateField', () => {
     expect(within(due).getByText('überfällig')).toBeTruthy();
     expect(due.getAttribute('aria-keyshortcuts')).toBe('D');
     // the start is no deadline, and a done item is overdue no more
-    expect(screen.getByRole('button', { name: 'Start-Date: 20.10.2026' }).textContent).toContain('vor 11 Tagen');
-    const done = screen.getByRole('button', { name: 'Due-Date: 28.10.2026' });
+    expect(screen.getByRole('button', { name: 'Start-Date: 20.10.2026, vor 11 Tagen' }).textContent).toContain('vor 11 Tagen');
+    const done = screen.getByRole('button', { name: 'Due-Date: 28.10.' });
     expect(done.textContent).toBe('28.10.');
     expect(done.hasAttribute('aria-keyshortcuts')).toBe(false);
+  });
+
+  it('names every date trigger with the words it shows (WCAG 2.5.3)', async () => {
+    today();
+    const late = item({}, { due_date: '2026-10-28', start_date: '2026-10-20', state_id: 'std_progress' });
+    const { container } = renderWith(
+      <>
+        <DateField item={late} field="due_date" />
+        <DateField item={late} field="start_date" />
+        <DateField item={late} field="due_date" look="chip" />
+        <DateField item={{ ...late, id: 'wi_done', state_id: 'std_done' }} field="due_date" look="chip" />
+        <DateField item={{ ...late, id: 'wi_none', due_date: null }} field="due_date" />
+        <PropertyValueInput property={launch} value="2026-11-02" onChange={() => undefined} projectId="p_web" />
+        <PropertyValueInput property={launch} value={null} onChange={() => undefined} projectId="p_web" />
+      </>,
+    );
+
+    // overdue once the workflow is there
+    await screen.findByRole('button', { name: 'Due-Date: 28.10.2026, überfällig' });
+    await waitFor(() => expect(container.querySelectorAll('[data-picker-trigger]')).toHaveLength(7));
+    const triggers = [...container.querySelectorAll('[data-picker-trigger]')];
+    for (const trigger of triggers) expectLabelInName(trigger);
+    // the words in order: the day as shown, then what the field says beside it
+    expect(screen.getByRole('button', { name: 'Due-Date: 28.10.2026, überfällig' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Start-Date: 20.10.2026, vor 11 Tagen' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Due-Date: 28.10., überfällig' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Due-Date: 28.10.' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Due-Date: Kein Due-Date' })).toBeTruthy();
   });
 
   it('sets a day, removes it, and says when there is none', async () => {
@@ -745,7 +774,7 @@ describe('DateField', () => {
     const user = userEvent.setup();
     renderWith(<Live>{(entry) => <DateField item={entry} field="due_date" />}</Live>);
 
-    const trigger = await writable('Due-Date: nicht gesetzt');
+    const trigger = await writable('Due-Date: Kein Due-Date');
     expect(trigger.textContent).toBe('Kein Due-Date');
     await user.click(trigger);
     await user.click(day('2026-11-04'));
@@ -774,7 +803,7 @@ describe('DateField', () => {
       { 'PATCH /api/v1/work-items/wi_web_47': () => invalid({ due_date: ['Das Start-Date liegt nach dem Due-Date.'] }) },
     );
 
-    const start = await writable('Start-Date: 27.10.2026');
+    const start = await writable('Start-Date: 27.10.2026, vor 4 Tagen');
     expect(start.getAttribute('aria-keyshortcuts')).toBe('Shift+D');
     await user.click(start);
     // a day after the due date is refused in the calendar, which stays open
@@ -791,7 +820,7 @@ describe('DateField', () => {
     expect(toastTitles()).toContain('Änderung nicht gespeichert');
 
     // the due date before the start is refused in its calendar as well
-    await user.click(screen.getByRole('button', { name: 'Due-Date: 31.10.2026' }));
+    await user.click(screen.getByRole('button', { name: 'Due-Date: 31.10.2026, heute' }));
     await user.click(day('2026-10-26'));
     expect(await screen.findByText('Das Due-Date liegt vor dem Start (27.10.2026). Wähle einen Tag ab dann oder verschiebe zuerst den Start.')).toBeTruthy();
   });
@@ -815,7 +844,7 @@ describe('DateField', () => {
     today();
     signedIn = theo;
     renderWith(<DateField item={web47} field="due_date" />, {}, { projects: [project('WEB', 'viewer')] });
-    const value = await screen.findByRole('button', { name: 'Due-Date: 31.10.2026' });
+    const value = await screen.findByRole('button', { name: 'Due-Date: 31.10.2026, heute' });
     await waitFor(() => expect(value.getAttribute('aria-disabled')).toBe('true'));
 
     const before = document.activeElement;
@@ -947,6 +976,6 @@ describe('DateField', () => {
 
     org = { ...organization, timezone: 'America/New_York' };
     renderWith(<DateField item={due} field="due_date" />);
-    expect(await screen.findByRole('button', { name: 'Due-Date: 30.10.2026' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Due-Date: 30.10.2026, heute' })).toBeTruthy();
   });
 });
