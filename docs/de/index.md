@@ -66,6 +66,8 @@ Und dieselbe Seite im Dunkeln.
 
 ![Die Seite des Work Items WEB-47 im dunklen Thema](/screenshots/de/item-dark.png)
 
+<SelfHost />
+
 ## Stand
 
 Gebaut ist alles. Vor v0.1.0 wird noch einmal von Hand getestet, darum gibt es noch kein Release. Bis dahin baust du das Image selbst. Wie das geht und wie werkbuch auf einem Server läuft, steht unter [Einrichtung](/de/setup), [Reverse Proxy](/de/reverse-proxy), [Betrieb](/de/operations), [Aktualisieren](/de/upgrading) und [Sicherung](/de/backup), die Arbeit am Code auf der [Entwicklungsseite](/de/development). Wie alles funktioniert, steht unter [Konzepte](/de/concepts/permissions).

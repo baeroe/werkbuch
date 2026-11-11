@@ -147,7 +147,8 @@ export default defineConfig({
     },
 
     themeConfig: {
-        logo: { src: '/favicon.svg', alt: '' },
+        // the mark: three index cards of a card file, the front one marked (docs/public/logo-{light,dark}.svg)
+        logo: { light: '/logo-light.svg', dark: '/logo-dark.svg', alt: '' },
         socialLinks: [{ icon: 'github', link: 'https://github.com/baeroe/werkbuch' }],
         search: {
             provider: 'local',
