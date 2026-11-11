@@ -4,6 +4,7 @@ namespace App\Mcp\Tools;
 
 use App\Actions\Pages\GetPage;
 use App\Actions\Pages\GetPageVersion;
+use App\Actions\Pages\ListItemPages;
 use App\Actions\Pages\ListPages;
 use App\Actions\Pages\ListPageVersions;
 use App\Http\Resources\PageNodeResource;
@@ -23,7 +24,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 /**
  * `pages` (spec 6.2): the wiki of a project as a tree (without text, `{data, meta: {total}}` as REST sends it), one
- * page with its text as Markdown and its versions. The writes are `manage-pages`.
+ * page with its text as Markdown, its versions, and the pages that name a work item (A456). The writes are `manage-pages`.
  */
 #[IsReadOnly]
 #[IsOpenWorld(false)]
@@ -33,11 +34,12 @@ final class PagesTool extends ReadTool
 
     protected string $title = 'Wiki pages';
 
-    protected string $description = 'Reads the wiki of a project: the tree, one page (text as Markdown) and the versions of a page.';
+    protected string $description = 'Reads the wiki of a project: the tree, one page (text as Markdown), the versions of a page and the pages that name an item.';
 
     protected function actions(): array
     {
         $versions = ToolSchema::list(ListPageVersions::spec());
+        $named = ToolSchema::list(ListItemPages::spec());
         $page = ['page' => ToolSchema::reference('page')];
 
         return [
@@ -76,6 +78,14 @@ final class PagesTool extends ReadTool
                 parameters: [...$page, 'page_version' => ToolSchema::reference('pageVersion')],
                 required: ['page', 'page_version'],
                 twin: 'GET pages/{page}/versions/{pageVersion}',
+            ),
+            new McpAction(
+                name: 'item',
+                summary: 'The pages that name a work item, by title, without text.',
+                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::list(ListItemPages::run($actor, References::item($args->reference('item')), $args->query(array_keys($named))), PageResource::class),
+                parameters: ['item' => ToolSchema::reference('item'), ...$named],
+                required: ['item'],
+                twin: 'GET work-items/{item}/pages',
             ),
         ];
     }

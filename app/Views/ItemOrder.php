@@ -11,6 +11,7 @@ use App\Models\WorkItem;
 use App\Support\PageArgs;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Expression;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Pagination\Cursor;
 use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Pagination\Paginator;
@@ -25,10 +26,14 @@ use Illuminate\Validation\ValidationException;
  *   direction turns only the value itself: the mark of an empty value (`… is null`, 0 before 1) keeps empty values
  *   last in both directions, and the guard of `coalesce` makes every value comparable; `rank` and the ULID always
  *   ascend (the manual sort turns its rank).
- * - The key of an item is the identifier of its project (collation) and its number; the category is that of its
+ * - Texts sort naturally (A450, changes A168): a text or address property and the identifier of a key by
+ *   `natural_sort_key()` under the collation of the column, so "Item 9" comes before "Item 10" and `A2` before `A10`,
+ *   as `sort.ts` orders them with `Intl.Collator(…, {numeric: true})`. The cursor carries that key, and the signature
+ *   of a natural order ends on `~natural`: a cursor of the collation order before it is refused, not misread.
+ * - The key of an item is the identifier of its project (naturally) and its number; the category is that of its
  *   state. Both come from joins with their own aliases (`sort_projects`, `sort_states`, K3), so no condition of
- *   `FilterQuery` meets a column of another table. A property sorts by its first value (`position` 0) as a scalar
- *   subquery; an item whose type does not have the property (any more) counts as empty, like one without a value.
+ *   `FilterQuery` meets a column of another table. A property sorts by its first value (`position` 0), joined once as
+ *   `sort_values`; an item whose type does not have the property (any more) counts as empty, like one without a value.
  * - The next page is the keyset condition `(k0 > v0) or (k0 = v0 and k1 > v1) or …` (`<` for a descending key),
  *   written out, since Laravel's `cursorPaginate` knows neither marks nor expressions nor mixed directions. The
  *   previous page asks with every direction turned; the paginator turns its rows back (K5).
@@ -40,22 +45,24 @@ final class ItemOrder
 {
     private const CURSOR_SIGNATURE = '_sig';
 
-    /** The names of the selected keys of a sort (at most two: the mark of an empty value and the value). */
-    private const ALIASES = ['sort_0', 'sort_1'];
-
-    /** The guard of `coalesce` for a stamp, in the form the cursor carries (`Y-m-d H:i:s`). */
-    private const STAMP_GUARD = "timestamp '0001-01-01 00:00:00'";
+    /** The end of the signature of an order with a natural key: a cursor of the order by collation (A168) lacks it. */
+    private const NATURAL_SIGNATURE = '~natural';
 
     /** The sorts of a property, with the column of its value and the guard of `coalesce`. */
     private const PROPERTY_VALUES = [
         FieldType::Number->value => ['value_number', '0', 'decimal'],
         FieldType::Date->value => ['value_date', "date '0001-01-01'", 'day'],
-        FieldType::Text->value => ['value_string', "''", 'text'],
-        FieldType::Url->value => ['value_string', "''", 'text'],
+        FieldType::Text->value => ['value_string', "''", 'natural'],
+        FieldType::Url->value => ['value_string', "''", 'natural'],
     ];
 
     /**
      * One page of the query in the order of the sort; the query (filtered) changes with it, an order it brings goes.
+     *
+     * The rows carry the keys of the order (`sort_0`, `sort_1`, …) and the signature (`_sig`) as attributes, because the
+     * cursor reads them from there: they are the business of the paginator, never of the caller. A row of a page is for
+     * reading; it is never given to `save()` or `toArray()` for a write (they are original attributes, so only what the
+     * caller changed is dirty, and `ItemOrderTest` holds that).
      *
      * @param  Builder<WorkItem>  $query
      * @param  string|null  $group  the group the page lists (`group_by:key`), so that a cursor of another group is refused
@@ -66,7 +73,8 @@ final class ItemOrder
     public static function page(Builder $query, SortSpec $sort, PageArgs $args, ?string $group = null): CursorPaginator
     {
         $keys = self::prepare($query, $sort);
-        $signature = $sort->signature().($group === null ? '' : '|'.$group);
+        $natural = in_array('natural', array_column($keys, 'kind'), true);
+        $signature = $sort->signature().($natural ? self::NATURAL_SIGNATURE : '').($group === null ? '' : '|'.$group);
         $cursor = self::cursor($args->cursor, $keys, $signature);
         $back = $cursor !== null && $cursor->pointsToPreviousItems();
 
@@ -112,12 +120,12 @@ final class ItemOrder
             'priority' => [self::position('`work_items`.`priority`', array_map(fn (Priority $p) => $p->value, Priority::ORDER), $desc)],
             'due_date' => self::emptyLast('`work_items`.`due_date`', [], "date '0001-01-01'", 'day', $desc),
             'start_date' => self::emptyLast('`work_items`.`start_date`', [], "date '0001-01-01'", 'day', $desc),
-            // the stamps may be null as well (a row written without Eloquent), so they get the mark too (T5-M1)
-            'created_at' => self::emptyLast('`work_items`.`created_at`', [], self::STAMP_GUARD, 'stamp', $desc),
-            'updated_at' => self::emptyLast('`work_items`.`updated_at`', [], self::STAMP_GUARD, 'stamp', $desc),
+            // the stamps are required (A440): the column itself, so the keyset condition is a range on its index
+            'created_at' => [self::key('`work_items`.`created_at`', [], $desc, 'stamp')],
+            'updated_at' => [self::key('`work_items`.`updated_at`', [], $desc, 'stamp')],
             'key' => self::projectKey($query, $desc),
             'state_category' => self::category($query, $desc),
-            default => self::property($sort->field, $desc),
+            default => self::property($query, $sort->field, $desc),
         };
 
         if ($query->getQuery()->columns === null) {
@@ -125,7 +133,9 @@ final class ItemOrder
         }
         $keys = [];
         foreach ($values as $index => $value) {
-            $name = self::ALIASES[$index];
+            // `sort_0`, `sort_1`: an alias of ours, never input
+            /** @var literal-string $name */
+            $name = "sort_{$index}";
             $query->addSelect(new Expression($value['sql'].' as '.$name))->addBinding($value['bindings'], 'select');
             $keys[] = [...$value, 'name' => $name, 'order' => $name];
         }
@@ -217,8 +227,13 @@ final class ItemOrder
         };
     }
 
-    /** How a value of the cursor is bound: numbers as exact decimals (a text would compare as a float), days as days. */
-    /** @return literal-string */
+    /**
+     * How a value of the cursor is bound: numbers as decimals, days as days. The casts are defensive (T5-M4): fits()
+     * already holds every value to the form the database gave the key; without them MariaDB would compare the text
+     * with a decimal key as a float, which differs from the exact comparison only past about 15 digits.
+     *
+     * @return literal-string
+     */
     private static function placeholder(string $kind): string
     {
         return match ($kind) {
@@ -229,7 +244,7 @@ final class ItemOrder
     }
 
     /**
-     * The identifier of the project (by the collation) and the number.
+     * The identifier of the project (naturally: `A2` before `A10`) and the number.
      *
      * @param  Builder<WorkItem>  $query
      * @return list<array{sql: literal-string, bindings: list<mixed>, descending: bool, kind: string}>
@@ -238,7 +253,7 @@ final class ItemOrder
     {
         $query->join('projects as sort_projects', 'sort_projects.id', '=', 'work_items.project_id');
 
-        return [self::key('`sort_projects`.`identifier`', [], $desc, 'text'), self::key('`work_items`.`number`', [], $desc, 'int')];
+        return [self::natural('`sort_projects`.`identifier`', [], $desc), self::key('`work_items`.`number`', [], $desc, 'int')];
     }
 
     /**
@@ -256,11 +271,14 @@ final class ItemOrder
 
     /**
      * The first value (`position` 0) of a property of the types number, date, text and address, of an item whose type
-     * has the property; any other field (a stored sort whose property went) is the manual order.
+     * has the property; any other field (a stored sort whose property went) is the manual order. The value is joined
+     * once (`sort_values`, at most one row per item by the unique index), not read as a subquery per key: the mark and
+     * the value would read it twice per item (Task 10a).
      *
+     * @param  Builder<WorkItem>  $query
      * @return list<array{sql: literal-string, bindings: list<mixed>, descending: bool, kind: string}>
      */
-    private static function property(string $field, bool $desc): array
+    private static function property(Builder $query, string $field, bool $desc): array
     {
         $property = Field::named($field, app(CatalogProperties::class));
         $values = self::PROPERTY_VALUES[$property?->propertyType->value ?? ''] ?? null;
@@ -269,14 +287,15 @@ final class ItemOrder
         }
 
         [$column, $guard, $kind] = $values;
-        // a value left from a type the item no longer has is no value
-        $first = "(select `sort_values`.`{$column}` from `work_item_values` as `sort_values`"
-            .' where `sort_values`.`work_item_id` = `work_items`.`id` and `sort_values`.`position` = 0'
-            .' and `sort_values`.`property_id` = (select `sort_properties`.`id` from `properties` as `sort_properties` where `sort_properties`.`key` = ?)'
-            .' and exists (select 1 from `type_properties` as `sort_types`'
-            .' where `sort_types`.`type_id` = `work_items`.`type_id` and `sort_types`.`property_id` = `sort_values`.`property_id`))';
+        $query->leftJoin('work_item_values as sort_values', fn (JoinClause $join) => $join
+            ->on('sort_values.work_item_id', '=', 'work_items.id')
+            ->where('sort_values.position', '=', 0)
+            ->whereRaw('`sort_values`.`property_id` = (select `sort_properties`.`id` from `properties` as `sort_properties` where `sort_properties`.`key` = ?)', [(string) $property->propertyKey])
+            // a value left from a type the item no longer has is no value
+            ->whereRaw('exists (select 1 from `type_properties` as `sort_types`'
+                .' where `sort_types`.`type_id` = `work_items`.`type_id` and `sort_types`.`property_id` = `sort_values`.`property_id`)'));
 
-        return self::emptyLast($first, [(string) $property->propertyKey], $guard, $kind, $desc);
+        return self::emptyLast("`sort_values`.`{$column}`", [], $guard, $kind, $desc);
     }
 
     /**
@@ -289,10 +308,25 @@ final class ItemOrder
      */
     private static function emptyLast(string $sql, array $bindings, string $guard, string $kind, bool $desc): array
     {
+        $value = "coalesce({$sql}, {$guard})";
+
         return [
             self::key("({$sql} is null)", $bindings, false, 'mark'),
-            self::key("coalesce({$sql}, {$guard})", $bindings, $desc, $kind),
+            $kind === 'natural' ? self::natural($value, $bindings, $desc) : self::key($value, $bindings, $desc, $kind),
         ];
+    }
+
+    /**
+     * The natural sort key of a text (A450): every number in it with the count of its digits before it, so it compares
+     * as a number; under the collation of the text, so case and accents count as little as elsewhere.
+     *
+     * @param  literal-string  $sql
+     * @param  list<mixed>  $bindings
+     * @return array{sql: literal-string, bindings: list<mixed>, descending: bool, kind: string}
+     */
+    private static function natural(string $sql, array $bindings, bool $desc): array
+    {
+        return self::key("natural_sort_key({$sql})", $bindings, $desc, 'natural');
     }
 
     /**

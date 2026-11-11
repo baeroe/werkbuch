@@ -33,4 +33,15 @@ final class ListOfAction
     {
         return ListSpec::fixed();
     }
+
+    /** A list with a flag that is no filter: the document reads it from the spec (ListFlags). */
+    public static function flaggedSpec(): ListSpec
+    {
+        return new ListSpec(
+            filters: [ListFilter::partial('name')],
+            sorts: ['name' => 'users.name'],
+            default: ['name'],
+            flags: ['with_hidden' => 'Hidden rows too (`1`).'],
+        );
+    }
 }

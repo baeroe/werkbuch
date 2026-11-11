@@ -1,3 +1,4 @@
+import { render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getLocale,
@@ -7,6 +8,7 @@ import {
   reloadIfLocaleChanged,
   t,
   tn,
+  tx,
   type PluralKey,
   type TranslationKey,
 } from '@/lib/i18n';
@@ -55,5 +57,12 @@ describe('i18n', () => {
     expect(reload).not.toHaveBeenCalled();
     reloadIfLocaleChanged('de', reload);
     expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it('puts nodes into the placeholders of a text, and leaves one without a node as text', () => {
+    const { container } = render(<p>{tx('x.greeting' as TranslationKey, { name: <b>Mara</b> })}</p>);
+    expect(container.innerHTML).toBe('<p>Hi <b>Mara</b></p>');
+    const { container: plain } = render(<p>{tx('x.greeting' as TranslationKey, {})}</p>);
+    expect(plain.textContent).toBe('Hi :name');
   });
 });

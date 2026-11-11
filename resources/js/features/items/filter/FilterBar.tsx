@@ -41,6 +41,8 @@ const removeAt = (list: Condition[], index: number) => list.filter((_, at) => at
 export function FilterBar({ filter, onChange, project, actions, searchRef }: FilterBarProps) {
   const properties = useProperties();
   const known = properties.data?.items ?? [];
+  // without a list of properties a property chip says it was not loaded, not that its field is unknown (T16-M5)
+  const failed = properties.isError && !properties.data ? { retry: async () => !(await properties.refetch()).isError, retrying: properties.isFetching } : undefined;
   const ownSearch = useRef<HTMLInputElement>(null);
   const search = searchRef ?? ownSearch;
   const addButton = useRef<HTMLButtonElement>(null);
@@ -123,6 +125,7 @@ export function FilterBar({ filter, onChange, project, actions, searchRef }: Fil
                     condition={condition}
                     def={def}
                     project={project}
+                    failed={failed}
                     onChange={(next) => commit(replaceAt(latest.current.conditions, index, next))}
                     onRemove={() => remove(index, place)}
                     onLeave={() => {

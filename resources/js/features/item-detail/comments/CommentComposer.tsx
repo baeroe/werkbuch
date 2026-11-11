@@ -69,6 +69,21 @@ function inlineRest(sent: RichText[], now: RichText[]): RichText[] | undefined {
 /** Blocks that hold blocks (a list, its items, a quote): what was typed on in them is read block by block. */
 const CONTAINERS = new Set(['bulletList', 'orderedList', 'taskList', 'listItem', 'taskItem', 'blockquote']);
 
+/** Blocks that begin with a paragraph (`paragraph block*` in the schema of the server, which refuses them otherwise). */
+const ITEMS = new Set(['listItem', 'taskItem']);
+
+/**
+ * The attrs of the rest of a numbered list: it goes on counting where the sent part stopped, so its start moves up by
+ * the sent items, less one when the last sent item was typed on and stays as the first item of the rest (N3).
+ */
+function numbered(sent: RichText, grown: RichText, inner: RichText[]): Pick<RichText, 'attrs'> {
+  if (sent.type !== 'orderedList') return {};
+  const count = sent.content?.length ?? 0;
+  const typedOn = inner.length > (grown.content?.length ?? 0) - count ? 1 : 0;
+  const start = typeof grown.attrs?.start === 'number' ? grown.attrs.start : 1;
+  return { attrs: { ...grown.attrs, start: start + count - typedOn } };
+}
+
 /**
  * The blocks of `now` after the blocks of `sent`, when `sent` is how `now` begins: the last sent block may have grown,
  * a paragraph by text after the sent part, a list or a quote by blocks after the sent ones (T18-M5). Undefined when
@@ -83,7 +98,10 @@ function blockRest(sent: RichText[], now: RichText[]): RichText[] | undefined {
   if (tail.type !== grown.type || !same(tail.attrs, grown.attrs)) return undefined;
   const inner = CONTAINERS.has(tail.type ?? '') ? blockRest(tail.content ?? [], grown.content ?? []) : inlineRest(tail.content ?? [], grown.content ?? []);
   if (!inner) return undefined;
-  return [...(inner.length > 0 ? [{ ...grown, content: inner }] : []), ...after];
+  if (inner.length === 0) return after;
+  // an item of which only its inner list went on: an empty paragraph in front of that list, as an item has to begin
+  const lead: RichText[] = ITEMS.has(tail.type ?? '') && inner[0]!.type !== 'paragraph' ? [{ type: 'paragraph' }] : [];
+  return [{ ...grown, ...numbered(tail, grown, inner), content: [...lead, ...inner] }, ...after];
 }
 
 /**

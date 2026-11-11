@@ -12,7 +12,8 @@ use App\Exceptions\Problem;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Actor;
-use App\Support\MemberInput;
+use App\Support\ProjectLock;
+use App\Support\ProjectMembership;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -35,9 +36,9 @@ final class RemoveMember
 
         DB::transaction(function () use ($actor, $project, $user): void {
             // the lead is read under the lock too: a change of lead at the same time waits for this removal
-            $project = MemberInput::lock($project);
+            $project = ProjectLock::lock($project);
 
-            if (! MemberInput::isMember($project, $user)) {
+            if (! ProjectMembership::isMember($project, $user)) {
                 throw Problem::notFound();
             }
 

@@ -27,16 +27,18 @@ use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Search\MeilisearchEngine;
+use App\Support\BotIds;
+use App\Support\ReadCommitted;
 use App\Support\RetryingDatabaseStore;
 use App\Views\CatalogProperties;
 use App\Webhooks\DnsResolver;
 use App\Webhooks\Resolver;
-use GuzzleHttp\Client as GuzzleClient;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Events\ConnectionEstablished;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event as Events;
@@ -59,6 +61,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(RoleIndex::class);
         // the properties as filters, sorts and displays look them up, read once per request and job
         $this->app->scoped(CatalogProperties::class, fn () => CatalogProperties::load());
+        // which accounts are bots, read once per request and job (a bulk change preloads its assignees)
+        $this->app->scoped(BotIds::class);
         // the addresses of a webhook's host, asked before every attempt (spec 6.3); RES_OPTIONS only counts before the
         // first lookup of the process, so it is set here (K17)
         DnsResolver::limitWaiting();
@@ -121,6 +125,8 @@ class AppServiceProvider extends ServiceProvider
 
         // roles and visible projects read inside a transaction that rolls back would otherwise outlive it and grant access
         Events::listen(TransactionRolledBack::class, fn () => Visibility::forget());
+        // a session made while a read-committed run is open (a reconnect inside the caller's BEGIN) gets the level again (K4)
+        Events::listen(ConnectionEstablished::class, [ReadCommitted::class, 'established']);
 
         // uploads (A234): 60 per minute and account; the throttles run before auth, the key finds the account of a token
         // as well as of the session (RateKey::account, without it every token shared one quota)
@@ -137,15 +143,12 @@ class AppServiceProvider extends ServiceProvider
         User::disableSearchSyncing();
 
         // Scout's engine, able to remove the documents of a project's items by filter (RemovesWhere) and to say how
-        // Meilisearch is (ReportsStatus) over a client of its own that gives up after 2 s (K15)
+        // Meilisearch is (PoolsStatus, requests of 2 s, K15)
         resolve(EngineManager::class)->extend('meilisearch', fn (Application $app) => new MeilisearchEngine(
             $app->make(Client::class),
             (bool) config('scout.soft_delete'),
-            new Client(
-                (string) config('scout.meilisearch.host'),
-                config('scout.meilisearch.key'),
-                new GuzzleClient(['connect_timeout' => 2, 'timeout' => 2]),
-            ),
+            (string) config('scout.meilisearch.host'),
+            config('scout.meilisearch.key'),
         ));
     }
 }

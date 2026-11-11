@@ -9,6 +9,7 @@ use App\Actions\Pages\DeletePage;
 use App\Actions\Pages\MovePage;
 use App\Actions\Pages\UpdatePage;
 use App\Actions\Projects\AddMember;
+use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\UpdateProject;
 use App\Actions\Templates\DeleteTemplate;
 use App\Actions\Templates\RunTemplate;
@@ -16,6 +17,7 @@ use App\Actions\Templates\SaveTemplate;
 use App\Actions\Tokens\CreateToken;
 use App\Actions\Users\UpdateUserRole;
 use App\Actions\Views\DeleteView;
+use App\Actions\WorkItems\RedistributeRanks;
 use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Events\EventRecorder;
@@ -25,6 +27,7 @@ use App\Live\LiveConsumer;
 use App\Live\LiveMessage;
 use App\Models\Automation;
 use App\Models\EventConsumption;
+use App\Models\Notification;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\Template;
@@ -297,6 +300,22 @@ it('sends template and automation events to the project channel with ids only, a
     ])->and($engine->writes())->toBe(0);
 });
 
+it('sends new ranks of a project to its channel, and the search and the notifications pass over them (A448)', function () use ($world, $message) {
+    $engine = searchEngine();
+    consumers(LiveConsumer::class, SearchConsumer::class, NotificationConsumer::class);
+    $w = $world();
+    DB::table('work_items')->where('id', $w['item']->id)->update(['rank' => 'a0VVV']);
+
+    expect(RedistributeRanks::run(actor($w['mara']), $w['web']))->toBe(1);
+
+    $event = eventsOf(EventType::ProjectRanksRedistributed, $w['web'])->sole();
+    expect($this->live->sent())->toBe([
+        ['channels' => ["private-project.{$w['web']->id}"], 'event' => 'live', 'payload' => $message($event->id, 'project.ranks_redistributed', $w['web']->id, null, null, $w['mara']->id), 'socket' => null],
+    ])->and($engine->writes())->toBe(0)
+        ->and(Notification::query()->count())->toBe(0)
+        ->and(EventConsumption::query()->where('event_id', $event->id)->pluck('consumer')->sort()->values()->all())->toBe(['live', 'notifications', 'search']);
+});
+
 it('sends a failed run of a template to the project channel', function () use ($world, $message) {
     $w = $world();
     $template = Template::factory()->create(['project_id' => $w['web']->id, 'created_by' => $w['mara']->id]);
@@ -326,6 +345,190 @@ it('names the template of the item a run created, so its log and its next run lo
         'payload' => $message($created->id, 'work_item.created', $w['web']->id, $item->id, null, User::defaultBot()->id, null, $template->id),
         'socket' => null,
     ]]);
+});
+
+/*
+ * People who see a project before they listen to it (A451): a new project nobody holds yet, a project that turned
+ * public only its members and the org admins hold. They hear it on their own channel, if Visibility says they see it.
+ */
+
+/** The messages of an event on the own channels of people, in order: the accounts each one names. */
+$toPeople = fn (array $sent, string $eventId) => array_values(array_map(
+    fn (array $message) => array_map(fn (string $channel) => substr($channel, strlen('presence-user.')), $message['channels']),
+    array_filter($sent, fn (array $message) => $message['payload']['event_id'] === $eventId && str_starts_with($message['channels'][0], 'presence-user.')),
+));
+
+it('tells everyone who sees a new public project on their own channel', function () use ($world, $message) {
+    $w = $world();
+    $ida = User::factory()->create(['name' => 'Ida']);
+    // left out below: Gerd (deactivated), Kira and the default bot (bots); Mara, who made it, hears it in her other tabs
+    User::factory()->disabled()->create(['name' => 'Gerd']);
+    User::factory()->bot()->create(['name' => 'Kira']);
+
+    $project = CreateProject::run(actor($w['mara']), ['name' => 'Neues Projekt', 'identifier' => 'NEU']);
+
+    $event = eventsOf(EventType::ProjectCreated, $project)->sole();
+    $payload = $message($event->id, 'project.created', $project->id, null, null, $w['mara']->id);
+    $people = collect([$w['tom'], $w['mara'], $ida])->sortBy('id')->pluck('id')->all();
+    expect($this->live->sent())->toBe([
+        ['channels' => ["private-project.{$project->id}"], 'event' => 'live', 'payload' => $payload, 'socket' => null],
+        ['channels' => array_map(fn (string $id) => "presence-user.{$id}", $people), 'event' => 'live', 'payload' => $payload, 'socket' => null],
+    ]);
+});
+
+it('tells only members and org admins about a new private project', function () use ($world, $toPeople) {
+    $w = $world();
+    User::factory()->create(['name' => 'Ida']);
+    $lene = User::factory()->create(['name' => 'Lene']);
+    $erik = User::factory()->admin()->create(['name' => 'Erik']);
+
+    $project = CreateProject::run(actor($w['mara']), ['name' => 'Geheim', 'identifier' => 'GEH', 'visibility' => 'private', 'lead_id' => $lene->id]);
+
+    $event = eventsOf(EventType::ProjectCreated, $project)->sole();
+    $heard = array_merge(...$toPeople($this->live->sent(), $event->id));
+    sort($heard);
+    // Mara made it (its admin), Lene as the lead is a member, Tom and Erik see every project; Ida does not see it
+    $expected = [$w['mara']->id, $lene->id, $w['tom']->id, $erik->id];
+    sort($expected);
+    expect($heard)->toBe($expected);
+});
+
+it('tells people about a project that turned public, with the socket of the change', function () use ($world, $message) {
+    $w = $world();
+    $ops = Project::factory()->identifier('OPS')->private()->member($w['tom'], ProjectRole::Admin)->create(['lead_id' => $w['tom']->id]);
+    $ida = User::factory()->create(['name' => 'Ida']);
+
+    $this->actingAs($w['tom'])->withHeader('X-Socket-ID', '1234.5678')
+        ->patchJson("/api/v1/projects/{$ops->id}", ['visibility' => 'public'])->assertOk();
+
+    $event = eventsOf(EventType::ProjectUpdated, $ops)->sole();
+    $payload = $message($event->id, 'project.updated', $ops->id, null, null, $w['tom']->id);
+    // Tom, who made it public, too: Reverb leaves out the tab of the socket, his other tabs hear it
+    $people = collect([$w['tom'], $w['mara'], $ida])->sortBy('id')->pluck('id')->all();
+    expect($this->live->sent())->toBe([
+        ['channels' => ["private-project.{$ops->id}"], 'event' => 'live', 'payload' => $payload, 'socket' => '1234.5678'],
+        ['channels' => array_map(fn (string $id) => "presence-user.{$id}", $people), 'event' => 'live', 'payload' => $payload, 'socket' => '1234.5678'],
+    ]);
+});
+
+it("reaches the actor's own channel with a project made over a token", function () use ($world, $toPeople) {
+    $w = $world();
+    $token = apiToken($w['mara'], ['read', 'write']);
+
+    $answer = $this->withToken($token)->postJson('/api/v1/projects', ['name' => 'Über die API', 'identifier' => 'API'])->assertCreated();
+
+    // no socket: every tab of Mara hears it on her own channel, the one of Tom too
+    $event = eventsOf(EventType::ProjectCreated, Project::query()->findOrFail($answer->json('data.id')))->sole();
+    $heard = $toPeople($this->live->sent(), $event->id);
+    $expected = [$w['tom']->id, $w['mara']->id];
+    sort($expected);
+    expect($heard)->toBe([$expected])
+        ->and(collect($this->live->sent())->pluck('socket')->unique()->all())->toBe([null]);
+});
+
+it('reads who sees a project when it consumes, not when it turned public', function () use ($world, $toPeople) {
+    $w = $world();
+    $ops = Project::factory()->identifier('OPS')->private()->member($w['tom'], ProjectRole::Admin)->create(['lead_id' => $w['tom']->id]);
+    $lene = memberOf($ops, ProjectRole::Member, ['name' => 'Lene']);
+    User::factory()->create(['name' => 'Ida']);
+    consumers();
+    UpdateProject::run(actor($w['tom']), $ops, ['visibility' => 'public']);
+    UpdateProject::run(actor($w['tom']), $ops, ['visibility' => 'private']);
+    consumers(LiveConsumer::class);
+    $public = eventsOf(EventType::ProjectUpdated, $ops)->first(fn ($event) => data_get($event->changes, 'visibility.new') === 'public');
+
+    app(Outbox::class)->consume($public->id, LiveConsumer::class);
+
+    // private again by now: its member and the org admin, not Mara (member of WEB only) nor Ida
+    $expected = [$w['tom']->id, $lene->id];
+    sort($expected);
+    expect($toPeople($this->live->sent(), $public->id))->toBe([$expected]);
+});
+
+it('tells nobody on their own channel about a change of a project that keeps its visibility', function () use ($world, $toPeople) {
+    $w = $world();
+    $ops = Project::factory()->identifier('OPS')->public()->member($w['tom'], ProjectRole::Admin)->create(['lead_id' => $w['tom']->id]);
+
+    UpdateProject::run(actor($w['tom']), $ops, ['name' => 'Betrieb', 'visibility' => 'public']);
+    UpdateProject::run(actor($w['tom']), $ops, ['visibility' => 'private']);
+
+    $named = eventsOf(EventType::ProjectUpdated, $ops)->values();
+    // the name alone, then public to private (those lose the project, Disconnect, A281): the project channel only
+    expect($named)->toHaveCount(2)
+        ->and($toPeople($this->live->sent(), $named[0]->id))->toBe([])
+        ->and($toPeople($this->live->sent(), $named[1]->id))->toBe([])
+        ->and(array_column($this->live->sent(), 'channels'))->toBe([["private-project.{$ops->id}"], ["private-project.{$ops->id}"]]);
+});
+
+it('sends a hundred channels per message', function () use ($world, $toPeople) {
+    $w = $world();
+    User::factory()->count(150)->create();
+
+    $project = CreateProject::run(actor($w['mara']), ['name' => 'Alle', 'identifier' => 'ALLE']);
+
+    $event = eventsOf(EventType::ProjectCreated, $project)->sole();
+    $messages = $toPeople($this->live->sent(), $event->id);
+    $heard = array_merge(...$messages);
+    // the body of the first request to Reverb's HTTP API as the Pusher client builds it, well within its 10 000 bytes
+    $full = collect($this->live->sent())->first(fn (array $sent) => count($sent['channels']) === LiveMessage::CHANNELS_MAX);
+    $body = strlen((string) json_encode([
+        'name' => 'live', 'data' => json_encode($full['payload']), 'channels' => $full['channels'], 'socket_id' => '1234567890.1234567890',
+    ]));
+    // Tom, Mara and the 150: two messages, the first one full
+    expect(LiveMessage::CHANNELS_MAX)->toBe(100)
+        ->and($body)->toBeLessThan(7_000)
+        ->and(array_map('count', $messages))->toBe([100, 52])
+        ->and(array_unique($heard))->toHaveCount(152)
+        ->and($heard)->toContain($w['tom']->id)
+        ->and($heard)->toContain($w['mara']->id);
+});
+
+it('asks the same number of queries for 2 and 50 people', function () use ($world, $toPeople) {
+    $w = $world();
+    $queries = function (int $people, string $identifier) use ($w, $toPeople): array {
+        User::factory()->count($people)->create();
+        consumers();
+        $project = CreateProject::run(actor($w['mara']), ['name' => "Privat {$identifier}", 'identifier' => $identifier, 'visibility' => 'private']);
+        consumers(LiveConsumer::class);
+        $event = eventsOf(EventType::ProjectCreated, $project)->sole();
+
+        $count = 0;
+        DB::listen(function () use (&$count) {
+            $count++;
+        });
+        app(Outbox::class)->consume($event->id, LiveConsumer::class);
+
+        return [$count, count(array_merge(...$toPeople($this->live->sent(), $event->id)))];
+    };
+
+    [$few, $fewHeard] = $queries(0, 'ZWEI');
+    [$many, $manyHeard] = $queries(48, 'VIELE');
+
+    // Tom and Mara, then 48 more people: each private project reaches Tom (org admin) and Mara (its admin) only, and who
+    // sees it is read with the same queries however many people there are (the members once, Mara is one)
+    expect($fewHeard)->toBe(2)
+        ->and($manyHeard)->toBe(2)
+        ->and($many)->toBe($few);
+});
+
+it('tells nobody on their own channel about a project that is being deleted or gone', function () use ($world, $toPeople) {
+    $w = $world();
+    consumers();
+    $deleting = CreateProject::run(actor($w['mara']), ['name' => 'Weg', 'identifier' => 'WEG']);
+    $gone = CreateProject::run(actor($w['mara']), ['name' => 'Fort', 'identifier' => 'FORT']);
+    consumers(LiveConsumer::class);
+    $deleting->forceFill(['deleting_at' => now()])->save();
+    $created = [eventsOf(EventType::ProjectCreated, $deleting)->sole(), eventsOf(EventType::ProjectCreated, $gone)->sole()];
+    DB::table('projects')->where('id', $gone->id)->delete();
+
+    foreach ($created as $event) {
+        app(Outbox::class)->consume($event->id, LiveConsumer::class);
+    }
+
+    // the project channels still hear it (whoever holds one learns the project is going), no own channel does
+    expect($toPeople($this->live->sent(), $created[0]->id))->toBe([])
+        ->and($toPeople($this->live->sent(), $created[1]->id))->toBe([])
+        ->and(array_column($this->live->sent(), 'channels'))->toBe([["private-project.{$deleting->id}"], ["private-project.{$gone->id}"]]);
 });
 
 it('sends nothing for catalog, view and token events', function () use ($world) {

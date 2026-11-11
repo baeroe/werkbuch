@@ -22,15 +22,24 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * and never for a project being deleted, an organization webhook for a project being deleted only `project.deleted`;
  * a webhook with a bot only while the bot sees the project (active, member or public), and only for what concerns it
  * (`bot.*` of it, `work_item.*`/`comment.*` of an item it is assigned to when consumed, it was assigned to before or
- * after the change, or a deleted item it had, K9). The body is built once per reader (the bot, else the default bot, A363) and
- * stored with the delivery; the rows go in with `insertOrIgnore` over (`event_id`, `webhook_id`), in the order of the
- * webhooks (K16), so an event that arrives twice (redispatch, queue:retry without the claim) writes nothing twice; only
- * the rows this call inserted (its own ULIDs) get a job, after the commit. Runs in the claim transaction of
- * WebhookConsumer; work of a job without an event of its own, like NotifyRecipients.
+ * after the change, or a deleted item it had, K9). The body is built once per reader (the bot, else the default bot,
+ * A363, read once per event, T6-M1) and stored with the delivery; the rows go in with `insertOrIgnore` over
+ * (`event_id`, `webhook_id`), in the order of the webhooks (K16), so an event that arrives twice (redispatch,
+ * queue:retry without the claim) writes nothing twice; only the rows this call inserted (its own ULIDs) get a job,
+ * after the commit. The rows go in chunks of at most INSERT_MAX_BYTES: 50 webhooks with bodies of up to 1 MiB each
+ * would not fit into one packet of MariaDB (`max_allowed_packet`, 16 MiB by default). Runs in the claim transaction of
+ * WebhookConsumer; work of a job without an event of its own, like NotifyRecipients. Deliveries of one item may arrive
+ * out of order (every delivery has its own job and tries).
  */
 final class QueueDeliveries
 {
     use AsAction;
+
+    /**
+     * The most bytes of values one insert may carry: a quarter of the 64 MiB the stack gives MariaDB and half of its
+     * default of 16 MiB, so the statement fits with room for its SQL; a body has at most WebhookPayload::MAX_BYTES.
+     */
+    public const INSERT_MAX_BYTES = 8 * 1_048_576;
 
     /**
      * @return int how many deliveries it queued
@@ -57,6 +66,7 @@ final class QueueDeliveries
 
         $assignee = $this->assignee($event, $webhooks->contains(fn (Webhook $webhook) => $webhook->bot_id !== null));
         $bodies = $rows = [];
+        $defaultBot = null;
         $now = now();
         foreach ($webhooks as $webhook) {
             if ($deleting && ($webhook->project_id !== null || $type !== EventType::ProjectDeleted)) {
@@ -67,7 +77,7 @@ final class QueueDeliveries
                 continue;
             }
 
-            $reader = $bot ?? User::defaultBot();
+            $reader = $bot ?? ($defaultBot ??= User::defaultBot());
             $rows[] = [
                 'id' => (new WebhookDelivery)->newUniqueId(),
                 'webhook_id' => $webhook->id,
@@ -84,7 +94,9 @@ final class QueueDeliveries
             return 0;
         }
 
-        WebhookDelivery::query()->insertOrIgnore($rows);
+        foreach ($this->chunks($rows) as $chunk) {
+            WebhookDelivery::query()->insertOrIgnore($chunk);
+        }
 
         $byId = $webhooks->keyBy('id');
         $deliveries = WebhookDelivery::query()->whereKey(array_column($rows, 'id'))->orderBy('webhook_id')->get();
@@ -94,6 +106,33 @@ final class QueueDeliveries
         }
 
         return $deliveries->count();
+    }
+
+    /**
+     * The rows in their order, cut into chunks whose values have at most INSERT_MAX_BYTES (a single larger row would
+     * stand alone; a body never comes near it).
+     *
+     * @param  list<array<string, string|int>>  $rows
+     * @return list<list<array<string, string|int>>>
+     */
+    private function chunks(array $rows): array
+    {
+        $chunks = [];
+        $chunk = [];
+        $bytes = 0;
+        foreach ($rows as $row) {
+            $size = array_sum(array_map(fn (string|int $value): int => strlen((string) $value), $row));
+            if ($chunk !== [] && $bytes + $size > self::INSERT_MAX_BYTES) {
+                $chunks[] = $chunk;
+                $chunk = [];
+                $bytes = 0;
+            }
+            $chunk[] = $row;
+            $bytes += $size;
+        }
+        $chunks[] = $chunk;
+
+        return $chunks;
     }
 
     /**

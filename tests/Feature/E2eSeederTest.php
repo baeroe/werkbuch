@@ -7,6 +7,7 @@ use App\Actions\Projects\CreateProject;
 use App\Actions\Projects\UpdateProject;
 use App\Actions\Templates\RescheduleTemplates;
 use App\Actions\Templates\RunDueTemplates;
+use App\Domain\Automations\AutomationKey;
 use App\Domain\Notifications\NotificationKind;
 use App\Enums\AccountType;
 use App\Events\EventType;
@@ -31,6 +32,7 @@ use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
 use App\Support\Actor;
+use App\Support\ProjectAutomations;
 use Database\Seeders\DemoSeeder;
 use Database\Seeders\E2eSeeder;
 use Illuminate\Support\Facades\DB;
@@ -323,6 +325,20 @@ it('leaves the demo automations off and the demo schedules paused (K9)', functio
     expect(Automation::query()->where('enabled', true)->count())->toBe(0)
         ->and(Template::query()->whereNotNull('next_run_at')->count())->toBe(0)
         ->and(Template::query()->whereNotNull('schedule')->get()->every(fn (Template $template) => $template->schedule()?->paused === true))->toBeTrue();
+});
+
+it('switches every automation of the demo projects off, also one without a row', function () {
+    $this->seed(DemoSeeder::class);
+    $web = Project::query()->where('identifier', 'WEB')->value('id');
+    // a database seeded before link_references existed has no row for it
+    Automation::query()->where('project_id', $web)->where('key', AutomationKey::LinkReferences)->delete();
+
+    $this->seed(E2eSeeder::class);
+
+    $rows = Automation::query()->where('project_id', $web)->get();
+    expect($rows->pluck('key')->map(fn ($key) => $key->value)->sort()->values()->all())->toBe(['assign_on_start', 'auto_archive', 'auto_close', 'close_parent', 'link_references'])
+        ->and($rows->where('enabled', true)->count())->toBe(0)
+        ->and(ProjectAutomations::enabled($web, AutomationKey::LinkReferences))->toBeNull();
 });
 
 it('switches the demo webhooks off and drops notifications of gone webhooks (K8)', function () {

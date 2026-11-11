@@ -5,6 +5,7 @@ namespace Database\Seeders\Demo;
 use App\Actions\Attachments\UploadAttachment;
 use App\Models\Attachment;
 use Closure;
+use Database\Seeders\Demo\Texts\DemoTexts;
 use finfo;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -16,11 +17,12 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
  * The three files of the file lists of the demo items (the `attachments` of src/api/seed/activity.ts; the files are
- * the data URLs of src/api/seed/files.ts, decoded into `files/`). The seed names no uploader: the person who created
- * the item and whose text says the file is attached uploads it, when the item was created. Stored like an upload
- * (UploadAttachment): the row of kind `file` owned by the item, `mime` read from the content, the file in the media
- * collection `file` under the row's ID (an image gets its preview on the queue `media`); the source stays where it is.
- * Without events (A86).
+ * the data URLs of src/api/seed/files.ts, decoded into `files/`; the English ones in `files/en/` are the same image,
+ * an outline written in English and the configuration with an English comment). The seed names no uploader: the
+ * person who created the item and whose text says the file is attached uploads it, when the item was created. Stored
+ * like an upload (UploadAttachment): the row of kind `file` owned by the item, `mime` read from the content, the file
+ * in the media collection `file` under the row's ID (an image gets its preview on the queue `media`); the source stays
+ * where it is. Without events (A86).
  *
  * Safe to run again: an item gets a file only while it has none of that name, so a file somebody deleted comes back
  * and a second run adds nothing.
@@ -30,25 +32,27 @@ class AttachmentsSeeder extends Seeder
     use WithoutModelEvents;
 
     /**
-     * Item and file name (in `files/`).
+     * Item and the number of the file there: its name is DemoTexts' `file.<KEY>.<n>.name`, in the folder of the language
+     * (`file.folder`: `files/` German, `files/en/` English).
      *
-     * @var list<array{0: string, 1: string}>
+     * @var list<array{0: string, 1: int}>
      */
     private const FILES = [
-        ['WEB-42', 'hero-entwurf.png'],
-        ['WEB-45', 'leistungsseiten-gliederung.pdf'],
-        ['OPS-12', 'postfix-main.cf.txt'],
+        ['WEB-42', 1],
+        ['WEB-45', 1],
+        ['OPS-12', 1],
     ];
 
     public function run(): void
     {
-        foreach (self::FILES as [$key, $filename]) {
+        foreach (self::FILES as [$key, $n]) {
+            $filename = DemoTexts::get("file.{$key}.{$n}.name");
             $item = ItemsSeeder::find($key);
             if ($item === null || Attachment::query()->whereMorphedTo('attachable', $item)->where('filename', $filename)->exists()) {
                 continue;
             }
 
-            $path = __DIR__."/files/{$filename}";
+            $path = __DIR__.'/'.DemoTexts::get('file.folder')."/{$filename}";
             // one transaction each: the row and its file belong together
             DB::transaction(function () use ($item, $filename, $path): void {
                 $mime = (new finfo(FILEINFO_MIME_TYPE))->file($path) ?: 'application/octet-stream';

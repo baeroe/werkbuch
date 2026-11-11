@@ -4,17 +4,19 @@
  * archiving and deleting with undo, and that the page and the preview register the keys once.
  */
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRef, useState, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import type { Page } from '@/api/client';
 import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/components/ui/toast';
 import { cachedZone } from '@/domain/tz';
 import { CommandPalette } from '@/features/palette/CommandPalette';
 import { listCommands } from '@/lib/commands';
 import { helpGroups } from '@/lib/shortcuts/HelpOverlay';
 import { listShortcuts } from '@/lib/shortcuts/registry';
+import { qk } from '@/hooks/keys';
 import { useWorkItems } from '@/hooks/workItems';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
@@ -619,6 +621,23 @@ describe('the sub-lists of the item commands', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('counts the children of the detail, never the list it embeds (A449)', async () => {
+    // an answer whose list holds none of the children still says through `children_progress` that there are 130
+    const epic = { ...web30, id: 'wi_web_61', key: 'WEB-61', children_progress: { done: 0, total: 130 } };
+    renderWith(<ItemPage id="wi_web_61" />, {
+      routes: {
+        'GET /api/v1/work-items/wi_web_61': () => ({ body: { data: { ...epic, children: [], relations: [], type: types.find((type) => type.id === epic.type_id), workflow: standard, attachments: [] } } }),
+      },
+    });
+    await ready('WEB-61', 'item.type');
+
+    choose('item.type', 'Task');
+    expect(await screen.findByText('WEB-61 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect(sent('PUT', '/api/v1/work-items/wi_web_61/type')).toEqual([]);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Typ behalten' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
   it('offers the days from today, sets and removes a date, and refuses a start after the due date', async () => {
     // a fixed day: a run across midnight in the zone of the organisation would count from two days otherwise
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -1023,6 +1042,53 @@ describe('the item commands of a list', () => {
     );
   });
 
+  it('keeps archived items off the screen when a reload of the list was on its way (T7)', async () => {
+    const web51 = makeWorkItem({ id: 'wi_web_51', number: 51, key: 'WEB-51', state_id: 'std_cancelled', rank: 'a7' });
+    let client!: QueryClient;
+    function Client() {
+      client = useQueryClient();
+      return null;
+    }
+    renderWith(
+      <>
+        <Client />
+        <ListScreen />
+        <WebList />
+      </>,
+      { role: 'admin', routes: { 'POST /api/v1/work-items/query': (body) => ({ body: list(queryItems([...items, web51], body)) }) } },
+    );
+    const webList = screen.getByLabelText('WEB');
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48 WEB-50 WEB-51'));
+
+    // a reload (a live update) is on its way and answers the items as they were, after they left the screen
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => (answer = resolve));
+    let asked = 0;
+    const answering = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (String(input).includes('/work-items/query')) {
+        asked += 1;
+        await held;
+      }
+      return answering(input, init);
+    };
+    onTestFinished(() => {
+      globalThis.fetch = answering;
+    });
+    act(() => void client.invalidateQueries({ queryKey: qk.workItems.all }));
+    await waitFor(() => expect(asked).toBe(1));
+
+    select('wi_web_50', 'wi_web_51');
+    await ready('2 Items', 'item.archive');
+    press('Backspace', { ctrlKey: true });
+    expect(lastToast()).toMatchObject({ title: '2 Items archiviert' });
+    await waitFor(() => expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48'));
+
+    await act(async () => answer());
+    await waitFor(() => expect(client.isFetching({ queryKey: qk.workItems.all })).toBe(0));
+    expect(webList.textContent).toBe('WEB-30 WEB-47 WEB-48');
+  });
+
   it('brings the archived items back when the bulk edit fails', async () => {
     const web51 = makeWorkItem({ id: 'wi_web_51', number: 51, key: 'WEB-51', state_id: 'std_cancelled', rank: 'a7' });
     renderWith(
@@ -1411,5 +1477,52 @@ describe('the item commands of a list', () => {
     expect(previewKeysAct(panel)).toBe(false);
     inside.focus();
     expect(previewKeysAct(panel)).toBe(true);
+  });
+
+  it('reads the cache once for a selection of 1 000 items, not once per item (T15-M2)', async () => {
+    let client: QueryClient | undefined;
+    function Client() {
+      client = useQueryClient();
+      return null;
+    }
+    renderWith(
+      <>
+        <ListScreen />
+        <Client />
+      </>,
+    );
+    await waitFor(() => expect(command('item.priority')).toBeDefined());
+
+    // ten pages of 100 items of WEB in the cache, as a long list loaded them; each page counts how often its items are read
+    const ids = Array.from({ length: 1000 }, (_, n) => `wi_many_${n}`);
+    const reads = Array.from({ length: 10 }, () => 0);
+    act(() => {
+      for (let p = 0; p < 10; p++) {
+        const items = ids.slice(p * 100, p * 100 + 100).map((id, n) => makeWorkItem({ id, number: 1000 + p * 100 + n, key: `WEB-${1000 + p * 100 + n}` }));
+        const page = { next_cursor: null, total: 1000 } as Page<WorkItem>;
+        Object.defineProperty(page, 'items', { enumerable: true, get: () => ((reads[p]! += 1), items) });
+        client!.setQueryData(qk.workItems.list({ project_id: 'p_web', q: 'viele', cursor: `c${p}` }), page);
+      }
+    });
+    const lookups = vi.spyOn(client!, 'getQueriesData');
+    /** What one look at the targets reads: calls into the cache, and the reads of each page. */
+    const cost = () => {
+      lookups.mockClear();
+      reads.fill(0);
+      expect(command('item.priority')!.when!()).toBe(true);
+      return { lookups: lookups.mock.calls.length, reads: [...reads] };
+    };
+
+    select(ids[0]!);
+    await waitFor(() => expect(command('item.priority')?.group).toBe('Aktionen für WEB-1000'));
+    const one = cost();
+    select(...ids);
+    await waitFor(() => expect(command('item.priority')?.group).toBe('Aktionen für 1.000 Items'));
+    const many = cost();
+
+    // the selection's size does not change how often the cache and its pages are read
+    expect(many).toEqual(one);
+    expect(one.lookups).toBeGreaterThan(0);
+    expect(one.reads.every((count) => count > 0)).toBe(true);
   });
 });

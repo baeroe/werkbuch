@@ -5,13 +5,13 @@ use App\Actions\Templates\ListTemplates;
 use Tests\Support\OpenApi\Document;
 
 /*
- * The flags of a list that its `ListSpec` does not hold (Final-Review I1): `include_archived` of `GET /projects` and
- * `lean` of both template lists. The actions read them from the query, so a client generated from the document has to
+ * The flags of a list that are no filter (Final-Review I1), held by its `ListSpec` (`flags`): `include_archived` of
+ * `GET /projects` and `lean` of both template lists. The actions read them from the query, so a client generated from the document has to
  * be able to send them, as `1` or `0` like every other flag of the query. And what the real document says of a text
  * filter (the lists of ListParametersTest have an API of their own, whose columns are the names).
  */
 
-it('names the flags of the lists that no ListSpec holds', function (string $path, string $flag, string $words) {
+it('names the flags that the ListSpec of a list holds', function (string $path, string $flag, string $words) {
     $parameter = collect(Document::operation('GET', $path)['parameters'])->firstWhere('name', $flag);
 
     expect($parameter['in'])->toBe('query')

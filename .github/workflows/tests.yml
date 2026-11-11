@@ -17,7 +17,7 @@ jobs:
   # required check: the name must stay `tests`
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     services:
       mariadb:
@@ -118,16 +118,180 @@ jobs:
       - name: Meilisearch
         run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
 
+      # max_allowed_packet of the stack (docker-compose.yml, 64 MiB) instead of the image's 16 MiB: the CI measures what
+      # runs in production. A service cannot take server options; only new connections read the global value, and the
+      # step checks it on one.
+      - name: MariaDB packet
+        run: >-
+          php -r '(new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->exec("SET GLOBAL max_allowed_packet = 67108864");
+          $size = (int) (new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->query("SELECT @@max_allowed_packet")->fetchColumn();
+          echo "max_allowed_packet {$size}", PHP_EOL; exit($size === 67108864 ? 0 : 1);'
+
       - name: Pest with coverage
         run: php artisan test --coverage --min=100
 
-  # Playwright against `php artisan serve` with MariaDB and Mailpit as services; merges the Playwright coverage with
-  # the Vitest coverage (100 % lines of the frontend). Not a required check.
-  e2e:
+  # The load suite (tests/Load, phpunit.load.xml): the API against 50 000 items, each answer within 1.5 s as the median
+  # of three runs, the queries as against 100 items (A187, K10). No required check; the table of every row is the
+  # artifact `load-budget`.
+  load:
+    name: load (50 000 items)
     runs-on: ubuntu-latest
-    # Phase 8 brought the suite to about 700 tests on one worker (about 80 minutes in CI: the tests themselves take
-    # nearly all of it, one shared database keeps them serial).
-    timeout-minutes: 120
+    timeout-minutes: 40
+
+    services:
+      mariadb:
+        image: mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          # `load` is a reserved word in MariaDB; the image quotes the name it creates
+          MARIADB_DATABASE: load
+          MARIADB_USER: db
+          MARIADB_PASSWORD: db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      meilisearch:
+        image: getmeili/meilisearch:v1.56.0@sha256:1f578fa865f8251894b3bf38d6668d6209a3f451f8f65ab953e129d4c1db5ef4
+        env:
+          MEILI_MASTER_KEY: ci-werkbuch-master-key
+          MEILI_NO_ANALYTICS: 'true'
+        ports:
+          - 7700:7700
+
+    env:
+      DB_CONNECTION: mariadb
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: load
+      DB_USERNAME: db
+      DB_PASSWORD: db
+      MEILISEARCH_HOST: http://127.0.0.1:7700
+      MEILISEARCH_KEY: ci-werkbuch-master-key
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          extensions: intl, zip, bcmath, pdo_mysql, gd
+          coverage: none
+
+      - name: Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Composer
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Environment
+        run: cp .env.example .env && php artisan key:generate
+
+      - name: Meilisearch
+        run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
+
+      # max_allowed_packet of the stack (docker-compose.yml, 64 MiB) instead of the image's 16 MiB: the CI measures what
+      # runs in production. A service cannot take server options; only new connections read the global value, and the
+      # step checks it on one.
+      - name: MariaDB packet
+        run: >-
+          php -r '(new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->exec("SET GLOBAL max_allowed_packet = 67108864");
+          $size = (int) (new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->query("SELECT @@max_allowed_packet")->fetchColumn();
+          echo "max_allowed_packet {$size}", PHP_EOL; exit($size === 67108864 ? 0 : 1);'
+
+      # The buffer pool of DDEV's MariaDB (1 GiB) instead of the image's 128 MiB: the database `load` (about 580 MB) has to
+      # fit in memory in both, or the CI measures the disk. A service cannot take server options, but the variable can be
+      # set while the server runs; the step waits until the resize is done.
+      - name: MariaDB buffer pool
+        run: >-
+          php -r '$db = new PDO("mysql:host=127.0.0.1;port=3306", "root", "root");
+          $db->exec("SET GLOBAL innodb_buffer_pool_size = 1073741824");
+          for ($i = 0; $i < 60 && (int) $db->query("SELECT @@innodb_buffer_pool_size")->fetchColumn() !== 1073741824; $i++) { sleep(1); }
+          $size = (int) $db->query("SELECT @@innodb_buffer_pool_size")->fetchColumn();
+          echo "innodb_buffer_pool_size {$size}", PHP_EOL; exit($size === 1073741824 ? 0 : 1);'
+
+      # Pest directly: `php artisan test` puts --configuration=phpunit.xml in front and ends with exit code 1
+      - name: Load suite
+        run: vendor/bin/pest --configuration=phpunit.load.xml
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: load-budget
+          path: storage/logs/load-budget.md
+          if-no-files-found: warn
+
+  # The Playwright suite in three steps (A438), none of them a required check. `e2e-build` builds the instrumented
+  # frontend once and runs Vitest for its half of the merged coverage; `e2e` runs the suite once per Playwright project,
+  # in parallel, each against a database, a search, a mailbox, a Reverb and workers of its own; `e2e-coverage` merges
+  # Vitest and the four projects and holds the 100 % lines (only the sum reaches them, no project on its own).
+  e2e-build:
+    name: e2e build (coverage build, Vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      # the Vitest half of the merged coverage (the job `tests` runs it as well, for its own gate: K7)
+      - name: Vitest with coverage
+        run: pnpm test:coverage
+
+      # the Istanbul build every project job serves: one build, one set of source maps, so the hits of all projects
+      # add up the same before and after the mapping
+      - name: Build with coverage
+        run: pnpm build:coverage
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-build
+          path: public/build
+          if-no-files-found: error
+          retention-days: 3
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unit-coverage
+          path: coverage/unit/coverage-final.json
+          if-no-files-found: error
+          retention-days: 3
+
+  # Playwright against `php artisan serve` with MariaDB, Meilisearch and Mailpit as services, one job per project.
+  e2e:
+    name: e2e (${{ matrix.project }})
+    needs: e2e-build
+    runs-on: ubuntu-latest
+    # one project takes about a quarter of the suite (about 23 minutes of tests in CI, Phase 15)
+    timeout-minutes: 60
+    strategy:
+      # every project runs to its end: the merge names each one that is missing
+      fail-fast: false
+      matrix:
+        # the projects of e2e/playwright.config.ts (`setup` runs in every job, it signs the e2e person in)
+        project: [desktop-light, desktop-dark, phone-light, phone-dark]
+
+    env:
+      E2E_PROJECT: ${{ matrix.project }}
 
     services:
       mariadb:
@@ -200,22 +364,30 @@ jobs:
       - name: Meilisearch
         run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
 
+      # max_allowed_packet of the stack (docker-compose.yml, 64 MiB) instead of the image's 16 MiB: the CI measures what
+      # runs in production. A service cannot take server options; only new connections read the global value, and the
+      # step checks it on one.
+      - name: MariaDB packet
+        run: >-
+          php -r '(new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->exec("SET GLOBAL max_allowed_packet = 67108864");
+          $size = (int) (new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->query("SELECT @@max_allowed_packet")->fetchColumn();
+          echo "max_allowed_packet {$size}", PHP_EOL; exit($size === 67108864 ? 0 : 1);'
+
       - name: Migrate
         run: php artisan migrate --force
 
       - name: Search settings
         run: php artisan app:search-sync
 
+      # only for scripts/coverage-merge.mjs (the mapping back to the sources); the build comes from `e2e-build`
       - name: pnpm install
         run: pnpm install --frozen-lockfile
 
-      # the Vitest half of the merged coverage: coverage/merged joins it with the Playwright coverage
-      - name: Vitest with coverage
-        run: pnpm test:coverage
-
-      # the Istanbul build the server serves
-      - name: Build with coverage
-        run: pnpm build:coverage
+      # the Istanbul build of the job `e2e-build`, the same for every project
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: e2e-build
+          path: public/build
 
       - name: Server
         run: |
@@ -228,15 +400,15 @@ jobs:
           php artisan reverb:start --host=127.0.0.1 --port=8080 > reverb.log 2>&1 &
           curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:8080/up
 
-      # QUEUE_CONNECTION=database as in production: the workers run the queued jobs (the reset mail goes out on the
-      # queue `notifications`, the search consumer works in the queue `search`, previews of pictures are made in the
+      # QUEUE_CONNECTION=database as in production: the workers run the queued jobs (the reset and invitation mails go out on the
+      # queue `mail`, the search consumer works in the queue `search`, previews of pictures are made in the
       # queue `media`, a deleted project is purged in the queue `bulk`) like the `queue` and `queue-index` daemons of
       # DDEV: search and media in a worker of their own, so the jobs every event makes for `default`, `live` and
       # `notifications` never keep them waiting; the webhooks (the deliveries to the receiver the e2e specs start on the
       # runner) have a worker of their own too, as a receiver that hangs holds its worker (T16-M5)
       - name: Queue workers
         run: |
-          php artisan queue:work --queue=default,live,notifications,bulk --sleep=1 --tries=3 > queue.log 2>&1 &
+          php artisan queue:work --queue=mail,default,live,notifications,bulk --sleep=1 --tries=3 > queue.log 2>&1 &
           php artisan queue:work --queue=search,media --sleep=1 --tries=3 > queue-index.log 2>&1 &
           php artisan queue:work --queue=webhooks --sleep=1 --tries=3 > queue-webhooks.log 2>&1 &
 
@@ -246,27 +418,40 @@ jobs:
           pnpm --dir e2e typecheck
           pnpm --dir e2e exec playwright install --with-deps chromium
 
+      # E2E_MERGE=0: the coverage stays in coverage/e2e/<project>/ (one project never reaches the gate on its own)
       - name: Tests
-        run: pnpm --dir e2e test
+        id: tests
+        run: pnpm --dir e2e test --project=setup --project="$E2E_PROJECT"
         env:
           CI: 'true'
+          E2E_MERGE: '0'
           WERKBUCH_URL: http://127.0.0.1:8000
           MAILPIT_URL: http://127.0.0.1:8025
           E2E_ARTISAN: php artisan
           E2E_WEBHOOK_HOST: 127.0.0.1
           E2E_EXEC: ''
 
+      # the raw files (well over a thousand of about 2 MB) mapped back to the sources once, as one file of a few MB;
+      # also after failed tests, so the merge reports the coverage, but not in a run a newer push cancelled;
+      # `setup` counts with every project, as in a local run. A project that runs into `timeout-minutes` is cancelled
+      # too and uploads nothing: the merge then fails at `--expect-shards` (no coverage of that project) before its
+      # report, and the run stays red
+      - name: Remap the coverage
+        if: "!cancelled() && steps.tests.outcome != 'skipped'"
+        run: node scripts/coverage-merge.mjs --remap-only --out "coverage/e2e-$E2E_PROJECT.json"
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: "!cancelled() && steps.tests.outcome != 'skipped'"
         with:
-          name: frontend-coverage
-          path: coverage/merged
-          if-no-files-found: warn
+          name: e2e-coverage-${{ matrix.project }}
+          path: coverage/e2e-${{ matrix.project }}.json
+          if-no-files-found: error
+          retention-days: 3
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
-          name: e2e-results
+          name: e2e-results-${{ matrix.project }}
           path: |
             serve.log
             queue.log
@@ -276,6 +461,62 @@ jobs:
             storage/logs
             e2e/test-results
           if-no-files-found: ignore
+
+  # Vitest and the four projects as one map over resources/js: fails below 100 % lines and when a project left no
+  # coverage. It runs after failed projects too (their coverage is uploaded all the same), and its last step fails
+  # with them: the coverage can reach 100 % while tests failed. A run a newer push cancelled merges nothing: it
+  # would hold the next run of the concurrency group back.
+  e2e-coverage:
+    name: e2e coverage (merge, 100 % lines)
+    # needs.e2e-build is only readable for a job that needs it
+    needs: [e2e-build, e2e]
+    if: "!cancelled() && needs.e2e-build.result == 'success'"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # the sources: the report and the paths of the coverage name resources/js
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: unit-coverage
+          path: coverage/unit
+
+      # one folder per artifact, coverage/e2e/e2e-coverage-<project>/: --expect-shards finds each project by its name
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: e2e-coverage-*
+          path: coverage/e2e
+          merge-multiple: false
+
+      - name: Merge
+        run: pnpm coverage:merge --expect-shards=desktop-light,desktop-dark,phone-light,phone-dark
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: "!cancelled()"
+        with:
+          name: frontend-coverage
+          path: coverage/merged
+          if-no-files-found: warn
+
+      - name: The projects passed
+        if: "!cancelled() && needs.e2e.result != 'success'"
+        run: |
+          echo "::error::At least one Playwright project failed (result: $E2E_RESULT)."
+          exit 1
+        env:
+          E2E_RESULT: ${{ needs.e2e.result }}
 
   # the VitePress site in en and de; the config uses `lastUpdated`, so the whole history is checked out. Not a
   # required check.

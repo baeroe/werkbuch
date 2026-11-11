@@ -44,6 +44,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 
 /*
  * Who hears of what (Task 5): the consumer `notifications` turns the events of the real actions into rows of
@@ -672,4 +673,40 @@ it('sends a mail only to admins who switched it on', function () use ($of, $swit
     expect($of($bea)->sole()->mail_id)->toBe($collection->id)
         ->and($mails($bea))->toHaveCount(1);
     Queue::assertPushed(SendNotificationMailJob::class, 1);
+});
+
+it('writes the notifications of thousands of watchers in blocks below the limit of placeholders', function () use ($world, $mailServer) {
+    $mailServer();
+    $w = $world();
+    // 5 100 watchers: one insert of all their rows would bind 13 values each, more than the 65 535 placeholders MariaDB
+    // takes in one statement
+    $now = now()->format('Y-m-d H:i:s');
+    $watchers = collect(range(1, 5100))->map(fn (int $n) => Str::lower((string) Str::ulid()));
+    foreach ($watchers->chunk(1000) as $chunk) {
+        DB::table('users')->insert($chunk->map(fn (string $id) => ['id' => $id, 'type' => 'person', 'name' => "Person {$id}", 'handle' => strtolower("p{$id}"), 'created_at' => $now, 'updated_at' => $now])->values()->all());
+        DB::table('work_item_subscribers')->insert($chunk->map(fn (string $id) => ['id' => Str::lower((string) Str::ulid()), 'work_item_id' => $w['item']->id, 'user_id' => $id, 'reason' => 'manual', 'created_at' => $now, 'updated_at' => $now])->values()->all());
+    }
+    consumers();
+    AddComment::run(actor($w['ida']), $w['item'], ['body' => 'Erledigt.']);
+    $event = eventsOf(EventType::CommentCreated, $w['item'])->sole();
+    $placeholders = 0;
+    $inserts = 0;
+    DB::listen(function ($query) use (&$placeholders, &$inserts): void {
+        $placeholders = max($placeholders, count($query->bindings));
+        $inserts += str_starts_with($query->sql, 'insert ignore into `notifications`') ? 1 : 0;
+    });
+
+    $written = NotifyRecipients::run(Actor::system(User::defaultBot(), 'notifications'), $event);
+
+    // the watchers and the lead, each with a mail collection of the item
+    expect($written)->toBe(5101)
+        ->and($placeholders)->toBeLessThanOrEqual(65535)
+        ->and($inserts)->toBe((int) ceil(5101 / NotifyRecipients::BLOCK))
+        ->and(NotificationMail::query()->where('scope', "item:{$w['item']->id}")->count())->toBe(5101)
+        ->and(Notification::query()->where('event_id', $event->id)->whereNull('mail_id')->count())->toBe(0);
+    Queue::assertPushed(SendNotificationMailJob::class, 5101);
+
+    // a second delivery writes nothing and opens no mail
+    expect(NotifyRecipients::run(Actor::system(User::defaultBot(), 'notifications'), $event))->toBe(0)
+        ->and(NotificationMail::query()->count())->toBe(5101);
 });

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, artisan, channelHeld, createE2eProject, createE2eTemplate, makeTemplateDue, PEOPLE, removeE2eProject, runId, signedInContext, tr, variant, waitForNotification } from '../helpers';
+import { allEntries, api, artisan, channelHeld, createE2eProject, createE2eTemplate, INBOX_NAMED, inboxName, makeTemplateDue, PEOPLE, removeE2eProject, runId, signedInContext, tr, variant, waitForNotification } from '../helpers';
 
 // The acceptance of phase 10 (success criterion 3, flow 6): a due template creates its item once, as the default bot
 // "Automation", however often the scheduler runs; a template that fails at run time tells the lead of its project live.
@@ -15,7 +15,7 @@ const name = (what: string) => `E2E accept ${what} ${variant()} ${runId()}`;
 const LIVE = { timeout: 20_000 };
 
 // a second context and the way through the queues: more than the default 30 s may pass
-test.describe.configure({ timeout: 90_000 });
+test.describe.configure({ timeout: 240_000 });
 
 type Inbox = (typeof PEOPLE.inbox)[string];
 
@@ -108,8 +108,8 @@ test('a template that fails at run time tells the lead live', async ({ page, bro
       const response = await api(lead.page, 'GET', '/api/v1/notifications?filter[unread]=1&per_page=1');
       const count = ((await response.json()) as { meta: { total: number } }).meta.total;
       expect(count).toBeGreaterThan(0);
-      const link = lead.page.getByRole('link', { name: /^Inbox(, \d+ unread)?$/ }).filter({ visible: true });
-      await expect(link).toHaveAccessibleName(tr('en', 'shell.nav.inbox_unread', { count }), { timeout: 1_000 });
+      const link = lead.page.getByRole('link', { name: INBOX_NAMED }).filter({ visible: true });
+      await expect(link).toHaveAccessibleName(inboxName(count), { timeout: 1_000 });
       await expect(link.locator('[data-inbox-badge]')).toHaveText(count > 99 ? '99+' : String(count), { timeout: 1_000 });
     }).toPass(LIVE);
     expect(await lead.page.evaluate(() => (window as Window & { __accept?: boolean }).__accept)).toBe(true);

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, artisan, artisanEval, createE2eProject, createItem, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, artisan, artisanEval, createE2eProject, createItem, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // The automations of a project (spec 4.13), signed in as the e2e person (org admin, English). Every test works in a
 // project of its own (`E2E …`, removed in `finally`); its items come over the API. The nightly run is started by hand
@@ -92,6 +92,41 @@ test('switches Assignee beim Start on with the keyboard; a person who starts an 
     await expectReason(page, item.key, 'assign_on_start');
   } finally {
     await cleanUp(page, project.identifier);
+  }
+});
+
+test('relates an item it references, keyboard only', async ({ page }) => {
+  // the relation waits on the queue (up to 90 s, as the acceptance specs do, K18): a full run backs it up
+  test.setTimeout(150_000);
+  // "Erwähnte Items verknüpfen" is on in a new project (A452): a # in a comment relates both items after the commit
+  const project = await createE2eProject(page, projectName('link references'), { types: ['Task'] });
+  try {
+    const target = await createItem(page, { project_id: project.id, title: 'E2E Impressum prüfen' });
+    const item = await createItem(page, { project_id: project.id, title: 'E2E Datenschutz prüfen' });
+    await page.goto(`/items/${item.key}`);
+    await expect(page.getByRole('heading', { level: 1, name: 'E2E Datenschutz prüfen' })).toBeVisible();
+    const relations = page.getByRole('region', { name: tr('en', 'items.detail.relations.title') });
+    await expect(relations.getByText(tr('en', 'items.detail.relations.empty'))).toBeVisible();
+
+    await page.keyboard.press('m');
+    const editor = page.getByRole('textbox', { name: tr('en', 'editor.label.comment') });
+    await expect(editor).toBeFocused();
+    // the key finds the item at once (no index needed)
+    await page.keyboard.type(`Hängt an #${target.key}`);
+    await expect(page.getByRole('option', { name: new RegExp(target.key) })).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(editor.locator('.rt-ref')).toContainText(target.key);
+    await pressMod(page, 'Enter');
+    await expect(page.getByRole('status').filter({ hasText: tr('en', 'items.comments.sent') })).toBeVisible();
+
+    // the relation comes from the queue, live on the page, and stands on both ends
+    await expect(relations.getByText(target.key)).toBeVisible({ timeout: 90_000 });
+    const relationsOf = async (key: string) => ((await (await api(page, 'GET', `/api/v1/work-items/${key}/relations`)).json()) as { data: unknown[] }).data.length;
+    expect(await relationsOf(item.key)).toBe(1);
+    expect(await relationsOf(target.key)).toBe(1);
+  } finally {
+    await page.goto('/my-items');
+    await removeE2eProject(page, project.identifier);
   }
 });
 

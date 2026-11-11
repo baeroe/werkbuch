@@ -8,7 +8,7 @@
  * server: only it knows the key, the children that lose their parent, and the values of the new type.
  */
 
-import { hashKey, useQueries, useQuery, useQueryClient, type QueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { hashKey, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { Page } from '@/api/client';
 import {
@@ -23,6 +23,7 @@ import {
   listActivity,
   listStateUsage,
   listWorkItems,
+  redistributeRanks,
   restoreWorkItem,
   setSubscribed,
   transitionWorkItem,
@@ -315,7 +316,7 @@ function usePagedLists(lists: readonly PagedList[], all: boolean): Record<string
     () =>
       queryClient.getQueryCache().subscribe((event) => {
         if (event.type !== 'updated' || event.action.type !== 'invalidate') return;
-        const list = layoutRef.current.find((entry) => entry.cursors.length > 1 && event.query.queryHash === hashKey(pageKey(entry.args, null)));
+        const list = layoutRef.current.find((entry) => entry.cursors.length > 1 && event.query.queryHash === entry.hash);
         if (!list) return;
         const rebuild = rebuildsOf(queryClient).get(list.hash);
         if (rebuild) rebuild.depth = list.cursors.length;
@@ -738,6 +739,19 @@ export function useBulkChange() {
     [mutateAsync, queryClient],
   );
   return { run, isPending };
+}
+
+/**
+ * Gives the items of a project short ranks (A448). Variable: the project's ULID. Settles with the server's answer and
+ * starts reloading the shown lists (`qk.workItems.all`) without waiting for them: a list that does not answer must not
+ * hold the caller for good, it waits for the lists itself, with a limit (the board's `listsLoaded`).
+ */
+export function useRedistributeRanks() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: redistributeRanks,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: qk.workItems.all }),
+  });
 }
 
 /** Not optimistic: the values of the new type are only known on the server. Variables: `{ id, type_id, values? }`. */

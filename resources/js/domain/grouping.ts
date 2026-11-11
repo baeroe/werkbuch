@@ -100,10 +100,11 @@ export interface Placement {
 
 /**
  * Puts every loaded item into the groups it belongs to now. An item that appears more than once (it stands in several
- * label groups, or a page was loaded twice) counts once, in its latest version (the one cached last). Each group is
- * sorted again; the groups the server delivered stay, even when they are empty now.
+ * label groups, or a page was loaded twice) counts once: its later entry in `served` wins. Each group is sorted again;
+ * the groups the server delivered stay, even when they are empty now.
  */
 export function placeItems(served: readonly ServedGroup[], groupBy: GroupBy, sort: SortSpec, ctx: KeyContext): Placement {
+  // the later entry of an item in `served` wins
   const latest = new Map<string, ListedItem>();
   for (const group of served) for (const item of group.items) latest.set(item.id, item);
 

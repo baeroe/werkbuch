@@ -8,7 +8,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import en from '../../../../lang/en.json';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
@@ -109,6 +109,9 @@ function visibleText(element: Element): string {
 const optionTexts = async () => (await screen.findAllByRole('option')).map(visibleText);
 
 /** Types into the search field of the open list once it has the focus (Base UI sets it a frame later). */
+/** Two frames: Base UI opens a popup and sets its focus a frame after the render that asks for it. */
+const nextFrames = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
 async function search(user: ReturnType<typeof userEvent.setup>, text: string) {
   const input = await screen.findByRole('combobox', { name: /suchen …$/i });
   await user.click(input);
@@ -671,7 +674,8 @@ describe('askResolution and ItemDialogsHost', () => {
 
     act(() => askResolution({ subject: 'WEB-47', target: done, onConfirm }));
     const dialog = await screen.findByRole('dialog', { name: 'WEB-47 auf Done setzen' });
-    expect(within(dialog).getByRole('status').textContent).toBe('Resolutions werden geladen …');
+    // the outline shows after a moment, while the resolutions are held
+    expect((await within(dialog).findByRole('status')).textContent).toBe('Resolutions werden geladen …');
     // the focus waits in the dialog, never on the page behind it
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
 
@@ -909,6 +913,31 @@ describe('TypePicker and the type change', () => {
     await waitFor(() => expect(typeCalls('wi_web_47')).toHaveLength(3));
   });
 
+  it('knows the children from the listed item before its detail is there', async () => {
+    const user = userEvent.setup();
+    // the detail does not load: the listed WEB-30 says through `children_progress` that it has a child
+    renderWith(<TypePicker item={web30} />, {
+      ...routes(web30),
+      'GET /api/v1/work-items/wi_web_30': () => problem(503, 'service_unavailable', 'Der Server ist gerade nicht erreichbar.'),
+    });
+    await user.click(await picker(/^Typ: Epic$/));
+    await user.click(await screen.findByRole('option', { name: 'Task' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Typ von WEB-30 auf Task ändern' });
+    expect(within(dialog).getByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect(typeCalls('wi_web_30')).toEqual([]);
+  });
+
+  it('counts the children of the item, never the list it embeds (A449)', async () => {
+    // the embedded list ends after 100; an answer without it still says through `children_progress` that there are some
+    const many = { ...web30, children_progress: { done: 0, total: 130 } };
+    renderWith(<TypeChangeDialog item={many} target={task} open onOpenChange={() => {}} />, {
+      ...routes(many),
+      'GET /api/v1/work-items/wi_web_30': () => ({ body: { data: { ...many, children: [], relations: [], type: epic, workflow: standard, attachments: [] } } }),
+    });
+    expect(await screen.findByText('WEB-30 hat Kind-Items. Nur Epics können Kind-Items haben.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Zu Task wechseln/ })).toBeNull();
+  });
+
   it('says why from what the caller knows before the item has loaded', () => {
     renderWith(<TypeChangeDialog item={web30} target={task} open onOpenChange={() => {}} hasChildren />, routes(web30));
     // the first draw already says no
@@ -982,6 +1011,24 @@ describe('Picker', () => {
     expect(onValueChange).toHaveBeenCalledWith('o4');
   });
 
+  it('reports what is typed and leaves the narrowing to its owner, and reports an empty query when the list closes', async () => {
+    const user = userEvent.setup();
+    const onQueryChange = vi.fn();
+    const props = { label: 'Kunde', display: 'Option 2', displayText: 'Option 2', value: 'o1', onValueChange: vi.fn(), placeholder: 'Suchen …', onQueryChange };
+    // the owner's options do not match what is typed (the server finds by a former key or a word of the text): all stay
+    render(<Picker {...props} options={many.slice(1, 4)} />);
+
+    await user.click(screen.getByRole('combobox', { name: 'Kunde: Option 2' }));
+    await search(user, 'zzz');
+
+    expect(onQueryChange.mock.calls.map(([text]) => text)).toContain('zzz');
+    expect(await screen.findAllByRole('option')).toHaveLength(3);
+    expect(screen.queryByText(/Keine/)).toBeNull();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(onQueryChange).toHaveBeenLastCalledWith(''));
+  });
+
   it('keeps the focus on the trigger when the rights arrive and the read-only trigger gives way to the picker', () => {
     const props = { label: 'Kunde', display: 'Option 2', displayText: 'Option 2', options: many.slice(0, 3), value: 'o1', onValueChange: vi.fn(), placeholder: 'Suchen …' };
     const view = render(<Picker {...props} disabledReason="Rechte laden noch." />);
@@ -1000,6 +1047,64 @@ describe('Picker', () => {
     act(() => (document.activeElement as HTMLElement).blur());
     view.rerender(<Picker {...props} />);
     expect(document.activeElement).toBe(document.body);
+  });
+
+  it('keeps the focus when an open picker turns read-only', async () => {
+    const user = userEvent.setup();
+    const props = { label: 'Kunde', display: 'Option 2', displayText: 'Option 2', options: many.slice(0, 3), value: 'o1', onValueChange: vi.fn(), placeholder: 'Suchen …' };
+    const view = render(<Picker {...props} />);
+    await user.click(screen.getByRole('combobox', { name: 'Kunde: Option 2' }));
+    const input = await screen.findByRole('combobox', { name: /suchen …$/i });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+
+    // the rights go while the list is open: the list goes, the focus lands on the read-only trigger
+    view.rerender(<Picker {...props} disabledReason="Im Projekt darfst du nur lesen." />);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Kunde: Option 2' }));
+  });
+
+  it('tells its owner that the rights closed an open list, which stays closed when they come back', async () => {
+    const user = userEvent.setup();
+    const changes: boolean[] = [];
+    const props = { label: 'Kunde', display: 'Option 2', displayText: 'Option 2', options: many.slice(0, 3), value: 'o1', onValueChange: vi.fn(), placeholder: 'Suchen …' };
+    function Owned({ reason }: { reason?: string }) {
+      const [open, setOpen] = useState(false);
+      return (
+        <Picker
+          {...props}
+          disabledReason={reason}
+          open={open}
+          onOpenChange={(next) => {
+            changes.push(next);
+            setOpen(next);
+          }}
+        />
+      );
+    }
+    const view = render(<Owned />);
+    await user.click(screen.getByRole('combobox', { name: 'Kunde: Option 2' }));
+    await screen.findByRole('combobox', { name: /suchen …$/i });
+    view.rerender(<Owned reason="Im Projekt darfst du nur lesen." />);
+    expect(changes).toEqual([true, false]);
+
+    view.rerender(<Owned />);
+    const trigger = screen.getByRole('combobox', { name: 'Kunde: Option 2' });
+    await act(nextFrames);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('combobox', { name: /suchen …$/i })).toBeNull();
+  });
+
+  it('opens a list that starts open only that first time, not again after the rights went and came back', async () => {
+    const props = { label: 'Kunde', display: 'Option 2', displayText: 'Option 2', options: many.slice(0, 3), value: 'o1', onValueChange: vi.fn(), placeholder: 'Suchen …', defaultOpen: true };
+    const view = render(<Picker {...props} />);
+    expect(await screen.findAllByRole('option')).toHaveLength(3);
+    view.rerender(<Picker {...props} disabledReason="Im Projekt darfst du nur lesen." />);
+    expect(screen.getByRole('button', { name: 'Kunde: Option 2' }).getAttribute('aria-disabled')).toBe('true');
+
+    view.rerender(<Picker {...props} />);
+    const trigger = screen.getByRole('combobox', { name: 'Kunde: Option 2' });
+    await act(nextFrames);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryAllByRole('option')).toEqual([]);
   });
 
   it('changes nothing when the chosen value is chosen again, and opens at once without taking the focus', async () => {

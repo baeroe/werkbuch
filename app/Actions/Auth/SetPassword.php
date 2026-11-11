@@ -2,12 +2,16 @@
 
 namespace App\Actions\Auth;
 
+use App\Auth\AccountLoginRateLimiter;
+use App\Auth\KnownDevice;
+use App\Auth\TwoFactorDay;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Models\User;
 use App\Support\Actor;
 use App\Support\PasswordRules;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -45,6 +49,17 @@ final class SetPassword
             // the event names why in `meta.reason`, also when an account acts
             $actor = $actor === null ? Actor::system($user, $reason) : $actor->withReason($reason);
             EventRecorder::record(EventType::UserPasswordChanged, $actor, $user, null);
+            // whoever sets a new password (through the mailed link: the mailbox is proven) is no longer held by the cap
+            // per account of the sign-in nor by the day of codes of the second factor (A434, A435); the new password
+            // revokes every known device, the own browser of a change in the session stays one; after the commit
+            DB::afterCommit(function () use ($user, $keepSession): void {
+                app(AccountLoginRateLimiter::class)->clearAccount((string) $user->email);
+                RateLimiter::clear(TwoFactorDay::cacheKey((string) $user->id));
+
+                if ($keepSession) {
+                    KnownDevice::renew($user);
+                }
+            });
         });
     }
 }

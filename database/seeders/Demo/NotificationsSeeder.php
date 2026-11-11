@@ -12,6 +12,7 @@ use App\Models\Webhook;
 use App\Models\WorkflowState;
 use App\Models\WorkItem;
 use App\Support\StateSnapshot;
+use Database\Seeders\Demo\Texts\DemoTexts;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -22,8 +23,10 @@ use RuntimeException;
  * file and compares row by row), 3 of them unread. Each row keeps the `data` its kind stores in the app (table
  * "Benachrichtigungsarten" of the phase plan 8): a comment `[key, n]` is the n-th comment of the item by time, as the
  * CommentsSeeder writes them, a state change the snapshot of the two states of the item's workflow (StateSnapshot, like
- * `meta.states`); `template_run_failed` names its template (the TemplatesSeeder runs before). `webhook_disabled` names the webhook
- * "Altes CRM" (the WebhooksSeeder runs before). Written directly, without events and without mail
+ * `meta.states`); `template_run_failed` names its template „Zertifikate prüfen“ and the error of its run
+ * (TemplatesSeeder::failure(); the TemplatesSeeder runs before). `webhook_disabled` names the webhook "Altes CRM" (the
+ * WebhooksSeeder runs before). Template and webhook are keys of their texts in DemoTexts, so the names follow the
+ * language of the demo. Written directly, without events and without mail
  * collections (A86); no row points to an event (`event_id` null), the demo history has no IDs of the clickdummy.
  *
  * Safe to run again (like K13): it creates the rows whose `dedupe_key` (`seed:<n_id>`) Mara lacks and never changes
@@ -37,9 +40,9 @@ class NotificationsSeeder extends Seeder
     /**
      * id, kind, item key (or `project` => identifier|null without an item), actor handle, `data`, created and read
      * (`MM-DD HH:mm`, Berlin time; read null = unread). `comment` names the comment, `states` the moved states (keys of
-     * ItemsSeeder::STATES).
+     * ItemsSeeder::state()), `template` and `webhook` the key of its texts, `missing` the required property the run lacked.
      *
-     * @var list<array{id: string, kind: NotificationKind, item?: string, project?: string|null, template?: string, webhook?: string, actor?: string, data?: array<string, mixed>, comment?: array{0: string, 1: int}, states?: array{0: string, 1: string}, created: string, read?: string, seconds?: int}>
+     * @var list<array{id: string, kind: NotificationKind, item?: string, project?: string|null, template?: string, missing?: string, webhook?: string, actor?: string, data?: array<string, mixed>, comment?: array{0: string, 1: int}, states?: array{0: string, 1: string}, created: string, read?: string, seconds?: int}>
      */
     private const ROWS = [
         // unread
@@ -55,12 +58,12 @@ class NotificationsSeeder extends Seeder
         ['id' => 'n_09', 'kind' => NotificationKind::Mentioned, 'item' => 'OPS-3', 'actor' => 'jonas', 'data' => ['source' => 'comment'], 'comment' => ['OPS-3', 1], 'created' => '10-26 17:00', 'read' => '10-27 08:30'],
         ['id' => 'n_11', 'kind' => NotificationKind::StateChanged, 'item' => 'WEB-40', 'actor' => 'lene', 'states' => ['todo', 'done'], 'created' => '10-23 14:10', 'read' => '10-23 16:00'],
         // the webhook "Altes CRM" (phase 11): an organization notification without a project (K5)
-        ['id' => 'n_10', 'kind' => NotificationKind::WebhookDisabled, 'project' => null, 'webhook' => 'Altes CRM', 'created' => '10-22 10:00', 'read' => '10-23 09:00'],
+        ['id' => 'n_10', 'kind' => NotificationKind::WebhookDisabled, 'project' => null, 'webhook' => 'crm', 'created' => '10-22 10:00', 'read' => '10-23 09:00'],
         ['id' => 'n_12', 'kind' => NotificationKind::Assigned, 'item' => 'APP-18', 'actor' => 'theo', 'created' => '10-21 11:00', 'read' => '10-21 13:00'],
         // the mention in the description of WEB-47
         ['id' => 'n_13', 'kind' => NotificationKind::Mentioned, 'item' => 'WEB-47', 'actor' => 'ida', 'data' => ['source' => 'description'], 'created' => '10-20 11:30', 'read' => '10-20 15:00'],
         // the template "Zertifikate prüfen"
-        ['id' => 'n_14', 'kind' => NotificationKind::TemplateRunFailed, 'project' => 'OPS', 'template' => 'Zertifikate prüfen', 'data' => ['error' => 'Pflicht-Property Umgebung fehlt'], 'created' => '10-01 07:00', 'read' => '10-02 09:00', 'seconds' => 5],
+        ['id' => 'n_14', 'kind' => NotificationKind::TemplateRunFailed, 'project' => 'OPS', 'template' => 'ops_certs', 'missing' => 'environment', 'created' => '10-01 07:00', 'read' => '10-02 09:00', 'seconds' => 5],
     ];
 
     public function run(): void
@@ -79,7 +82,7 @@ class NotificationsSeeder extends Seeder
     }
 
     /**
-     * @param  array{id: string, kind: NotificationKind, item?: string, project?: string|null, template?: string, webhook?: string, actor?: string, data?: array<string, mixed>, comment?: array{0: string, 1: int}, states?: array{0: string, 1: string}, created: string, read?: string, seconds?: int}  $row
+     * @param  array{id: string, kind: NotificationKind, item?: string, project?: string|null, template?: string, missing?: string, webhook?: string, actor?: string, data?: array<string, mixed>, comment?: array{0: string, 1: int}, states?: array{0: string, 1: string}, created: string, read?: string, seconds?: int}  $row
      * @param  array<string, string>  $people  IDs by handle
      */
     private function write(User $mara, array $row, array $people): void
@@ -92,15 +95,20 @@ class NotificationsSeeder extends Seeder
         $data = $row['data'] ?? [];
         if (isset($row['template'])) {
             // as the app stores it: the template first (its ID, or null when it is gone), then the error
-            $data = ['template_id' => Template::query()->where('project_id', $this->project($row['project'] ?? null))->where('name', $row['template'])->value('id'), ...$data];
+            $name = DemoTexts::get("template.{$row['template']}.name");
+            $data = [
+                'template_id' => Template::query()->where('project_id', $this->project($row['project'] ?? null))->where('name', $name)->value('id'),
+                'error' => TemplatesSeeder::failure($row['missing'] ?? throw new RuntimeException('A failed run names the property it lacked.')),
+            ];
         }
         if (isset($row['webhook'])) {
             // as the app stores it (NotificationFacts): the webhook and its name at the time; one that is gone stays out
-            $id = Webhook::query()->where('name', $row['webhook'])->value('id');
+            $name = DemoTexts::get("webhook.{$row['webhook']}.name");
+            $id = Webhook::query()->where('name', $name)->value('id');
             if ($id === null) {
                 return;
             }
-            $data = ['webhook_id' => $id, 'name' => $row['webhook']];
+            $data = ['webhook_id' => $id, 'name' => $name];
         }
         if (isset($row['comment'])) {
             $data['comment_id'] = $this->comment(...$row['comment']);
@@ -145,12 +153,12 @@ class NotificationsSeeder extends Seeder
         return is_string($id) ? $id : null;
     }
 
-    /** The state of that name (a key of ItemsSeeder::STATES) in the workflow the item's project has now, if it has one. */
+    /** The state of that name (a key of ItemsSeeder::state()) in the workflow the item's project has now, if it has one. */
     private function state(WorkItem $item, string $key): ?WorkflowState
     {
         $workflow = Project::query()->whereKey($item->project_id)->value('workflow_id');
 
-        return WorkflowState::query()->where('workflow_id', $workflow)->where('name', ItemsSeeder::STATES[$key])->first();
+        return WorkflowState::query()->where('workflow_id', $workflow)->where('name', ItemsSeeder::state($key))->first();
     }
 
     private function project(?string $identifier): ?string

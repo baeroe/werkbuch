@@ -4,7 +4,10 @@ use App\Models\Event;
 use App\Models\Page;
 use App\Models\PageVersion;
 use App\Models\User;
+use App\Models\WorkItem;
+use App\RichText\Document;
 use Carbon\CarbonInterface;
+use Database\Seeders\Demo\ItemsSeeder;
 use Database\Seeders\Demo\PagesSeeder;
 use Database\Seeders\DemoSeeder;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +47,8 @@ $clickdummy = function (): array {
             'updated' => $field('updated') ?? $field('created'),
             'updatedBy' => $field('updatedBy') ?? $field('by'),
             'version' => $version[1] ?? '1',
+            // the keys the text names, in order (`WEB-47`)
+            'keys' => preg_match_all('/\\b[A-Z][A-Z0-9]{1,9}-\\d+\\b/', (string) strstr($chunk, 'content:'), $keys) ? implode(' ', $keys[0]) : '',
         ];
     }
 
@@ -53,9 +58,24 @@ $clickdummy = function (): array {
     return ['rows' => $rows, 'versions' => array_map(fn (array $match) => [$match[1], (int) $match[2]], $kept)];
 };
 
+/**
+ * The text of a stored page as the clickdummy writes it: a line a block, a reference as the key of its item (the key the
+ * stored node names, so a wrong node shows), like CommentsSeederTest reads a comment.
+ */
+$asWritten = function (array $content) use (&$asWritten): string {
+    $inline = fn (array $node): string => match ($node['type']) {
+        'text' => $node['text'],
+        'reference' => WorkItem::query()->with('project')->findOrFail($node['attrs']['id'])->key,
+        default => $asWritten($node),
+    };
+
+    return implode(isset($content['content'][0]['text']) || ($content['content'][0]['type'] ?? '') === 'reference' ? '' : "\n", array_map($inline, $content['content'] ?? []));
+};
+
 /** Everything a rerun must leave as it is. */
 $snapshot = fn (): array => [
     Event::count(),
+    DB::table('page_item_references')->orderBy('id')->get()->map(fn (object $row) => (array) $row)->all(),
     DB::table('pages')->orderBy('id')->get()->map(fn (object $row) => (array) $row)->all(),
     DB::table('page_versions')->orderBy('id')->get()->map(fn (object $row) => (array) $row)->all(),
 ];
@@ -111,20 +131,62 @@ it('seeds every page of the clickdummy with its parent, rank, emoji, creator, ti
         ->and(collect($versions)->pluck(1)->sort()->values()->all())->toBe([1, 2, 3]);
 });
 
-it('writes the text as stored rich text with its plain text, references as text, and no event', function () {
+it('writes the text as stored rich text with its plain text and no event', function () {
     $this->seed(DemoSeeder::class);
     $form = Page::query()->where('title', 'Kontaktformular – Technik')->sole();
     $api = Page::query()->where('title', 'API-Schnittstelle')->sole();
 
     expect(array_column($form->content['content'], 'type'))->toBe(['paragraph', 'heading', 'orderedList', 'heading', 'paragraph'])
         ->and($form->content['content'][2]['attrs'])->toBe(['start' => 1, 'type' => null])
-        // `WEB-47` stays text, as in the seed
-        ->and($form->content_text)->toContain('siehe WEB-47.')
-        ->and(json_encode($form->content))->not->toContain('"reference"')
+        // a reference has no plain text (Document::toText), the sentence around it stays
+        ->and($form->content_text)->toContain('siehe . Bis zur Lösung')
         ->and(array_column($api->content['content'], 'type'))->toBe(['paragraph', 'codeBlock', 'paragraph'])
         ->and($api->content['content'][1]['content'][0]['text'])->toBe('GET /v2/orders?status=open')
         ->and(Event::query()->where('type', 'like', 'page.%')->count())->toBe(0)
         ->and(Page::query()->whereNull('content')->orWhereNull('content_text')->count())->toBe(0);
+});
+
+it('references the items the demo pages name', function () use ($clickdummy, $asWritten) {
+    $this->seed(DemoSeeder::class);
+    ['rows' => $rows] = $clickdummy();
+    $keys = fn (array $content): array => array_map(
+        fn (string $id) => WorkItem::query()->with('project')->findOrFail($id)->key,
+        Document::fromJson($content)->itemRefs(),
+    );
+    $named = 0;
+
+    foreach ($rows as $row) {
+        $page = Page::query()->where('title', $row['title'])->sole();
+        $expected = $row['keys'] === '' ? [] : explode(' ', $row['keys']);
+        $named += count($expected);
+
+        // every key of the seed is a reference to its item, recorded in the table as CreatePage records it
+        expect($keys($page->content))->toBe($expected, $row['title'])
+            ->and(DB::table('page_item_references')->where('page_id', $page->id)->pluck('work_item_id')->sort()->values()->all())
+            ->toBe(collect($expected)->map(fn (string $key) => ItemsSeeder::find($key)?->id)->sort()->values()->all(), $row['title']);
+    }
+
+    $form = Page::query()->where('title', 'Kontaktformular – Technik')->sole();
+    $release = Page::query()->where('title', 'Release-Checkliste')->sole();
+    $structure = Page::query()->where('title', 'Seitenstruktur')->sole();
+    expect($named)->toBe(8)
+        ->and($asWritten($form->content))->toContain('Unter Safari kann der Absende-Button doppelt auslösen, siehe WEB-47. Bis zur Lösung')
+        ->and($asWritten($release->content))->toContain('Release-Notes geschrieben (APP-16)')
+        // the kept version numbered like the page names the same item
+        ->and($keys((array) $structure->versions()->where('version', $structure->version)->sole()->content))->toBe(['WEB-48']);
+});
+
+it('keeps a key without an item as text', function () {
+    $this->seed(DemoSeeder::class);
+    Page::query()->where('title', 'Performance-Budget')->delete();
+    ItemsSeeder::find('WEB-56')?->delete();
+
+    (new PagesSeeder)->run();
+    $page = Page::query()->where('title', 'Performance-Budget')->sole();
+
+    expect($page->content_text)->toContain('Die Prüfung in der CI folgt mit WEB-56.')
+        ->and(Document::fromJson($page->content)->itemRefs())->toBe([])
+        ->and(DB::table('page_item_references')->where('page_id', $page->id)->count())->toBe(0);
 });
 
 it('changes nothing on a second run, keeps what somebody changed and brings back a page that is gone', function () use ($snapshot) {

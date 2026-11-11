@@ -13,7 +13,8 @@ use App\Models\ProjectMember;
 use App\Models\User;
 use App\Support\Actor;
 use App\Support\Ids;
-use App\Support\MemberInput;
+use App\Support\ProjectLock;
+use App\Support\ProjectMembership;
 use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -50,13 +51,13 @@ final class AddMember
         }
 
         $member = DB::transaction(function () use ($actor, $project, $input): ProjectMember {
-            $project = MemberInput::lock($project);
+            $project = ProjectLock::lock($project);
 
             $valid = Validator::make($input, [
                 'user_id' => [
                     'bail', 'required', 'string', 'ulid', Rule::exists('users', 'id')->whereNull('disabled_at'),
                     function (string $attribute, string $value, Closure $fail) use ($project): void {
-                        if (MemberInput::isMember($project, $value)) {
+                        if (ProjectMembership::isMember($project, $value)) {
                             $fail(__('field.user.already_member'));
                         }
                     },
@@ -80,7 +81,7 @@ final class AddMember
                 'member' => ['old' => null, 'new' => ['user_id' => $user->id, 'role' => $role->value]],
             ]);
 
-            return MemberInput::membership($project, $user);
+            return ProjectMembership::membership($project, $user);
         });
 
         // the new membership counts from the next check of this request on (P33)

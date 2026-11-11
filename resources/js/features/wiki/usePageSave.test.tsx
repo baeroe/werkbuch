@@ -5,10 +5,10 @@
  * on an older base (K17).
  */
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { notifyManager, QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { UploadCounter } from '@/editor/UploadContext';
 import { drafts, pageDraft } from '@/lib/drafts';
@@ -66,14 +66,39 @@ function holdSaves() {
   };
 }
 
-function renderSave(options: { canEdit?: boolean; uploads?: UploadCounter; page?: WikiPage } = {}) {
+function renderSave(options: { canEdit?: boolean; uploads?: UploadCounter; page?: WikiPage; onTitleRequired?: () => void } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  const view = renderHook(({ shown }: { shown: WikiPage }) => usePageSave(shown, { canEdit: options.canEdit ?? true, uploads: options.uploads }), {
-    wrapper,
-    initialProps: { shown: options.page ?? page },
-  });
+  const view = renderHook(
+    ({ shown, canEdit }: { shown: WikiPage; canEdit?: boolean }) =>
+      usePageSave(shown, { canEdit: canEdit ?? options.canEdit ?? true, uploads: options.uploads, onTitleRequired: options.onTitleRequired }),
+    { wrapper, initialProps: { shown: options.page ?? page } as { shown: WikiPage; canEdit?: boolean } },
+  );
   return { ...view, client };
+}
+
+/**
+ * The autosave with the rights as the wiki reads them: from the projects (one query a screen shows); `role` answers
+ * each fetch of them, a viewer may not edit.
+ */
+function renderWithRights(role: () => 'member' | 'viewer') {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  let fetches = 0;
+  const view = renderHook(
+    () => {
+      const rights = useQuery({
+        queryKey: qk.projects.list({ include_archived: true }),
+        queryFn: () => {
+          fetches += 1;
+          return Promise.resolve(role());
+        },
+      });
+      return { canEdit: rights.data !== 'viewer', save: usePageSave(page, { canEdit: rights.data !== 'viewer' }) };
+    },
+    { wrapper },
+  );
+  return { ...view, fetches: () => fetches };
 }
 
 describe('usePageSave', () => {
@@ -243,6 +268,129 @@ describe('usePageSave', () => {
     expect(result.current.draft.content).toEqual(doc('Meins'));
   });
 
+  it('says why undo after reload could not run with an empty title', async () => {
+    const current = makePage({ ...page, title: 'Domain-Umzug (Ida)', content_json: doc('Idas'), version: 5 });
+    patch = () => problem(409, 'page_conflict', { detail: 'Ida Brenner hat die Seite inzwischen geändert.', current });
+    const onTitleRequired = vi.fn();
+    const { result } = renderSave({ onTitleRequired });
+    await act(async () => result.current.change({ content: doc('Meins') }, { now: true }));
+    await waitFor(() => expect(result.current.conflict).not.toBeNull());
+    act(() => result.current.reload());
+    // the title emptied after "Neu laden": the text typed since cannot save first
+    act(() => result.current.change({ title: '' }));
+    const dropped = currentToasts().find((toast) => toast.title === 'Deine Fassung verworfen')!;
+
+    await act(async () => runToastAction(dropped.id));
+
+    expect(currentToasts().at(-1)).toMatchObject({ title: 'Deine Fassung nicht zurückgeholt: Gib der Seite erst einen Titel.', tone: 'error' });
+    expect(onTitleRequired).toHaveBeenCalledTimes(1);
+    expect(result.current.titleError).toBe('Gib der Seite einen Titel. Ohne Titel wird nichts gespeichert.');
+    expect(result.current.conflict).toBeNull();
+    expect(result.current.draft.content).toEqual(doc('Idas'));
+    expect(saves()).toHaveLength(1);
+  });
+
+  it('undoes after reload once the upload finished', async () => {
+    const uploads = new UploadCounter();
+    const current = makePage({ ...page, title: 'Domain-Umzug (Ida)', content_json: doc('Idas'), version: 5 });
+    patch = () => problem(409, 'page_conflict', { detail: 'Ida Brenner hat die Seite inzwischen geändert.', current });
+    const { result } = renderSave({ uploads });
+    await act(async () => result.current.change({ content: doc('Meins') }, { now: true }));
+    await waitFor(() => expect(result.current.conflict).not.toBeNull());
+    act(() => result.current.reload());
+    patch = (body) => stored(body);
+    // a picture uploads into the text typed after "Neu laden"
+    act(() => uploads.add(1));
+    act(() => result.current.change({ content: doc('Idas mit Bild') }));
+    const dropped = currentToasts().find((toast) => toast.title === 'Deine Fassung verworfen')!;
+
+    await act(async () => runToastAction(dropped.id));
+    // the toast says it waits, nothing is sent or brought back yet
+    expect(currentToasts().at(-1)).toMatchObject({ title: 'Deine Fassung kommt zurück, sobald der Upload fertig ist.', tone: 'neutral' });
+    expect(saves()).toHaveLength(1);
+    expect(result.current.conflict).toBeNull();
+    act(() => uploads.add(-1));
+    // the text typed since is saved first, then the own text comes back with the conflict, once
+    await waitFor(() => expect(result.current.conflict?.current.version).toBe(6));
+    expect(saves()).toHaveLength(2);
+    expect(saves()[1]).toEqual({ title: 'Domain-Umzug (Ida)', emoji: null, content_json: doc('Idas mit Bild'), base_version: 5 });
+    expect(result.current.draft.content).toEqual(doc('Meins'));
+    // at most once: a save that waits for the next upload is only that save, the own text does not come back again
+    act(() => result.current.reload());
+    act(() => uploads.add(1));
+    await act(async () => result.current.change({ content: doc('Idas mit zweitem Bild') }, { now: true }));
+    expect(result.current.state).toBe('saving');
+    act(() => uploads.add(-1));
+    await waitFor(() => expect(saves()).toHaveLength(3));
+    await waitFor(() => expect(result.current.state).toBe('saved'));
+    await act(async () => {});
+    expect(saves()).toHaveLength(3);
+    expect(result.current.conflict).toBeNull();
+    expect(result.current.draft.content).toEqual(doc('Idas mit zweitem Bild'));
+  });
+
+  it('keeps the own version when the view goes while the undo waits for an upload', async () => {
+    const uploads = new UploadCounter();
+    const current = makePage({ ...page, title: 'Domain-Umzug (Ida)', content_json: doc('Idas'), version: 5 });
+    patch = () => problem(409, 'page_conflict', { detail: 'Ida Brenner hat die Seite inzwischen geändert.', current });
+    const { result, unmount } = renderSave({ uploads });
+    await act(async () => result.current.change({ content: doc('Meins') }, { now: true }));
+    await waitFor(() => expect(result.current.conflict).not.toBeNull());
+    act(() => result.current.reload());
+    patch = (body) => stored(body);
+    act(() => uploads.add(1));
+    act(() => result.current.change({ content: doc('Idas mit Bild') }));
+    await act(async () => runToastAction(currentToasts().find((toast) => toast.title === 'Deine Fassung verworfen')!.id));
+    expect(currentToasts().at(-1)?.title).toBe('Deine Fassung kommt zurück, sobald der Upload fertig ist.');
+
+    // left before the upload ends: the save on leaving goes, then the own version waits on the page with the conflict
+    unmount();
+    await waitFor(() => expect(saves()).toHaveLength(2));
+    expect(saves()[1]).toMatchObject({ content_json: doc('Idas mit Bild'), base_version: 5 });
+    await waitFor(() => expect(drafts.page(key)?.content).toEqual(doc('Meins')));
+    expect(drafts.page(key)?.conflict).toMatchObject({ message: 'Ida Brenner hat die Seite inzwischen geändert.', current: { version: 6 } });
+    expect(drafts.page(key)?.base_version).toBe(6);
+  });
+
+  it('parks the own version when undo after reload finds the right gone', async () => {
+    const current = makePage({ ...page, title: 'Domain-Umzug (Ida)', content_json: doc('Idas'), version: 5 });
+    patch = () => problem(409, 'page_conflict', { detail: 'Ida Brenner hat die Seite inzwischen geändert.', current });
+    const { result, rerender } = renderSave();
+    await act(async () => result.current.change({ content: doc('Meins') }, { now: true }));
+    await waitFor(() => expect(result.current.conflict).not.toBeNull());
+    act(() => result.current.reload());
+    // made a viewer meanwhile
+    rerender({ shown: page, canEdit: false });
+
+    await act(async () => runToastAction(currentToasts().find((toast) => toast.title === 'Deine Fassung verworfen')!.id));
+
+    // the own version stands parked to copy (the sheet shows the draft as ParkedDraft), and a toast says why
+    expect(drafts.page(key)?.content).toEqual(doc('Meins'));
+    expect(currentToasts().at(-1)).toMatchObject({ title: 'Deine Fassung steht zum Kopieren über der Seite: Du darfst sie nicht mehr bearbeiten.', tone: 'error' });
+    expect(saves()).toHaveLength(1);
+  });
+
+  it('keeps newer typed text parked when undo after reload finds the right gone', async () => {
+    const current = makePage({ ...page, title: 'Domain-Umzug (Ida)', content_json: doc('Idas'), version: 5 });
+    patch = () => problem(409, 'page_conflict', { detail: 'Ida Brenner hat die Seite inzwischen geändert.', current });
+    const { result, rerender } = renderSave();
+    await act(async () => result.current.change({ content: doc('Meins') }, { now: true }));
+    await waitFor(() => expect(result.current.conflict).not.toBeNull());
+    act(() => result.current.reload());
+    // typed on the other version, then made a viewer before it saved
+    rerender({ shown: page, canEdit: false });
+    act(() => result.current.change({ content: doc('Idas und neu') }));
+
+    await act(async () => runToastAction(currentToasts().find((toast) => toast.title === 'Deine Fassung verworfen')!.id));
+
+    expect(drafts.page(key)?.content).toEqual(doc('Idas und neu'));
+    expect(currentToasts().at(-1)).toMatchObject({
+      title: 'Deine Fassung nicht zurückgeholt: Du darfst die Seite nicht mehr bearbeiten, dein neuerer Text steht zum Kopieren darüber.',
+      tone: 'error',
+    });
+    expect(saves()).toHaveLength(1);
+  });
+
   it('takes a newer page from outside only while nothing is typed', async () => {
     const { result, rerender } = renderSave();
     rerender({ shown: makePage({ ...page, title: 'Domain-Umzug (neu)', version: 4 }) });
@@ -345,16 +493,93 @@ describe('usePageSave', () => {
 
   it('a save refused with 403 keeps the page, reloads the rights and keeps the text (T14-M5)', async () => {
     patch = () => problem(403, 'wiki_members_only', { detail: 'Nur Mitglieder bearbeiten das Wiki.' });
-    const { result, client } = renderSave();
-    client.setQueryData(qk.projects.list({ include_archived: true }), { items: [], next_cursor: null, total: 0 });
-    await act(async () => result.current.change({ content: doc('Rette mich') }, { now: true }));
-    await waitFor(() => expect(result.current.state).toBe('failed'));
+    let role: 'member' | 'viewer' = 'member';
+    const { result, fetches } = renderWithRights(() => role);
+    await waitFor(() => expect(fetches()).toBe(1));
+    // a member made a viewer meanwhile
+    role = 'viewer';
+    await act(async () => result.current.save.change({ content: doc('Rette mich') }, { now: true }));
+    await waitFor(() => expect(result.current.save.state).toBe('failed'));
 
-    // a member made a viewer meanwhile: the page is still there to read, the rights load again and park the text
+    // the page is still there to read, the rights load again and park the text (the sheet shows it, no toast)
+    await waitFor(() => expect(result.current.canEdit).toBe(false));
+    expect(fetches()).toBe(2);
     expect(isPageGone('pg_web_domain')).toBe(false);
-    expect(client.getQueryState(qk.projects.list({ include_archived: true }))?.isInvalidated).toBe(true);
+    // the decision waits for the screens to show the rights loaded again: one round of the query's notifications
+    await act(() => new Promise<void>((resolve) => notifyManager.schedule(resolve)));
     expect(currentToasts()).toHaveLength(0);
     expect(drafts.page(key)?.content).toEqual(doc('Rette mich'));
+  });
+
+  it('says a lasting refusal in one toast, whatever title is typed', async () => {
+    patch = () => problem(403, 'wiki_members_only', { detail: 'Nur Mitglieder bearbeiten das Wiki.' });
+    const { result, fetches, unmount } = renderWithRights(() => 'member');
+    await waitFor(() => expect(fetches()).toBe(1));
+    await act(async () => result.current.save.change({ title: 'Domain' }, { now: true }));
+    await waitFor(() => expect(currentToasts()).toHaveLength(1));
+    await act(async () => result.current.save.change({ title: 'Domain neu' }, { now: true }));
+    await waitFor(() => expect(saves()).toHaveLength(2));
+    // the second refusal is handled, then its decision waits one round
+    await waitFor(() => expect(result.current.save.state).toBe('failed'));
+    await act(() => new Promise<void>((resolve) => notifyManager.schedule(resolve)));
+    // the rights loaded once for this series of refusals (21i-M3b)
+    expect(fetches()).toBe(2);
+
+    // named after the stored title, one toast for the page
+    expect(currentToasts().map((toast) => toast.title)).toEqual(['„Domain-Umzug“ nicht gespeichert']);
+    // the view goes here: its save on leaving is refused too, before the next test
+    unmount();
+    await waitFor(() => expect(saves()).toHaveLength(3));
+  });
+
+  it('says why a refused save failed while the rights still allow it', async () => {
+    patch = () => problem(403, 'wiki_members_only', { detail: 'Nur Mitglieder bearbeiten das Wiki.' });
+    const { result, fetches } = renderWithRights(() => 'member');
+    await waitFor(() => expect(fetches()).toBe(1));
+    await act(async () => result.current.save.change({ content: doc('Rette mich') }, { now: true }));
+
+    // the rights loaded again still say "may" (a rule of the server the browser does not know): the toast says why
+    await waitFor(() => expect(currentToasts()).toHaveLength(1));
+    expect(fetches()).toBe(2);
+    expect(currentToasts()[0]).toMatchObject({
+      title: '„Domain-Umzug“ nicht gespeichert',
+      description: 'Nur Mitglieder bearbeiten das Wiki. Dein Text bleibt auf der Seite, die nächste Änderung versucht es erneut.',
+      tone: 'error',
+    });
+    expect(result.current.save.state).toBe('failed');
+    expect(drafts.page(key)?.content).toEqual(doc('Rette mich'));
+
+    // the next change sends it again
+    patch = (body) => stored(body);
+    await act(async () => result.current.save.change({ content: doc('Rette mich jetzt') }, { now: true }));
+    await waitFor(() => expect(result.current.save.state).toBe('saved'));
+    expect(saves().at(-1)).toMatchObject({ content_json: doc('Rette mich jetzt'), base_version: 3 });
+  });
+
+  it('loads the rights again once per series of refused saves, not for each (21i-M3b)', async () => {
+    patch = () => problem(403, 'wiki_members_only', { detail: 'Nur Mitglieder bearbeiten das Wiki.' });
+    const { result, fetches } = renderWithRights(() => 'member');
+    await waitFor(() => expect(fetches()).toBe(1));
+    await act(async () => result.current.save.change({ content: doc('Eins') }, { now: true }));
+    await waitFor(() => expect(currentToasts()).toHaveLength(1));
+    expect(fetches()).toBe(2);
+
+    // refused again: the rights just loaded say "may" still; the toast says it again, the rights stay as they are
+    const before = saves().length;
+    await act(async () => result.current.save.change({ content: doc('Zwei') }, { now: true }));
+    await waitFor(() => expect(saves()).toHaveLength(before + 1));
+    await waitFor(() => expect(result.current.save.state).toBe('failed'));
+    await waitFor(() => expect(currentToasts()[0]?.description).toContain('Nur Mitglieder bearbeiten das Wiki.'));
+    expect(currentToasts()).toHaveLength(1);
+    expect(fetches()).toBe(2);
+
+    // a save that goes through ends the series: the next refusal loads them again
+    patch = (body) => stored(body);
+    await act(async () => result.current.save.change({ content: doc('Drei') }, { now: true }));
+    await waitFor(() => expect(result.current.save.state).toBe('saved'));
+    patch = () => problem(403, 'wiki_members_only', { detail: 'Nur Mitglieder bearbeiten das Wiki.' });
+    await act(async () => result.current.save.change({ content: doc('Vier') }, { now: true }));
+    await waitFor(() => expect(fetches()).toBe(3));
   });
 
   it('saves nothing for a reader, and nothing unchanged', async () => {

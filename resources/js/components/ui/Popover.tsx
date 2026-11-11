@@ -1,6 +1,7 @@
 import { Popover as BasePopover } from '@base-ui/react/popover';
 import type { ComponentProps, ReactNode } from 'react';
 import { cx } from './cx';
+import { pauseWhileOpen } from './pauseWhileOpen';
 import { keptSide, popupFocus, popupSurface } from './styles';
 
 /*
@@ -24,13 +25,18 @@ type PopoverContentProps = {
   initialFocus?: ComponentProps<typeof BasePopover.Popup>['initialFocus'];
   /** Width and padding; default 18 rem with 12 px padding. */
   className?: string;
+  /** The focus enters or leaves the popover (React's focus events, also from its content). */
+  onFocus?: () => void;
+  onBlur?: () => void;
+  /** It holds the focus like a dialog (a calendar, an editor): the page's shortcuts pause while it is open. */
+  pauseShortcuts?: boolean;
 };
 
-export function PopoverContent({ title, description, children, side = 'bottom', align = 'start', sideOffset = 6, keepSide, initialFocus, className }: PopoverContentProps) {
+export function PopoverContent({ title, description, children, side = 'bottom', align = 'start', sideOffset = 6, keepSide, initialFocus, className, onFocus, onBlur, pauseShortcuts = false }: PopoverContentProps) {
   return (
     <BasePopover.Portal>
       <BasePopover.Positioner side={side} align={align} sideOffset={sideOffset} collisionAvoidance={keepSide ? keptSide : undefined} className="z-50 outline-none">
-        <BasePopover.Popup {...popupFocus} initialFocus={initialFocus} className={cx(popupSurface, 'max-w-[var(--available-width)]', className ?? 'w-72 p-3')}>
+        <BasePopover.Popup {...popupFocus} render={pauseShortcuts ? pauseWhileOpen : undefined} initialFocus={initialFocus} onFocus={onFocus} onBlur={onBlur} className={cx(popupSurface, 'max-w-[var(--available-width)]', className ?? 'w-72 p-3')}>
           {title && <BasePopover.Title className="font-display text-md font-bold tracking-title text-ink">{title}</BasePopover.Title>}
           {description && <BasePopover.Description className="mt-0.5 text-sm text-pretty text-muted">{description}</BasePopover.Description>}
           {children}

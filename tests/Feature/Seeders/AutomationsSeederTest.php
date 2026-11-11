@@ -49,7 +49,7 @@ it('seeds the automations of the three projects like the clickdummy', function (
 
     expect($projects)->toHaveCount(3)
         ->and($days)->toBe(['auto_archive' => 30, 'auto_close' => 90])
-        ->and(Automation::query()->count())->toBe(12)
+        ->and(Automation::query()->count())->toBe(15)
         ->and(Event::query()->where('type', 'like', 'automation.%')->count())->toBe(0);
 
     foreach ($projects as $identifier => $row) {
@@ -61,12 +61,14 @@ it('seeds the automations of the three projects like the clickdummy', function (
             'auto_close' => [in_array('auto_close', $row['on'], true), ['days' => $days['auto_close'], 'state_id' => $states[$row['cancelled']]]],
             'close_parent' => [in_array('close_parent', $row['on'], true), []],
             'assign_on_start' => [in_array('assign_on_start', $row['on'], true), []],
+            // not in the frozen clickdummy (A446): on in every project
+            'link_references' => [true, []],
         ], $identifier);
     }
 
     // WEB: Auto-Archive and assignee on start; APP: Auto-Close into its Cancelled and close the parent; OPS: all off
     expect(Automation::query()->where('enabled', true)->with('project')->get()->map(fn (Automation $a) => $a->project->identifier.' '.$a->key->value)->sort()->values()->all())
-        ->toBe(['APP auto_close', 'APP close_parent', 'WEB assign_on_start', 'WEB auto_archive']);
+        ->toBe(['APP auto_close', 'APP close_parent', 'APP link_references', 'OPS link_references', 'WEB assign_on_start', 'WEB auto_archive', 'WEB link_references']);
 });
 
 it('changes nothing on a second run and keeps what an admin switched', function () use ($snapshot) {
@@ -98,4 +100,12 @@ it('leaves Auto-Close off without a Canceled state in the workflow of the projec
 
     $close = Automation::query()->where('project_id', $app->id)->where('key', AutomationKey::AutoClose)->sole();
     expect([$close->enabled, $close->settings])->toBe([false, ['days' => 90, 'state_id' => null]]);
+});
+
+it('switches link_references on in the demo projects', function () {
+    $this->seed(DemoSeeder::class);
+
+    expect(Automation::query()->where('key', AutomationKey::LinkReferences)->with('project')->get()
+        ->map(fn (Automation $a) => $a->project->identifier.' '.var_export($a->enabled, true))->sort()->values()->all())
+        ->toBe(['APP true', 'OPS true', 'WEB true']);
 });

@@ -56,7 +56,7 @@ function ListSkeleton() {
 
 /** The text of the chosen version, read on its own. */
 function VersionText({ page, version }: { page: WikiPage; version: PageVersion }) {
-  const text = usePageVersion(page.id, version.id);
+  const text = usePageVersion(page.id, version.id, page.project_id);
   if (text.isError && !text.data) {
     return (
       <ErrorState
@@ -84,7 +84,7 @@ function VersionText({ page, version }: { page: WikiPage; version: PageVersion }
 }
 
 export function VersionsDialog({ page, open, onOpenChange, restoreReason, beforeRestore }: VersionsDialogProps) {
-  const versions = usePageVersions(open ? page.id : null);
+  const versions = usePageVersions(open ? page.id : null, page.project_id);
   const restore = useRestorePageVersion();
   const users = useUserMap();
   const timeZone = useSharedProps().organization.timezone;

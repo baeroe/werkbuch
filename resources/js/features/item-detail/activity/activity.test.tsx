@@ -345,6 +345,21 @@ describe('phrases', () => {
     ]);
   });
 
+  it('names the reason under a relation the automation made', async () => {
+    const bot = { actor_id: 'u_automation', via: 'automation', reason: 'link_references' };
+    renderActivity(() =>
+      historyPage([
+        event('ev_1', 0, { ...bot, type: 'work_item.relation_added', changes: { relation: { old: null, new: { label: 'relates to', item_id: 'wi_web_12', key: 'WEB-12' } } } }),
+        event('ev_2', 10, { type: 'work_item.relation_added', changes: { relation: { old: null, new: { label: 'relates to', item_id: 'wi_web_13', key: 'WEB-13' } } } }),
+      ]),
+    );
+
+    expect(await linesOf()).toEqual([
+      'Automation Bot hat die Relation „relates to“ zu WEB-12 hinzugefügt. heute 01:00 | Automatisierung: Erwähnte Items verknüpfen',
+      'Mara Lindqvist hat die Relation „relates to“ zu WEB-13 hinzugefügt. heute 01:10',
+    ]);
+  });
+
   it('says which automation acted, and the template an item was made from', async () => {
     const bot = { actor_id: 'u_automation', via: 'automation' };
     const template = { id: 'tpl_web_report', name: 'Monatsbericht' };
@@ -576,8 +591,8 @@ describe('Activity', () => {
   it('shows a skeleton while loading and says when there is nothing yet', async () => {
     renderActivity(() => historyPage([]));
 
-    // the first render waits for the answer
-    expect(screen.getByRole('status').textContent).toContain('Aktivität wird geladen …');
+    // the first render waits for the answer, in outline (which shows after a moment, SkeletonGroup)
+    expect(screen.getByText('Aktivität wird geladen …')).toBeTruthy();
     await screen.findByText('Noch keine Aktivität.');
   });
 

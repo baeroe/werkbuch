@@ -22,6 +22,9 @@ final class DisplaySchema
 
     public const MAX_FIELDS = 30;
 
+    /** The fields a list shows when a stored display has none to read (`DEFAULT_FIELDS` of `viewState.ts`, a test compares them, T2-M1). */
+    public const DEFAULT_FIELDS = ['key', 'state', 'priority', 'labels', 'due_date', 'assignee'];
+
     private const KEYS = ['layout', 'group_by', 'sort', 'fields', 'show_sub_items'];
 
     /**
@@ -89,7 +92,7 @@ final class DisplaySchema
         $layout = is_string($stored['layout'] ?? null) ? Layout::tryFrom($stored['layout']) : null;
         $groupBy = is_string($stored['group_by'] ?? null) ? GroupBy::tryFrom($stored['group_by']) : null;
         $sort = is_array($stored['sort'] ?? null) ? SortSpec::read($stored['sort'], $catalog) : SortSpec::manual();
-        $fields = is_array($stored['fields'] ?? null) ? self::fields($stored['fields'], $catalog) : [];
+        $fields = is_array($stored['fields'] ?? null) && array_is_list($stored['fields']) ? self::fields($stored['fields'], $catalog) : self::DEFAULT_FIELDS;
         $showSubItems = $stored['show_sub_items'] ?? null;
 
         return new Display($layout ?? Layout::List, $groupBy ?? GroupBy::None, $sort, $fields, is_bool($showSubItems) ? $showSubItems : true);

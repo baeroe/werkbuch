@@ -75,7 +75,8 @@ export const qk = {
   notifications: resource('notifications'),
   preferences: resource('preferences'),
   /** The wiki: `qk.pages.list({ project })` is the tree of a project, `qk.pages.detail(id)` a page with its text. */
-  pages: resource('pages'),
+  /** `item(id)` is the wiki pages that name an item: no `list` or `detail` key, so no tree scan reads it as a tree. */
+  pages: { ...resource('pages'), item: (id: string) => ['pages', 'item', id] as const },
   /** The versions of a page: `qk.pageVersions.list({ page })` (without text), `qk.pageVersions.detail(id)` (one with). */
   pageVersions: resource('page-versions'),
   templates: resource('templates'),

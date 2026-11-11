@@ -14,8 +14,8 @@ use App\Models\WorkflowState;
 use App\Support\Actor;
 use App\Support\CatalogLock;
 use App\Support\Ids;
-use App\Support\MemberInput;
 use App\Support\ProjectAutomations;
+use App\Support\ProjectLock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -56,7 +56,7 @@ final class SaveAutomation
 
         return DB::transaction(function () use ($actor, $project, $key, $enabled, $sent, $errors): Automation {
             CatalogLock::share();
-            $locked = MemberInput::lock($project);
+            $locked = ProjectLock::lock($project);
 
             $current = Automation::query()->where('project_id', $locked->id)->where('key', $key)->lockForUpdate()->first()
                 ?? ProjectAutomations::unsaved($locked->id, $key);

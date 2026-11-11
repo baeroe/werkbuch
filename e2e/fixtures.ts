@@ -78,18 +78,21 @@ export const test = base.extend<{ allowedErrors: RegExp[]; pageErrors: string[];
   ],
 
   /**
-   * Writes the coverage of every page of the app to coverage/e2e/<testId>-<n>.json: after the test, and for every
-   * document a full reload replaced (its counters go with it). Such a document leaves its counters in sessionStorage on
-   * `pagehide`; the next document hands them over through a binding (a binding call during the unload itself is lost).
+   * Writes the coverage of every page of the app to coverage/e2e/<project>/<testId>-<n>.json (a folder per Playwright
+   * project: a CI job of one project remaps and uploads its own, scripts/coverage-merge.mjs): after the test, and for
+   * every document a full reload replaced (its counters go with it). Such a document leaves its counters in
+   * sessionStorage on `pagehide`; the next document hands them over through a binding (a binding call during the unload
+   * itself is lost).
    */
   coverage: [
     async ({ context, baseURL }, use, info) => {
       if (!COVERAGE) return use();
 
       let count = 0;
+      const dir = path.join(COVERAGE_DIR, info.project.name);
       const write = (coverage: Coverage) => {
-        mkdirSync(COVERAGE_DIR, { recursive: true });
-        writeFileSync(path.join(COVERAGE_DIR, `${info.testId}-${count++}.json`), JSON.stringify(coverage));
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(path.join(dir, `${info.testId}-${count++}.json`), JSON.stringify(coverage));
       };
 
       await context.exposeBinding('__werkbuchCoverage', (_source, coverage: Coverage) => write(coverage));

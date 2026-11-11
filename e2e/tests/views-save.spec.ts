@@ -115,12 +115,12 @@ test('refuses saving the view of somebody else and saves a copy', async ({ page,
     await tabTo(lene, lene.getByRole('button', { name: tr('de', 'items.save.save_as'), exact: true }));
     await lene.keyboard.press('Enter');
     const dialog = lene.getByRole('dialog', { name: tr('de', 'items.save.dialog.title') });
-    await expect(dialog.getByRole('textbox', { name: tr('de', 'views.fields.name') })).toHaveValue(tr('de', 'items.save.copy_name', { name: viewName('team') }));
+    await expect(dialog.getByRole('textbox', { name: tr('de', 'views.fields.name') })).toHaveValue(tr('de', 'views.copy_name', { name: viewName('team') }));
     await pressMod(lene, 'Enter');
     await expect(lene).toHaveURL(/\/views\/[0-9a-z]{26}$/);
     copy = viewIdOf(lene);
     expect(copy).not.toBe(view.id);
-    await expect(lene.getByRole('heading', { level: 1, name: tr('de', 'items.save.copy_name', { name: viewName('team') }) })).toBeVisible();
+    await expect(lene.getByRole('heading', { level: 1, name: tr('de', 'views.copy_name', { name: viewName('team') }) })).toBeVisible();
     // the copy is Lene's, with the grouping she chose: nothing unsaved, and hers to save
     await expect(lene.getByText(tr('de', 'items.save.unsaved'), { exact: true })).toHaveCount(0);
   } finally {

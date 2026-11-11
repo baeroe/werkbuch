@@ -1,6 +1,6 @@
 # Search
 
-One search finds work items, wiki pages, projects, people and bots, and views. In the interface it lives in the command palette (<kbd>⌘ / Ctrl</kbd>+<kbd>K</kbd>); over the API it is `GET /api/v1/search`. Both search the same way and leave out the same items, pages, projects and accounts; the palette asks for fewer hits per kind (8) and shows people and bots only to org admins (see below), and it never searches the archive. The browser never talks to the search engine itself: every search goes through werkbuch, which decides what you may see.
+One search finds work items, wiki pages, projects, people and bots, and views. In the interface it lives in the command palette (<kbd>⌘ / Ctrl</kbd>+<kbd>K</kbd>); over the API it is `GET /api/v1/search`. Both search the same way and leave out the same items, pages, projects and accounts; the palette asks for fewer hits per kind (8) and shows people and bots only to org admins (see below), and it leaves the archive out, except an item whose key you type. The browser never talks to the search engine itself: every search goes through werkbuch, which decides what you may see.
 
 ## What is found
 
@@ -17,6 +17,8 @@ Every word you type has to occur; the last word may be the start of a word, so `
 A word of a comment finds the item the comment belongs to; the search reads the comments of an item in the order they were written, up to 64 KB of text per item. A comment that is edited or deleted changes the search a moment later, like any other change; reactions change nothing.
 
 A wiki page is found by its title and its text, up to 64 KB of text per page; a hit in the title counts more than one in the text, and among equal hits the page changed last comes first. Saving, moving and deleting a page change the search a moment later.
+
+A reference to an item inside a page does not count for the search: the page is not found by the key of the item it refers to, because a key written as a reference stands in the text without its letters. To see which pages name an item, open the item: its section **Wiki pages** lists them (see [wiki](/en/concepts/wiki#references-and-search)).
 
 People and bots are found only while their account is active. Views are searched by every word of their name, case and accents aside, straight in the database: a new view is found at once.
 
@@ -41,6 +43,8 @@ Without a hit, the palette says so and gives two tips: commands are found by the
 The dialog **Add relation** (<kbd>R</kbd> on an item) finds the other item through the same search (items only, up to 20), keys included. It suggests nothing before you type. `#` in a text finds items and pages the same way (see [rich text](/en/concepts/rich-text#references)).
 
 All keys of the palette are on the [keyboard page](/en/keyboard).
+
+![The command palette searching for WEB: work items, wiki pages and the project](/screenshots/en/palette.png)
 
 ## REST
 
@@ -139,10 +143,10 @@ werkbuch searches with [Meilisearch](https://www.meilisearch.com) through Larave
 
 ```bash
 php artisan app:search-sync      # sends the settings of the indexes to Meilisearch (after an update changed them)
-php artisan app:search-import    # empties the four indexes and fills them again from the database
+php artisan app:search-import    # builds the four indexes again from the database and swaps them in
 ```
 
-`app:search-import` is the first start and the repair: it sends the settings, empties the indexes and reads everything again; during that, the search is briefly empty. In DDEV, prefix both with `ddev artisan`.
+`app:search-import` is the first start and the repair: it builds each index again from the database beside the one the search reads (`work_items_next` next to `work_items`, with the settings), then swaps the two and deletes the old one. The search keeps answering from the old documents meanwhile; if the build fails, the old index stays and the new one is deleted. Changes made while an index is being built first go into the old one; at the end, the import writes everything that changed since shortly before its start once more, so nothing is lost with the swap. It only touches indexes that start with `SCOUT_PREFIX`; other indexes on the same Meilisearch stay. In DDEV, prefix both with `ddev artisan`.
 
 **After an update** that changes what the index holds, run `app:search-sync` once: without it, Meilisearch does not search the new fields. The update that made comments searchable is one of them; run `app:search-import` after it as well, so that the comments written before the update get into the index. The update that brought the wiki adds the index `pages`: until `app:search-sync` has created it, every search without `types` answers `503`, and `app:search-import` puts the existing pages into it.
 

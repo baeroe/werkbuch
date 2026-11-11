@@ -221,7 +221,8 @@ export function ScheduleFields({ schedule, onChange, runCount, zone, errors, fie
               <Toggle
                 key={day}
                 value={String(day)}
-                aria-label={weekdayName(day)}
+                // the short day leads the name, so the name holds what the button shows (WCAG 2.5.3)
+                aria-label={t('schedule.editor.weekday_name', { short: t(SHORT_WEEKDAY[day]), day: weekdayName(day) })}
                 className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-chip text-ui font-medium text-muted transition-colors duration-120 hover:text-ink data-pressed:bg-surface data-pressed:font-semibold data-pressed:text-ink data-pressed:shadow-elev-1 md:h-8 md:w-9"
               >
                 {t(SHORT_WEEKDAY[day])}

@@ -25,8 +25,8 @@ it('shows the system to an org admin', function () use ($shape) {
             'queued_jobs' => 1, 'delayed_jobs' => 0, 'failed_jobs_total' => 1, 'search' => 'down', 'search_tasks' => null,
             'mail_configured' => false, 'live' => 'off',
         ])
-        ->and($response->json('data.queues.4'))->toBe(['queue' => 'search', 'pending' => 1, 'oldest_at' => '2026-11-03T09:59:00.000000Z'])
-        ->and($response->json('data.queues.0'))->toBe(['queue' => 'default', 'pending' => 0, 'oldest_at' => null])
+        ->and($response->json('data.queues.5'))->toBe(['queue' => 'search', 'pending' => 1, 'oldest_at' => '2026-11-03T09:59:00.000000Z'])
+        ->and($response->json('data.queues.1'))->toBe(['queue' => 'default', 'pending' => 0, 'oldest_at' => null])
         ->and($response->json('data.failed_jobs'))->toBe([[
             'id' => $uuid, 'queue' => 'webhooks', 'job' => 'App\\Jobs\\DeliverWebhook', 'error' => 'cURL error 28',
             'failed_at' => '2026-11-02T09:00:00.000000Z',

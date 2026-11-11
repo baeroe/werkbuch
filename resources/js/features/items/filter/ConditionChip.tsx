@@ -6,18 +6,20 @@
  * A condition without its value yet (new, or its values taken away) stays while the focus is within the chip, also in
  * its popups: changing the operator or tabbing from the first value of "zwischen" to the second keeps it (13c). Once
  * the focus leaves the chip, `onLeave` tells the filter bar, which drops it if it is still unfinished. A condition on
- * a field that is gone (a deleted property in a saved view) reads "Unbekanntes Feld" and can only be removed (P2).
+ * a field that is gone (a deleted property in a saved view) reads "Unbekanntes Feld" and can only be removed (P2); one on
+ * a property while the properties failed to load reads "Nicht geladen" with "Erneut versuchen" (T16-M5).
  */
 
-import { X } from 'lucide-react';
+import { RotateCw, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { IconButton } from '@/components/ui/IconButton';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '@/components/ui/Menu';
 import { t } from '@/lib/i18n';
 import type { Condition, ConditionOp, Project } from '@/types';
 import { ConditionEditor, useConditionText } from './ConditionEditor';
-import { fieldLabel, isComplete, menuOperators, operatorFamily, operatorLabelKey, valuesOf, withOperator, type FieldDef } from './fieldOps';
+import { fieldLabel, isComplete, menuOperators, operatorFamily, operatorLabelKey, PROPERTY_PREFIX, valuesOf, withOperator, type FieldDef } from './fieldOps';
 import { chipPart } from './values/shared';
 
 type ConditionChipProps = {
@@ -32,6 +34,8 @@ type ConditionChipProps = {
   fresh?: boolean;
   /** The project of a project list: its workflow's states. */
   project?: Project;
+  /** The properties failed to load: a chip on a property says so and offers to load them again (T16-M5). */
+  failed?: { retry: () => Promise<boolean>; retrying: boolean };
 };
 
 /** Frames to wait for the focus to land after it left an element (a popup gives it back to its trigger a frame later). */
@@ -66,17 +70,51 @@ function useFocusLeave(onLeave: () => void) {
   };
 }
 
-export function ConditionChip({ condition, def, onChange, onRemove, onLeave, fresh = false, project }: ConditionChipProps) {
+export function ConditionChip({ condition, def, onChange, onRemove, onLeave, fresh = false, project, failed }: ConditionChipProps) {
   const [open, setOpen] = useState(fresh);
   const root = useRef<HTMLDivElement>(null);
   /** The operator menu changed to one that needs a value: the value editor opens once the menu is closed. */
   const askValue = useRef(false);
   const focus = useFocusLeave(onLeave);
-  const text = useConditionText(condition, def, project);
+  const text = useConditionText(condition, def, project, open);
+  const notLoaded = !def && failed !== undefined && condition.field.startsWith(PROPERTY_PREFIX);
+  /** "Erneut versuchen" was pressed: once the chip is drawn anew, the focus goes on to it (20b-M2). */
+  const retried = useRef(false);
+  useLayoutEffect(() => {
+    if (notLoaded || !retried.current) return;
+    retried.current = false;
+    const active = document.activeElement;
+    if (active === null || active === document.body) root.current?.querySelector<HTMLElement>('button')?.focus();
+  }, [notLoaded]);
+
+  if (notLoaded) {
+    // not an unknown field: the list of properties did not come, the condition goes to the server as it is
+    const key = condition.field.slice(PROPERTY_PREFIX.length);
+    return (
+      <div role="group" aria-label={t('items.filter.chip.not_loaded_name', { field: key })} className="inline-flex h-11 max-w-full min-w-0 items-center gap-1 rounded-ctl border border-dashed border-line bg-surface pr-0.5 pl-2 text-sm md:h-7">
+        <span translate="no" className="truncate font-medium text-ink">
+          {key}
+        </span>
+        <span className="shrink-0 text-muted">{t('items.filter.chip.not_loaded')}</span>
+        <Button variant="ghost" size="sm" icon={RotateCw} aria-label={t('items.filter.chip.retry', { field: key })} pending={failed.retrying}
+          onClick={() => {
+            retried.current = true;
+            // failed again: a later load (another chip's press) is not this press's any more
+            void failed.retry().then((loaded) => {
+              if (!loaded) retried.current = false;
+            });
+          }}
+        >
+          {t('common.retry')}
+        </Button>
+        <IconButton icon={X} size="sm" label={t('items.filter.chip.remove', { field: key })} tooltip={false} onClick={onRemove} />
+      </div>
+    );
+  }
 
   if (!def) {
     return (
-      <div role="group" aria-label={t('items.filter.chip.unknown_name', { field: condition.field })} className="inline-flex h-11 max-w-full min-w-0 items-center gap-0.5 rounded-ctl border border-dashed border-line bg-surface pr-0.5 pl-2 text-sm text-muted md:h-7">
+      <div ref={root} role="group" aria-label={t('items.filter.chip.unknown_name', { field: condition.field })} className="inline-flex h-11 max-w-full min-w-0 items-center gap-0.5 rounded-ctl border border-dashed border-line bg-surface pr-0.5 pl-2 text-sm text-muted md:h-7">
         <span className="truncate">{t('items.filter.chip.unknown')}</span>
         <IconButton icon={X} size="sm" label={t('items.filter.chip.remove', { field: t('items.filter.chip.unknown') })} tooltip={false} onClick={onRemove} />
       </div>
@@ -147,7 +185,9 @@ export function ConditionChip({ condition, def, onChange, onRemove, onLeave, fre
         <span className="shrink-0 px-1.5 text-muted">{operator}</span>
       )}
       <ConditionEditor condition={condition} def={def} label={label} onChange={onChange} open={open} onOpenChange={setOpen} project={project} />
-      <IconButton icon={X} size="sm" label={t('items.filter.chip.remove', { field: label })} tooltip={false} onClick={onRemove} />
+      {/* a press keeps the focus where it is: a field of the chip would keep its typed text as it lost the focus, and the
+          list would change twice (T16-M4); the chip just goes. Tab to the × still keeps the text, as leaving a field does */}
+      <IconButton icon={X} size="sm" label={t('items.filter.chip.remove', { field: label })} tooltip={false} onMouseDown={(event) => event.preventDefault()} onClick={onRemove} />
     </div>
   );
 }

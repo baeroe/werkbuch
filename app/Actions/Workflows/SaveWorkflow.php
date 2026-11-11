@@ -34,7 +34,10 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * (RemapStates, `state_removed`); Auto-Close of a project whose state goes or stops being canceled follows (FollowWorkflow,
  * `state_removed`). Everything runs under the catalog lock, one change of the catalog at a time, each from
  * what the one before left, and every change of an item waits for it. Only what really changes is written and
- * recorded; the same input again writes nothing.
+ * recorded; the same input again writes nothing. The `workflow.updated` of the saved workflow says in
+ * `meta.categories_changed` whether a staying state changed its category (only then does the search reindex; the
+ * items of a state that goes are written through their own events); the one of the old default that lost its mark says
+ * nothing.
  */
 final class SaveWorkflow
 {
@@ -99,6 +102,15 @@ final class SaveWorkflow
             }
 
             $before = $current === null ? null : self::snapshot($current);
+
+            // whether a document of an item can change without an event of the item: a state that stays in another
+            // category (the search reads `meta.categories_changed` and reindexes the items of the workflow's projects);
+            // the items of a state that goes get their own `work_item.state_changed` from RemapStates (T11a-M2)
+            $categories = $current === null ? [] : $current->states->mapWithKeys(fn (WorkflowState $state) => [$state->id => $state->category])->all();
+            $categoriesChanged = array_any(
+                $valid['states'],
+                fn (array $state) => $state['existing'] !== null && $categories[$state['existing']] !== $state['category'],
+            );
 
             if ($valid['is_default']) {
                 // one default at all times: the old one loses the mark before this one gets it
@@ -208,7 +220,7 @@ final class SaveWorkflow
                     $saved->touch();
                 }
 
-                EventRecorder::record(EventType::WorkflowUpdated, $actor, $saved, null, $changes);
+                EventRecorder::record(EventType::WorkflowUpdated, $actor, $saved, null, $changes, ['categories_changed' => $categoriesChanged]);
             }
 
             return $saved;

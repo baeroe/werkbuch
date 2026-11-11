@@ -24,12 +24,14 @@ import { ReadOnlyNotice } from '../frame/access';
 import { fieldMessage, noticeOf, useDraft, useSaveShortcut } from '../frame/form';
 import { ImageField } from '../frame/ImageField';
 import { LeaveGuard } from '../frame/LeaveGuard';
-import { FieldGroup, FormSkeleton, Loaded, Panel, readOnlyField, SectionHeader } from '../frame/parts';
+import { FieldGroup, FormSkeleton, Loaded, Panel, readOnlyField, ReadOnlyValue, SectionHeader } from '../frame/parts';
 import type { SectionProps } from './sections';
 
 type GeneralFields = Pick<Organization, 'name' | 'logo_url' | 'locale' | 'timezone' | 'week_start'>;
 
 const FIELDS: (keyof GeneralFields)[] = ['name', 'logo_url', 'locale', 'timezone', 'week_start'];
+
+const LOCALE_LABELS = { de: 'settings.org.general.locale_de', en: 'settings.org.general.locale_en' } as const satisfies Record<Locale, string>;
 
 /** The logo, or the first letter of the name on a tone when there is none. */
 function OrgMark({ name, url }: { name: string; url: string | null }) {
@@ -45,7 +47,8 @@ function OrgMark({ name, url }: { name: string; url: string | null }) {
   );
 }
 
-function GeneralForm({ organization, readOnly }: { organization: Organization; readOnly: boolean }) {
+function GeneralForm({ organization, readOnlyReason }: { organization: Organization; readOnlyReason: string | null }) {
+  const readOnly = readOnlyReason !== null;
   const settle = useSettle();
   const form = useRef<HTMLFormElement>(null);
   const source = useMemo<GeneralFields>(
@@ -133,41 +136,60 @@ function GeneralForm({ organization, readOnly }: { organization: Organization; r
 
       <Panel title={t('settings.org.general.panel_time')}>
         <div className="grid gap-5 p-4 md:grid-cols-2">
-          <Select
-            label={t('settings.org.general.locale')}
-            hint={t('settings.org.general.locale_hint')}
-            error={fieldMessage(update.error, 'locale')}
-            value={locale}
-            disabled={readOnly}
-            onValueChange={(next) => next && draft.set({ locale: next as Locale })}
-            options={[
-              { value: 'de', label: t('settings.org.general.locale_de') },
-              { value: 'en', label: t('settings.org.general.locale_en') },
-            ]}
-          />
-          <Combobox
-            label={t('settings.org.general.timezone')}
-            name="timezone"
-            hint={t('settings.org.general.timezone_hint')}
-            error={fieldMessage(update.error, 'timezone')}
-            placeholder={t('settings.org.general.timezone_placeholder')}
-            emptyText={t('settings.org.general.timezone_empty')}
-            value={timezone}
-            disabled={readOnly}
-            onValueChange={(next) => next && draft.set({ timezone: next })}
-            options={zones}
-          />
-          <FieldGroup legend={t('settings.org.general.week_start')} hint={t('settings.org.general.week_start_hint')} error={fieldMessage(update.error, 'week_start')}>
-            <SegmentedControl
-              label={t('settings.org.general.week_start')}
-              value={String(weekStart)}
-              onValueChange={(next) => !readOnly && draft.set({ week_start: next === '0' ? 0 : 1 })}
-              options={[
-                { value: '1', label: t('settings.org.general.monday'), disabled: readOnly },
-                { value: '0', label: t('settings.org.general.sunday'), disabled: readOnly },
-              ]}
-            />
-          </FieldGroup>
+          {readOnlyReason !== null ? (
+            // values to read, as in the project settings (19a-M6): focusable, the value in the name, why in the description
+            <>
+              <ReadOnlyValue label={t('settings.org.general.locale')} hint={t('settings.org.general.locale_hint')} value={t(LOCALE_LABELS[locale])} reason={readOnlyReason} />
+              <ReadOnlyValue
+                label={t('settings.org.general.timezone')}
+                hint={t('settings.org.general.timezone_hint')}
+                value={zones.find((zone) => zone.value === timezone)?.label ?? timezone}
+                reason={readOnlyReason}
+              />
+              <ReadOnlyValue
+                label={t('settings.org.general.week_start')}
+                hint={t('settings.org.general.week_start_hint')}
+                value={weekStart === 0 ? t('settings.org.general.sunday') : t('settings.org.general.monday')}
+                reason={readOnlyReason}
+              />
+            </>
+          ) : (
+            <>
+              <Select
+                label={t('settings.org.general.locale')}
+                hint={t('settings.org.general.locale_hint')}
+                error={fieldMessage(update.error, 'locale')}
+                value={locale}
+                onValueChange={(next) => next && draft.set({ locale: next as Locale })}
+                options={[
+                  { value: 'de', label: t(LOCALE_LABELS.de) },
+                  { value: 'en', label: t(LOCALE_LABELS.en) },
+                ]}
+              />
+              <Combobox
+                label={t('settings.org.general.timezone')}
+                name="timezone"
+                hint={t('settings.org.general.timezone_hint')}
+                error={fieldMessage(update.error, 'timezone')}
+                placeholder={t('settings.org.general.timezone_placeholder')}
+                emptyText={t('settings.org.general.timezone_empty')}
+                value={timezone}
+                onValueChange={(next) => next && draft.set({ timezone: next })}
+                options={zones}
+              />
+              <FieldGroup legend={t('settings.org.general.week_start')} hint={t('settings.org.general.week_start_hint')} error={fieldMessage(update.error, 'week_start')}>
+                <SegmentedControl
+                  label={t('settings.org.general.week_start')}
+                  value={String(weekStart)}
+                  onValueChange={(next) => draft.set({ week_start: next === '0' ? 0 : 1 })}
+                  options={[
+                    { value: '1', label: t('settings.org.general.monday') },
+                    { value: '0', label: t('settings.org.general.sunday') },
+                  ]}
+                />
+              </FieldGroup>
+            </>
+          )}
         </div>
       </Panel>
 
@@ -191,7 +213,7 @@ export default function General({ readOnlyReason }: SectionProps) {
       <SectionHeader title={t('settings.org.section.general')} description={t('settings.org.general.description')} />
       {readOnlyReason && <ReadOnlyNotice reason={readOnlyReason} />}
       <Loaded queries={[organization]} failure={t('settings.org.general.load_failed')} skeleton={<FormSkeleton label={t('settings.org.general.loading')} />}>
-        {() => <GeneralForm key={organization.data.id} organization={organization.data} readOnly={readOnlyReason !== null} />}
+        {() => <GeneralForm key={organization.data.id} organization={organization.data} readOnlyReason={readOnlyReason} />}
       </Loaded>
     </div>
   );

@@ -8,6 +8,8 @@ import {
   channelHeld,
   createE2eProject,
   createItem,
+  INBOX_NAMED,
+  inboxName,
   mailpit,
   PEOPLE,
   pressMod,
@@ -33,7 +35,7 @@ const name = (what: string) => `E2E accept ${what} ${variant()} ${runId()}`;
 const LIVE = { timeout: 20_000 };
 
 // several contexts and the way through the queues: more than the default 30 s may pass
-test.describe.configure({ timeout: 90_000 });
+test.describe.configure({ timeout: 240_000 });
 
 type Inbox = (typeof PEOPLE.inbox)[string];
 
@@ -106,7 +108,7 @@ async function stillTheSameDocument(page: Page): Promise<void> {
 const cardOf = (page: Page, key: string) => page.getByRole('article', { name: new RegExp(`^${key}:`) });
 
 /** The inbox link that shows (the sidebar, on the phone the top bar), named with the unread count. */
-const inboxLink = (page: Page) => page.getByRole('link', { name: /^Inbox(, \d+ unread)?$/ }).filter({ visible: true });
+const inboxLink = (page: Page) => page.getByRole('link', { name: INBOX_NAMED }).filter({ visible: true });
 
 /** The unread notifications of the signed-in person of `page`, as the server counts them. */
 async function unreadCount(page: Page): Promise<number> {
@@ -118,7 +120,7 @@ async function unreadCount(page: Page): Promise<number> {
 /** The name of the inbox link says the count, the badge shows it (none at 0). */
 async function expectBadge(page: Page, count: number, options = {}): Promise<void> {
   const link = inboxLink(page);
-  await expect(link).toHaveAccessibleName(count > 0 ? tr('en', 'shell.nav.inbox_unread', { count }) : tr('en', 'shell.nav.inbox'), options);
+  await expect(link).toHaveAccessibleName(inboxName(count), options);
   if (count > 0) await expect(link.locator('[data-inbox-badge]')).toHaveText(count > 99 ? '99+' : String(count));
   else await expect(link.locator('[data-inbox-badge]')).toHaveCount(0);
 }

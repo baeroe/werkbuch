@@ -84,6 +84,8 @@ let api: MockApi;
 let saveFails: boolean;
 /** How the next `POST /views` answers; by default it makes the view. */
 let createAnswer: ((body: ViewInput) => { status: number; body: unknown }) | null;
+/** `GET /projects` (and with it the rights) answers 503. */
+let projectsFail = false;
 
 beforeEach(() => {
   inertia.user = lene;
@@ -92,11 +94,12 @@ beforeEach(() => {
   views = [];
   saveFails = false;
   createAnswer = null;
+  projectsFail = false;
   useUiStore.setState({ selection: [], peekItemId: null });
   resetToasts();
   api = mockApi({
     'GET /api/v1/organization': () => ({ body: { data: organization } }),
-    'GET /api/v1/projects': () => ({ body: list([project('WEB', 'member', { name: 'Website-Relaunch' })]) }),
+    'GET /api/v1/projects': () => (projectsFail ? { status: 503, body: { reason: 'unavailable' } } : { body: list([project('WEB', 'member', { name: 'Website-Relaunch' })]) }),
     'GET /api/v1/projects/WEB': () => ({ body: { data: project('WEB', 'member', { name: 'Website-Relaunch' }) } }),
     'GET /api/v1/workflows': () => ({ body: list([standard, agency]) }),
     'GET /api/v1/users': () => ({ body: list([mara, lene]) }),
@@ -154,6 +157,17 @@ async function openSaveAs() {
   return dialog();
 }
 const reasonOf = (button: HTMLElement) => document.getElementById(button.getAttribute('aria-describedby')!)?.textContent;
+/** Holds the answers of `GET <path>` (with any query) until released. */
+function holdGet(path: string): () => void {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const inner = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    if ((init?.method ?? 'GET') === 'GET' && new URL(String(input), window.location.origin).pathname === path) await gate;
+    return inner(input, init);
+  };
+  return () => act(() => release());
+}
 
 /* -------------------------------------------------------------------------- tests */
 
@@ -275,12 +289,33 @@ describe('unsaved changes', () => {
     act(() => inertia.go(`/projects/WEB?filter=${filterOf([{ field: 'nonsense', op: 'is', value: 'x' }])}`));
     const submit = within(form).getByRole('button', { name: /View anlegen/ });
     await waitFor(() => expect(submit.getAttribute('aria-disabled')).toBe('true'));
+    expect(reasonOf(submit)).toBe('Eine Bedingung nennt ein Feld, das es nicht mehr gibt. Entferne sie mit × am Chip „Unbekanntes Feld“, dann lässt sich die View speichern.');
     const name = within(form).getByRole('textbox', { name: 'Name' });
     await user.click(name);
     fireEvent.keyDown(name, { key: 'Enter', ctrlKey: true });
     fireEvent.submit(name.closest('form')!);
     await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
     expect(posted()).toHaveLength(0);
+  });
+
+  it('shows no creator sentence while rights load', async () => {
+    const release = holdGet('/api/v1/projects');
+    await openView(makeView({ created_by: 'u_mara', display: display() }), '?group=priority');
+    const save = await screen.findByRole('button', { name: 'Speichern' });
+    // an org admin may save it: until the rights are there, say that they load, not who may save
+    expect(reasonOf(save)).toBe('Die Rechte werden noch geladen.');
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+
+    release();
+    await waitFor(() => expect(reasonOf(save)).toBe('Nur Mara Lindqvist und Org-Admins dürfen „Fällig diese Woche“ ändern. Speichere deine Änderungen als neue View.'));
+  });
+
+  it('says the rights failed instead of who may save a view of somebody else when they did not load (19b-M5)', async () => {
+    projectsFail = true;
+    await openView(makeView({ created_by: 'u_mara', display: display() }), '?group=priority');
+    const save = await screen.findByRole('button', { name: 'Speichern' });
+    await waitFor(() => expect(reasonOf(save)).toBe('Die Rechte konnten nicht geladen werden.'));
+    expect(save.getAttribute('aria-disabled')).toBe('true');
   });
 
   it('lets an org admin save the view of somebody else', async () => {
@@ -493,6 +528,43 @@ describe('the display menu', () => {
     const { menu } = renderMenu({ display: display({ sort: { field: 'property:gone', direction: 'asc' } }) });
     expect(within(menu).getByRole('combobox', { name: /^Sortierung/ }).textContent).toContain('Unbekanntes Feld');
     expect(within(menu).getByText('Das Feld gibt es nicht mehr. Bis du ein anderes wählst, ist die Liste manuell sortiert.')).toBeTruthy();
+  });
+
+  it('calls a loading property sort neither unknown nor sortable', async () => {
+    const release = holdGet('/api/v1/properties');
+    await openView(ownView(), '?sort=property:effort:desc');
+    fireEvent.click(screen.getByRole('button', { name: 'Anzeige' }));
+    const menu = screen.getByRole('dialog', { name: 'Anzeige' });
+    const sort = within(menu).getByRole('combobox', { name: /^Sortierung/ });
+    // the properties are on their way: the sort says so, it is neither "Unbekanntes Feld" nor already named
+    expect(sort.textContent).toContain('Lädt …');
+    expect(sort.textContent).not.toContain('Unbekanntes Feld');
+    expect(within(menu).queryByText('Das Feld gibt es nicht mehr. Bis du ein anderes wählst, ist die Liste manuell sortiert.')).toBeNull();
+
+    release();
+    await waitFor(() => expect(sort.textContent).toContain('Aufwand (h)'));
+    expect(within(menu).queryByText('Das Feld gibt es nicht mehr. Bis du ein anderes wählst, ist die Liste manuell sortiert.')).toBeNull();
+  });
+
+  it('waits for the properties before a view with a property sort is saved (T17-M8)', async () => {
+    const release = holdGet('/api/v1/properties');
+    await openView(ownView(), '?sort=property:effort:desc');
+    const save = await screen.findByRole('button', { name: 'Speichern' });
+    const saveAs = screen.getByRole('button', { name: 'Als neue View speichern …' });
+    const sentence = 'Die Properties werden noch geladen. Speichern geht, sobald klar ist, ob die Sortierung noch gilt.';
+    // a click goes nowhere: the mutation would send its PUT after a few ticks, so wait for them before looking
+    fireEvent.click(save);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(api.calls.some((call) => call.method === 'PUT')).toBe(false);
+    expect(reasonOf(save)).toBe(sentence);
+    expect(reasonOf(saveAs)).toBe(sentence);
+
+    release();
+    await waitFor(() => expect(save.getAttribute('aria-disabled')).toBeNull());
+    fireEvent.click(save);
+    await waitFor(() => expect(api.calls.find((call) => call.method === 'PUT')?.body).toMatchObject({ display: { sort: { field: 'property:effort', direction: 'desc' } } }));
   });
 
   it('hides sub-items', () => {

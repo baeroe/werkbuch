@@ -2,14 +2,21 @@
 
 use App\Access\ProjectRole;
 use App\Actions\Projects\DeleteProject;
+use App\Actions\WorkItems\ArchiveWorkItem;
+use App\Actions\WorkItems\DeleteWorkItem;
+use App\Actions\WorkItems\UpdateWorkItem;
 use App\Jobs\ReindexWorkItems;
+use App\Models\Label;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
+use App\Search\SearchConsumer;
 use App\Search\SearchIndexer;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Laravel\Scout\EngineManager;
 use Laravel\Scout\Engines\NullEngine;
 
@@ -224,6 +231,34 @@ it('rebuilds every index from scratch', function () use ($world) {
         ->and($engine->updatedSettings('testing_users'))->toBe(config('scout.meilisearch.index-settings')[User::class]);
 });
 
+it('reads the labels of the documents from work_item_labels alone', function () use ($world) {
+    $engine = searchEngine();
+    [$web, , [$item, $bare]] = $world();
+    [$first, $second] = [Label::factory()->create(), Label::factory()->create()];
+    // linked in the other order: the document names them in catalog order, as the links of a page (Task 10b)
+    $item->labels()->attach([$second->id, $first->id]);
+    $indexer = app(SearchIndexer::class);
+
+    $read = [];
+    DB::listen(function (QueryExecuted $query) use (&$read): void {
+        if (str_contains($query->sql, 'work_item_labels')) {
+            $read[] = $query->sql;
+        }
+    });
+    $indexer->rebuild();
+    $indexer->reindexItems([$web->id]);
+    $indexer->upsertItem($item->id);
+
+    // a rebuild, a reindex and an upsert each read the links once, never with a join of `labels` (its plan could begin
+    // with the labels and walk every link of the organisation, Task 10b)
+    expect($read)->toHaveCount(3);
+    foreach ($read as $sql) {
+        expect($sql)->toStartWith('select `work_item_id`, `label_id` from `work_item_labels`');
+    }
+    expect($engine->documents('testing_work_items')[$item->id]['label_ids'])->toBe([$first->id, $second->id])
+        ->and($engine->documents('testing_work_items')[$bare->id]['label_ids'])->toBe([]);
+});
+
 it('skips settings for an engine without them', function () {
     config(['scout.driver' => 'null']);
     app(EngineManager::class)->forgetDrivers();
@@ -296,4 +331,116 @@ it('needs none without an engine that counts', function () {
     app(EngineManager::class)->forgetDrivers();
 
     expect(app(SearchIndexer::class)->needsImport())->toBeFalse();
+});
+
+it('builds the next index beside the live one and swaps it in', function () use ($world, $titles) {
+    $engine = searchEngine();
+    [, , [$item]] = $world();
+    $indexer = app(SearchIndexer::class);
+    $indexer->rebuild();
+    $before = $titles($engine);
+    DB::table('work_items')->where('id', $item->id)->update(['title' => 'Impressum ergänzen']);
+
+    expect($indexer->buildNext(WorkItem::class))->toBe(3)
+        ->and($titles($engine))->toBe($before)
+        ->and($engine->documents('testing_work_items_next')[$item->id]['title'])->toBe('Impressum ergänzen')
+        ->and($engine->updatedSettings('testing_work_items_next'))->toBe(config('scout.meilisearch.index-settings')[WorkItem::class]);
+
+    $indexer->swapIn(WorkItem::class);
+
+    expect($titles($engine)[$item->id])->toBe('Impressum ergänzen')
+        ->and(count($titles($engine)))->toBe(3)
+        ->and($engine->indexNames())->toBe(['testing_pages', 'testing_projects', 'testing_users', 'testing_work_items']);
+});
+
+it('starts the next index empty, without what an earlier rebuild left in it', function () use ($world) {
+    $engine = searchEngine();
+    [, , [$item, $other], $inOps] = $world();
+    $engine->updateIn('testing_work_items_next', WorkItem::query()->whereKey($item->id)->get());
+    DB::table('work_items')->where('id', $item->id)->delete();
+
+    expect(array_keys($engine->documents('testing_work_items_next')))->toBe([$item->id])
+        ->and(app(SearchIndexer::class)->buildNext(WorkItem::class))->toBe(2)
+        ->and(array_keys($engine->documents('testing_work_items_next')))->toEqualCanonicalizing([$other->id, $inOps->id]);
+});
+
+it('leaves the old index and removes the next one when filling fails', function () use ($world, $titles) {
+    $engine = searchEngine();
+    $world();
+    $indexer = app(SearchIndexer::class);
+    $indexer->rebuild();
+    $before = $titles($engine);
+    DB::listen(function (QueryExecuted $query): void {
+        if (str_contains($query->sql, 'from `work_items`')) {
+            throw new RuntimeException('The database went away.');
+        }
+    });
+
+    expect(fn () => $indexer->buildNext(WorkItem::class))->toThrow(RuntimeException::class, 'The database went away.')
+        ->and($titles($engine))->toBe($before)
+        ->and($engine->indexNames())->toBe(['testing_pages', 'testing_projects', 'testing_users', 'testing_work_items']);
+});
+
+it('keeps the error of the fill when the next index cannot be removed either', function () use ($world) {
+    Exceptions::fake();
+    $engine = searchEngine();
+    $world();
+    $down = new RuntimeException('Meilisearch is down.');
+    DB::listen(function (QueryExecuted $query) use ($engine, $down): void {
+        if (str_contains($query->sql, 'from `work_items`')) {
+            $engine->failWith($down);
+
+            throw new RuntimeException('The database went away.');
+        }
+    });
+
+    expect(fn () => app(SearchIndexer::class)->buildNext(WorkItem::class))->toThrow(RuntimeException::class, 'The database went away.');
+
+    Exceptions::assertReported(fn (RuntimeException $reported) => $reported === $down);
+});
+
+it('rebuilds in place on an engine that cannot swap', function () use ($world) {
+    config(['scout.driver' => 'null']);
+    app(EngineManager::class)->forgetDrivers();
+    $world();
+
+    expect(app(SearchIndexer::class)->rebuild())->toBe(['work_items' => 3, 'pages' => 0, 'projects' => 2, 'users' => User::count()]);
+});
+
+it('needs an engine that swaps to build the next index', function () {
+    config(['scout.driver' => 'null']);
+    app(EngineManager::class)->forgetDrivers();
+
+    expect(fn () => app(SearchIndexer::class)->buildNext(WorkItem::class))
+        ->toThrow(LogicException::class, 'The search engine cannot swap indexes.')
+        ->and(fn () => app(SearchIndexer::class)->swapIn(WorkItem::class))
+        ->toThrow(LogicException::class, 'The search engine cannot swap indexes.');
+});
+
+it('keeps a change made while an index is rebuilt', function () {
+    consumers(SearchConsumer::class);
+    $engine = searchEngine();
+    $mara = User::factory()->create(['name' => 'Mara']);
+    $web = Project::factory()->identifier('WEB')->member($mara, ProjectRole::Admin)->create(['lead_id' => $mara->id]);
+    $renamed = WorkItem::factory()->for($web)->create(['title' => 'Kontaktformular']);
+    $gone = WorkItem::factory()->for($web)->create(['title' => 'Impressum']);
+    $done = WorkItem::factory()->for($web)->closed()->create(['title' => 'Datenschutz']);
+    $changed = false;
+    // right after the rebuild read the items, as the consumer would meanwhile: it writes into the live index
+    DB::listen(function (QueryExecuted $query) use (&$changed, $mara, $renamed, $gone, $done): void {
+        if ($changed || ! str_contains($query->sql, 'from `work_items`')) {
+            return;
+        }
+        $changed = true;
+        UpdateWorkItem::run(actor($mara), $renamed, ['title' => 'Kontaktformular prüfen']);
+        DeleteWorkItem::run(actor($mara), $gone);
+        ArchiveWorkItem::run(actor($mara), $done);
+    });
+
+    app(SearchIndexer::class)->rebuild();
+
+    expect($changed)->toBeTrue()
+        ->and(array_keys($engine->documents('testing_work_items')))->toEqualCanonicalizing([$renamed->id, $done->id])
+        ->and($engine->documents('testing_work_items')[$renamed->id]['title'])->toBe('Kontaktformular prüfen')
+        ->and($engine->documents('testing_work_items')[$done->id]['archived'])->toBeTrue();
 });

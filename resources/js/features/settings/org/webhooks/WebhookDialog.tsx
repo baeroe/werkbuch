@@ -61,6 +61,10 @@ export function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onC
   const [attempted, setAttempted] = useState(false);
   const [asking, setAsking] = useState(false);
   const [secret, setSecret] = useState<Secret | null>(null);
+  // a new webhook hands its secret to a dialog of its own, which has the focus by the time this form has faded out: the
+  // form gives nothing back then (T7: Base UI moves the focus to an explicit `finalFocus` wherever it is, and Enter on
+  // "Webhook anlegen" behind the secret opened a second form)
+  const [handedOver, setHandedOver] = useState(false);
   const renewButton = useRef<HTMLButtonElement>(null);
   // "Try again" of a toast sends the form as it is by then, not as it was when the toast came up
   const latest = useRef<() => void>(() => {});
@@ -86,6 +90,7 @@ export function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onC
       onSuccess: ({ webhook: saved, secret: created }) => {
         // the list holds the secret now; the call's answer lets go of it (and leaves the cache, gcTime 0)
         save.reset();
+        if (created) setHandedOver(true);
         onOpenChange(false);
         if (created) onCreated({ kind: 'created', name: saved.name, value: created });
         else toast({ title: t('settings.webhooks.dialog.saved', { name: saved.name }), tone: 'success' });
@@ -124,7 +129,7 @@ export function WebhookDialog({ open, onOpenChange, webhook, projects, bots, onC
       submitLabel={webhook ? t('settings.frame.save') : t('settings.webhooks.dialog.submit_create')}
       pending={save.isPending}
       notice={noticeOf(refusal, PLACED)}
-      finalFocus={finalFocus}
+      finalFocus={handedOver ? false : finalFocus}
       onSubmit={submit}
     >
       <div className="grid gap-4 sm:grid-cols-2">

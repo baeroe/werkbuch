@@ -21,6 +21,25 @@ use Throwable;
  */
 final class Rendering
 {
+    /**
+     * The sentence of a limit: the wait in seconds, from two minutes on in minutes (rounded up; the cap per account of
+     * the sign-in lasts up to an hour, A434).
+     */
+    public static function throttleMessage(int $seconds): string
+    {
+        return $seconds >= 120
+            ? __('auth.throttle_minutes', ['minutes' => (int) ceil($seconds / 60)])
+            : __('auth.throttle', ['seconds' => $seconds]);
+    }
+
+    /** The wait at the second factor: a minute's limit names seconds, the limit of the day names hours (A435). */
+    public static function twoFactorMessage(int $seconds): string
+    {
+        return $seconds > 60
+            ? __('two_factor_challenge.locked', ['hours' => max(1, (int) ceil($seconds / 3600))])
+            : self::throttleMessage($seconds);
+    }
+
     public static function register(Exceptions $exceptions): void
     {
         // refusals below 500 are expected answers, not errors; a search engine that does not answer and a mail server
@@ -32,7 +51,7 @@ final class Rendering
         // changing the own password: the limit shows at the current password, which it protects from guessing
         $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->is('api/v1/me/password')
             ? ProblemResponse::from(new Problem(429, 'too_many_requests', errors: [
-                'current_password' => [__('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])],
+                'current_password' => [self::throttleMessage((int) ($e->getHeaders()['Retry-After'] ?? 60))],
             ]), false)->withHeaders($e->getHeaders())
             : null);
 
@@ -50,17 +69,17 @@ final class Rendering
         // the limits per IP of the sign-in, of the reset links and of the new passwords show at the email field (like the
         // lock per address), instead of a 429 page
         $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->routeIs('login.store', 'password.email', 'password.update')
-            ? back()->withErrors(['email' => __('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])])->onlyInput('email')
+            ? back()->withErrors(['email' => self::throttleMessage((int) ($e->getHeaders()['Retry-After'] ?? 60))])->onlyInput('email')
             : null);
 
         // the two-factor challenge: the limit shows at the field in use, like a wrong code
         $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->routeIs('two-factor.login.store')
-            ? back()->withErrors([$request->filled('recovery_code') ? 'recovery_code' : 'code' => __('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])])
+            ? back()->withErrors([$request->filled('recovery_code') ? 'recovery_code' : 'code' => self::twoFactorMessage((int) ($e->getHeaders()['Retry-After'] ?? 60))])
             : null);
 
         // accepting an invitation: the limit shows at the page's own error, which also names a link that no longer works
         $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => $request->routeIs('invitations.accept')
-            ? back()->withErrors(['invitation' => __('auth.throttle', ['seconds' => (int) ($e->getHeaders()['Retry-After'] ?? 60)])])
+            ? back()->withErrors(['invitation' => self::throttleMessage((int) ($e->getHeaders()['Retry-After'] ?? 60))])
             : null);
 
         // an expired session (CSRF token mismatch; Laravel has already turned it into a 419) leads back with a message:

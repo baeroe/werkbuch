@@ -8,7 +8,7 @@
  * is replaced ("Meine Fassung übernehmen", A307); a version is read on its own with its text (`getPageVersion`, A315).
  */
 
-import type { Page as WikiPage, PageNode, PageVersion, PageVersionDetail, RichText } from '@/types';
+import type { Page as WikiPage, PageNode, PageSummary, PageVersion, PageVersionDetail, RichText } from '@/types';
 import { allPages, type Page } from './client';
 import { del, get, getPage as getList, one, patch, post } from './http';
 
@@ -95,4 +95,9 @@ export function getPageVersion(page_id: string, version_id: string): Promise<Pag
 /** Takes a kept version as the text of the page (a new version; the replaced state is kept first). */
 export function restorePageVersion(page_id: string, version_id: string): Promise<WikiPage> {
   return one(post<{ data: WikiPage }>(`${versionPath(page_id, version_id)}/restore`));
+}
+
+/** The pages of the wiki that reference a work item (ULID or key), by title, without text; only those the reader sees. */
+export function listItemPages(item_id: string): Promise<Page<PageSummary>> {
+  return allPages((cursor) => getList<PageSummary>(`/work-items/${encodeURIComponent(item_id)}/pages`, { cursor }));
 }

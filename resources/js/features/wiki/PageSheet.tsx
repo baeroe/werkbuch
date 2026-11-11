@@ -14,7 +14,8 @@
  *   "Verschieben nach …" (`wiki.page.move`, `onMove`) and "Löschen …" (`wiki.page.delete`, `onDelete`), only for whoever
  *   may edit and only as far as the wiki passes them.
  * - A conflict (409) stands as a banner above the text (`ConflictBanner`): "Neu laden" or "Meine Fassung übernehmen",
- *   both give the focus on into the text (`usePageSave`).
+ *   both give the focus on into the text (`usePageSave`). An undo of "Neu laden" that waits for a title puts the focus
+ *   in the title.
  * - "Versionen …" in the head row and the palette's `wiki.page.versions` open the kept versions (`VersionsDialog`);
  *   a restore saves what is typed first and waits while a conflict stands ("Erst den Konflikt klären").
  * - A viewer reads: the title as heading, the text in the viewer (or "Diese Seite ist noch leer."), why they cannot
@@ -40,7 +41,7 @@ import { useCommand } from '@/lib/commands';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
-import { useDialogScope, useShortcut } from '@/lib/shortcuts/useShortcut';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 import type { Page as WikiPage } from '@/types';
 import { ConflictBanner } from './ConflictBanner';
@@ -52,25 +53,21 @@ import { SaveStatus } from './SaveStatus';
 import { MAX_TITLE, usePageSave } from './usePageSave';
 import { VersionsDialog } from './VersionsDialog';
 
-/** Mounted while the emoji choice is open: its grid takes letters, so the page's single-key shortcuts wait. */
-function PausePageShortcuts() {
-  useDialogScope();
-  return null;
-}
-
 export function PageSheet({ page, projectId, identifier, ancestors, rights, focusTitle = false, onMove, onDelete, onCreateChild }: PageViewProps & { page: WikiPage }) {
   const canEdit = rights.denied === null;
   const uploads = useUploadCounter();
   const me = useCurrentUser()?.id;
+  const titleRef = useRef<HTMLTextAreaElement>(null);
   const { draft, change, save, state, savedAt, spoken, titleError, conflict, reload, keepMine, flush } = usePageSave(page, {
     canEdit,
     uploads,
     me,
     href: paths.wiki(identifier, page.id),
+    // an undo after "Neu laden" waits for a title: the title takes the focus
+    onTitleRequired: () => titleRef.current?.focus(),
   });
   const users = useUserMap();
   const day = useInstantDay();
-  const titleRef = useRef<HTMLTextAreaElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const ids = useId();
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -176,8 +173,8 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
             >
               {draft.emoji ?? <SmilePlus className="size-6 text-muted" aria-hidden="true" />}
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-3" title={t('wiki.page.emoji.title')}>
-              <PausePageShortcuts />
+            {/* its grid takes letters, so the page's single-key shortcuts wait while it is open */}
+            <PopoverContent className="w-auto p-3" title={t('wiki.page.emoji.title')} pauseShortcuts>
               <EmojiPicker className="mt-2" onPick={pickEmoji} />
               {draft.emoji && (
                 <Button variant="ghost" size="sm" icon={X} className="mt-2" onClick={() => pickEmoji(null)}>

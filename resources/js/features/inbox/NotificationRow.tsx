@@ -30,8 +30,7 @@ import { Kbd } from '@/components/ui/Kbd';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/components/ui/Menu';
 import { StatusIcon } from '@/components/ui/StatusIcon';
 import { formatMoment } from '@/features/item-detail/activity/when';
-import { tx } from '@/features/item-detail/activity/phrases';
-import { t } from '@/lib/i18n';
+import { t, tx } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import type { Notification, Project, StateIcon, StateSnapshot, User } from '@/types';
 import { changedFields, opensElsewhere, timeAgo } from './notifications';
@@ -234,7 +233,7 @@ export function NotificationRow({ notification, ctx, subject, current, tabStop, 
             </>
           )}
           <span id={sentenceId}>{sentence}</span>
-          {excerpt && <span className="mt-0.5 line-clamp-2 block max-w-[65ch] text-sm break-words text-muted">„{excerpt}“</span>}
+          {excerpt && <span className="mt-0.5 line-clamp-2 block max-w-[65ch] text-sm break-words text-muted">{t('inbox.excerpt', { text: excerpt })}</span>}
         </a>
         <time dateTime={notification.created_at} title={stamp} className="mt-0.5 block text-sm text-muted tabular-nums md:hidden">
           {ago}

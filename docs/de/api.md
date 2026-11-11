@@ -131,6 +131,7 @@ Ohne `sort` behält jede Liste ihre eigene Ordnung (der Standard in der Tabelle)
 | `GET /favorites` | – | – | deine Reihenfolge | – |
 | `GET /work-items/{item}/comments` | – | – | älteste zuerst | – |
 | `GET /work-items/{item}/history` | – | – | älteste zuerst | – |
+| `GET /work-items/{item}/pages` | – | – | Titel | – |
 | `GET /pages/{page}/versions` | – | – | neueste zuerst | – |
 | `GET /templates/{template}/runs` | – | – | neueste zuerst | – |
 <!-- lists:end -->
@@ -151,12 +152,13 @@ Items haben ihre eigene Filter-Engine, die der Views. Die vollständige Referenz
 - `POST /work-items/query` nimmt einen vollen Filter, eine Sortierung und den Cursor im Body, ein Lesezugriff wie `GET`.
 - `POST /work-items/groups` und `/work-items/counts` liefern die Zahlen einer Gruppierung oder benannter Filter.
 - `lean=1` (`"lean": true`) lässt `description`, `description_json` und `values_markdown` weg.
+- `POST /projects/{project}/redistribute-ranks` gibt den Items eines Projekts neue kurze Ränge in ihrer Ordnung, wenn zwischen zwei Nachbarn kein Rang mehr passt; es antwortet `{"redistributed": n}` ([Work Items](/de/concepts/work-items#items-von-hand-ordnen)).
 
-`GET /work-items/{item}?include=children,relations,type,workflow,attachments` bettet in einer Anfrage ein, was die Item-Seite braucht.
+`GET /work-items/{item}?include=children,relations,type,workflow,attachments` bettet in einer Anfrage ein, was die Item-Seite braucht. `children` enthält die ersten 100 Kinder in manueller Ordnung, archivierte eingeschlossen; wie viele es gibt, sagt `children_progress.total`, und `GET /work-items?filter[parent]=<key>&include_archived=1` blättert in derselben Ordnung durch alle.
 
 ## Rich Text
 
-Beschreibungen, Rich-Text-Werte, Kommentare, Wiki-Seiten und Vorlagen kommen in zwei Formen: `description` in Markdown und `description_json` als Tiptap-Dokument (`body`/`body_json` bei Kommentaren, `content`/`content_json` bei Seiten). Schreib in einer davon; beide zugleich sind ein `422`. Markdown ist für den Leser geschrieben: Erwähnungen zeigen den aktuellen Handle, Verweise den aktuellen Key bzw. Titel, und Verweise auf etwas, das du nicht sehen darfst, bleiben `[hidden](item:<ulid>)`. Was ein Text enthalten darf und wie Erwähnungen, Verweise, Bilder und Dateien geschrieben werden, steht auf der Seite [Rich Text](/de/concepts/rich-text#rest).
+Beschreibungen, Rich-Text-Werte, Kommentare, Wiki-Seiten und Vorlagen kommen in zwei Formen: `description` in Markdown und `description_json` als Tiptap-Dokument (`body`/`body_json` bei Kommentaren, `content`/`content_json` bei Seiten). Schreib in einer davon; beide zugleich sind ein `422`. Markdown ist für den Leser geschrieben: Erwähnungen zeigen den aktuellen Handle, Verweise den aktuellen Key bzw. Titel, und Verweise auf etwas, das du nicht sehen darfst, bleiben `[hidden](item:<ulid>)` bzw. `[hidden](page:<ulid>)`. Was ein Text enthalten darf und wie Erwähnungen, Verweise, Bilder und Dateien geschrieben werden, steht auf der Seite [Rich Text](/de/concepts/rich-text#schreiben-uber-rest).
 
 ## Konflikte
 
@@ -254,7 +256,7 @@ curl -X POST https://werkbuch.example.com/api/v1/attachments \
   -F file=@angebot.pdf
 ```
 
-`kind=file` legt die Datei in die Dateiliste des Items. Für ein Bild im Text lädst du mit `kind=inline` hoch und nennst es im Text als `![alt](attachment:<ulid>)` ([Rich Text](/de/concepts/rich-text#rest)).
+`kind=file` legt die Datei in die Dateiliste des Items. Für ein Bild im Text lädst du mit `kind=inline` hoch und nennst es im Text als `![alt](attachment:<ulid>)` ([Rich Text](/de/concepts/rich-text#eine-datei-hochladen)).
 
 ### Eine Grenze prüfen
 

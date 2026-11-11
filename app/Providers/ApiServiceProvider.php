@@ -79,7 +79,7 @@ final class ApiServiceProvider extends ServiceProvider
                 .'created in the personal settings under “API & MCP”) or with the session of the web app. Errors are Problem '
                 .'Details (RFC 9457, `application/problem+json`) with a `reason`. Lists are cursor-paginated (`cursor`, '
                 .'`per_page` up to 100) and answer `{data, links, meta}`. The guide is the page “API” of the werkbuch '
-                .'documentation (https://github.com/baeroe/werkbuch, `docs/en/api.md`).',
+                .'documentation: https://werkbuch.dev/en/api',
             'scramble.renderers.elements.view' => 'api-docs',
         ]);
     }

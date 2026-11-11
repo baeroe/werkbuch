@@ -10,7 +10,7 @@ use App\Exceptions\Problem;
 use App\Jobs\PurgeProject as PurgeProjectJob;
 use App\Models\Project;
 use App\Support\Actor;
-use App\Support\MemberInput;
+use App\Support\ProjectLock;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -34,7 +34,7 @@ final class DeleteProject
         DB::transaction(function () use ($actor, $project): void {
             // a second deletion at the same time finds the first one's mark (or no project any more): no second event,
             // no second job
-            MemberInput::lock($project);
+            ProjectLock::lock($project);
 
             $project->update(['deleting_at' => now()]);
             EventRecorder::record(EventType::ProjectDeleted, $actor, $project, $project, null, [

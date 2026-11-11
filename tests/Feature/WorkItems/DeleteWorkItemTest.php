@@ -12,6 +12,7 @@ use App\Models\Comment;
 use App\Models\CommentReaction;
 use App\Models\Event;
 use App\Models\Label;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\RelationType;
 use App\Models\User;
@@ -25,6 +26,7 @@ use App\Support\RelationSnapshot;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /** WEB (the default workflow) with Mara as its admin and lead. */
@@ -124,7 +126,7 @@ it('keeps the events of the deleted item', function () use ($web) {
         ->and($deleted->actor_id)->toBe($mara->id);
 });
 
-it('removes values, labels and subscriptions', function () use ($web) {
+it('removes values, labels, subscriptions and the rows of pages that reference it', function () use ($web) {
     [$project, $mara] = $web();
     $label = Label::factory()->create();
     $bug = WorkItemType::query()->where('name', 'Bug')->firstOrFail();
@@ -134,12 +136,20 @@ it('removes values, labels and subscriptions', function () use ($web) {
     $kept = CreateWorkItem::run(actor($mara), [
         'project_id' => $project->id, 'type_id' => $bug->id, 'title' => 'Bleibt', 'label_ids' => [$label->id], 'values' => ['effort' => 1],
     ]);
+    $page = Page::factory()->create(['project_id' => $project->id]);
+    foreach ([$item, $kept] as $named) {
+        DB::table('page_item_references')->insert(['id' => strtolower((string) Str::ulid()), 'page_id' => $page->id, 'work_item_id' => $named->id]);
+    }
     $count = fn (string $table) => DB::table($table)->where('work_item_id', $item->id)->count();
-    expect([$count('work_item_values'), $count('work_item_labels'), $count('work_item_subscribers')])->toBe([1, 1, 1]);
+    $tables = ['work_item_values', 'work_item_labels', 'work_item_subscribers', 'page_item_references'];
+    expect(array_map($count, $tables))->toBe([1, 1, 1, 1]);
 
     DeleteWorkItem::run(actor($mara), $item);
 
-    expect([$count('work_item_values'), $count('work_item_labels'), $count('work_item_subscribers')])->toBe([0, 0, 0])
+    expect(array_map($count, $tables))->toBe([0, 0, 0, 0])
+        // the page keeps its text and its row to the other item (A456)
+        ->and(DB::table('page_item_references')->pluck('work_item_id')->all())->toBe([$kept->id])
+        ->and($page->fresh())->not->toBeNull()
         ->and(WorkItemValue::query()->where('work_item_id', $kept->id)->count())->toBe(1)
         ->and(WorkItemSubscriber::query()->where('work_item_id', $kept->id)->count())->toBe(1)
         ->and(Label::query()->find($label->id))->not->toBeNull();

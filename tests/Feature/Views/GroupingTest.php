@@ -202,6 +202,25 @@ it('groups by project, type and parent', function () use ($world, $groups) {
         ->toBe([[$second->id, 1, 'AAA-1'], [$epic->id, 1, 'WEB-1'], ['none', 3, null]]);
 });
 
+it('orders parent groups by identifier naturally, then by number (A450, T8-M7)', function () use ($world) {
+    ['mara' => $mara] = $world();
+    // by the collation A10 came before A2; the number of a key always counted as a number
+    $epics = [];
+    foreach (['A10', 'A2'] as $identifier) {
+        $project = Project::factory()->identifier($identifier)->public()->create(['lead_id' => $mara->id]);
+        foreach (range(1, 10) as $number) {
+            $epics["{$identifier}-{$number}"] = WorkItem::factory()->for($project)->epic()->create();
+        }
+    }
+    foreach (['A10-1', 'A2-10', 'A2-9', 'A10-2'] as $key) {
+        WorkItem::factory()->childOf($epics[$key])->create();
+    }
+
+    $parents = GroupWorkItems::run(actor($mara), ['group_by' => 'parent'])->groups;
+
+    expect(array_map(fn (GroupCount $group) => $group->item?->key, $parents))->toBe(['A2-9', 'A2-10', 'A10-1', 'A10-2', null]);
+});
+
 it('orders people first and by name, and names the group without an assignee', function () use ($world, $groups) {
     ['mara' => $mara, 'jonas' => $jonas, 'ida' => $ida, 'abby' => $abby, 'web' => $web] = $world();
     foreach ([$mara, $abby, $jonas, null] as $assignee) {

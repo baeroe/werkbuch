@@ -150,6 +150,29 @@ test('does not apply the own change twice', async ({ page, browser }) => {
   }
 });
 
+test('shows a new public project to a person who is no member, without a reload', async ({ page, browser }) => {
+  // the inbox account of the variant holds only its own channel: nobody holds the channel of a project not made yet (A451)
+  const other = await signedInContext(browser, PEOPLE.inbox[variant()]!);
+  let identifier: string | undefined;
+  try {
+    const held = channelHeld(other.page, 'presence-user.', { prefix: true });
+    await other.page.goto('/projects');
+    const list = other.page.getByRole('list', { name: tr('en', 'projects.list_label') });
+    await expect(list).toBeVisible();
+    await held;
+    await markDocument(other.page);
+
+    const project = await createE2eProject(page, name('public'), { types: ['Task'] });
+    identifier = project.identifier;
+
+    await expect(list.getByRole('listitem').filter({ hasText: name('public') })).toBeVisible(LIVE);
+    await stillTheSameDocument(other.page);
+  } finally {
+    await other.context.close();
+    if (identifier !== undefined) await removeE2eProject(page, identifier);
+  }
+});
+
 test.describe('without Reverb', () => {
   test('shows the banner after Reverb went away and hides it when it is back', async ({ page, allowedErrors }) => {
     test.skip(isPhone(page), 'the banner is the same on every width; one run is enough');

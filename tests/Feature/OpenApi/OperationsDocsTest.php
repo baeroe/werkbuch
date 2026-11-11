@@ -56,7 +56,7 @@ $writable = fn (array $object): array => array_keys(array_filter($object['proper
 /** The operations of these tags: `"<METHOD> <path>" => success status`. */
 $operations = [
     'GET /projects/{project}/pages' => 200, 'POST /projects/{project}/pages' => 201, 'GET /pages/{page}' => 200, 'PATCH /pages/{page}' => 200,
-    'DELETE /pages/{page}' => 200, 'POST /pages/{page}/move' => 200,
+    'DELETE /pages/{page}' => 200, 'POST /pages/{page}/move' => 200, 'GET /work-items/{item}/pages' => 200,
     'GET /pages/{page}/versions' => 200, 'GET /pages/{page}/versions/{pageVersion}' => 200, 'POST /pages/{page}/versions/{pageVersion}/restore' => 200,
     'GET /templates' => 200, 'GET /projects/{project}/templates' => 200, 'POST /projects/{project}/templates' => 201, 'GET /templates/{template}' => 200,
     'PUT /templates/{template}' => 200, 'DELETE /templates/{template}' => 204, 'GET /templates/{template}/draft' => 200, 'POST /templates/{template}/run' => 200,
@@ -105,6 +105,7 @@ it('names the resource every answer carries', function () use ($answer, $operati
         'GET /templates/{template}/runs' => 'TemplateRunResource', 'GET /notifications' => 'NotificationResource', 'GET /webhooks' => 'WebhookResource',
         'GET /webhooks/{webhook}/deliveries' => 'WebhookDeliveryResource', 'GET /notification-preferences' => 'NotificationPreferenceResource',
         'PUT /notification-preferences' => 'NotificationPreferenceResource', 'GET /projects/{project}/pages' => 'PageNodeResource',
+        'GET /work-items/{item}/pages' => 'PageResource',
     ] as $key => $resource) {
         [$method, $path] = explode(' ', $key, 2);
 

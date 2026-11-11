@@ -15,6 +15,7 @@ import { currentToasts, dismissToast, resetToasts, runToastAction } from '@/comp
 import { preloadEditor } from '@/editor/RichTextEditor';
 import { listCommands } from '@/lib/commands';
 import { useUiStore } from '@/store/ui';
+import { expectLabelInName } from '@/test/a11y';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, labels, list, makeAttachment, makeTemplate, makeTemplateRun, makeWorkItem, mara, organization, project, properties, queryItems, theo, types } from '@/test/fixtures';
 import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
@@ -408,12 +409,18 @@ describe('the title', () => {
     await waitFor(() => expect(preview.textContent).toContain('Monatsbericht November 2026'));
     expect(preview.textContent).toContain('So heißt das Item beim nächsten Lauf, Mo., 02.11.2026, 09:00:');
     // the examples of the placeholders come from the server as well
-    await waitFor(() => expect(within(preview).getByRole('button', { name: '{week} einfügen: Kalenderwoche, jetzt 45' })).toBeTruthy());
+    await waitFor(() =>
+      expect(within(preview).getByRole('button', { name: '{week} 45: Platzhalter „Kalenderwoche“ einfügen (jetzt 45)' })).toBeTruthy(),
+    );
+    // a chip's name starts with what it shows, the placeholder and its example (WCAG 2.5.3), then says what it does
+    const chips = within(within(preview).getByRole('group', { name: 'Platzhalter einfügen' })).getAllByRole('button');
+    expect(chips).toHaveLength(6);
+    for (const chip of chips) expectLabelInName(chip);
 
     const title = screen.getByRole('textbox', { name: /^Titel/ }) as HTMLInputElement;
     await user.click(title);
     title.setSelectionRange(14, 14);
-    await user.click(within(preview).getByRole('button', { name: /^\{week\} einfügen/ }));
+    await user.click(within(preview).getByRole('button', { name: /^\{week\} 45: Platzhalter/ }));
     expect(title.value).toBe('Monatsbericht {week}{month_name} {year}');
     expect(document.activeElement).toBe(title);
     expect(title.selectionStart).toBe(20);
@@ -441,7 +448,8 @@ describe('the title', () => {
     const preview = screen.getByRole('region', { name: 'Vorschau des Titels' });
     await waitFor(() => expect(calls('POST', '/api/v1/templates/preview').length).toBeGreaterThan(0));
     expect(preview.textContent).toContain('Monatsbericht {month_name} {year}');
-    expect(within(preview).getByRole('button', { name: '{week} einfügen: Kalenderwoche' })).toBeTruthy();
+    const chip = within(preview).getByRole('button', { name: '{week}: Platzhalter „Kalenderwoche“ einfügen' });
+    expectLabelInName(chip);
   });
 });
 

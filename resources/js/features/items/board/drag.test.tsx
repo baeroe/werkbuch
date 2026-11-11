@@ -13,6 +13,7 @@ import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { useUiStore } from '@/store/ui';
 import {
   announced,
+  app,
   board,
   cardIn,
   column,
@@ -20,6 +21,7 @@ import {
   keysIn,
   lastToast,
   layBoardOut,
+  rankOf,
   renderBoard as renderWithServer,
   sent,
   startBoardServer,
@@ -361,21 +363,95 @@ describe('dragging a card', () => {
 
     await drag('Unstarted', 'WEB-48', onCard('Unstarted', 'WEB-44'));
     await waitFor(() => expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toHaveLength(1));
-    // no rank lies between two equal ones: the card goes just past them, never between ranks it would equal
+    // no rank lies between two equal ones: the card goes just past them, never between ranks it would equal, and stays
+    // above the card that comes after them (T19-M5)
     const { rank } = sent('PATCH', '/api/v1/work-items/wi_web_48')[0] as { rank: string };
-    expect('a2' < rank).toBe(true);
+    expect(keysIn('Unstarted')[4]).toBe('APP-17');
+    expect('a2' < rank && rank < rankOf(17)).toBe(true);
   });
 
-  it('says there is no room when the rank would grow too long', async () => {
+  it('redistributes the ranks when a dropped card has no room, and keeps the card in its new place meanwhile', async () => {
     // WEB-44 lies right after WEB-43, with a rank of 128 characters: between the two there is no room left
     board.items = board.items.map((entry) => (entry.id === 'wi_web_44' ? { ...entry, rank: `a1${'0'.repeat(125)}1` } : entry));
+    let release = () => {};
+    board.holdRanks = new Promise((resolve) => (release = resolve));
     renderBoard('/projects/WEB?layout=board');
     await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']));
 
     await drag('Todo', 'WEB-48', onCard('Todo', 'WEB-44'));
-    expect(lastToast()).toMatchObject({ tone: 'error', title: 'WEB-48 nicht verschoben', description: 'Hier ist kein Platz mehr. Verschiebe die Karte an eine andere Stelle.' });
+    await waitFor(() => expect(announced()).toBe('Ordnung wird neu verteilt …'));
+    expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-48', 'WEB-44']);
     expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
-    expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']);
+    // the card keeps the focus while it waits (M3)
+    await waitFor(() => expect(document.activeElement).toBe(cardIn('Todo', 'WEB-48')));
+    await act(async () => release());
+    await waitFor(() => expect(sent('POST', '/api/v1/projects/p_web/redistribute-ranks')).toHaveLength(1));
+
+    await waitFor(() => expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toHaveLength(1));
+    const { rank } = sent('PATCH', '/api/v1/work-items/wi_web_48')[0] as { rank: string };
+    expect('a0' < rank && rank < 'a1').toBe(true);
+    await waitFor(() => expect(announced()).toBe('WEB-48 steht jetzt an Stelle 2 von 3 in Todo.'));
+    expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-48', 'WEB-44']);
+  });
+
+  it('works out the rank of a card dropped again during the redistribution when its turn comes', async () => {
+    board.items = board.items.map((entry) => (entry.id === 'wi_web_44' ? { ...entry, rank: `a1${'0'.repeat(125)}1` } : entry));
+    let release = () => {};
+    board.holdRanks = new Promise((resolve) => (release = resolve));
+    renderBoard('/projects/WEB?layout=board');
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']));
+
+    await drag('Todo', 'WEB-48', onCard('Todo', 'WEB-44'));
+    await waitFor(() => expect(announced()).toBe('Ordnung wird neu verteilt …'));
+    // dropped again, on top of WEB-43
+    await drag('Todo', 'WEB-48', onCard('Todo', 'WEB-43'));
+    expect(keysIn('Todo')).toEqual(['WEB-48', 'WEB-43', 'WEB-44']);
+    await act(async () => release());
+
+    await waitFor(() => expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toHaveLength(2));
+    // WEB-43 is a0 now: a rank from its old a1 would be a0 as well and put the card after it
+    const [, second] = sent('PATCH', '/api/v1/work-items/wi_web_48') as { rank: string }[];
+    expect(second!.rank < 'a0').toBe(true);
+    await waitFor(() => expect(announced()).toBe('WEB-48 steht jetzt an Stelle 1 von 3 in Todo.'));
+    expect(keysIn('Todo')).toEqual(['WEB-48', 'WEB-43', 'WEB-44']);
+  });
+
+  it('puts the card back without "Try again" when the server refuses the redistribution', async () => {
+    board.items = board.items.map((entry) => (entry.id === 'wi_web_44' ? { ...entry, rank: `a1${'0'.repeat(125)}1` } : entry));
+    board.failRanks = 409;
+    renderBoard('/projects/WEB?layout=board');
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']));
+
+    await drag('Todo', 'WEB-48', onCard('Todo', 'WEB-44'));
+    await waitFor(() => expect(lastToast()).toMatchObject({ tone: 'error', title: 'WEB-48 nicht verschoben', description: 'Das Projekt ist archiviert.' }));
+    expect(lastToast()!.action).toBeUndefined();
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']));
+    expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
+  });
+
+  it('puts the card back when the redistribution fails', async () => {
+    board.items = board.items.map((entry) => (entry.id === 'wi_web_44' ? { ...entry, rank: `a1${'0'.repeat(125)}1` } : entry));
+    board.failRanks = 503;
+    renderBoard('/projects/WEB?layout=board');
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']));
+
+    await drag('Todo', 'WEB-48', onCard('Todo', 'WEB-44'));
+    await waitFor(() => expect(lastToast()).toMatchObject({ tone: 'error', title: 'WEB-48 nicht verschoben', description: 'Wartung.', action: { label: 'Erneut versuchen' } }));
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-44', 'WEB-48']));
+    expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
+    await waitFor(() => expect(cardIn('Todo', 'WEB-48').getAttribute('aria-busy')).toBeNull());
+
+    // "Try again" makes room and moves the card where it was dropped; it waits there meanwhile (M1)
+    board.failRanks = false;
+    let release = () => {};
+    board.holdRanks = new Promise((resolve) => (release = resolve));
+    act(() => lastToast()!.action!.onClick());
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-48', 'WEB-44']));
+    expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toEqual([]);
+    await act(async () => release());
+    await waitFor(() => expect(sent('PATCH', '/api/v1/work-items/wi_web_48')).toHaveLength(1));
+    expect(sent('POST', '/api/v1/projects/p_web/redistribute-ranks')).toHaveLength(2);
+    await waitFor(() => expect(keysIn('Todo')).toEqual(['WEB-43', 'WEB-48', 'WEB-44']));
   });
 
   it('keeps the order of a column sorted by something else and says so once', async () => {
@@ -527,6 +603,24 @@ describe('the quick add of a column', () => {
     expect(currentToasts()).toEqual([]);
   });
 
+  it('says where a new card stands that a later page of its column will bring, and opens it from the toast', async () => {
+    // more cards in Todo than the first page holds, and than the column shows: the next page is not asked for
+    board.items.push(...Array.from({ length: 12 }, (_, index) => app(30 + index, `Aufgabe ${30 + index}`, 'app_todo')));
+    board.pageSize = 12;
+    renderBoard('/projects/APP?layout=board');
+    await waitFor(() => expect(keysIn('Todo')).toContain('APP-30'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Item in Todo anlegen' }));
+    const input = screen.getByRole('textbox', { name: 'Neues Item in Todo' });
+    fireEvent.change(input, { target: { value: 'Testflug planen' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'APP-42 angelegt', description: 'APP-42 steht weiter unten in „Todo“.' }));
+    expect(useUiStore.getState().flashIds).toEqual([]);
+    act(() => lastToast()!.action!.onClick());
+    expect(useUiStore.getState().peekItemId).toBe('wi_app_42');
+  });
+
   it('keeps an empty quick add open, says what is missing and puts the focus on the title', async () => {
     renderBoard('/projects/APP?layout=board');
     fireEvent.click(await screen.findByRole('button', { name: 'Item in Todo anlegen' }));
@@ -608,6 +702,22 @@ describe('the quick add of a column', () => {
     await waitFor(() => expect(lastToast()).toMatchObject({ title: 'WEB-51 angelegt', description: 'Es passt nicht zum Filter dieser Liste und steht darum nicht hier.' }));
     act(() => lastToast()!.action!.onClick());
     expect(useUiStore.getState().peekItemId).toBe('wi_web_51');
+  });
+
+  it('says the filter leaves the new item out also in a column with more cards to load (20b-M1)', async () => {
+    // more tasks in Todo than the column shows: the next page is not asked for, and the new bug is no task
+    board.items.push(...Array.from({ length: 12 }, (_, index) => web(60 + index, `Aufgabe ${60 + index}`, 'std_todo')));
+    board.pageSize = 12;
+    board.webDefaultType = 't_bug';
+    const filter = encodeURIComponent(JSON.stringify([{ field: 'type', op: 'is', value: 't_task' }]));
+    renderBoard(`/projects/WEB?layout=board&filter=${filter}`);
+    await waitFor(() => expect(keysIn('Todo')).toContain('WEB-60'));
+    fireEvent.click(screen.getByRole('button', { name: 'Item in Todo anlegen' }));
+    const input = screen.getByRole('textbox', { name: 'Neues Item in Todo' });
+    fireEvent.change(input, { target: { value: 'Fehler im Footer' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => expect(lastToast()).toMatchObject({ title: 'WEB-72 angelegt', description: 'Es passt nicht zum Filter dieser Liste und steht darum nicht hier.' }));
   });
 
   it('chooses the project on a board of several, the one with the most cards first, and assigns the item to me on Meine Items', async () => {

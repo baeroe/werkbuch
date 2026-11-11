@@ -230,6 +230,63 @@ it('skips events without a webhook, without a query', function () use ($world, $
     expect(WebhookDelivery::query()->count())->toBe(0);
 });
 
+it('reads the default bot once per event (T6-M1)', function () use ($world, $create, $system) {
+    Queue::fake([DeliverWebhook::class]);
+    $w = $world();
+    consumers();
+    $item = $create($w['mara'], $w['ops']);
+    $event = eventsOf(EventType::WorkItemCreated, $item)->sole();
+    $actor = $system();
+    Webhook::factory()->create(['events' => ['work_item.*']]);
+    $run = function () use ($actor, $event): array {
+        WebhookDelivery::query()->delete();
+        app()->forgetScopedInstances();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $queued = QueueDeliveries::run($actor, $event);
+        DB::disableQueryLog();
+        $sql = array_column(DB::getQueryLog(), 'query');
+
+        return [$queued, count($sql), count(array_filter($sql, fn (string $query) => str_contains($query, '`is_default_bot`')))];
+    };
+
+    $run();
+    $one = $run();
+    Webhook::factory()->count(19)->create(['events' => ['work_item.*']]);
+    $twenty = $run();
+
+    expect($one)->toBe([1, $one[1], 1])
+        ->and($twenty)->toBe([20, $one[1], 1]);
+});
+
+it('reads no default bot when only webhooks with a bot take the event (T13a-M3)', function () use ($world, $create, $system) {
+    Queue::fake([DeliverWebhook::class]);
+    $w = $world();
+    consumers();
+    $item = $create($w['mara'], $w['web'], ['assignee_id' => $w['kira']->id]);
+    $event = eventsOf(EventType::WorkItemCreated, $item)->sole();
+    $actor = $system();
+    $kira = Webhook::factory()->forBot($w['kira'])->create(['events' => ['work_item.*']]);
+    $run = function () use ($actor, $event): array {
+        WebhookDelivery::query()->delete();
+        app()->forgetScopedInstances();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $queued = QueueDeliveries::run($actor, $event);
+        DB::disableQueryLog();
+
+        return [$queued, count(array_filter(array_column(DB::getQueryLog(), 'query'), fn (string $query) => str_contains($query, '`is_default_bot`')))];
+    };
+
+    // the body reads as Kira: the default bot is never asked for
+    expect($run())->toBe([1, 0])
+        ->and(WebhookDelivery::query()->sole()->webhook_id)->toBe($kira->id);
+
+    // the probe: a webhook without a bot takes the event as well, and the default bot is read once
+    Webhook::factory()->create(['events' => ['work_item.*']]);
+    expect($run())->toBe([2, 1]);
+});
+
 it('filters by bot: its own bot events, the events of its items, nothing of an item of another account (A364, K9)', function () use ($world, $create, $delivered, $botAssigned) {
     Queue::fake([DeliverWebhook::class]);
     $w = $world();
@@ -385,4 +442,49 @@ it('keeps a body within its limit: first without changes, then without data (T5-
     $fill = str_repeat('a', WebhookPayload::MAX_BYTES - strlen(WebhookPayload::encode([...$envelope, 'data' => ['d' => ''], 'changes' => null])));
     expect(strlen(WebhookPayload::encode([...$envelope, 'data' => ['d' => $fill], 'changes' => null])))->toBe(WebhookPayload::MAX_BYTES)
         ->and(json_decode(WebhookPayload::encode([...$envelope, 'data' => ['d' => $fill.'a'], 'changes' => null]), true)['data'])->toBeNull();
+});
+
+it('inserts the deliveries of an event in statements of at most 8 MiB, in the order of the webhooks (K16)', function () use ($world, $create, $system) {
+    Queue::fake([DeliverWebhook::class]);
+    $w = $world();
+    consumers();
+    $item = $create($w['mara'], $w['ops']);
+    // a description near the limit of a document (256 KB): the body carries it as Markdown and as JSON
+    $sentence = 'Die Seite lädt das Formular für die Kontaktdaten nach und prüft jedes Feld, bevor sie es an den Server schickt. ';
+    $paragraphs = [];
+    for ($n = 1; $n <= 800; $n++) {
+        $paragraphs[] = ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => "Absatz {$n}: ".str_repeat($sentence, 2)]]];
+    }
+    DB::table('work_items')->where('id', $item->id)->update(['description' => json_encode(['type' => 'doc', 'content' => $paragraphs])]);
+    UpdateWorkItem::run(actor($w['mara']), $item, ['title' => 'Formular prüfen, groß']);
+    $event = eventsOf(EventType::WorkItemUpdated, $item)->sole();
+    $webhooks = Webhook::factory()->count(40)->create(['events' => ['work_item.*']])->sortBy('id')->values();
+
+    $statements = [];
+    DB::listen(function ($query) use (&$statements): void {
+        if (str_starts_with($query->sql, 'insert ignore into `webhook_deliveries`')) {
+            $statements[] = array_sum(array_map(fn ($binding) => strlen((string) $binding), $query->bindings));
+        }
+    });
+    $queued = QueueDeliveries::run($system(), $event);
+
+    $deliveries = WebhookDelivery::query()->where('event_id', $event->id)->orderBy('id')->get();
+    $body = $deliveries->first()->body;
+    expect(strlen($body))->toBeGreaterThan(400_000)
+        ->and(strlen($body))->toBeLessThanOrEqual(WebhookPayload::MAX_BYTES)
+        // 40 bodies of more than 400 KB: more than 16 MiB, the default max_allowed_packet of MariaDB
+        ->and(array_sum($statements))->toBeGreaterThan(16 * 1_048_576)
+        ->and(count($statements))->toBeGreaterThan(1, 'bytes per statement: '.implode(', ', $statements))
+        ->and(max($statements))->toBeLessThanOrEqual(QueueDeliveries::INSERT_MAX_BYTES)
+        ->and($queued)->toBe(40)
+        ->and($deliveries->pluck('body')->unique()->all())->toBe([$body])
+        // the deliveries got their ULIDs in the order of the webhooks, chunk by chunk
+        ->and($deliveries->pluck('webhook_id')->all())->toBe($webhooks->modelKeys());
+    expect(Queue::pushed(DeliverWebhook::class)->map(fn (DeliverWebhook $job) => $job->uuid)->all())
+        ->toBe($deliveries->modelKeys());
+
+    // an event that arrives twice inserts nothing and queues nothing, in every chunk
+    expect(QueueDeliveries::run($system(), $event))->toBe(0)
+        ->and(WebhookDelivery::query()->where('event_id', $event->id)->count())->toBe(40);
+    Queue::assertPushed(DeliverWebhook::class, 40);
 });

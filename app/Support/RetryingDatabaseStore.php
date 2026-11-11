@@ -4,26 +4,30 @@ namespace App\Support;
 
 use Closure;
 use Illuminate\Cache\DatabaseStore;
-use Illuminate\Database\DetectsConcurrencyErrors;
+use Illuminate\Database\QueryException;
 use Throwable;
 
 /**
  * Laravel's cache store `database` (driver `retrying-database`, the store `database` of DDEV and Docker), which tries a
- * statement again that MariaDB rolled back for a deadlock or a lock it waited for too long. The throttles count in it:
+ * statement again that MariaDB rolled back as a deadlock victim (SQLSTATE 40001, error 1213). The throttles count in it:
  * requests of one person at once (a live salvo loads every query of a screen again) write the same key, and once a
  * counter has run out, the first request deletes the expired row and two `insert ignore` of the key both hold a shared
  * lock on the delete-marked record and both wait for the exclusive one: MariaDB rolls one back (1213), which was a 500.
  * Each of these statements is one on its own (an increment one short transaction), so trying it again is safe: an add
  * then finds the row of the other request.
  *
+ * Never a lock wait timeout (1205): outside a transaction every attempt waits the full `innodb_lock_wait_timeout`
+ * (50 s), three attempts would hold a request for 150 s (A436, changes A433).
+ *
  * Only outside a transaction: inside one the deadlock rolled back the whole transaction of the caller, which tries it
  * again itself (`DB::transaction(…, 3)`, the same rule as Laravel's transactions and DatabaseLock). Locks (`lock()`)
- * stay Laravel's: outside a transaction a lock that deadlocked counts as not acquired, never as an error.
+ * stay Laravel's: `DatabaseLock::release` and `pruneExpiredLocks` swallow only a concurrency error (Laravel's
+ * ConcurrencyErrorDetector: a deadlock, a lock wait, "record has changed since last read", SQLSTATE 40001, …) outside
+ * a transaction and throw anything else, the `update` in `acquire`, `refresh` and `forceRelease` can throw (only jobs and
+ * the scheduler lock).
  */
 final class RetryingDatabaseStore extends DatabaseStore
 {
-    use DetectsConcurrencyErrors;
-
     /** The driver of the store in `config/cache.php`, registered in AppServiceProvider. */
     public const DRIVER = 'retrying-database';
 
@@ -96,9 +100,19 @@ final class RetryingDatabaseStore extends DatabaseStore
         $this->retrying = true;
 
         try {
-            return retry(self::PAUSES, $statement, 0, fn (Throwable $e): bool => $this->causedByConcurrencyError($e));
+            return retry(self::PAUSES, $statement, 0, self::isDeadlock(...));
         } finally {
             $this->retrying = false;
         }
+    }
+
+    /** A deadlock victim: SQLSTATE 40001 or MariaDB error 1213 (a lock wait timeout, 1205, is none). */
+    private static function isDeadlock(Throwable $e): bool
+    {
+        if (! $e instanceof QueryException) {
+            return false;
+        }
+
+        return ($e->errorInfo[1] ?? null) === 1213 || ($e->errorInfo[0] ?? null) === '40001';
     }
 }

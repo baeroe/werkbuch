@@ -2,10 +2,15 @@
 
 namespace App\Live;
 
+use App\Access\Visibility;
+use App\Enums\AccountType;
+use App\Enums\ProjectVisibility;
 use App\Events\EventConsumer;
 use App\Events\EventType;
 use App\Events\RetriesConsumption;
 use App\Models\Event;
+use App\Models\Project;
+use App\Models\User;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -20,6 +25,7 @@ use Illuminate\Broadcasting\PrivateChannel;
  * | `work_item.subscribed`/`unsubscribed` | `presence-user.{actor}` |
  * | `project.member_added` | also `presence-user.{new member}` (K14: the person does not listen to the project yet) |
  * | `user.role_changed` | `presence-user.{account}` (K14) |
+ * | `project.created`, `project.updated` that made it public | also `presence-user.{everyone who sees it}` (A451) |
  *
  * Every other event (catalogs, views, tokens, favorites, accounts, the events of the migrations) has no live update
  * (A280). Whoever lost access through the event is disconnected afterwards (A281, Disconnect). Broadcasts never throw
@@ -57,6 +63,9 @@ final class LiveConsumer implements EventConsumer, RetriesConsumption
         foreach (self::channels($event) as $channel) {
             Broadcasts::send(LiveMessage::of($event, $channel));
         }
+        foreach (array_chunk(self::newcomers($event), LiveMessage::CHANNELS_MAX) as $channels) {
+            Broadcasts::send(LiveMessage::of($event, ...$channels));
+        }
 
         Disconnect::users(Disconnect::lostAccess($event));
     }
@@ -77,5 +86,31 @@ final class LiveConsumer implements EventConsumer, RetriesConsumption
             $event->type->group() === 'comment' => [new PrivateChannel("work-item.{$event->subject_id}")],
             default => [],
         };
+    }
+
+    /**
+     * The own channels of the people who see a project but do not listen to it yet (A451): nobody holds the channel of
+     * a new project, and that of a project that turned public only its members and the org admins. Every active person
+     * whom Visibility lets see the project now, the actor too: Reverb leaves out the tab of the socket (A282), the
+     * actor's other tabs (and every tab, when the change came over a token) hear it. A private project reaches its
+     * members and the org admins, one being deleted (or gone) nobody. Members who hold the project channel
+     * hear it twice; the browser keeps one per `event_id`. Asks the same queries however many people there are (the
+     * project, the people, the org roles and the members, the last two only for a private project).
+     *
+     * @return list<PresenceChannel>
+     */
+    private static function newcomers(Event $event): array
+    {
+        $shown = $event->type === EventType::ProjectCreated
+            || ($event->type === EventType::ProjectUpdated && data_get($event->changes, 'visibility.new') === ProjectVisibility::Public->value);
+        $project = $shown ? Project::query()->find($event->subject_id) : null;
+        if ($project === null) {
+            return [];
+        }
+
+        Visibility::forget();
+        $people = User::query()->where('type', AccountType::Person)->whereNull('disabled_at')->orderBy('id')->get();
+
+        return array_map(fn (User $user) => new PresenceChannel("user.{$user->id}"), Visibility::seeing($project, $people));
     }
 }

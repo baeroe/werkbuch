@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Laravel\Scout\EngineManager;
 
 /*
  * What the system page shows its org admins (Task 11, A287): the version, the backlog per queue (only jobs that are due
@@ -53,6 +54,7 @@ it('shows version, backlog per queue and delayed jobs apart', function () use ($
         ->and($status['delayed_jobs'])->toBe(2)
         ->and(array_column($status['queues'], 'queue'))->toBe(config('werkbuch.queues'))
         ->and(collect($status['queues'])->keyBy('queue')->map(fn (array $q) => [$q['pending'], $q['oldest_at']?->toJSON()])->all())->toBe([
+            'mail' => [0, null],
             'default' => [1, '2026-11-03T09:59:30.000000Z'],
             'live' => [0, null],
             'notifications' => [3, '2026-11-03T09:50:00.000000Z'],
@@ -141,7 +143,6 @@ it('says whether mail is configured', function () {
 });
 
 it('says live is off for the log broadcaster', function () {
-    Http::preventStrayRequests();
     config(['broadcasting.default' => 'log']);
 
     expect(GetSystemStatus::run(actor($this->admin))['live'])->toBe('off');
@@ -149,19 +150,70 @@ it('says live is off for the log broadcaster', function () {
 });
 
 it('asks Reverb whether it is up', function () {
-    Http::preventStrayRequests();
     liveChannels();
-    Http::fakeSequence('http://127.0.0.1:6001/up')
+    $answers = Http::fakeSequence('http://127.0.0.1:6001/up')
         ->push('{"health":"OK"}')
         ->push('', 500)
         ->pushFailedConnection('Connection refused');
 
     expect(GetSystemStatus::run(actor($this->admin))['live'])->toBe('ok')
         ->and(GetSystemStatus::run(actor($this->admin))['live'])->toBe('down')
-        ->and(GetSystemStatus::run(actor($this->admin))['live'])->toBe('down');
+        ->and(GetSystemStatus::run(actor($this->admin))['live'])->toBe('down')
+        // the third ask took the refused connection: every answer of the sequence was asked for
+        ->and($answers->isEmpty())->toBeTrue();
 
-    Http::assertSentCount(3);
+    // a refused connection in a pool leaves no response to record: two answers, three asks
+    Http::assertSentCount(2);
     Http::assertSent(fn ($request) => $request->url() === 'http://127.0.0.1:6001/up' && $request->method() === 'GET');
+});
+
+/** The real engine of Meilisearch over a fake host, and Reverb as the broadcaster. */
+$meilisearch = function (): void {
+    liveChannels();
+    config(['scout.driver' => 'meilisearch', 'scout.meilisearch.host' => 'http://meili.test', 'scout.meilisearch.key' => 'master-key']);
+    app(EngineManager::class)->forgetDrivers();
+};
+
+it('asks search and live in one pool, each once (K21)', function () use ($meilisearch) {
+    $meilisearch();
+    Http::fake([
+        'meili.test/health' => Http::response(['status' => 'available']),
+        'meili.test/tasks*' => fn ($request) => Http::response(['total' => match (true) {
+            str_contains($request->url(), 'statuses=enqueued') => 3,
+            str_contains($request->url(), 'statuses=processing') => 1,
+            default => 2,
+        }]),
+        '127.0.0.1:6001/up' => Http::response('{"health":"OK"}'),
+    ]);
+
+    $status = GetSystemStatus::run(actor($this->admin));
+
+    expect($status)->toMatchArray(['search' => 'ok', 'search_tasks' => ['enqueued' => 3, 'processing' => 1, 'failed_last_day' => 2], 'live' => 'ok']);
+    // one request each for the health, the three kinds of tasks and Reverb: nothing is asked twice
+    Http::assertSentCount(5);
+    Http::assertSent(fn ($request) => $request->url() === 'http://meili.test/health' && $request->hasHeader('Authorization', 'Bearer master-key'));
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'statuses=failed') && str_contains($request->url(), 'afterFinishedAt='));
+});
+
+it('says search is down and live is up when only Meilisearch fails', function () use ($meilisearch) {
+    $meilisearch();
+    Http::fake([
+        'meili.test/health' => Http::response(['status' => 'available']),
+        'meili.test/tasks*' => Http::response('', 500),
+        '127.0.0.1:6001/up' => Http::response('{"health":"OK"}'),
+    ]);
+    expect(GetSystemStatus::run(actor($this->admin)))->toMatchArray(['search' => 'down', 'search_tasks' => null, 'live' => 'ok']);
+});
+
+it('says live is down and search is up when only Reverb fails', function () use ($meilisearch) {
+    $meilisearch();
+    Http::fake([
+        'meili.test/*' => Http::response(['total' => 0]),
+        '127.0.0.1:6001/up' => $reverb = Http::sequence()->pushFailedConnection('Connection refused'),
+    ]);
+    expect(GetSystemStatus::run(actor($this->admin)))->toMatchArray(['search' => 'ok', 'search_tasks' => ['enqueued' => 0, 'processing' => 0, 'failed_last_day' => 0], 'live' => 'down'])
+        // down because Reverb refused the connection, not because nothing asked it
+        ->and($reverb->isEmpty())->toBeTrue();
 });
 
 it('refuses members and bots with 403', function () {

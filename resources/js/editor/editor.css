@@ -238,10 +238,21 @@
   vertical-align: top;
   min-width: 4rem;
 }
+/* header cells of the header row and of the header column alike */
 .rt th {
   background: var(--bg-sunken);
   font-weight: 600;
   text-align: left;
+}
+/* room above every table of an editable text for the tab of the table menu (tables.tsx): it never covers text, and
+   nothing moves when it comes; 44 px on phones */
+.rt-editor .ProseMirror[contenteditable='true'] .tableWrapper {
+  margin-top: 2.75rem;
+}
+@media (min-width: 48rem) {
+  .rt-editor .ProseMirror[contenteditable='true'] .tableWrapper {
+    margin-top: 1.5rem;
+  }
 }
 .rt .selectedCell::after {
   content: '';

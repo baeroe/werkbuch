@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, createE2eProject, createItem, isPhone, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { allEntries, createE2eProject, createItem, isPhone, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // The table of a project with the keyboard only, signed in as the e2e person (playwright.config.ts), in English. Each
 // test works in a project of its own (`E2E …`, removed after it) with two items over the API.
@@ -55,6 +55,45 @@ test('edits the priority of an item in the table with the keyboard', async ({ pa
     // the server has it
     await page.reload();
     await expect(cell(page, reset.id, 1).getByRole('combobox', { name: `${tr('en', 'items.fields.priority.label')}: Urgent` })).toBeVisible();
+  } finally {
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
+test('jumps to the edges of the grid with Home, End and mod, and extends the selection with shift', async ({ page }) => {
+  await page.goto('/my-items');
+  const project = await createE2eProject(page, name('edges'), { types: ['Task'] });
+  try {
+    const items: { id: string; key: string }[] = [];
+    for (const title of ['Login form', 'Password reset', 'Profile page']) items.push(await createItem(page, { project_id: project.id, title }));
+    const [first, second, third] = [items[0]!, items[1]!, items[2]!];
+    await openTable(page, project.identifier, first.id, 'fields=key,priority,assignee,due_date');
+
+    // End and Home: the last and the first column of the row
+    await page.keyboard.press('End');
+    await expect(cell(page, first.id, 3)).toBeFocused();
+    await page.keyboard.press('Home');
+    await expect(cell(page, first.id, 0)).toBeFocused();
+    // with mod: the last and the first row, in the same column
+    await page.keyboard.press('ArrowRight');
+    await pressMod(page, 'End');
+    await expect(cell(page, third.id, 1)).toBeFocused();
+    await pressMod(page, 'Home');
+    await expect(cell(page, first.id, 1)).toBeFocused();
+
+    // shift+↓ and shift+↑ grow the selection from the row of the cursor
+    const bar = page.getByRole('group', { name: tr('en', 'items.bulk.label') });
+    await page.keyboard.press('Shift+ArrowDown');
+    await expect(cell(page, second.id, 1)).toBeFocused();
+    await expect(bar).toContainText(`2 ${tr('en', 'items.bulk.of_total', { total: 3 })}`);
+    await page.keyboard.press('Shift+ArrowDown');
+    await expect(cell(page, third.id, 1)).toBeFocused();
+    await expect(bar).toContainText(`3 ${tr('en', 'items.bulk.of_total', { total: 3 })}`);
+    await page.keyboard.press('Escape');
+    await expect(bar).toBeHidden();
+    await page.keyboard.press('Shift+ArrowUp');
+    await expect(cell(page, second.id, 1)).toBeFocused();
+    await expect(bar).toContainText(`2 ${tr('en', 'items.bulk.of_total', { total: 3 })}`);
   } finally {
     await removeE2eProject(page, project.identifier);
   }

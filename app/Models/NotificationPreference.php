@@ -26,9 +26,12 @@ final class NotificationPreference extends Model
 {
     use HasUlids;
 
+    /** Accounts per query of storedFor(): far below the 65 535 placeholders MariaDB takes in one statement. */
+    public const BLOCK = 1000;
+
     /**
      * The stored choices of the accounts, `"<kind>:<channel>" => enabled` per account (the form Preferences::enabled
-     * reads), in one query.
+     * reads), in one query per BLOCK accounts.
      *
      * @param  list<string>  $userIds
      * @return array<string, array<string, bool>>
@@ -36,8 +39,10 @@ final class NotificationPreference extends Model
     public static function storedFor(array $userIds): array
     {
         $stored = [];
-        foreach (self::query()->whereIn('user_id', $userIds)->get() as $preference) {
-            $stored[$preference->user_id]["{$preference->kind->value}:{$preference->channel->value}"] = $preference->enabled;
+        foreach (array_chunk($userIds, self::BLOCK) as $block) {
+            foreach (self::query()->whereIn('user_id', $block)->get() as $preference) {
+                $stored[$preference->user_id]["{$preference->kind->value}:{$preference->channel->value}"] = $preference->enabled;
+            }
         }
 
         return $stored;

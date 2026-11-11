@@ -15,6 +15,7 @@ import {
   tr,
   variant,
 } from '../helpers';
+import { range, stateId, typeId } from '../timelineHelpers';
 
 // The acceptance of phase 5 (success criteria 4 and 6), with the keyboard only, signed in as the e2e person (org
 // admin, English). A team view with a filter on a property of its own (the demo dropdown "Kunde", Task and Epic have
@@ -33,15 +34,6 @@ async function customer(page: Page): Promise<{ label: string; nordlicht: string;
     nordlicht: property.options.find((option) => option.label === 'Studio Nordlicht')!.id,
     other: property.options.find((option) => option.label !== 'Studio Nordlicht')!.id,
   };
-}
-
-async function typeId(page: Page, type: string): Promise<string> {
-  return String((await allEntries(page, 'work-item-types')).find((entry) => entry.name === type)!.id);
-}
-
-async function stateId(page: Page, state: string): Promise<string> {
-  const workflow = (await allEntries(page, 'workflows')).find((entry) => entry.is_default === true) as { states: { id: string; name: string }[] };
-  return workflow.states.find((entry) => entry.name === state)!.id;
 }
 
 /**
@@ -90,9 +82,9 @@ async function keysOverRest(page: Page, viewId: string): Promise<{ keys: string[
 
 /** The keys a layout shows, read from the ids its items carry once `count` of them stand there, sorted. */
 async function shownKeys(page: Page, selector: string, attribute: string, count: number, keyOf: Map<string, string>): Promise<string[]> {
-  const shown = page.locator(selector);
-  await expect(shown).toHaveCount(count);
-  const ids = await shown.evaluateAll((elements, name) => elements.map((element) => element.getAttribute(name)!), attribute);
+  const present = page.locator(selector);
+  await expect(present).toHaveCount(count);
+  const ids = await present.evaluateAll((elements, name) => elements.map((element) => element.getAttribute(name)!), attribute);
   return ids.map((id) => keyOf.get(id) ?? `not over REST: ${id}`).sort();
 }
 
@@ -101,10 +93,6 @@ const layoutButton = (page: Page, layout: 'list' | 'board' | 'table' | 'timeline
     .getByRole('group', { name: tr('en', 'items.screen.layout') })
     .filter({ visible: true })
     .getByRole('button', { name: new RegExp(tr('en', `items.layout.${layout}`)) });
-
-/** A day as the app writes it in English (01/10/2026), and the range of a bar on the timeline. */
-const shown = (day: string) => new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`));
-const range = (start: string, due: string) => tr('en', 'items.timeline.range', { start: shown(start), due: shown(due) });
 
 // one project for the tests that only read it: every item created is an event the queue worker handles one at a time
 let shared: Awaited<ReturnType<typeof customerProject>> & { name: string };
@@ -188,7 +176,7 @@ test('filters with f, saves as a view, stars it and opens it from the sidebar', 
   const dialog = page.getByRole('dialog', { name: tr('en', 'items.save.dialog.title') });
   const field = dialog.getByRole('textbox', { name: tr('en', 'views.fields.name') });
   await expect(field).toBeFocused();
-  await field.selectText();
+  await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.type(viewName('saved'));
   await pressMod(page, 'Enter');
   await expect(page).toHaveURL(/\/views\/[0-9a-z]{26}$/);

@@ -264,7 +264,7 @@ final class Grouping
     }
 
     /**
-     * The parents by key, each with its item, then `none`. Only a parent the reader sees names a group: a key without
+     * The parents by key (the identifier naturally, then the number), each with its item, then `none`. Only a parent the reader sees names a group: a key without
      * one (a parent the reader may not see) counts into `none`, so that no group answers with the ULID of an item the
      * reader may not know. A parent lives in the project of its child (`field.parent_id.project`), so this only guards
      * against rows built by hand.
@@ -276,7 +276,8 @@ final class Grouping
     {
         $parents = WorkItem::query()->visibleTo($reader)->whereKey(array_keys($counts))
             ->join('projects as group_projects', 'group_projects.id', '=', 'work_items.project_id')
-            ->orderBy('group_projects.identifier')->orderBy('work_items.number')
+            // the identifier naturally (A2 before A10) like the sort by key (A450, T8-M7)
+            ->orderByRaw('natural_sort_key(`group_projects`.`identifier`)')->orderBy('work_items.number')
             ->select('work_items.*')->with('project')->get()->keyBy('id')->all();
 
         $known = [self::NONE => 0];

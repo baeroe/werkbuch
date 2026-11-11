@@ -7,6 +7,7 @@ use App\Enums\Locale;
 use App\Events\EventConsumer;
 use App\Events\EventType;
 use App\Exceptions\Problem;
+use App\Jobs\LinkReferencesJob;
 use App\Models\Event;
 use App\Models\Organization;
 use App\Models\Project;
@@ -19,12 +20,14 @@ use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Laravel\Scout\EngineManager;
 use Symfony\Component\Finder\Finder;
+use Tests\Load\LoadTestCase;
 use Tests\Support\ArraySearchEngine;
 use Tests\Support\FakeResolver;
 use Tests\Support\RecordingBroadcaster;
@@ -38,6 +41,8 @@ pest()->extend(TestCase::class)->use(RefreshDatabase::class)->beforeEach(functio
     resolver([]);
 })->in('Feature');
 pest()->extend(TestCase::class)->use(DatabaseMigrations::class)->in('Integration');
+// the load suite (phpunit.load.xml) against the database `load`, which keeps its data between runs (LoadWorld)
+pest()->extend(LoadTestCase::class)->in('Load');
 
 /**
  * Absolute path inside the repository. Unit tests run without the app, so they resolve files
@@ -397,6 +402,15 @@ function eventsOf(EventType $type, ?Model $subject = null): Collection
     return Event::query()->where('type', $type)
         ->when($subject, fn ($query) => $query->where('subject_type', $subject->getMorphClass())->where('subject_id', $subject->getKey()))
         ->orderBy('occurred_at')->orderBy('id')->get();
+}
+
+/**
+ * Holds the job of the automation `link_references` (on by default, A452): for a test that does not deal with it and
+ * counts relations, events, `updated_at` or queries after a text that names another item. Say why where you call it.
+ */
+function withoutReferenceLinks(): void
+{
+    Queue::fake([LinkReferencesJob::class]);
 }
 
 /**

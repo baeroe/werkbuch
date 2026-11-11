@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Support\RetryingDatabaseStore;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Cache\Repository;
 use Illuminate\Database\Connection;
@@ -28,18 +29,26 @@ afterEach(function () {
     RaceConnections::tearDown();
 });
 
+/** A PDOException as the driver builds it: the message and the errorInfo of the server. */
+$driverError = function (string $state, int $code, string $message): PDOException {
+    $error = new PDOException("SQLSTATE[{$state}]: {$message}");
+    $error->errorInfo = [$state, $code, $message];
+
+    return $error;
+};
+
 /**
  * Makes the first statement of the connection that starts with `$sqlStart` fail like a deadlock MariaDB reports, before
  * it runs; answers how often it did.
  *
  * @return Closure(): int
  */
-$deadlockOnce = function (string $sqlStart, string $connection = 'mariadb'): Closure {
+$deadlockOnce = function (string $sqlStart, string $connection = 'mariadb') use ($driverError): Closure {
     $thrown = 0;
-    DB::connection($connection)->beforeExecuting(function (string $query, array $bindings, Connection $on) use ($sqlStart, &$thrown): void {
+    DB::connection($connection)->beforeExecuting(function (string $query, array $bindings, Connection $on) use ($sqlStart, &$thrown, $driverError): void {
         if ($thrown === 0 && str_starts_with($query, $sqlStart)) {
             $thrown++;
-            throw new QueryException($on->getName() ?? '', $query, $bindings, new PDOException('SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction'));
+            throw new QueryException($on->getName() ?? '', $query, $bindings, $driverError('40001', 1213, 'Deadlock found when trying to get lock; try restarting transaction'));
         }
     });
 
@@ -60,11 +69,44 @@ it('tries a statement of the cache again that MariaDB rolled back as the deadloc
         ->and($store()->get('counter'))->toBe($value);
     Sleep::assertSleptTimes(1);
 })->with([
-    'add' => ['insert ignore into `cache`', fn (Repository $cache) => expect($cache->add('other', 5, 60))->toBeTrue(), 1],
+    'add' => ['insert ignore into `cache`', function (Repository $cache) {
+        expect($cache->add('other', 5, 60))->toBeTrue();
+        expect($cache->get('other'))->toBe(5);
+    }, 1],
     'increment' => ['select * from `cache`', fn (Repository $cache) => expect($cache->increment('counter'))->toBe(2), 2],
     'put' => ['insert into `cache`', fn (Repository $cache) => $cache->put('counter', 7, 60), 7],
     'forget' => ['delete from `cache`', fn (Repository $cache) => $cache->forget('counter'), null],
     'touch' => ['update `cache`', fn (Repository $cache) => expect($cache->touch('counter', 120))->toBeTrue(), 1],
+]);
+
+it('reads either sign of the server as a deadlock, and only those', function (string $state, int $code, bool $retried) use ($store, $driverError) {
+    $thrown = 0;
+    DB::connection()->beforeExecuting(function (string $query, array $bindings) use (&$thrown, $driverError, $state, $code): void {
+        if ($thrown === 0 && str_starts_with($query, 'insert ignore into `cache`')) {
+            $thrown++;
+            throw new QueryException('mariadb', $query, $bindings, $driverError($state, $code, 'the server refused the statement'));
+        }
+    });
+    $add = fn () => $store()->add('counter', 0, 60);
+
+    if ($retried) {
+        expect($add())->toBeTrue()
+            ->and($store()->get('counter'))->toBe(0);
+        Sleep::assertSleptTimes(1);
+    } else {
+        expect($add)->toThrow(QueryException::class, 'the server refused the statement');
+        Sleep::assertNeverSlept();
+    }
+    expect($thrown)->toBe(1);
+})->with([
+    // SQLSTATE 40001 and error 1213 together, as MariaDB reports a deadlock victim
+    'state and code' => ['40001', 1213, true],
+    // either one alone counts (a driver may report only one of them)
+    'the code 1213 under another state' => ['HY000', 1213, true],
+    'the state 40001 without a code of the server' => ['40001', 0, true],
+    // a lock wait timeout and any other error go to the caller at once
+    'a lock wait timeout' => ['HY000', 1205, false],
+    'neither' => ['42S02', 1146, false],
 ]);
 
 it('reads an expired key again whose delete was the deadlock victim', function () use ($deadlockOnce, $store) {
@@ -77,12 +119,12 @@ it('reads an expired key again whose delete was the deadlock victim', function (
         ->and(DB::table('cache')->count())->toBe(0);
 });
 
-it('gives up after the third deadlock in a row', function () use ($store) {
+it('gives up after the third deadlock in a row', function () use ($store, $driverError) {
     $thrown = 0;
-    DB::connection()->beforeExecuting(function (string $query, array $bindings) use (&$thrown): void {
+    DB::connection()->beforeExecuting(function (string $query, array $bindings) use (&$thrown, $driverError): void {
         if (str_starts_with($query, 'insert ignore into `cache`')) {
             $thrown++;
-            throw new QueryException('mariadb', $query, $bindings, new PDOException('SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction'));
+            throw new QueryException('mariadb', $query, $bindings, $driverError('40001', 1213, 'Deadlock found when trying to get lock; try restarting transaction'));
         }
     });
 
@@ -90,16 +132,29 @@ it('gives up after the third deadlock in a row', function () use ($store) {
     expect($thrown)->toBe(3);
 });
 
-it('leaves any other error of the database to the caller', function () use ($store) {
+it('leaves any other error of the database to the caller', function () use ($store, $driverError) {
     $thrown = 0;
-    DB::connection()->beforeExecuting(function (string $query, array $bindings) use (&$thrown): void {
+    DB::connection()->beforeExecuting(function (string $query, array $bindings) use (&$thrown, $driverError): void {
         if (str_starts_with($query, 'insert ignore into `cache`')) {
             $thrown++;
-            throw new QueryException('mariadb', $query, $bindings, new PDOException("SQLSTATE[42S02]: Base table or view not found: 1146 Table 'testing.cache' doesn't exist"));
+            throw new QueryException('mariadb', $query, $bindings, $driverError('42S02', 1146, "Table 'testing.cache' doesn't exist"));
         }
     });
 
     expect(fn () => $store()->add('counter', 0, 60))->toThrow(QueryException::class, "doesn't exist");
+    expect($thrown)->toBe(1);
+});
+
+it('leaves an error that is no database error to the caller', function () use ($store) {
+    $thrown = 0;
+    DB::connection()->beforeExecuting(function (string $query) use (&$thrown): void {
+        if (str_starts_with($query, 'insert ignore into `cache`')) {
+            $thrown++;
+            throw new RuntimeException('connection lost');
+        }
+    });
+
+    expect(fn () => $store()->add('counter', 0, 60))->toThrow(RuntimeException::class, 'connection lost');
     expect($thrown)->toBe(1);
 });
 
@@ -112,19 +167,44 @@ it('leaves a deadlock inside a transaction to the transaction', function () use 
     Sleep::assertNeverSlept();
 });
 
-it('waits again for a lock another request held until the cache gave up', function () {
+it('passes a lock wait timeout through at once', function () {
     config(['cache.stores.database.connection' => 'mariadb_second']);
     $cache = Cache::store('database');
     $prefixed = $cache->getStore()->getPrefix().'counter';
-    // the other request has written the counter and not committed yet: the add waits for its lock
+    // the other request has written the counter and not committed yet: the add waits for its lock until MariaDB gives up
     RaceConnections::hold(fn () => DB::table('cache')->insert(['key' => $prefixed, 'value' => 'i:3;', 'expiration' => now()->addMinute()->timestamp]));
-    Sleep::whenFakingSleep(fn () => RaceConnections::release());
+    $attempts = 0;
+    DB::connection('mariadb_second')->beforeExecuting(function (string $query) use (&$attempts): void {
+        if (str_starts_with($query, 'insert ignore into `cache`')) {
+            $attempts++;
+        }
+    });
 
-    $added = RaceConnections::second(fn () => $cache->add('counter', 0, 60));
+    $outcome = RaceConnections::second(fn () => $cache->add('counter', 0, 60));
 
-    expect($added)->toBeFalse()
-        ->and(RaceConnections::second(fn () => $cache->get('counter')))->toBe(3);
+    expect($outcome)->toBeInstanceOf(QueryException::class)
+        ->and($outcome->getMessage())->toContain('Lock wait timeout');
+    expect($attempts)->toBe(1);
+    Sleep::assertNeverSlept();
+});
+
+it('retries a deadlock on the update of increment', function () use ($deadlockOnce, $store) {
+    $store()->put('counter', 1, 60);
+    $thrown = $deadlockOnce('update `cache`');
+
+    expect($store()->increment('counter'))->toBe(2)
+        ->and($thrown())->toBe(1)
+        ->and($store()->get('counter'))->toBe(2);
     Sleep::assertSleptTimes(1);
+});
+
+it('uses the retrying store for the rate limiter of the app', function () {
+    config(['cache.default' => 'database']);
+    app()->forgetInstance(RateLimiter::class);
+    $limiter = app(RateLimiter::class);
+    $cache = (new ReflectionProperty(RateLimiter::class, 'cache'))->getValue($limiter);
+
+    expect($cache->getStore())->toBeInstanceOf(RetryingDatabaseStore::class);
 });
 
 it('answers the API although the counter of its throttle deadlocked once', function () use ($deadlockOnce) {

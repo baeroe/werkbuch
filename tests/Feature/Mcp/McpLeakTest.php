@@ -75,6 +75,8 @@ $world = function (): array {
     $opsVersion = PageVersion::factory()->create(['page_id' => $opsPage->id]);
     $opsParent = Page::factory()->create(['project_id' => $ops->id, 'title' => 'Geheimer Ordner', 'created_by' => $mara->id, 'updated_by' => $mara->id]);
 
+    // the relation below is Mara's own: the automation link_references would make it from the reference first (A452)
+    withoutReferenceLinks();
     UpdateWorkItem::run(actor($mara), $webItem, ['description' => "Hängt an OPS-1 und [Plan](page:{$opsPage->id})."]);
     AddRelation::run(actor($mara), $webItem, ['type_id' => RelationType::query()->where('built_in', 'relates')->value('id'), 'target_id' => 'OPS-1']);
     $webPage = CreatePage::run(actor($mara), $web, ['title' => 'Öffentliche Seite', 'content' => "Siehe OPS-1 und [Plan](page:{$opsPage->id})."]);
@@ -154,6 +156,7 @@ $refusals = fn (): array => [
     'pages get' => ['pages', fn ($w, $hide) => ['action' => 'get', 'page' => $hide($w['opsPage']->id)]],
     'pages versions' => ['pages', fn ($w, $hide) => ['action' => 'versions', 'page' => $hide($w['opsPage']->id)]],
     'pages version' => ['pages', fn ($w, $hide) => ['action' => 'version', 'page' => $hide($w['opsPage']->id), 'page_version' => $hide($w['opsVersion']->id)]],
+    'pages item' => ['pages', fn ($w, $hide) => ['action' => 'item', 'item' => $hide($w['opsItem']->key)]],
     'templates get' => ['templates', fn ($w, $hide) => ['action' => 'get', 'template' => $hide($w['opsTemplate']->id)]],
     'templates runs' => ['templates', fn ($w, $hide) => ['action' => 'runs', 'template' => $hide($w['opsTemplate']->id)]],
     'templates draft' => ['templates', fn ($w, $hide) => ['action' => 'draft', 'template' => $hide($w['opsTemplate']->id)]],
@@ -210,6 +213,7 @@ $refusals = fn (): array => [
     'manage-automations' => ['manage-automations', fn ($w, $hide) => ['project' => $hide('OPS'), 'key' => 'close_parent', 'input' => ['enabled' => true]]],
     'manage-projects update' => ['manage-projects', fn ($w, $hide) => ['action' => 'update', 'project' => $hide('OPS'), 'input' => ['name' => 'Umbenannt']]],
     'manage-projects set-workflow' => ['manage-projects', fn ($w, $hide) => ['action' => 'set-workflow', 'project' => $hide('OPS'), 'input' => ['workflow_id' => Workflow::default()->id, 'mapping' => []]]],
+    'manage-projects redistribute-ranks' => ['manage-projects', fn ($w, $hide) => ['action' => 'redistribute-ranks', 'project' => $hide('OPS')]],
     'manage-projects join' => ['manage-projects', fn ($w, $hide) => ['action' => 'join', 'project' => $hide('OPS')], 'positive' => fn ($w) => ['admin', ['action' => 'join', 'project' => 'OPS']]],
     'manage-projects add-member' => ['manage-projects', fn ($w, $hide) => ['action' => 'add-member', 'project' => $hide('OPS'), 'input' => ['user_id' => $w['ida']->id, 'role' => 'viewer']],
         'positive' => fn ($w) => ['mara', ['action' => 'add-member', 'project' => 'OPS', 'input' => ['user_id' => User::factory()->create()->id, 'role' => 'viewer']]]],
@@ -405,6 +409,37 @@ it('shows the hidden end of a relation and a reference without key, title or id'
         ->and($leaks($page, withId: false))->toBe([])
         ->and($ok($mara->call('pages', ['action' => 'get', 'page' => $w['webPage']->id]))['data']['content'])
         ->toBe("Siehe OPS-1 und [Geheime Seite](page:{$w['opsPage']->id}).");
+});
+
+it('lists no page of a private project that names a public item, not even as a number', function () use ($world, $client, $ok) {
+    $w = $world();
+    // a page of OPS names WEB-1 (A456): Ida sees the item, not the page; another item of WEB is named by nothing
+    CreatePage::run(actor($w['mara']), $w['ops'], ['title' => 'Geheime Notiz', 'content' => "Betrifft {$w['webItem']->key}."]);
+    $unnamed = WorkItem::factory()->for($w['web'])->create(['created_by' => $w['mara']->id]);
+    $ida = $client($this, $w['ida']);
+    $mara = $client($this, $w['mara']);
+    $pages = fn (McpClient $mcp, string $key) => $ok($mcp->call('pages', ['action' => 'item', 'item' => $key]));
+
+    $hidden = $pages($ida, $w['webItem']->key);
+    $nothing = $pages($ida, $unnamed->key);
+    expect($hidden['data'])->toBe([])
+        ->and($hidden['meta']['total'])->toBe(0)
+        ->and(str_contains((string) json_encode($hidden, JSON_UNESCAPED_UNICODE), 'Geheim'))->toBeFalse('MCP names the page of OPS')
+        ->and([$hidden['data'], $hidden['meta']['total'], $hidden['meta']['next_cursor']])->toBe([$nothing['data'], $nothing['meta']['total'], $nothing['meta']['next_cursor']])
+        ->and(array_column($pages($mara, $w['webItem']->key)['data'], 'title'))->toBe(['Geheime Notiz']);
+
+    // REST answers the same
+    $rest = function (User $user, string $key) {
+        // a new request: the guard of the test app would still know the account of the call before
+        forgetApiAuth();
+
+        return $this->withToken(apiToken($user, ['read']))->getJson("/api/v1/work-items/{$key}/pages")->assertOk();
+    };
+    $answer = $rest($w['ida'], $w['webItem']->key);
+    expect($answer->json('data'))->toBe([])
+        ->and($answer->json('meta.total'))->toBe(0)
+        ->and(str_contains($answer->getContent() ?: '', 'Geheim'))->toBeFalse('REST names the page of OPS')
+        ->and($rest($w['olaf'], $w['webItem']->key)->json('data.0.title'))->toBe('Geheime Notiz');
 });
 
 it('lets secrets and invitation links leave only where REST shows them', function () use ($world, $client, $ok) {

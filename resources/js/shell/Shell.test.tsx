@@ -9,6 +9,7 @@ import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { listCommands } from '@/lib/commands';
 import { drafts } from '@/lib/drafts';
 import { useUiStore } from '@/store/ui';
+import { expectLabelInName } from '@/test/a11y';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { list, makeView, project } from '@/test/fixtures';
 import { pauseLive } from '@/api/live';
@@ -123,16 +124,47 @@ describe('Shell', () => {
     expect(gear().getAttribute('aria-current')).toBe('page');
   });
 
-  it('closes the drawer when only the query of the address changes', async () => {
-    url = '/projects/WEB?view=open';
+  it('keeps the drawer open when only the query of the address changes, and closes it on a new path', async () => {
+    url = '/projects/WEB?layout=board';
     const { rerender } = render(<Shell>Inhalt</Shell>);
     fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }));
-    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Navigation' })).toBeTruthy();
 
-    // a view chosen in the list changes the query, not the path
-    url = '/projects/WEB?view=mine';
+    // the list writes its state into the query (a canonical address, a parameter taken out): the drawer stays
+    url = '/projects/WEB?layout=table';
     rerender(<Shell>Inhalt</Shell>);
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(screen.getByRole('dialog', { name: 'Navigation' })).toBeTruthy();
+
+    // a link to another page closes it
+    url = '/inbox';
+    rerender(<Shell>Inhalt</Shell>);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull());
+  });
+
+  it('closes the drawer on a link chosen in it, also one to the page it is on', async () => {
+    url = '/my-items';
+    render(<Shell>Inhalt</Shell>);
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Navigation' });
+    fireEvent.click(within(drawer).getByRole('link', { name: 'Meine Items' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull());
+  });
+
+  it('keeps the drawer open on a link opened in a new tab or window (20b-M6)', async () => {
+    url = '/my-items';
+    render(<Shell>Inhalt</Shell>);
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation öffnen' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Navigation' });
+    const link = within(drawer).getByRole('link', { name: 'Meine Items' });
+    fireEvent.click(link, { ctrlKey: true });
+    fireEvent.click(link, { metaKey: true });
+    fireEvent.click(link, { button: 1 });
+    await act(async () => {});
+    expect(screen.getByRole('dialog', { name: 'Navigation' }).hasAttribute('data-ending-style')).toBe(false);
+    // a plain click still closes it
+    fireEvent.click(link);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull());
   });
 
   it('shows nothing when the visit flashed nothing', () => {
@@ -158,10 +190,13 @@ describe('Inbox badge', () => {
 
     // the sidebar and the phone bar: the name says it, the badge shows it
     const full = await within(sidebar()).findByRole('link', { name: 'Inbox, 3 ungelesen' });
-    expect(full.textContent).toBe('Inbox3');
+    // the word and the count stay two words for anyone reading the text (WCAG 2.5.3)
+    expect(full.textContent).toBe('Inbox 3');
+    expectLabelInName(full);
     expect(full.getAttribute('href')).toBe('/inbox');
     const bar = within(header).getByRole('link', { name: 'Inbox, 3 ungelesen' });
     expect(bar.textContent).toBe('3');
+    expectLabelInName(bar);
     // the badge is a picture of the name: read once, through the link
     expect(full.querySelector('[data-inbox-badge]')?.getAttribute('aria-hidden')).toBe('true');
 
@@ -169,6 +204,7 @@ describe('Inbox badge', () => {
     act(() => useUiStore.getState().toggleSidebar());
     const rail = await within(sidebar()).findByRole('link', { name: 'Inbox, 3 ungelesen' });
     expect(rail.textContent).toBe('3');
+    expectLabelInName(rail);
 
     // the count follows the inbox: `notifications.changed` makes it stale, the badge asks again (Task 14)
     unread(4);
@@ -187,11 +223,18 @@ describe('Inbox badge', () => {
 
     unread(120);
     await act(() => client.invalidateQueries({ queryKey: ['notifications'] }));
-    const full = await within(sidebar()).findByRole('link', { name: 'Inbox, 120 ungelesen' });
+    // the name says what the badge shows, and keeps the whole number
+    const many = 'Inbox, 99+ ungelesen (insgesamt 120)';
+    const full = await within(sidebar()).findByRole('link', { name: many });
     expect(full.querySelector('[data-inbox-badge]')?.textContent).toBe('99+');
-    expect(within(screen.getByRole('banner')).getByRole('link', { name: 'Inbox, 120 ungelesen' }).textContent).toBe('99+');
+    expectLabelInName(full);
+    const bar = within(screen.getByRole('banner')).getByRole('link', { name: many });
+    expect(bar.textContent).toBe('99+');
+    expectLabelInName(bar);
     act(() => useUiStore.getState().toggleSidebar());
-    expect((await within(sidebar()).findByRole('link', { name: 'Inbox, 120 ungelesen' })).textContent).toBe('99+');
+    const rail = await within(sidebar()).findByRole('link', { name: many });
+    expect(rail.textContent).toBe('99+');
+    expectLabelInName(rail);
   });
 });
 

@@ -6,6 +6,7 @@ use App\Models\Favorite;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\View;
+use Database\Seeders\Demo\Texts\DemoTexts;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -41,17 +42,17 @@ class FavoritesSeeder extends Seeder
         }
 
         $views = [
-            'mara' => ['Fällig diese Woche' => 0, 'Bugs in Produktion' => 1, 'Für Kira' => 2],
-            'jonas' => ['Blockiert' => 0],
-            'ida' => ['Bugs in Produktion' => 0],
-            'theo' => ['Studio Nordlicht' => 0],
+            'mara' => ['due_week' => 0, 'prod_bugs' => 1, 'kira' => 2],
+            'jonas' => ['blocked' => 0],
+            'ida' => ['prod_bugs' => 0],
+            'theo' => ['nordlicht' => 0],
         ];
         $viewType = (new View)->getMorphClass();
 
         foreach ($views as $handle => $positions) {
-            foreach ($positions as $name => $position) {
+            foreach ($positions as $key => $position) {
                 // the oldest of that name and creator is the seeded one: names are not unique (K27)
-                $view = View::query()->where('name', $name)->where('created_by', $accounts[ViewsSeeder::CREATORS[$name]])
+                $view = View::query()->where('name', DemoTexts::get("view.{$key}.name"))->where('created_by', $accounts[ViewsSeeder::CREATORS[$key]])
                     ->orderBy('id')->firstOrFail();
 
                 Favorite::updateOrCreate(

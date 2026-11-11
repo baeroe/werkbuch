@@ -32,7 +32,7 @@ Eine Property ist ein Feld, das Typen ihren Items über die Kernfelder hinaus ge
 
 ### Schlüssel
 
-Der Schlüssel nennt die Property in der API und später in MCP und Filtern. Er ist `snake_case`: Kleinbuchstaben, Ziffern und `_`, vorn ein Buchstabe, höchstens 40 Zeichen. Er ist eindeutig und **lässt sich nicht ändern**, sobald die Property gespeichert ist. Er darf nicht der Name eines Kernfelds sein: `id`, `key`, `project`, `type`, `title`, `description`, `state`, `state_category`, `resolution`, `assignee`, `priority`, `label`, `labels`, `start_date`, `due_date`, `parent`, `created_by`, `created_at`, `updated_at`, `started_at`, `closed_at`, `archived`, `archived_at` und `rank` sind vergeben.
+Der Schlüssel nennt die Property in der API, in MCP und in [Filtern](/de/concepts/views#properties) (`property:<key>`). Er ist `snake_case`: Kleinbuchstaben, Ziffern und `_`, vorn ein Buchstabe, höchstens 40 Zeichen. Er ist eindeutig und **lässt sich nicht ändern**, sobald die Property gespeichert ist. Er darf nicht der Name eines Kernfelds sein: `id`, `key`, `project`, `type`, `title`, `description`, `state`, `state_category`, `resolution`, `assignee`, `priority`, `label`, `labels`, `start_date`, `due_date`, `parent`, `created_by`, `created_at`, `updated_at`, `started_at`, `closed_at`, `archived`, `archived_at` und `rank` sind vergeben.
 
 <!-- reference:start -->
 ### Feldtypen
@@ -84,7 +84,7 @@ Jede der beiden Kategorien hat immer genau einen Standard. Wird eine Resolution 
 
 Lesen darf jedes Konto die Kataloge; anlegen, ändern und löschen nur Org-Admins. Listen kommen in Seiten von bis zu 100 (`per_page`, `cursor`), wie jede Liste der API.
 
-| Katalog | Auflisten und anlegen | Ändern und löschen |
+| Katalog | Auflisten und anlegen | Lesen, ändern und löschen |
 |---|---|---|
 | Typen | `/api/v1/work-item-types` | `/api/v1/work-item-types/{id}` |
 | Properties | `/api/v1/properties` | `/api/v1/properties/{id}` |

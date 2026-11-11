@@ -96,15 +96,18 @@ export function timeAgo(iso: string, at: Date, timeZone: string): string {
 
 /* ---------------------------------------------------------------------- fields */
 
-/** The fields an `item_changed` notification can list (`EventFacts::fieldsOf`), by the names the item shows them with. */
+/**
+ * The fields an `item_changed` notification can list (`EventFacts::fieldsOf`), by the names the item shows them with, as
+ * they read mid-sentence: lower case in English ("changed priority"), the nouns of the item in German.
+ */
 const FIELD_NAMES: Record<string, TranslationKey> = {
   title: 'inbox.field.title',
   description: 'inbox.field.description',
-  priority: 'items.fields.row.priority',
-  label_ids: 'items.fields.row.labels',
-  start_date: 'items.fields.row.start_date',
-  due_date: 'items.fields.row.due_date',
-  assignee_id: 'items.fields.row.assignee',
+  priority: 'inbox.field.priority',
+  label_ids: 'inbox.field.label_ids',
+  start_date: 'inbox.field.start_date',
+  due_date: 'inbox.field.due_date',
+  assignee_id: 'inbox.field.assignee_id',
   parent_id: 'inbox.field.parent_id',
   type_id: 'inbox.field.type_id',
   resolution_id: 'inbox.field.resolution_id',

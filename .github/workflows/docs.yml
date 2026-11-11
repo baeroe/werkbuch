@@ -1,0 +1,110 @@
+name: Docs
+
+# The docs on GitHub Pages at https://werkbuch.dev, from the root (base /). The custom domain lives in the Pages
+# settings of the repository; docs/public/CNAME records it, GitHub ignores the file when Actions deploy the site.
+# Runs on main only (and by hand): the CI job docs in tests.yml builds every pull request.
+on:
+  push:
+    branches: [main]
+    # the compose files are embedded in the setup; the plans and notes under docs/ are no part of the site
+    paths: ['docs/**', '!docs/superpowers/**', '!docs/history/**', 'docker-compose.yml', 'docker-compose.standalone.yml', 'pnpm-lock.yaml', '.github/workflows/docs.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# one deployment at a time; a running one is not cancelled halfway
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # whether Pages is on and deploys from GitHub Actions: otherwise the docs are built, but not deployed, and the run
+  # stays green (a site that deploys from a branch would refuse the deployment of a workflow)
+  pages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pages: read
+    outputs:
+      enabled: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - name: GitHub Pages
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          status=$(gh api --include "repos/$REPOSITORY/pages" 2>/dev/null | head -n 1 | cut -d ' ' -f 2) || true
+          case "$status" in
+            200)
+              build_type=$(gh api "repos/$REPOSITORY/pages" --jq .build_type)
+              if [ "$build_type" = workflow ]; then
+                echo "enabled=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "::notice title=GitHub Pages::Pages deploys from a branch (build_type ${build_type:-unknown}), not from GitHub Actions (Settings → Pages → Source 'GitHub Actions'); the docs were built but not deployed."
+                echo "enabled=false" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            404)
+              echo "::notice title=GitHub Pages::Pages is not enabled for this repository (Settings → Pages → Source 'GitHub Actions', custom domain werkbuch.dev); the docs were built but not deployed."
+              echo "enabled=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error title=GitHub Pages::GET repos/$REPOSITORY/pages answered ${status:-nothing}"
+              exit 1
+              ;;
+          esac
+
+  # always: a page that does not build on main shows as a red run
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # "last updated" needs the git history
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm --dir docs build
+        env:
+          DOCS_BASE: /
+          DOCS_URL: https://werkbuch.dev
+
+      - name: CNAME, sitemap and llms.txt
+        run: |
+          grep -qx werkbuch.dev docs/.vitepress/dist/CNAME
+          test -f docs/.vitepress/dist/sitemap.xml
+          grep -q '<loc>https://werkbuch.dev/en/setup</loc>' docs/.vitepress/dist/sitemap.xml
+          test -f docs/.vitepress/dist/llms.txt
+
+      # no actions/configure-pages: its outputs (base_url …) are not used, the base is /
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    needs: [pages, build]
+    # started by hand on another branch, the docs are built but never deployed
+    if: github.ref == 'refs/heads/main' && needs.pages.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

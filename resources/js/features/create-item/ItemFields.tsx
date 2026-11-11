@@ -7,7 +7,7 @@
 import { CircleAlert } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { personOption } from '@/components/fields/AssigneePicker';
-import { DatePopover, DayValue } from '@/components/fields/DateField';
+import { DatePopover, DayValue, dayText } from '@/components/fields/DateField';
 import { formatDay } from '@/components/fields/format';
 import { useProjectPeople, useToday } from '@/components/fields/itemData';
 import { labelOption } from '@/components/fields/LabelsPicker';
@@ -97,6 +97,7 @@ export function ItemFields({ draft, update, errors, clearError, workflow }: Item
   const date = (field: 'startDate' | 'dueDate') => {
     const path = field === 'startDate' ? 'start_date' : 'due_date';
     const value = draft[field];
+    const shown = { value, today, overdue: false, empty: t(field === 'startDate' ? 'items.fields.date.no_start' : 'items.fields.date.no_due') };
     return (
       <FieldRow label={t(field === 'startDate' ? 'items.detail.fields.start' : 'items.detail.fields.due')} error={errors[path]} errorId={errorId(path)}>
         <DatePopover
@@ -104,8 +105,8 @@ export function ItemFields({ draft, update, errors, clearError, workflow }: Item
           value={value}
           invalid={Boolean(errors[path])}
           describedBy={describe(path)}
-          display={<DayValue value={value} today={today} overdue={false} empty={t(field === 'startDate' ? 'items.fields.date.no_start' : 'items.fields.date.no_due')} />}
-          displayText={value ? formatDay(value) : t('items.fields.date.unset')}
+          display={<DayValue {...shown} />}
+          displayText={dayText(shown)}
           onChoose={(next) => {
             const other = field === 'startDate' ? draft.dueDate : draft.startDate;
             if (next && other && (field === 'startDate' ? next > other : next < other)) {

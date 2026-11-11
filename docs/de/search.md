@@ -1,6 +1,6 @@
 # Suche
 
-Eine Suche findet Work Items, Wiki-Seiten, Projekte, Personen und Bots sowie Views. In der Oberfläche steckt sie in der Befehlspalette (<kbd>⌘ / Strg</kbd>+<kbd>K</kbd>), über die API ist es `GET /api/v1/search`. Beide suchen gleich und lassen dieselben Items, Seiten, Projekte und Konten weg; die Palette fragt nach weniger Treffern je Art (8), zeigt Personen und Bots nur Org-Admins (siehe unten) und durchsucht nie das Archiv. Der Browser spricht nie selbst mit der Suchmaschine: Jede Suche läuft über werkbuch, und werkbuch entscheidet, was du sehen darfst.
+Eine Suche findet Work Items, Wiki-Seiten, Projekte, Personen und Bots sowie Views. In der Oberfläche steckt sie in der Befehlspalette (<kbd>⌘ / Strg</kbd>+<kbd>K</kbd>), über die API ist es `GET /api/v1/search`. Beide suchen gleich und lassen dieselben Items, Seiten, Projekte und Konten weg; die Palette fragt nach weniger Treffern je Art (8), zeigt Personen und Bots nur Org-Admins (siehe unten) und lässt das Archiv aus, außer ein Item, dessen Key du tippst. Der Browser spricht nie selbst mit der Suchmaschine: Jede Suche läuft über werkbuch, und werkbuch entscheidet, was du sehen darfst.
 
 ## Was gefunden wird
 
@@ -17,6 +17,8 @@ Jedes getippte Wort muss vorkommen; das letzte darf der Anfang eines Worts sein,
 Ein Wort eines Kommentars findet das Item, zu dem der Kommentar gehört; die Suche liest die Kommentare eines Items in der Reihenfolge, in der sie geschrieben wurden, bis zu 64 KB Text je Item. Ein bearbeiteter oder gelöschter Kommentar ändert die Suche einen Moment später, wie jede andere Änderung; Reaktionen ändern nichts.
 
 Eine Wiki-Seite wird über ihren Titel und ihren Text gefunden, bis zu 64 KB Text je Seite; ein Treffer im Titel zählt mehr als einer im Text, und bei gleichen Treffern steht die zuletzt geänderte Seite vorn. Speichern, Verschieben und Löschen einer Seite ändern die Suche einen Moment später.
+
+Ein Verweis auf ein Item in einer Seite zählt für die Suche nicht: Die Seite wird über den Key des Items, auf das sie verweist, nicht gefunden, denn ein Key als Verweis steht ohne seine Buchstaben im Text. Welche Seiten ein Item nennen, zeigt das Item selbst: Sein Abschnitt **Wiki-Seiten** listet sie (siehe [Wiki](/de/concepts/wiki#verweise-und-suche)).
 
 Personen und Bots werden nur gefunden, solange ihr Konto aktiv ist. Views sucht werkbuch über jedes Wort ihres Namens, ohne Rücksicht auf Groß- und Kleinschreibung und Akzente, direkt in der Datenbank: Eine neue View wird sofort gefunden.
 
@@ -41,6 +43,8 @@ Ohne Treffer sagt die Palette das und gibt zwei Tipps: Befehle findest du über 
 Der Dialog **Relation hinzufügen** (<kbd>R</kbd> an einem Item) findet das andere Item über dieselbe Suche (nur Items, bis zu 20), Keys eingeschlossen. Bevor du tippst, schlägt er nichts vor. `#` in einem Text findet Items und Seiten genauso (siehe [Rich Text](/de/concepts/rich-text#verweise)).
 
 Alle Tasten der Palette stehen auf der Seite [Tastatur](/de/keyboard).
+
+![Die Befehlspalette mit der Suche nach WEB: Work Items, Wiki-Seiten und das Projekt](/screenshots/de/palette.png)
 
 ## REST
 
@@ -139,10 +143,10 @@ werkbuch sucht mit [Meilisearch](https://www.meilisearch.com) über Laravel Scou
 
 ```bash
 php artisan app:search-sync      # schickt die Einstellungen der Indizes an Meilisearch (nach einem Update, das sie geändert hat)
-php artisan app:search-import    # leert die vier Indizes und füllt sie neu aus der Datenbank
+php artisan app:search-import    # baut die vier Indizes neu aus der Datenbank auf und tauscht sie ein
 ```
 
-`app:search-import` ist der erste Start und die Reparatur: Es schickt die Einstellungen, leert die Indizes und liest alles neu ein; währenddessen ist die Suche kurz leer. In DDEV stellst du beiden `ddev artisan` voran.
+`app:search-import` ist der erste Start und die Reparatur: Es baut jeden Index neu aus der Datenbank auf, neben dem, den die Suche liest (`work_items_next` neben `work_items`, mit den Einstellungen), tauscht dann die beiden und löscht den alten. Die Suche antwortet währenddessen weiter aus den alten Dokumenten; scheitert der Aufbau, bleibt der alte Index und der neue wird gelöscht. Änderungen, die kommen, während ein Index aufgebaut wird, landen zuerst im alten; am Ende schreibt der Import alles, was sich seit kurz vor seinem Start geändert hat, noch einmal, so geht mit dem Tausch nichts verloren. Er fasst nur Indizes an, die mit `SCOUT_PREFIX` beginnen; andere Indizes auf demselben Meilisearch bleiben. In DDEV stellst du beiden `ddev artisan` voran.
 
 **Nach einem Update**, das ändert, was der Index enthält, führst du einmal `app:search-sync` aus: Ohne das durchsucht Meilisearch die neuen Felder nicht. Das Update, mit dem Kommentare durchsuchbar wurden, ist so eins; führe danach auch `app:search-import` aus, damit die Kommentare von vor dem Update in den Index kommen. Das Update mit dem Wiki bringt den Index `pages`: Bis `app:search-sync` ihn angelegt hat, antwortet jede Suche ohne `types` mit `503`, und `app:search-import` bringt die vorhandenen Seiten hinein.
 

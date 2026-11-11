@@ -15,23 +15,51 @@ describe('keyboard docs', () => {
   });
 
   it('writes mod, shift, sequences and arrows for each language', () => {
-    expect(keyLabel('mod+shift+k', 'de')).toBe('<kbd>⌘ / Strg</kbd>+<kbd>⇧</kbd>+<kbd>K</kbd>');
-    expect(keyLabel('mod+shift+k', 'en')).toBe('<kbd>⌘ / Ctrl</kbd>+<kbd>⇧</kbd>+<kbd>K</kbd>');
+    expect(keyLabel('mod+shift+k', 'de')).toBe('<kbd>⌘ / Strg</kbd>+<kbd>⇧ / Umschalt</kbd>+<kbd>K</kbd>');
+    expect(keyLabel('mod+shift+k', 'en')).toBe('<kbd>⌘ / Ctrl</kbd>+<kbd>⇧ / Shift</kbd>+<kbd>K</kbd>');
     expect(keyLabel('g i', 'en')).toBe('<kbd>G</kbd> then <kbd>I</kbd>');
     expect(keyLabel('g i', 'de')).toBe('<kbd>G</kbd>, dann <kbd>I</kbd>');
     expect(keyLabel('alt+up', 'de')).toBe('<kbd>⌥ / Alt</kbd>+<kbd>↑</kbd>');
-    expect(keyLabel('shift+left', 'en')).toBe('<kbd>⇧</kbd>+<kbd>←</kbd>');
+    expect(keyLabel('shift+left', 'en')).toBe('<kbd>⇧ / Shift</kbd>+<kbd>←</kbd>');
     expect(keyLabel('down', 'en')).toBe('<kbd>↓</kbd>');
     expect(keyLabel('right', 'en')).toBe('<kbd>→</kbd>');
-    expect(keyLabel('mod+enter', 'en')).toBe('<kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd>');
+    expect(keyLabel('mod+enter', 'en')).toBe('<kbd>⌘ / Ctrl</kbd>+<kbd>↵ / Enter</kbd>');
     expect(keyLabel('escape', 'de')).toBe('<kbd>Esc</kbd>');
-    expect(keyLabel('mod+backspace', 'de')).toBe('<kbd>⌘ / Strg</kbd>+<kbd>⌫</kbd>');
+    expect(keyLabel('mod+backspace', 'de')).toBe('<kbd>⌘ / Strg</kbd>+<kbd>⌫ / Rückschritt</kbd>');
     expect(keyLabel('space', 'en')).toBe('<kbd>Space</kbd>');
     expect(keyLabel('space', 'de')).toBe('<kbd>Leertaste</kbd>');
     expect(keyLabel('home', 'de')).toBe('<kbd>Pos1</kbd>');
     expect(keyLabel('mod+end', 'en')).toBe('<kbd>⌘ / Ctrl</kbd>+<kbd>End</kbd>');
     expect(keyLabel('?', 'en')).toBe('<kbd>?</kbd>');
     expect(keyLabel('1', 'de')).toBe('<kbd>1</kbd>');
+  });
+
+  it('names shift, enter and backspace on both kinds of keyboard, and the keys a Windows keyboard names in words', () => {
+    expect(keyLabel('shift+d', 'en')).toBe('<kbd>⇧ / Shift</kbd>+<kbd>D</kbd>');
+    expect(keyLabel('shift+d', 'de')).toBe('<kbd>⇧ / Umschalt</kbd>+<kbd>D</kbd>');
+    expect(keyLabel('enter', 'en')).toBe('<kbd>↵ / Enter</kbd>');
+    expect(keyLabel('enter', 'de')).toBe('<kbd>↵ / Eingabe</kbd>');
+    expect(keyLabel('backspace', 'en')).toBe('<kbd>⌫ / Backspace</kbd>');
+    expect(keyLabel('backspace', 'de')).toBe('<kbd>⌫ / Rückschritt</kbd>');
+    expect(keyLabel('delete', 'en')).toBe('<kbd>Del</kbd>');
+    expect(keyLabel('delete', 'de')).toBe('<kbd>Entf</kbd>');
+    expect(keyLabel('ctrl+k', 'de')).toBe('<kbd>⌃ / Strg</kbd>+<kbd>K</kbd>');
+    expect(keyLabel('alt+F10', 'en')).toBe('<kbd>⌥ / Alt</kbd>+<kbd>F10</kbd>');
+    expect(keyLabel('f2', 'en')).toBe('<kbd>F2</kbd>');
+  });
+
+  it('refuses a key it has no name for, so no key reaches the page in register spelling', () => {
+    expect(() => keyLabel('pageup', 'en')).toThrow('pageup');
+    expect(() => keyLabel('mod+insert', 'de')).toThrow('insert');
+  });
+
+  it('lists Esc of the preview under its own heading, not among the item keys', async () => {
+    const page = await renderKeyboardDoc('en');
+    const items = page.slice(page.indexOf('## Items\n'), page.indexOf('\n## ', page.indexOf('## Items\n') + 1));
+
+    expect(items).not.toContain('Close the preview');
+    expect(page).toContain('## Preview\n\n| Keys | Action |\n| --- | --- |\n| <kbd>Esc</kbd> | Close the preview |');
+    expect(await renderKeyboardDoc('de')).toContain('## Vorschau\n\n| Taste | Aktion |\n| --- | --- |\n| <kbd>Esc</kbd> | Vorschau schließen |');
   });
 
   it('lists every group of the catalog in its order, then the widgets', async () => {
@@ -54,6 +82,7 @@ describe('keyboard docs', () => {
       'Inbox',
       'Wiki',
       'Template',
+      'Preview',
       'Command palette',
       'Table',
       'Group headers (list and table)',
@@ -64,11 +93,20 @@ describe('keyboard docs', () => {
     expect(page).toContain('| <kbd>J</kbd> / <kbd>↓</kbd> | Next item |');
     expect(page).toContain('| <kbd>G</kbd> then <kbd>I</kbd> | Inbox |');
     expect(page).toContain('| <kbd>#</kbd> | Delete notification |');
-    expect(page).toContain('| <kbd>⌘ / Ctrl</kbd>+<kbd>↵</kbd> | Save the page now |');
+    expect(page).toContain('| <kbd>⌘ / Ctrl</kbd>+<kbd>↵ / Enter</kbd> | Save the page now |');
+  });
+
+  it('says what the item keys act on, below their heading', async () => {
+    expect(await renderKeyboardDoc('en')).toContain(
+      '## Items\n\n<kbd>C</kbd> works on every screen. The other keys act on the item of the page or the preview; in a list on the selected items, without a selection on the item under the cursor.\n\n| Keys | Action |',
+    );
+    expect(await renderKeyboardDoc('de')).toContain(
+      '## Items\n\n<kbd>C</kbd> wirkt auf jedem Bildschirm. Die übrigen Tasten wirken auf das Item der Seite oder der Vorschau, in einer Liste auf die ausgewählten Items, ohne Auswahl auf das Item am Cursor.\n\n| Taste | Aktion |',
+    );
   });
 
   it('lists the grid keys of the table', async () => {
-    expect(await renderKeyboardDoc('en')).toContain('| <kbd>⇧</kbd>+<kbd>↑</kbd> / <kbd>⇧</kbd>+<kbd>↓</kbd> | Extend the selection |');
+    expect(await renderKeyboardDoc('en')).toContain('| <kbd>⇧ / Shift</kbd>+<kbd>↑</kbd> / <kbd>⇧ / Shift</kbd>+<kbd>↓</kbd> | Extend the selection |');
     expect(await renderKeyboardDoc('en')).toContain('| <kbd>⌘ / Ctrl</kbd>+<kbd>Home</kbd> / <kbd>⌘ / Ctrl</kbd>+<kbd>End</kbd> | First or last row |');
     expect(await renderKeyboardDoc('de')).toContain('| <kbd>⌘ / Strg</kbd>+<kbd>Pos1</kbd> / <kbd>⌘ / Strg</kbd>+<kbd>Ende</kbd> |');
   });

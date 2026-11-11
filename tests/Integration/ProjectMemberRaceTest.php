@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 use Tests\Support\RaceConnections;
 
 /*
- * Changes of the members of a project take the row of the project `lockForUpdate` and check under it (MemberInput::lock):
+ * Changes of the members of a project take the row of the project `lockForUpdate` and check under it (ProjectLock::lock):
  * a removal and a new lead, or two joins of one account, run one after the other; so do two changes of the project. Two connections as in
  * ProjectIdentifierRaceTest: `mariadb` holds its transaction open like a request in progress, `mariadb_second` is the
  * other request and gives up waiting for a lock after one second.

@@ -87,19 +87,32 @@ final class ListRelations
             ];
         }
 
-        usort($entries, fn (array $a, array $b) => self::order($a) <=> self::order($b));
+        usort($entries, self::compare(...));
 
         return $entries;
     }
 
     /**
-     * @param  RelationEntry  $entry
-     * @return array{string, bool, string, int, string}
+     * Type, the visible ends before the hidden ones, the identifier of the other end naturally (`A2` before `A10`, like
+     * the sort by key and the parent groups, T21g-M2), its number, the relation.
+     *
+     * @param  RelationEntry  $a
+     * @param  RelationEntry  $b
      */
-    private static function order(array $entry): array
+    private static function compare(array $a, array $b): int
     {
-        $other = $entry['other'];
+        return [$a['relation']->type_id, $a['hidden']] <=> [$b['relation']->type_id, $b['hidden']]
+            ?: strnatcasecmp(self::natural($a['other']->project->identifier ?? ''), self::natural($b['other']->project->identifier ?? ''))
+            ?: [$a['other']->number ?? 0, $a['relation']->id] <=> [$b['other']->number ?? 0, $b['relation']->id];
+    }
 
-        return [$entry['relation']->type_id, $entry['hidden'], $other?->project->identifier ?? '', $other->number ?? 0, $entry['relation']->id];
+    /**
+     * An identifier without the leading zeros of its numbers. `natural_sort_key()` of MariaDB ignores them (`A02` sorts
+     * like `A2`, after `A1`), while `strnatcasecmp` reads a number with a leading zero like a fraction (`A02` before
+     * `A1`); without them both order alike (A2-M1).
+     */
+    private static function natural(string $identifier): string
+    {
+        return (string) preg_replace('/(?<!\d)0+(?=\d)/', '', $identifier);
     }
 }

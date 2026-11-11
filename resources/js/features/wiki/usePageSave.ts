@@ -24,7 +24,9 @@
  *   versuchen"; a 422 at `title` stands at the title. A 404 means the page is gone (deleted meanwhile, K5): it is
  *   marked as gone (`markLiveGone`), the text stays in the draft to copy, nothing is retried, no toast. A 403 means the
  *   right is gone (made a viewer, T14-M5): the rights load again (`projects`), the text stays in the draft, and the
- *   sheet shows it parked with the reason (`ParkedDraft`), no toast.
+ *   sheet shows it parked with the reason (`ParkedDraft`), no toast. Do the rights loaded again still say "may" (a rule
+ *   of the server the browser does not know), an error toast gives the server's sentence and that the next change
+ *   tries again (T21i); it is decided once the screens show those rights, a round of the query's notifications later.
  * - A conflict (409 `page_conflict`) stops the saves until it is settled, and the save state says "Nicht gespeichert".
  *   The stored page it brings goes into the cache (only when newer, Task 12) and the tree goes stale. Its sentence
  *   names who saved meanwhile; was that the person's own account (another window), it says so instead (T4-M5). The
@@ -33,6 +35,10 @@
  *   - `reload()` takes the stored page into the editor and drops the own text, with a toast whose "Rückgängig" (⌘Z
  *     with the focus outside a text field) brings the own text and the conflict back; a version this view saved since
  *     then is what the conflict is about now (13c); text typed since then and not saved yet is saved first (T15-M1).
+ *     Can it not save yet, a toast says why (T21i): a blank title (and the title takes the focus, `onTitleRequired`),
+ *     or an upload on its way, then the undo waits for the uploads and runs once they are stored, at most once (a view
+ *     left meanwhile saves on leaving and then keeps the own version with the conflict as the draft). With the right
+ *     gone, the own version stands parked to copy (`ParkedDraft`), unless newer typed text stands there already.
  *     The editor's own undo stops at the reloaded page (it never enters
  *     the editor's history), so it never saves the own text over the other one without the conflict.
  *   - A conflict that stands when the view goes says so in the same toast with "Öffnen"; nothing is sent then.
@@ -42,7 +48,7 @@
  */
 
 import { router } from '@inertiajs/react';
-import { useQueryClient } from '@tanstack/react-query';
+import { notifyManager, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { toast } from '@/components/ui/toast';
@@ -51,7 +57,7 @@ import type { UploadCounter } from '@/editor/UploadContext';
 import { qk } from '@/hooks/keys';
 import { useSavePage } from '@/hooks/pages';
 import { drafts, pageDraft, useDraftSending, usePageDraft, type PageDraft } from '@/lib/drafts';
-import { notifyError } from '@/lib/errors';
+import { causeOf, notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
 import { isPageGone, markLiveGone } from '@/lib/liveGone';
 import { undoLabel } from '@/lib/undo';
@@ -130,9 +136,11 @@ export interface PageSaveOptions {
   me?: string;
   /** The address of the page, for "Öffnen" of a conflict met after the view went away. */
   href?: string;
+  /** The title is blank where a save had to go first (an undo after "Neu laden"): the title takes the focus. */
+  onTitleRequired?: () => void;
 }
 
-export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: PageSaveOptions): PageSave {
+export function usePageSave(page: WikiPage, { canEdit, uploads, me, href, onTitleRequired }: PageSaveOptions): PageSave {
   const key = pageDraft(page.id);
   const savePage = useSavePage();
   const queryClient = useQueryClient();
@@ -153,13 +161,17 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
   const [state, setState] = useState<SaveState>(kept ? 'failed' : 'idle');
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
+  /** A save refused with 403 whose rights are loading again: decided once the screen shows them (`canEdit`). */
+  const [refusal, setRefusal] = useState<{ error: unknown } | null>(null);
+  /** A refused save of this series loaded the rights again already; a save that goes through ends the series. */
+  const rightsReloaded = useRef(false);
 
   /** The page as typed, for saves that run outside a render. */
   const latest = useRef(draft);
   /** The page as the latest render had it, for an undo that runs later. */
   const latestPage = useRef(page);
   /** The options as the latest render had them. */
-  const options = useRef({ me, href });
+  const options = useRef({ me, href, onTitleRequired });
   /** The version the typed text is based on. */
   const base = useRef(kept ? kept.base_version : page.version);
   /** What the server holds of this view's text. */
@@ -173,13 +185,15 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
   const keepCurrent = useRef(false);
   /** A save waits for the uploads to be stored. */
   const waiting = useRef(false);
+  /** An undo after "Neu laden" that waits for the uploads: it runs instead of that save, once (or after the save on leaving). */
+  const undoAfterUploads = useRef<{ mine: PageFields; before: PageConflict } | null>(null);
   const mounted = useRef(false);
   const editable = useRef(canEdit);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     editable.current = canEdit;
     latestPage.current = page;
-    options.current = { me, href };
+    options.current = { me, href, onTitleRequired };
   });
 
   /** Typed text the server does not have yet: kept as the page's draft with the version it is typed on. */
@@ -233,7 +247,11 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
     return uploads.subscribe(() => {
       if (uploads.current() > 0 || !waiting.current) return;
       waiting.current = false;
-      void save.current();
+      // an undo that waited saves first itself
+      const undo = undoAfterUploads.current;
+      undoAfterUploads.current = null;
+      if (undo) void restoreMine(undo.mine, undo.before);
+      else void save.current();
     });
   }, [uploads]);
 
@@ -277,6 +295,7 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
       });
       flight.current = request;
       const saved = await request;
+      rightsReloaded.current = false;
       // the next save is based on the version the server has now, also when nothing changed there (K17)
       base.current = saved.version;
       held.current = { ...mine, title };
@@ -299,7 +318,14 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
       } else if (isRefused(error)) {
         // the right is gone, not the page (T14-M5): the rights load again, and the text stands parked with the reason
         setState('failed');
-        void queryClient.invalidateQueries({ queryKey: qk.projects.all });
+        // the screens get the rights in a round of notifications after the fetch: the decision comes after that round;
+        // once per series of refusals (21i-M3b): rights that said "may" a moment ago say the same for the next one
+        const decide = () => notifyManager.schedule(() => setRefusal({ error }));
+        if (rightsReloaded.current) decide();
+        else {
+          rightsReloaded.current = true;
+          void queryClient.invalidateQueries({ queryKey: qk.projects.all }).then(decide);
+        }
       } else {
         keepCurrent.current = keep;
         setState('failed');
@@ -347,12 +373,35 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
     mounted.current = true;
     return () => {
       mounted.current = false;
+      const undo = undoAfterUploads.current;
+      undoAfterUploads.current = null;
       const found = open.current;
       if (found && editable.current && !isPageGone(page.id)) announceLeft(found, latest.current.title.trim() || held.current.title);
-      else void save.current();
+      else {
+        // an undo that waited for the uploads: after the save on leaving, the own version waits on the page with the
+        // conflict (as an undo of a view that is gone); should that save fail, its newer text stays (T15-M1)
+        const leaving = save.current();
+        if (undo) void leaving.then(() => (!dirty.current && !open.current ? bringBack(undo.mine, undo.before) : undefined));
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the view goes
   }, []);
+
+  // the rights loaded again after a refusal: still "may" means a rule the browser does not know, the toast says it;
+  // otherwise the sheet shows the text parked with the reason
+  useEffect(() => {
+    if (!refusal) return;
+    setRefusal(null);
+    // named after the stored title, one toast per page: a lasting refusal refreshes it, whatever title is typed
+    if (canEdit) {
+      toast({
+        title: t('wiki.save.not_saved', { title: held.current.title }),
+        subject: `page-refused:${page.id}`,
+        description: `${causeOf(refusal.error)} ${t('wiki.save.refused')}`,
+        tone: 'error',
+      });
+    }
+  }, [refusal, canEdit]);
 
   function change(patch: Partial<PageFields>, { now = false } = {}) {
     latest.current = { ...latest.current, ...patch };
@@ -397,7 +446,33 @@ export function usePageSave(page: WikiPage, { canEdit, uploads, me, href }: Page
   async function restoreMine(mine: PageFields, before: PageConflict) {
     // typed after "Neu laden" and not saved yet: saved first, so taking the own text back loses none of it (T15-M1);
     // should that save fail or meet a conflict, the newer text stays and the old one is not brought back over it
-    if (mounted.current && !(await flush())) return;
+    // the right is gone: nothing saves, the own version stands parked to copy (`ParkedDraft`)
+    if (mounted.current && !editable.current) return parkMine(mine, before);
+    if (mounted.current && !(await flush())) {
+      // a conflict met (the banner says it), a failure (its toast says it), or the view gone: nothing more to say
+      if (open.current || !mounted.current) return;
+      if (!editable.current) parkMine(mine, before);
+      else if (waiting.current) {
+        undoAfterUploads.current = { mine, before };
+        toast({ title: t('wiki.conflict.undo_blocked.uploading') });
+      } else if (latest.current.title.trim() === '') {
+        toast({ title: t('wiki.conflict.undo_blocked.title_required'), tone: 'error' });
+        options.current.onTitleRequired?.();
+      }
+      return;
+    }
+    bringBack(mine, before);
+  }
+
+  /** The right is gone: the own version as the parked draft, unless newer typed text stands there already. */
+  function parkMine(mine: PageFields, before: PageConflict) {
+    if (dirty.current) return void toast({ title: t('wiki.conflict.undo_blocked.newer'), tone: 'error' });
+    bringBack(mine, before);
+    toast({ title: t('wiki.conflict.undo_blocked.parked'), tone: 'error' });
+  }
+
+  /** The own version back with the conflict, against what is stored now; a view that is gone keeps it as the draft. */
+  function bringBack(mine: PageFields, before: PageConflict) {
     // a copy: the editor ignores documents it reported itself
     const copy: PageFields = { ...mine, content: mine.content ? structuredClone(mine.content) : null };
     // what this view saved after "Neu laden" is newer than the page the conflict met: that is the stored state now

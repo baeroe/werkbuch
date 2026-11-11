@@ -459,6 +459,41 @@ describe('unsentRest', () => {
     expect(unsentRest(bullets('Eins', 'Zwei'), bullets('Ein', 'Zwei', 'Drei'))).toEqual(bullets('Ein', 'Zwei', 'Drei'));
   });
 
+  it('goes on counting a numbered list where the sent part stopped (N3)', () => {
+    const item = (value: string): RichText => ({ type: 'listItem', content: [para(text(value))] });
+    const numbers = (start: number, ...values: string[]): RichText => ({ type: 'doc', content: [{ type: 'orderedList', attrs: { start, type: null }, content: values.map(item) }] });
+
+    expect(unsentRest(numbers(1, 'Eins', 'Zwei'), numbers(1, 'Eins', 'Zwei', 'Drei'))).toEqual(numbers(3, 'Drei'));
+    expect(unsentRest(numbers(4, 'Vier'), numbers(4, 'Vier', 'Fünf', 'Sechs'))).toEqual(numbers(5, 'Fünf', 'Sechs'));
+    // the last sent item was typed on: it stays the first one, with its own number
+    expect(unsentRest(numbers(1, 'Eins', 'Zwei'), numbers(1, 'Eins', 'Zwei und mehr'))).toEqual(numbers(2, 'und mehr'));
+  });
+
+  it('gives an item whose inner list went on a paragraph in front, as the schema of the server wants it', () => {
+    const item = (value: string, ...inner: RichText[]): RichText => ({ type: 'listItem', content: [para(text(value)), ...inner] });
+    const numbers = (start: number, ...items: RichText[]): RichText => ({ type: 'orderedList', attrs: { start, type: null }, content: items });
+    const nested = (...values: string[]): RichText => ({ type: 'doc', content: [numbers(1, item('Eins', numbers(1, ...values.map((value) => item(value)))))] });
+
+    // "1. Eins / 1. a" went out, then "2. b" was typed in the inner list: the item goes on (number 1 of the outer list),
+    // its inner list at 2; a list item is `paragraph block*`, so an empty paragraph stands before that list (422 without)
+    expect(unsentRest(nested('a'), nested('a', 'b'))).toEqual({
+      type: 'doc',
+      content: [numbers(1, { type: 'listItem', content: [{ type: 'paragraph' }, numbers(2, item('b'))] })],
+    });
+    // the same in a bullet list and a task list
+    const bullets = (...items: RichText[]): RichText => ({ type: 'bulletList', content: items });
+    const tasks = (...values: string[]): RichText => ({ type: 'taskList', content: values.map((value) => ({ type: 'taskItem', attrs: { checked: false }, content: [para(text(value))] })) });
+    const task = (value: string, ...inner: RichText[]): RichText => ({ type: 'taskItem', attrs: { checked: false }, content: [para(text(value)), ...inner] });
+    expect(unsentRest({ type: 'doc', content: [bullets(item('Eins', bullets(item('a'))))] }, { type: 'doc', content: [bullets(item('Eins', bullets(item('a'), item('b'))))] })).toEqual({
+      type: 'doc',
+      content: [bullets({ type: 'listItem', content: [{ type: 'paragraph' }, bullets(item('b'))] })],
+    });
+    expect(unsentRest({ type: 'doc', content: [{ type: 'taskList', content: [task('Eins', tasks('a'))] }] }, { type: 'doc', content: [{ type: 'taskList', content: [task('Eins', tasks('a', 'b'))] }] })).toEqual({
+      type: 'doc',
+      content: [{ type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph' }, tasks('b')] }] }],
+    });
+  });
+
   it('keeps everything when the sent text was changed while sending', () => {
     expect(unsentRest(doc('Erstens.'), doc('Erst ens.'))).toEqual(doc('Erst ens.'));
     expect(unsentRest(doc('Erstens.', 'Zweitens.'), doc('Erstens.', 'Zwei.'))).toEqual(doc('Erstens.', 'Zwei.'));

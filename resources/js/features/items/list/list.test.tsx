@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type MouseEvent, type ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ApiError } from '@/api/client';
 import { mockApi, type MockApi } from '@/test/api';
 import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, standard, types } from '@/test/fixtures';
@@ -263,7 +263,7 @@ describe('ListLayout', () => {
     scrollPage(60 * ROW);
     await waitFor(() => expect(second.enable).toHaveBeenCalledTimes(1));
     // until its first page is there it shows a placeholder
-    expect(within(screen.getByRole('list')).getByRole('status').textContent).toBe('Lädt …');
+    expect(within(screen.getByRole('list')).getByText('Lädt …')).toBeTruthy();
   });
 
   it('loads the next page of a group when its last row comes into view', async () => {
@@ -291,7 +291,7 @@ describe('ListLayout', () => {
     rerenderList({ groups: [{ ...only }], groupBy: 'none' });
     expect(only.loadMore).toHaveBeenCalledTimes(2);
     // the end stays a placeholder only while a page is on its way
-    expect(within(screen.getByRole('list')).getByRole('status').textContent).toBe('Lädt …');
+    expect(within(screen.getByRole('list')).getByText('Lädt …')).toBeTruthy();
   });
 
   it('keeps the rows and offers a retry when a later page fails', async () => {
@@ -346,10 +346,10 @@ describe('ListLayout', () => {
     await waitFor(() => expect(document.activeElement).toBe(heading('c')));
     press('ArrowLeft');
     expect(heading('c').getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText('Lädt …')).toBeNull();
     press('ArrowRight');
     expect(heading('c').getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByRole('status')).not.toBeNull();
+    expect(screen.getByText('Lädt …')).toBeTruthy();
   });
 
   it('keeps the focused row rendered while scrolling away', async () => {
@@ -368,6 +368,74 @@ describe('ListLayout', () => {
     expect(document.querySelectorAll('[data-nav-target][tabindex="0"]')).toHaveLength(1);
   });
 
+  it('keeps a focused heading rendered while scrolling away', async () => {
+    renderList({ groups: [group('a', items('a', 2000)), group('b', items('b', 1))] });
+    const focused = heading('a');
+    act(() => focused.focus());
+
+    scrollPage(1500 * ROW);
+    await waitFor(() => expect(rowOf('a1500')).not.toBeNull());
+    expect(rowOf('a1')).toBeNull();
+    // the heading stays with the focus, though no cursor names it
+    expect(cursor()).toBe('');
+    expect(heading('a')).toBe(focused);
+    expect(document.activeElement).toBe(focused);
+  });
+
+  it('lets a heading go once the focus left the list for good (20b-M9)', async () => {
+    renderList({ groups: [group('a', items('a', 2000)), group('b', items('b', 1))] });
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    try {
+      act(() => heading('a').focus());
+      act(() => outside.focus());
+      // the list waits a few frames for a focus on its way back (a popup of a row gives it back to its trigger)
+      await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+
+      scrollPage(1500 * ROW);
+      await waitFor(() => expect(rowOf('a1500')).not.toBeNull());
+      expect(rowOf('a1')).toBeNull();
+      // nothing keeps the heading any more: it went with the rows around it
+      expect(document.querySelector('[data-row-key="group:a"]')).toBeNull();
+      expect(document.activeElement).toBe(outside);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it('keeps a focused heading rendered while the window is left (another tab or app)', async () => {
+    renderList({ groups: [group('a', items('a', 2000)), group('b', items('b', 1))] });
+    const focused = heading('a');
+    act(() => focused.focus());
+    // leaving the window fires focusout, but the heading stays the active element of the document
+    fireEvent.focusOut(focused);
+    expect(document.activeElement).toBe(focused);
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+
+    scrollPage(1500 * ROW);
+    await waitFor(() => expect(rowOf('a1500')).not.toBeNull());
+    expect(rowOf('a1')).toBeNull();
+    // back in the window, the focus is still on the heading, not on the body
+    expect(heading('a')).toBe(focused);
+    expect(document.activeElement).toBe(focused);
+  });
+
+  it('keeps the focused row of an item with two labels rendered while scrolling away, not only its first one', async () => {
+    const shared = makeWorkItem({ id: 'wi_s1', key: 'S-1', number: 1, title: 'zweimal' });
+    renderList({ groups: [group('a', [shared]), group('b', [shared, ...items('b', 2000)])], groupBy: 'label' });
+    const rows = () => [...document.querySelectorAll<HTMLElement>('[data-row-id="wi_s1"]')];
+    const second = rows()[1]!;
+    act(() => second.focus());
+    expect(cursor()).toBe('wi_s1');
+
+    scrollPage(1500 * ROW);
+    await waitFor(() => expect(rowOf('b1500')).not.toBeNull());
+    expect(rowOf('b1')).toBeNull();
+    // the row in the second group keeps the focus
+    expect(rows()).toContain(second);
+    expect(document.activeElement).toBe(second);
+  });
+
   it('shows the count of the server, not of what is loaded', () => {
     renderList({ groups: [group('a', items('a', 3), { count: 120, hasMore: true, loadingMore: true })] });
 
@@ -375,7 +443,7 @@ describe('ListLayout', () => {
     expect(button.textContent).toBe('Gruppe a120, 120 Items');
     expect(rowOf('a1')!.closest('li')!.getAttribute('aria-setsize')).toBe('120');
     // a page on its way shows a placeholder after the loaded rows
-    expect(screen.getByRole('status')).not.toBeNull();
+    expect(screen.getByText('Lädt …')).toBeTruthy();
   });
 
   it('moves the cursor across groups with j and k', async () => {
@@ -556,5 +624,80 @@ describe('GroupIcon', () => {
         if (shown) expect(mark.firstElementChild!.getAttribute('aria-hidden')).toBe('true');
       }
     });
+  });
+});
+
+describe('where the list starts', () => {
+  /** Where the list stands in the page (the bars of the screen above it), and how often the list asked. */
+  let top = 0;
+  let measured = 0;
+  /** A stand-in for the browser's ResizeObserver (jsdom has none): the test says when an observed box changed size. */
+  const observers: { callback: ResizeObserverCallback; targets: Element[] }[] = [];
+  const resized = (target: Element) =>
+    act(() => observers.filter((entry) => entry.targets.includes(target)).forEach((entry) => entry.callback([], {} as ResizeObserver)));
+
+  beforeEach(() => {
+    top = 0;
+    measured = 0;
+    observers.length = 0;
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        private entry: (typeof observers)[number];
+        constructor(callback: ResizeObserverCallback) {
+          this.entry = { callback, targets: [] };
+          observers.push(this.entry);
+        }
+        observe(target: Element) {
+          this.entry.targets.push(target);
+        }
+        unobserve(target: Element) {
+          this.entry.targets = this.entry.targets.filter((entry) => entry !== target);
+        }
+        disconnect() {
+          this.entry.targets = [];
+        }
+      },
+    );
+    const stubbed = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (this.tagName !== 'UL') return stubbed.call(this);
+      measured += 1;
+      return new DOMRect(0, top - scrollY, 1024, 0);
+    };
+    onTestFinished(() => {
+      Element.prototype.getBoundingClientRect = stubbed;
+      vi.unstubAllGlobals();
+    });
+  });
+
+  it('measures where it starts when its rows change, not on every render (T13-M7)', async () => {
+    const loaded = items('w', 60);
+    const { rerenderList } = renderList({ groups: [group('todo', loaded)] });
+    await waitFor(() => expect(rowOf('w1')).not.toBeNull());
+
+    // the cursor moves: a render with the same rows reads no box
+    measured = 0;
+    act(() => rowOf('w1')!.focus());
+    press('j');
+    press('j');
+    expect(cursor()).toBe('wi_w3');
+    expect(measured).toBe(0);
+
+    // a row more: the list measures again
+    rerenderList({ groups: [group('todo', [...loaded, ...items('w', 1, 61)])] });
+    expect(measured).toBeGreaterThan(0);
+  });
+
+  it('follows a bar above it that grows, which changes the height of the page', async () => {
+    renderList({ groups: [group('todo', items('w', 60))] });
+    await waitFor(() => expect(rowOf('w1')).not.toBeNull());
+    const shown = document.querySelectorAll('[data-row-id]').length;
+
+    // the bulk bar and a second line of filter chips push the list far down: fewer of its rows are in the window
+    top = 2000;
+    resized(document.body);
+    await waitFor(() => expect(document.querySelectorAll('[data-row-id]').length).toBeLessThan(shown));
+    expect(rowOf('w1')).not.toBeNull();
   });
 });

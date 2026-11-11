@@ -30,7 +30,7 @@ use RuntimeException;
 use Throwable;
 
 /**
- * The nightly automations (spec 4.13, A343, A344): the hourly RunDailyAutomationsJob acts in the hour 03:00–03:59 in the
+ * The nightly automations (spec 4.13, A343, A344; reads rows only, no nightly key starts on without one, A452): the hourly RunDailyAutomationsJob acts in the hour 03:00–03:59 in the
  * zone of the organisation (NightlyRun) and in no other, unless forced (`app:run-automations --now`). In every project
  * that is neither archived nor being deleted, with the automation switched on (`$projectId` names one project, e2e, K9):
  *
@@ -173,8 +173,9 @@ final class RunDailyAutomations
     /**
      * Each candidate in a transaction of its own, locked and checked again by `$work` (`done` or `none`); a refusal
      * (409 `transition_not_allowed` or another conflict, a 422 of the move) is `skipped` and leaves nothing behind, an
-     * item gone or a project being deleted meanwhile (404) `none`; any other failure is reported and `skipped`, and the
-     * night goes on with the next item (W1 of the final review). `$tally` hears each.
+     * item gone or a project being deleted meanwhile (the 404 of its lock) `none`; a 404 of the work after the lock and
+     * any other failure is reported and `skipped`, and the night goes on with the next item (W1 of the final review).
+     * `$tally` hears each.
      *
      * @param  Builder<WorkItem>  $candidates
      * @param  Closure(WorkItem): string  $work
@@ -186,12 +187,22 @@ final class RunDailyAutomations
             foreach ($items as $item) {
                 try {
                     $outcome = DB::transaction(function () use ($item, $work): string {
-                        $locked = ItemLock::take($item);
+                        try {
+                            $locked = ItemLock::take($item);
+                        } catch (Problem $gone) {
+                            // the item or its project went (being deleted) after the read: nothing to do
+                            return $gone->status === 404 ? 'none' : throw $gone;
+                        }
 
                         return $locked->project->archived_at === null ? $work($locked) : 'none';
                     }, 3);
                 } catch (Problem|ValidationException $refusal) {
-                    $outcome = $refusal instanceof Problem && $refusal->status === 404 ? 'none' : 'skipped';
+                    if ($refusal instanceof Problem && $refusal->status === 404) {
+                        // a 404 of the work after the lock (the comment of the default bot that no longer sees the
+                        // project) is no item gone: report it, the reporter skips a Problem below 500 on its own
+                        report(new RuntimeException("The night could not work item {$item->id}: {$refusal->getMessage()}", previous: $refusal));
+                    }
+                    $outcome = 'skipped';
                 } catch (Throwable $failure) {
                     // anything else (a lock wait timeout after its three attempts) costs this item, never the night
                     report($failure);
@@ -206,7 +217,7 @@ final class RunDailyAutomations
     /** Whether the item, as locked, saw activity after the cutoff: a change of its own or a comment. */
     private static function active(WorkItem $locked, Carbon $cutoff): bool
     {
-        return $locked->updated_at?->gt($cutoff) === true
+        return $locked->updated_at->gt($cutoff)
             || Comment::query()->where('work_item_id', $locked->id)->where('created_at', '>', $cutoff)->exists();
     }
 

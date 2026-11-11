@@ -35,6 +35,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 beforeEach(function () {
@@ -228,7 +229,7 @@ it('purges only a project that is being deleted', function () {
         ->and($web->fresh())->not->toBeNull();
 });
 
-it('purges a project whose pages form a chain of 20', function () {
+it('purges a project whose pages form a chain of 20, with their item references', function () {
     [$web, $admin] = projectToDelete();
     $other = Page::factory()->create();
     // deeper than the 15 levels InnoDB cascades; the purge loosens the tree itself before the project goes (K1, T2-M1)
@@ -239,12 +240,20 @@ it('purges a project whose pages form a chain of 20', function () {
         $page = Page::factory()->childOf($page)->create();
         PageVersion::factory()->create(['page_id' => $page->id]);
     }
+    // rows of the pages of WEB and of its items go with them, the row of the other page to an item elsewhere stays (A456)
+    $item = WorkItem::factory()->for($web)->create();
+    $elsewhere = WorkItem::factory()->for(Project::query()->findOrFail($other->project_id))->create();
+    foreach ([[$page, $elsewhere], [$other, $item], [$other, $elsewhere]] as [$named, $by]) {
+        DB::table('page_item_references')->insert(['id' => strtolower((string) Str::ulid()), 'page_id' => $named->id, 'work_item_id' => $by->id]);
+    }
     $web->update(['deleting_at' => now()]);
 
     PurgeProjectAction::run(actor(User::defaultBot()), $web);
 
     expect(Project::query()->find($web->id))->toBeNull()
         ->and(Page::query()->pluck('id')->all())->toBe([$other->id])
+        ->and(DB::table('page_item_references')->get(['page_id', 'work_item_id'])->map(fn (object $row) => [$row->page_id, $row->work_item_id])->all())
+        ->toBe([[$other->id, $elsewhere->id]])
         ->and(PageVersion::query()->count())->toBe(0)
         ->and(Attachment::query()->count())->toBe(0)
         ->and(Storage::disk('local')->exists($file))->toBeFalse();

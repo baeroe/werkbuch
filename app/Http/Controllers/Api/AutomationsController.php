@@ -14,13 +14,13 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 /**
- * The four automations of a project (spec 4.13, A346): the list, always four, and switching one by its key (a value of
+ * The five automations of a project (spec 4.13, A346): the list, always five, and switching one by its key (a value of
  * AutomationKey, anything else is a 404).
  */
 final class AutomationsController extends Controller
 {
     /**
-     * List the four automations of a project, also those never saved.
+     * List the five automations of a project, also those never saved.
      */
     public function index(Request $request, Project $project): AnonymousResourceCollection
     {

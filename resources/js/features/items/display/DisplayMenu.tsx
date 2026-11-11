@@ -8,7 +8,7 @@
  * - The grouping by status falls back to the categories when the items span several workflows (P14): the menu then
  *   offers no status grouping, shows the categories as chosen and says why.
  * - A sort on something that is gone (a deleted property) stays visible as an unknown field; the list is in the manual
- *   order meanwhile (P2).
+ *   order meanwhile (P2). While the properties load (`properties` undefined), a sort on a property says so instead.
  */
 
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, Bookmark, SlidersHorizontal } from 'lucide-react';
@@ -41,14 +41,16 @@ type DisplayMenuProps = {
   onChange(display: Display): void;
   /** The grouping by status fell back to the categories (the items have several workflows). */
   fellBack: boolean;
-  properties: readonly Property[];
+  /** The properties, undefined while they load. */
+  properties: readonly Property[] | undefined;
   /** A built-in list: saves what it shows as a new view, also when only the display changed (P28). */
   onSaveAs?(): void;
   /** Why "Als neue View speichern" is not possible (rights still loading), or null. */
   saveAsReason?: string | null;
 };
 
-export function DisplayMenu({ display, onChange, fellBack, properties, onSaveAs, saveAsReason = null }: DisplayMenuProps) {
+export function DisplayMenu({ display, onChange, fellBack, properties: loaded, onSaveAs, saveAsReason = null }: DisplayMenuProps) {
+  const properties = loaded ?? [];
   const [open, setOpen] = useState(false);
   const fieldsId = useId();
   const set = (patch: Partial<Display>) => onChange({ ...display, ...patch });
@@ -57,11 +59,13 @@ export function DisplayMenu({ display, onChange, fellBack, properties, onSaveAs,
   const groupOptions = GROUP_BYS.filter((value) => !(fellBack && value === 'state')).map((value) => ({ value, label: t(GROUP_LABEL_KEYS[value]) }));
 
   const sortKnown = isSortable(display.sort.field, properties);
+  // a sort on a property waits for the properties: neither unknown nor named yet
+  const sortLoading = loaded === undefined && display.sort.field.startsWith(PROPERTY_PREFIX);
   const sortOptions = [
     ...SORT_FIELDS.map((option) => ({ value: option.value, label: t(option.label) })),
     ...properties.filter((property) => SORTABLE_TYPES.has(property.field_type)).map((property) => ({ value: `${PROPERTY_PREFIX}${property.key}`, label: property.label })),
     // a sort on a field that is gone stays shown as such; the list is in the manual order meanwhile
-    ...(sortKnown ? [] : [{ value: display.sort.field, label: t('items.display.sort.unknown') }]),
+    ...(sortKnown ? [] : [{ value: display.sort.field, label: t(sortLoading ? 'common.loading' : 'items.display.sort.unknown') }]),
   ];
 
   const fieldOptions = [...Object.keys(ROW_FIELDS), ...properties.map((property) => `${PROPERTY_PREFIX}${property.key}`)];
@@ -92,7 +96,7 @@ export function DisplayMenu({ display, onChange, fellBack, properties, onSaveAs,
           <div className="flex flex-col gap-2">
             <Select
               label={t('items.display.sort.label')}
-              hint={sortKnown ? undefined : t('items.display.sort.unknown_hint')}
+              hint={sortKnown || sortLoading ? undefined : t('items.display.sort.unknown_hint')}
               value={display.sort.field}
               onValueChange={(field) => field && set({ sort: { ...display.sort, field } })}
               options={sortOptions}

@@ -74,7 +74,8 @@ A token without the ability a request needs gets `403`. Create one token per dev
 Some actions are only possible with the session of the signed-in interface, not with a token, whatever its abilities:
 
 - changing your own password and setting up or turning off the second factor (`/api/v1/me/…`),
-- creating tokens (`POST /api/v1/tokens`).
+- creating tokens (`POST /api/v1/tokens`),
+- changing the email address of an account (`PATCH /api/v1/users/{user}` with `email`).
 
 A token that tries gets `403` with the reason `session_required`. A stolen token can neither take over the account nor create itself a longer-lived successor. Listing and revoking tokens works with a token.
 

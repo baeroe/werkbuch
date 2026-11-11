@@ -9,8 +9,8 @@ Es gibt einen Editor in drei Stufen. Jede Stufe zeigt, was an ihren Ort passt:
 | Stufe | Wo | Blöcke |
 |---|---|---|
 | Kommentar | Kommentare | Text, Listen, Zitate, Code, Links, Erwähnungen, Verweise, Bilder und Dateien |
-| Beschreibung | Beschreibungen von Items, Rich-Text-Properties | Dazu Überschriften (drei Ebenen), Checklisten und Tabellen |
-| Seite | [Wiki-Seiten](/de/concepts/wiki) | Dazu Trennlinien; Tabellen im `/`-Menü |
+| Beschreibung | Beschreibungen von Items und [Vorlagen](/de/concepts/templates), Rich-Text-Properties | Dazu Überschriften (drei Ebenen), Checklisten und Tabellen (eine eingefügte Tabelle bleibt; neue Tabellen bietet das `/`-Menü nur auf Seiten) |
+| Seite | [Wiki-Seiten](/de/concepts/wiki) | Dazu Trennlinien und Tabellen im `/`-Menü |
 
 Ein Text mit Blöcken, die seine Stufe nicht kennt (eine Tabelle in einem Kommentar), zeigt deren Text als Absätze. `mod+enter` speichert bzw. sendet; Beschreibung, Rich-Text-Properties und Wiki-Seiten speichern außerdem nach einer kurzen Pause und beim Verlassen des Felds von selbst.
 
@@ -30,6 +30,10 @@ Ein `/` am Zeilenanfang oder nach einem Leerzeichen öffnet das Blockmenü (dire
 
 **Bild oder Datei** im Menü öffnet die Dateiauswahl des Browsers. Code wird für Bash, CSS, Diff, JavaScript, JSON, Markdown, PHP, Python, Shell, SQL, TypeScript, XML und YAML hervorgehoben; ohne Sprache rät werkbuch eine für die Anzeige, der Text bleibt, wie du ihn getippt hast. Fett, kursiv, durchgestrichen, Code im Text und Links gehen mit den üblichen Markdown-Zeichen (`**`, `*`, `~~`, `` ` ``) und Tasten. Links behalten nur `http`, `https` und `mailto`.
 
+## Tabellen bearbeiten
+
+Steht der Cursor in einer Tabelle, sitzt an ihrer oberen Kante rechts der Knopf **Tabelle**; `alt+F10` öffnet sein Menü auch direkt aus dem Text. Darin fügst du Zeilen darüber oder darunter und Spalten links oder rechts ein, löschst die Zeile oder Spalte des Cursors oder die ganze Tabelle und schaltest **Kopfzeile** und **Kopfspalte** an und aus. Kopfzeile und Kopfspalte bleiben die erste Zeile und die erste Spalte, auch wenn du davor etwas einfügst. Eine Tabelle aus einer Zeile hat keine Kopfspalte. Die letzte Zeile und die letzte Spalte bleiben; lösche dann die Tabelle. Nach jedem Befehl und mit `esc` geht der Fokus an dieselbe Stelle im Text zurück. Dieselben Befehle stehen im `/`-Menü, solange der Cursor in einer Tabelle steht (Gruppe „Tabelle“). Zellen verbinden und einzelne Kopfzellen bietet der Editor nicht an: Markdown trägt beides nicht (siehe [Tabellen](#tabellen) unter Markdown).
+
 ## Erwähnungen
 
 `@` öffnet eine Liste der Personen und Bots, die im Projekt erwähnt werden können: seine aktiven Mitglieder und Personen, die Org-Admins sind. Ein Bot nur, wenn er Mitglied des Projekts ist, auch der Standard-Bot. Tippen grenzt die Liste über Name oder Handle ein. Eine Erwähnung zeigt den aktuellen Handle des Kontos, auch nach einer Umbenennung; ein deaktiviertes Konto ist als solches markiert.
@@ -40,7 +44,7 @@ Die Erwähnung von jemandem, der im Projekt nicht erwähnt werden kann, etwa wei
 
 ## Verweise
 
-`#` sucht die Items und Wiki-Seiten, die du siehst, mit derselben [Suche](/de/search) wie die Befehlspalette: Items über den Key (auch einen früheren), den Titel und den Text, Seiten darunter über Titel und Text. Ein Verweis auf ein Item zeigt dessen Typ und aktuellen Key, den Titel für Screenreader, und führt beim Lesen zum Item; ein Verweis auf eine Seite zeigt ihr Emoji und ihren aktuellen Titel und führt zur Seite.
+`#` sucht die Items und Wiki-Seiten, die du siehst, mit derselben [Suche](/de/search) wie die Befehlspalette: Items über den Key (auch einen früheren), den Titel und den Text, Seiten darunter über Titel und Text. Ein Verweis auf ein Item zeigt dessen Typ und aktuellen Key, den Titel für Screenreader, und führt beim Lesen zum Item; ein Verweis auf eine Seite zeigt ihr Emoji und ihren aktuellen Titel und führt zur Seite. Nennst du in der Beschreibung, einem Rich-Text-Feld oder einem Kommentar eines Items ein anderes Item neu, verknüpft werkbuch beide außerdem mit dem eingebauten Relationstyp „verwandt“, wenn du das Item bearbeiten darfst (die [Automatisierung](/de/concepts/automations#erwahnte-items-verknupfen) „Erwähnte Items verknüpfen“, standardmäßig an).
 
 werkbuch speichert nur die ULID des Items bzw. der Seite, nie Key oder Titel. Wer den Text liest, sieht den Verweis so, wie er darf: Ein Item oder eine Seite, die er nicht sieht, steht als **verborgen** da, ohne Key und Titel, in der Oberfläche, in der API und in Mails. Beim Speichern kannst du nur auf Items und Seiten verweisen, die du siehst; ein Verweis, der schon im Text stand, bleibt, auch auf eins, das du nicht siehst.
 
@@ -91,6 +95,10 @@ Für Markdown und JSON gelten dieselben Regeln, geprüft für das Konto, das sch
 | `attachment:<ulid>` eines anderen Projekts oder eines fremden Uploads ohne Text | `422` am Feld, das den Text schickte; nichts wird gespeichert. |
 
 In Code-Blöcken, Code im Text, Linktexten und Alternativtexten wird nichts als Erwähnung oder Verweis gelesen: `` `@mara` `` und `[WEB-123](https://example.com)` bleiben, wie sie sind. Ein Backslash hält Text davon ab, eins zu werden: `\@mara`, `WEB\-123`. Schreibt werkbuch Markdown, setzt es diesen Backslash vor Text, der auf dem Rückweg sonst zur Erwähnung oder zum Verweis würde.
+
+### Tabellen
+
+Markdown kennt eine Art Tabelle: die erste Zeile ist die Kopfzeile, keine Spalte ist eine Kopfspalte. So schreibt werkbuch jede Tabelle. Schickst du Markdown zurück, behält jede Tabelle Kopfzeile und Kopfspalte, die der Text vorher hatte. Hat dein Markdown so viele Tabellen wie der gespeicherte Text, übernimmt die erste Tabelle sie von der ersten gespeicherten, die zweite von der zweiten und so weiter, solange beide gleich viele Spalten haben. Fügst du eine Tabelle ein oder entfernst eine, ordnet werkbuch Tabellen nur vom Anfang und vom Ende des Texts her zu, und nur solange eine Tabelle gleich viele Spalten und denselben Text in der ersten Zeile hat wie die gespeicherte; an der ersten Tabelle, die abweicht, hört es auf, und die Tabellen dazwischen gelten so, wie Markdown sie schreibt. Ein Layout wandert so nie auf eine andere Tabelle, aber eine Tabelle, die du zwischen andere einfügst oder deren erste Zeile du in derselben Anfrage änderst, kommt mit Kopfzeile und ohne Kopfspalte zurück. Neue oder entfernte Zeilen ändern am Layout nichts; mit einer anderen Zahl Spalten oder in einem neuen Text gilt die Tabelle so, wie Markdown sie schreibt. Eine Tabelle ohne Kopfzeile bekommt deshalb über Markdown nie eine: Kopfzeile und Kopfspalte schaltest du im Editor oder per JSON um. Einzelne Kopfzellen und Zellen über mehrere Zeilen oder Spalten trägt Markdown nicht; sie gehen verloren, wenn Markdown zurückkommt. JSON (`*_json`) behält alles.
 
 <!-- reference:end -->
 
@@ -215,6 +223,6 @@ Ein Bild oder eine Datei zu löschen, die zu einem Text gehört, ist ein `409` m
 Zwei Dinge halten Uploads klein:
 
 - **Uploads, die kein Text übernommen hat** (ein Bild in einem Kommentar, der nie abgeschickt wurde): Ein Job des Schedulers entfernt sie stündlich, sobald sie älter als 24 Stunden sind. Der Browser löscht Uploads nie selbst, denn ein Text kann schon mit ihnen gespeichert sein.
-- **Bilder und Dateien, die kein Text mehr nennt:** `php artisan app:prune-attachments --dry-run --min-age=30` listet die Bilder und Dateien, die kein aktueller Text ihres Projekts nennt (Beschreibungen, Rich-Text-Werte, Kommentare, Wiki-Seiten und ihre Versionen) und die älter als das Mindestalter in Tagen sind; ohne `--dry-run` entfernt es sie. Ein Bild, das nur noch eine Version einer Wiki-Seite zeigt, bleibt, denn Versionen lassen sich wiederherstellen; Bilder, die nur eine ältere Fassung in der History eines Items zeigt, gehen dabei, wähle das Mindestalter danach. Dateien der Dateiliste räumt es nie ab.
+- **Bilder und Dateien, die kein Text mehr nennt:** `php artisan app:prune-attachments --dry-run --min-age=30` listet die Bilder und Dateien, die kein aktueller Text ihres Projekts nennt (Beschreibungen, Rich-Text-Werte, Kommentare, Wiki-Seiten und ihre Versionen, Vorlagen) und die älter als das Mindestalter in Tagen sind; ohne `--dry-run` entfernt es sie. Ein Bild, das nur noch eine Version einer Wiki-Seite zeigt, bleibt, denn Versionen lassen sich wiederherstellen; Bilder, die nur eine ältere Fassung in der History eines Items zeigt, gehen dabei, wähle das Mindestalter danach. Dateien der Dateiliste räumt es nie ab.
 
-Wer ein Item löscht, löscht seine Dateien und die seiner Kommentare, wer einen Kommentar löscht, dessen Dateien, wer eine Wiki-Seite löscht, die ihres Teilbaums, wer ein Projekt löscht, alle; ein Bild, das ein anderer Text des Projekts noch zeigt, bleibt und gehört dann diesem Text. Dateien gehen erst, wenn die Änderung gespeichert ist: Scheitert sie, geht nichts verloren. Mehr unter [Entwicklung](/de/development#wartungsbefehle).
+Wer ein Item löscht, löscht seine Dateien und die seiner Kommentare, wer einen Kommentar löscht, dessen Dateien, wer eine Wiki-Seite löscht, die ihres Teilbaums, wer eine Vorlage löscht, ihre eigenen, wer ein Projekt löscht, alle; ein Bild, das ein anderer Text des Projekts noch zeigt, bleibt und gehört dann diesem Text. Dateien gehen erst, wenn die Änderung gespeichert ist: Scheitert sie, geht nichts verloren. Mehr unter [Entwicklung](/de/development#wartungsbefehle).

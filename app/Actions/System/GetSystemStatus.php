@@ -4,13 +4,15 @@ namespace App\Actions\System;
 
 use App\Access\Authorize;
 use App\Models\Organization;
+use App\Search\PoolsStatus;
 use App\Search\ReportsStatus;
 use App\Support\Actor;
 use App\Support\MailSetup;
 use App\Support\QueuedJobs;
 use App\Support\Redact;
 use Illuminate\Database\Query\Builder;
-use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -24,8 +26,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * reservation ran out: its worker died) and since when the oldest of them is due (`oldest_at`), `queued_jobs` their
  * sum; jobs due later (mail collections, `delayed_jobs`) are no backlog. The newest FAILED_SHOWN failed jobs with the
  * first sentence of their error through Redact (URLs without user and query, at most ERROR_MAX characters) and how many there are; Meilisearch over the engine
- * (ReportsStatus, `down` for an engine that cannot say, K15); whether mail can go out (MailSetup); and Reverb: `off`
- * when it is not the broadcaster, else whether its `/up` answers within 2 s. It reads the tables of the database queue
+ * (PoolsStatus, `down` for an engine that cannot say, K15); whether mail can go out (MailSetup); and Reverb: `off`
+ * when it is not the broadcaster, else whether its `/up` answers within 2 s; both are asked in one Http::pool, in this process (K21). It reads the tables of the database queue
  * (`queue.connections.database`) and of the failed jobs (`queue.failed`, driver `database-uuids`).
  */
 final class GetSystemStatus
@@ -35,6 +37,8 @@ final class GetSystemStatus
     public const FAILED_SHOWN = 50;
 
     public const ERROR_MAX = Redact::MAX;
+
+    private const LIVE_KEY = 'live';
 
     /**
      * @return array{
@@ -58,6 +62,7 @@ final class GetSystemStatus
         $failed = DB::connection(config('queue.failed.database'))->table(config('queue.failed.table'));
 
         $engine = app(EngineManager::class)->engine();
+        [$search, $live] = $this->ask($engine);
 
         return [
             'version' => (string) config('werkbuch.version'),
@@ -66,9 +71,9 @@ final class GetSystemStatus
             'queues' => $queues,
             'failed_jobs' => $this->failedJobs(),
             'failed_jobs_total' => $failed->count(),
-            ...($engine instanceof ReportsStatus ? $engine->status() : ['search' => 'down', 'search_tasks' => null]),
+            ...$search,
             'mail_configured' => MailSetup::configured(),
-            'live' => $this->live(),
+            'live' => $live,
         ];
     }
 
@@ -118,21 +123,43 @@ final class GetSystemStatus
             ])->all());
     }
 
-    /** @return 'ok'|'down'|'off' */
-    private function live(): string
+    /**
+     * Meilisearch and Reverb in one pool, in this process, so the page waits for the slower of the two (2 s each),
+     * not for both (K21). An engine that cannot say how it is (the `null` engine) is `down`; one that is not a pool
+     * (ReportsStatus alone) answers by itself.
+     *
+     * @return array{0: array{search: 'ok'|'down', search_tasks: array{enqueued: int, processing: int, failed_last_day: int}|null}, 1: 'ok'|'down'|'off'}
+     */
+    private function ask(object $engine): array
+    {
+        $url = $this->liveUrl();
+        $responses = $engine instanceof PoolsStatus || $url !== null ? Http::pool(function (Pool $pool) use ($engine, $url): void {
+            if ($engine instanceof PoolsStatus) {
+                $engine->statusRequests($pool);
+            }
+            if ($url !== null) {
+                $pool->as(self::LIVE_KEY)->connectTimeout(2)->timeout(2)->get($url);
+            }
+        }) : [];
+
+        $search = match (true) {
+            $engine instanceof PoolsStatus => $engine->statusFrom($responses),
+            $engine instanceof ReportsStatus => $engine->status(),
+            default => ['search' => 'down', 'search_tasks' => null],
+        };
+        $live = $url === null ? 'off' : (($responses[self::LIVE_KEY] ?? null) instanceof Response && $responses[self::LIVE_KEY]->successful() ? 'ok' : 'down');
+
+        return [$search, $live];
+    }
+
+    private function liveUrl(): ?string
     {
         if (config('broadcasting.default') !== 'reverb') {
-            return 'off';
+            return null;
         }
 
         $options = (array) config('broadcasting.connections.reverb.options');
 
-        try {
-            return Http::connectTimeout(2)->timeout(2)
-                ->get(sprintf('%s://%s:%d/up', $options['scheme'] ?? 'https', $options['host'] ?? '', (int) ($options['port'] ?? 443)))
-                ->successful() ? 'ok' : 'down';
-        } catch (ConnectionException) {
-            return 'down';
-        }
+        return sprintf('%s://%s:%d/up', $options['scheme'] ?? 'https', $options['host'] ?? '', (int) ($options['port'] ?? 443));
     }
 }

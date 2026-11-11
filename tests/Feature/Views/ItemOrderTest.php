@@ -173,6 +173,17 @@ it('sorts keys naturally: by project, then by number', function () use ($sort) {
         ->and(($this->titles)($sort('key', 'desc')))->toBe(['WEB-10', 'WEB-9', 'APP-5']);
 });
 
+it('sorts identifiers with digits naturally (A450, T8-M7)', function () use ($sort) {
+    // by the collation A10 came before A2 and WEB10 before WEB2
+    foreach (['A10', 'WEB2', 'A2', 'WEB10'] as $identifier) {
+        WorkItem::factory()->create(['project_id' => Project::factory()->identifier($identifier)->create()->id, 'title' => "{$identifier}-1"]);
+    }
+    WorkItem::factory()->create(['project_id' => $this->web->id, 'title' => 'WEB-1']);
+
+    expect(($this->titles)($sort('key')))->toBe(['A2-1', 'A10-1', 'WEB-1', 'WEB2-1', 'WEB10-1'])
+        ->and(($this->titles)($sort('key', 'desc')))->toBe(['WEB10-1', 'WEB2-1', 'WEB-1', 'A10-1', 'A2-1']);
+});
+
 it('sorts by creation and change time', function () use ($sort) {
     WorkItem::factory()->create(['project_id' => $this->web->id, 'title' => 'new', 'created_at' => '2026-10-27 10:00:00', 'updated_at' => '2026-10-27 10:00:00']);
     WorkItem::factory()->create(['project_id' => $this->web->id, 'title' => 'old', 'created_at' => '2026-10-01 10:00:00', 'updated_at' => '2026-10-28 09:00:00']);
@@ -183,25 +194,44 @@ it('sorts by creation and change time', function () use ($sort) {
         ->and(($this->titles)($sort('updated_at')))->toBe(['new', 'old']);
 });
 
-it('pages items without a creation stamp exactly once', function () use ($sort, $forward, $backward) {
-    // the columns may be null (a row written without Eloquent); such items stand last in both directions (T5-M1)
-    foreach ([null, '2026-10-01 08:00:00', null, '2026-10-15 12:30:00', '2026-10-01 08:00:00'] as $i => $stamp) {
-        $item = WorkItem::factory()->create(['project_id' => $this->web->id, 'title' => "item {$i}"]);
-        DB::table('work_items')->where('id', $item->id)->update(['created_at' => $stamp, 'updated_at' => $stamp]);
+it('sorts by created_at without a guard', function () use ($sort) {
+    // the stamps are required (A440): the order and the keyset compare the column itself, so its index serves the range
+    $items = WorkItem::factory()->count(3)->create(['project_id' => $this->web->id]);
+    foreach ($items as $i => $item) {
+        DB::table('work_items')->where('id', $item->id)->update(['created_at' => sprintf('2026-10-%02d 08:00:00', $i + 1), 'updated_at' => sprintf('2026-10-%02d 09:00:00', $i + 1)]);
     }
 
     foreach (['created_at', 'updated_at'] as $field) {
-        expect(($this->titles)($sort($field)))->toBe(['item 1', 'item 4', 'item 3', 'item 0', 'item 2'], $field)
-            ->and(($this->titles)($sort($field, 'desc')))->toBe(['item 3', 'item 1', 'item 4', 'item 0', 'item 2'], $field);
+        foreach (['asc', 'desc'] as $direction) {
+            $first = ItemOrder::page(WorkItem::query(), $sort($field, $direction), new PageArgs(null, 1));
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $second = ItemOrder::page(WorkItem::query(), $sort($field, $direction), new PageArgs($first->nextCursor()?->encode(), 1));
+            DB::disableQueryLog();
+            $sql = DB::getQueryLog()[0]['query'];
+            $operator = $direction === 'desc' ? '<' : '>';
 
+            expect($sql)->not->toContain('coalesce')
+                ->and($sql)->not->toContain('is null')
+                ->and($sql)->toContain("`work_items`.`{$field}` {$operator} ?")
+                ->and($first->nextCursor()?->parameters(['sort_0']))->toBe([$first->first()?->getRawOriginal($field)])
+                ->and($second->pluck('id')->all())->toBe([$items[1]->id], "{$field} {$direction}");
+        }
+    }
+});
+
+it('refuses a cursor of the old shape', function () use ($sort, $refused) {
+    // before A440 a stamp had the mark of an empty value and the value with a guard (`sort_0`, `sort_1`)
+    $items = WorkItem::factory()->count(3)->create(['project_id' => $this->web->id]);
+    $old = fn (string $signature) => str_replace(['+', '/', '='], ['-', '_', ''], base64_encode((string) json_encode([
+        'sort_0' => 0, 'sort_1' => '2026-10-01 08:00:00', 'rank' => $items[0]->rank, 'id' => $items[0]->id,
+        '_sig' => $signature, '_pointsToNextItems' => true,
+    ])));
+
+    foreach (['created_at', 'updated_at'] as $field) {
         foreach (['asc', 'desc'] as $direction) {
             $order = $sort($field, $direction);
-            $all = ItemOrder::apply(WorkItem::query(), $order)->get()->pluck('id')->all();
-            foreach ([1, 2] as $perPage) {
-                $pages = $forward($order, $perPage);
-                expect(array_merge(...array_column($pages, 'ids')))->toBe($all, "{$field} {$direction}, {$perPage} per page")
-                    ->and($backward($order, end($pages)['page'], $perPage))->toBe(array_reverse(array_column(array_slice($pages, 0, -1), 'ids')), "{$field} {$direction} back");
-            }
+            $refused(fn () => ItemOrder::page(WorkItem::query(), $order, new PageArgs($old($order->signature()), 1)));
         }
     }
 });
@@ -236,6 +266,76 @@ it('sorts number, date and text properties', function () use ($sort, $properties
         ->and(($this->titles)($sort('property:customer_ref', 'desc')))->toBe(['c', 'a', 'b', ...$none]);
 });
 
+it('sorts a text property naturally (A450)', function () use ($sort, $properties) {
+    $properties();
+    ($this->catalog)();
+    $task = fn (string $title, array $values) => tap(
+        WorkItem::factory()->create(['project_id' => $this->web->id, 'type_id' => ($this->type)('Task')->id, 'title' => $title, 'rank' => 'a0']),
+        fn (WorkItem $item) => ItemValues::store($item, $values, []),
+    );
+    // created against the natural order, so neither rank nor ULID puts them right
+    $task('100', ['customer_ref' => 'Item 100', 'ticket_url' => 'https://a.example.com/100']);
+    $task('11', ['customer_ref' => 'item 11', 'ticket_url' => 'https://a.example.com/11']);
+    $task('10', ['customer_ref' => 'Item 10', 'ticket_url' => 'https://a.example.com/10']);
+    $task('9', ['customer_ref' => 'Item 9', 'ticket_url' => 'https://a.example.com/9']);
+    $task('2', ['customer_ref' => 'Item 2', 'ticket_url' => 'https://a.example.com/2']);
+    $task('none', []);
+
+    foreach (['customer_ref', 'ticket_url'] as $key) {
+        expect(($this->titles)($sort("property:{$key}")))->toBe(['2', '9', '10', '11', '100', 'none'], $key)
+            ->and(($this->titles)($sort("property:{$key}", 'desc')))->toBe(['100', '11', '10', '9', '2', 'none'], $key);
+    }
+});
+
+it('pages a natural sort exactly once', function () use ($sort, $properties, $forward, $backward) {
+    $properties();
+    ($this->catalog)();
+    $task = ($this->type)('Task')->id;
+    // numbers of one to three digits, equal texts in another case (a tie the rank and the ULID decide) and no value
+    $expected = [];
+    foreach (range(30, 1) as $n) {
+        $item = WorkItem::factory()->create(['project_id' => $this->web->id, 'type_id' => $task, 'rank' => $n % 3 === 0 ? 'a0' : 'a1']);
+        $text = $n % 7 === 0 ? null : ($n % 2 === 0 ? 'item ' : 'Item ').(intdiv($n, 2) * ($n % 8 < 2 ? 10 : 1));
+        ItemValues::store($item, array_filter(['customer_ref' => $text]), []);
+        $expected[] = ['id' => $item->id, 'rank' => $item->rank, 'text' => $text];
+    }
+    usort($expected, fn (array $a, array $b) => [$a['text'] === null, $a['text'] === null ? 0 : (int) explode(' ', $a['text'])[1], $a['rank'], $a['id']]
+        <=> [$b['text'] === null, $b['text'] === null ? 0 : (int) explode(' ', $b['text'])[1], $b['rank'], $b['id']]);
+    $order = $sort('property:customer_ref');
+
+    expect(ItemOrder::apply(WorkItem::query(), $order)->get()->pluck('id')->all())->toBe(array_column($expected, 'id'));
+    foreach ([1, 2, 7] as $perPage) {
+        $pages = $forward($order, $perPage);
+        $last = end($pages)['page'];
+
+        // every page but the last is full, and together they are every item once, in the natural order
+        expect(array_merge(...array_column($pages, 'ids')))->toBe(array_column($expected, 'id'), "forward, {$perPage} per page")
+            ->and(array_map('count', array_column(array_slice($pages, 0, -1), 'ids')))->each->toBe($perPage)
+            ->and($backward($order, $last, $perPage))->toBe(array_reverse(array_column(array_slice($pages, 0, -1), 'ids')), "backward, {$perPage} per page");
+    }
+});
+
+it('refuses a cursor of a text or key sort from before the natural order', function () use ($sort, $properties, $refused) {
+    $properties();
+    ($this->catalog)();
+    foreach (range(1, 3) as $n) {
+        $item = WorkItem::factory()->create(['project_id' => $this->web->id, 'type_id' => ($this->type)('Task')->id, 'rank' => 'a0']);
+        ItemValues::store($item, ['customer_ref' => "Item {$n}"], []);
+    }
+    $item = WorkItem::query()->orderBy('id')->firstOrFail();
+    // the value as the collation compared it, under the signature of the sort alone
+    $old = fn (SortSpec $order, array $values) => str_replace(['+', '/', '='], ['-', '_', ''], base64_encode((string) json_encode([
+        ...$values, 'rank' => $item->rank, 'id' => $item->id, '_sig' => $order->signature(), '_pointsToNextItems' => true,
+    ])));
+
+    foreach (['asc', 'desc'] as $direction) {
+        $text = $sort('property:customer_ref', $direction);
+        $key = $sort('key', $direction);
+        $refused(fn () => ItemOrder::page(WorkItem::query(), $text, new PageArgs($old($text, ['sort_0' => 0, 'sort_1' => 'Item 1']), 1)));
+        $refused(fn () => ItemOrder::page(WorkItem::query(), $key, new PageArgs($old($key, ['sort_0' => 'WEB', 'sort_1' => 1]), 1)));
+    }
+});
+
 it('sorts by the category of the status', function () use ($sort) {
     foreach ([['done', 'Done', 'a0'], ['progress', 'In Progress', 'a1'], ['backlog', 'Backlog', 'a2']] as [$title, $state, $rank]) {
         WorkItem::factory()->create(['project_id' => $this->web->id, 'title' => $title, 'state_id' => ($this->state)($state), 'rank' => $rank]);
@@ -268,7 +368,8 @@ it('falls back to the manual order for a field it does not know', function () us
 $world = function (Project $web) use ($properties): array {
     $properties();
     app()->instance(CatalogProperties::class, CatalogProperties::load());
-    $projects = [Project::factory()->identifier('APP')->create(), Project::factory()->identifier('OPS')->create(), $web];
+    // identifiers with digits: A2 before A10 only in the natural order
+    $projects = [Project::factory()->identifier('A10')->create(), Project::factory()->identifier('A2')->create(), $web];
     $types = ['Task' => WorkItemType::query()->where('name', 'Task')->sole(), 'Bug' => WorkItemType::query()->where('name', 'Bug')->sole(), 'Epic' => WorkItemType::query()->where('name', 'Epic')->sole()];
     $states = WorkflowState::query()->where('workflow_id', Workflow::default()->id)->get()->keyBy('name');
     $pick = fn (array $options, int $i, string $salt) => $options[crc32("{$salt}-{$i}") % count($options)];
@@ -279,8 +380,8 @@ $world = function (Project $web) use ($properties): array {
     $values = [
         'effort' => [null, 2.5, 10, 2.5, 0, -1.5, 10],
         'release' => [null, '2026-11-01', '2026-10-01', '2026-11-01'],
-        'customer_ref' => [null, 'Über', 'uber', 'Uber', 'chrome', 'Safari', 'Ärger'],
-        'ticket_url' => [null, 'https://b.example.com', 'https://a.example.com', 'https://a.example.com'],
+        'customer_ref' => [null, 'Über 10', 'uber 9', 'Uber 9', 'chrome', 'Safari 100', 'Ärger 2'],
+        'ticket_url' => [null, 'https://b.example.com/9', 'https://a.example.com/10', 'https://a.example.com/9'],
     ];
     $has = ['Task' => array_keys($values), 'Bug' => ['effort'], 'Epic' => []];
 
@@ -327,7 +428,8 @@ $world = function (Project $web) use ($properties): array {
 
 /**
  * The ULIDs in the order `sortItems` of the clickdummy gives them (empty values last, the direction for the value
- * alone, then rank and ULID byte by byte), with the collation of the database for texts (case and accents aside).
+ * alone, then rank and ULID byte by byte), with the collation of the database for texts (case and accents aside) and
+ * numbers in texts and identifiers read as numbers (A450).
  */
 $expected = function (array $rows, SortSpec $sort): array {
     $fold = fn (string $text) => mb_strtolower(Str::ascii($text));
@@ -348,7 +450,8 @@ $expected = function (array $rows, SortSpec $sort): array {
         foreach ($emptyA ? [] : array_keys($valuesA) as $index) {
             $left = $valuesA[$index];
             $right = $valuesB[$index];
-            $result = $result !== 0 ? $result : (is_string($left) ? strcmp($left, (string) $right) <=> 0 : $left <=> $right);
+            $text = in_array($sort->field, ['key', 'property:customer_ref', 'property:ticket_url'], true);
+            $result = $result !== 0 ? $result : (is_string($left) ? ($text ? strnatcmp($left, (string) $right) : strcmp($left, (string) $right)) <=> 0 : $left <=> $right);
         }
 
         return ($sort->descending ? -$result : $result) ?: strcmp($a['rank'], $b['rank']) ?: strcmp($a['id'], $b['id']);
@@ -512,7 +615,7 @@ it('refuses a cursor it cannot read', function () use ($sort, $refused, $tampere
         ['due_date', fn (array $p) => [...$p, 'sort_0' => 2]],
         ['due_date', fn (array $p) => [...$p, 'sort_1' => '2026-11-01 or 1']],
         ['created_at', fn (array $p) => [...$p, 'sort_0' => '2026-11-01']],
-        ['updated_at', fn (array $p) => [...$p, 'sort_1' => '2026-11-01']],
+        ['updated_at', fn (array $p) => [...$p, 'sort_0' => '2026-11-01 10:00']],
         ['property:effort', fn (array $p) => [...$p, 'sort_1' => '1e3']],
     ];
     foreach ($cases as [$field, $change]) {
@@ -520,7 +623,7 @@ it('refuses a cursor it cannot read', function () use ($sort, $refused, $tampere
     }
 
     // the cursor as it came is read; an empty one is the first page
-    foreach (['rank', 'priority', 'due_date', 'created_at', 'property:effort'] as $field) {
+    foreach (['rank', 'priority', 'due_date', 'created_at', 'updated_at', 'property:effort'] as $field) {
         expect($page($field, $tampered($sort($field), fn (array $p) => $p)))->toHaveCount(1);
     }
     expect($page('rank', ''))->toHaveCount(2);
@@ -565,4 +668,17 @@ it('asks the database twice for a page', function () use ($sort, $properties) {
             $cursor = $perPage === 7 ? $result->page->nextCursor()?->encode() : null;
         }
     }
+});
+
+it('hands out rows whose sort keys are original attributes, so a save of a page row writes only what changed', function () use ($sort) {
+    WorkItem::factory()->create(['project_id' => $this->web->id, 'title' => 'a', 'due_date' => '2026-10-01']);
+
+    $row = ItemOrder::page(WorkItem::query(), $sort('due_date'), new PageArgs(null, 5))->items()[0];
+    expect(array_key_exists('sort_0', $row->getAttributes()))->toBeTrue()
+        ->and(array_key_exists('_sig', $row->getAttributes()))->toBeTrue()
+        ->and($row->isDirty())->toBeFalse();
+
+    $row->title = 'b';
+
+    expect($row->getDirty())->toBe(['title' => 'b']);
 });

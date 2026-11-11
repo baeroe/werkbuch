@@ -1,11 +1,14 @@
 <?php
 
 use App\Auth\TwoFactorCodes;
+use App\Auth\TwoFactorDay;
 use App\Events\EventType;
 use App\Models\Event;
 use App\Models\User;
 use Illuminate\Cache\Repository;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\RateLimiter;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use Laravel\Fortify\Contracts\TwoFactorAuthenticationProvider;
@@ -93,6 +96,109 @@ it('limits the challenge to five tries a minute and names the wait at the field 
 
     $this->assertGuest();
 })->with(['code', 'recovery_code']);
+
+/** Mara signs in with the password and tries `$tries` wrong codes in blocks of five, 61 s apart (one field per block, in turn). */
+function dayOfTries(object $test, int $tries, array $fields = ['code']): void
+{
+    $test->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass']);
+    foreach (range(1, $tries) as $i) {
+        if ($i > 1 && ($i - 1) % 5 === 0) {
+            $test->travel(61)->seconds();
+            $test->flushSession();
+            $test->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass']);
+        }
+        $test->post('/two-factor-challenge', [$fields[intdiv($i - 1, 5) % count($fields)] => '000000']);
+    }
+}
+
+it('allows 30 attempts a day per account, over several sign-ins', function () {
+    $mara = maraWithTwoFactor();
+    dayOfTries($this, 30);
+
+    $this->travel(61)->seconds();
+    $this->flushSession();
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass']);
+    $this->from('/two-factor-challenge')->post('/two-factor-challenge', ['code' => currentCode($mara)])
+        ->assertRedirect('/two-factor-challenge')->assertSessionHasErrors(['code' => __('two_factor_challenge.locked', ['hours' => 24])]);
+
+    $this->assertGuest();
+});
+
+it('names the hours to wait, rounded up and at least one', function () {
+    $mara = maraWithTwoFactor();
+    dayOfTries($this, 30);
+
+    $this->travel(23)->hours();
+    $this->flushSession();
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass']);
+    $this->from('/two-factor-challenge')->post('/two-factor-challenge', ['code' => currentCode($mara)])
+        ->assertSessionHasErrors(['code' => __('two_factor_challenge.locked', ['hours' => 1])]);
+});
+
+it('counts recovery codes too', function () {
+    $mara = maraWithTwoFactor();
+    dayOfTries($this, 30, ['recovery_code', 'code']);
+
+    $this->travel(61)->seconds();
+    $this->flushSession();
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass']);
+    $this->from('/two-factor-challenge')->post('/two-factor-challenge', ['recovery_code' => $mara->recoveryCodes()[0]])
+        ->assertSessionHasErrors(['recovery_code' => __('two_factor_challenge.locked', ['hours' => 24])]);
+    $this->assertGuest();
+});
+
+it('counts a successful code too', function () {
+    $mara = maraWithTwoFactor();
+    // 29 wrong tries, then the right code is the 30th and passes; the next sign-in is the 31st attempt
+    dayOfTries($this, 29);
+    $this->travel(61)->seconds();
+    $this->post('/two-factor-challenge', ['code' => currentCode($mara)])->assertRedirect('/my-items');
+    $this->post('/logout');
+
+    $this->travel(31)->seconds();
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass']);
+    $this->from('/two-factor-challenge')->post('/two-factor-challenge', ['code' => '000000'])
+        ->assertSessionHasErrors(['code' => __('two_factor_challenge.locked', ['hours' => 24])]);
+    $this->assertGuest();
+});
+
+it('starts again the next day', function () {
+    $mara = maraWithTwoFactor();
+    dayOfTries($this, 30);
+
+    $this->travel(1)->days();
+    $this->flushSession();
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass']);
+    $this->post('/two-factor-challenge', ['code' => currentCode($mara)])->assertRedirect('/my-items');
+    $this->assertAuthenticatedAs($mara);
+});
+
+it('starts again after a new password', function () {
+    $mara = maraWithTwoFactor();
+    dayOfTries($this, 30);
+    $token = Password::createToken($mara);
+    $this->flushSession();
+    $this->post('/reset-password', ['token' => $token, 'email' => 'mara@example.com', 'password' => 'new-secret-pass-1', 'password_confirmation' => 'new-secret-pass-1'])
+        ->assertRedirect('/login')->assertSessionHas('status', __('passwords.reset'));
+
+    $this->travel(61)->seconds();
+    $this->flushSession();
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'new-secret-pass-1']);
+    $this->post('/two-factor-challenge', ['code' => currentCode($mara->fresh())])->assertRedirect('/my-items');
+    $this->assertAuthenticatedAs($mara);
+});
+
+it('burdens no account without a challenge', function () {
+    $mara = maraWithTwoFactor();
+
+    foreach (range(1, 3) as $i) {
+        $this->post('/two-factor-challenge', ['code' => '000000'])->assertRedirect('/login');
+    }
+
+    // the requests count, under the key without an account; Mara's day stays whole
+    expect(RateLimiter::attempts(TwoFactorDay::cacheKey('')))->toBe(3)
+        ->and(RateLimiter::attempts(TwoFactorDay::cacheKey($mara->id)))->toBe(0);
+});
 
 it('counts the tries per account that signs in', function () {
     maraWithTwoFactor();

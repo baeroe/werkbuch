@@ -31,7 +31,7 @@ When you create the webhook, werkbuch shows its **secret** once: `whsec_` and 43
 | `project.member_added` | Someone joined or was added to a project |
 | `project.member_removed` | Someone was removed from a project |
 | `work_item.created` | An item was created |
-| `work_item.updated` | Fields of an item changed: title, description, priority, dates, labels, properties, type, parent, rank, files |
+| `work_item.updated` | Fields of an item changed: title, description, priority, dates, labels, properties, type, parent, resolution, rank, files |
 | `work_item.state_changed` | An item moved to another state |
 | `work_item.assigned` | An item got another assignee or none |
 | `work_item.archived` | An item was archived |
@@ -159,7 +159,7 @@ The pauses are counted from each failure, so the real times drift by how long th
 What a receiver should know:
 
 - **Deduplicate over `X-Werkbuch-Delivery`.** A crash between sending and logging can send an attempt twice, always with the same delivery ID and the same body.
-- **The order is not guaranteed.** Retries and parallel workers can deliver a later event first; sort by `occurred_at` or read the current state over REST.
+- **The order is not guaranteed, not even for a single item.** Every delivery has its own job and its own retries, so a later event of the same item can arrive first; order the events by `occurred_at` and then by `id` (both in the body), or read the current state over REST.
 - **Answer quickly** and do the work afterwards. Ten seconds is the limit for the whole request.
 
 ## Switched off and on again
@@ -184,6 +184,8 @@ When a webhook has failed for 24 hours (a scheduled attempt fails, and the first
 | `connection` | The connection failed |
 
 An error text masks user, password and query of every URL in it, but not the path: a receiver that carries its token in the path, as Slack and Discord do, shows it to org admins in the log. Deliveries and their attempts are deleted 30 days after their last change. A delivery still waiting 36 hours after its last attempt (its job got lost) becomes `failed`, but never while the queue `webhooks` still holds jobs that are due: after a worker was down, its waiting attempts still go out.
+
+![The delivery log of a webhook, each attempt with its answer and duration](/screenshots/en/webhooks.png)
 
 ## Test ping and send again
 

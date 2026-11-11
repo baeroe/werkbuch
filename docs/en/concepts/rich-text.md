@@ -9,8 +9,8 @@ There is one editor in three levels. Each level shows what fits its place:
 | Level | Where | Blocks |
 |---|---|---|
 | Comment | Comments | Text, lists, quotes, code, links, mentions, references, images and files |
-| Description | Descriptions of items, rich text properties | Also headings (three levels), checklists and tables |
-| Page | [Wiki pages](/en/concepts/wiki) | Also horizontal rules; tables in the `/` menu |
+| Description | Descriptions of items and [templates](/en/concepts/templates), rich text properties | Also headings (three levels), checklists and tables (a table you paste stays; the `/` menu offers new tables on pages only) |
+| Page | [Wiki pages](/en/concepts/wiki) | Also horizontal rules, and tables in the `/` menu |
 
 A text that holds blocks its level does not know (a table pasted into a comment) shows their text as paragraphs. `mod+enter` saves or sends; the description, rich text properties and wiki pages also save on their own after a short pause and when you leave the field.
 
@@ -30,6 +30,10 @@ Type `/` at the start of a line or after a space to open the block menu (right a
 
 **Image or file** in the menu opens the file choice of the browser. Code is highlighted for Bash, CSS, Diff, JavaScript, JSON, Markdown, PHP, Python, Shell, SQL, TypeScript, XML and YAML; without a language werkbuch guesses one for the display, the text stays as you typed it. Bold, italic, strike-through, inline code and links work with the usual Markdown marks (`**`, `*`, `~~`, `` ` ``) and keys. Links keep only `http`, `https` and `mailto`.
 
+## Editing tables
+
+While the cursor is in a table, the **Table** button sits on its top edge at the right; `alt+F10` opens its menu straight from the text. There you insert rows above or below and columns to the left or right, delete the row or column of the cursor or the whole table, and turn the **Header row** and the **Header column** on and off. The header row and the header column stay the first row and the first column, also when you insert something before them. A table of one row has no header column. The last row and the last column stay; delete the table instead. After every command and on `esc` the focus goes back to the same place in the text. The same commands are in the `/` menu while the cursor is in a table (group "Table"). The editor offers neither merged cells nor single header cells: Markdown carries neither (see [Tables](#tables) under Markdown).
+
 ## Mentions
 
 `@` opens a list of the people and bots that can be mentioned in the project: its active members, and people who are org admins. A bot only when it is a member of the project, the default bot as well. Typing narrows the list by name or handle. A mention shows the current handle of the account, even after it was renamed; a deactivated account is marked as such.
@@ -40,7 +44,7 @@ A mention of someone who cannot be mentioned in the project, for example after t
 
 ## References
 
-`#` searches the items and wiki pages you see with the same [search](/en/search) as the command palette: items by key (also a former one), title and text, pages below them by title and text. A reference to an item shows its type and current key, the title for screen readers, and leads to the item when you read the text; a reference to a page shows its emoji and current title and leads to the page.
+`#` searches the items and wiki pages you see with the same [search](/en/search) as the command palette: items by key (also a former one), title and text, pages below them by title and text. A reference to an item shows its type and current key, the title for screen readers, and leads to the item when you read the text; a reference to a page shows its emoji and current title and leads to the page. When you newly reference an item in an item's description, rich text property or comment, werkbuch also relates both items with the built-in relation type "related", when you may edit the item (the [automation](/en/concepts/automations#link-referenced-items) "Link referenced items", on by default).
 
 werkbuch stores only the ULID of the item or page, never a key or title. Whoever reads the text sees the reference as they may: an item or page they cannot see shows as **hidden**, without key or title, in the interface, in the API and in mails. When you save, you can only refer to items and pages you see; a reference that the text already had stays, even to one you do not see.
 
@@ -91,6 +95,10 @@ The same rules apply to Markdown and JSON, checked for the account that writes:
 | `attachment:<ulid>` of another project, or of someone else's upload no text owns | `422` at the field that sent the text, nothing is saved. |
 
 Nothing inside code blocks, inline code, link texts or alternative texts is read as a mention or reference: `` `@mara` `` and `[WEB-123](https://example.com)` stay as they are. A backslash keeps text from becoming one: `\@mara`, `WEB\-123`. When werkbuch writes Markdown, it puts that backslash in front of text that would otherwise turn into a mention or reference on the way back.
+
+### Tables
+
+Markdown knows one kind of table: the first row is the header row, and no column is a header column. werkbuch writes every table that way. When you send Markdown back, each table keeps the header row and the header column the text had before. With as many tables as the stored text, the first table of your Markdown takes them from the first stored table, the second from the second, and so on, as long as both have as many columns. If you add or remove a table, werkbuch pairs tables only from the start and from the end of the text, and only while a table has as many columns and the same text in its first row as the stored one; it stops at the first table that differs, and the tables in between read as Markdown writes them. So a layout never moves to another table, but a table you add between others, or whose first row you change in the same request, comes back with a header row and without a header column. Adding or removing rows keeps the layout; with another number of columns, or in a new text, the table reads as Markdown writes it. This also means a table without a header row never gets one through Markdown: to switch the header row or the header column, use the editor or send JSON. Markdown carries no single header cells and no cells that span several rows or columns; they are lost when Markdown comes back. JSON (`*_json`) keeps all of it.
 
 <!-- reference:end -->
 
@@ -215,6 +223,6 @@ Deleting an image or file that belongs to a text is a `409` with `reason: attach
 Two things keep uploads from piling up:
 
 - **Uploads that no text took** (a picture pasted into a comment that was never sent): a job of the scheduler removes them every hour once they are older than 24 hours. The browser never deletes uploads itself, because a text may already have been saved with them.
-- **Images and files that no text names any more:** `php artisan app:prune-attachments --dry-run --min-age=30` lists the images and files that no current text of their project names (descriptions, rich text values, comments, wiki pages and their versions) and that are older than the minimum age in days; without `--dry-run` it removes them. An image that only a version of a wiki page shows stays, because versions can be restored; images that only an older version in the history of an item shows go, so pick the minimum age with that in mind. Files of the file list are never pruned.
+- **Images and files that no text names any more:** `php artisan app:prune-attachments --dry-run --min-age=30` lists the images and files that no current text of their project names (descriptions, rich text values, comments, wiki pages and their versions, templates) and that are older than the minimum age in days; without `--dry-run` it removes them. An image that only a version of a wiki page shows stays, because versions can be restored; images that only an older version in the history of an item shows go, so pick the minimum age with that in mind. Files of the file list are never pruned.
 
-Deleting an item removes its files and those of its comments, deleting a comment its files, deleting a wiki page those of its subtree, deleting a project all of them; an image that another text of the project still shows stays and then belongs to that text. Files are removed only after the change is saved: if it fails, nothing is lost. More under [development](/en/development#maintenance-commands).
+Deleting an item removes its files and those of its comments, deleting a comment its files, deleting a wiki page those of its subtree, deleting a template its own, deleting a project all of them; an image that another text of the project still shows stays and then belongs to that text. Files are removed only after the change is saved: if it fails, nothing is lost. More under [development](/en/development#maintenance-commands).

@@ -15,7 +15,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 /**
- * `automations` (spec 6.2): the four automations of a project, also those never saved. The write is `manage-automations`.
+ * `automations` (spec 6.2): the five automations of a project, also those never saved. The write is `manage-automations`.
  */
 #[IsReadOnly]
 #[IsOpenWorld(false)]
@@ -25,7 +25,7 @@ final class AutomationsTool extends ReadTool
 
     protected string $title = 'Automations';
 
-    protected string $description = 'Reads the four automations of a project (`auto_archive`, `auto_close`, `close_parent`, `assign_on_start`) with their settings.';
+    protected string $description = 'Reads the five automations of a project (`auto_archive`, `auto_close`, `close_parent`, `assign_on_start`, `link_references`) with their settings. A key never saved is off, except `link_references`, which is on.';
 
     protected function actions(): array
     {

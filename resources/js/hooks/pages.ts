@@ -7,7 +7,8 @@
  * - A saved page goes into the cache only when it is at least as new as what is there (13c: a late answer of a save
  *   must not overwrite a newer page that loaded meanwhile, e.g. after a live message).
  * - Deleting a page takes the queries of its subtree out of the cache before the tree loads again, and marks the
- *   subtree as gone (`usePageGone`): `usePage`, `usePageVersions` and `usePageVersion` ask for a gone page no more,
+ *   subtree as gone (`usePageGone`): `usePage`, `usePageVersions` and `usePageVersion` ask for a gone page no more (the
+ *   versions neither for a page of a deleted project, `useLiveGone`),
  *   so a screen still showing it never reads a 404. The subtree is what the caller names, what the cached trees hold
  *   below the page, and every cached page of the project the tree on the server holds no more (`goneFromTree`): a
  *   screen may have taken the subtree out of its tree already (the undo toast of a delete, `withoutPages`).
@@ -20,6 +21,7 @@ import {
   deletePage,
   getPage,
   getPageVersion,
+  listItemPages,
   listPages,
   listPageVersions,
   movePage,
@@ -28,7 +30,7 @@ import {
   type SavePageInput,
 } from '@/api/pages';
 import { drafts, pageDraft } from '@/lib/drafts';
-import { markLiveGone, usePageGone } from '@/lib/liveGone';
+import { markLiveGone, useLiveGone, usePageGone } from '@/lib/liveGone';
 import type { PageNode, Page as WikiPage } from '@/types';
 import { qk } from './keys';
 import { useApiMutation } from './mutation';
@@ -38,6 +40,12 @@ export { allPages } from '@/api/client';
 /** The page tree of a project (ULID or identifier; no text). */
 export function usePages(projectId: string | null | undefined) {
   return useQuery({ queryKey: qk.pages.list({ project: projectId }), queryFn: () => listPages(projectId!), enabled: !!projectId });
+}
+
+/** The wiki pages that reference an item; nothing is asked for an item known to be deleted (its list would be a 404). */
+export function useItemPages(itemId: string, projectId: string) {
+  const gone = useLiveGone(itemId, projectId);
+  return useQuery({ queryKey: qk.pages.item(itemId), queryFn: () => listItemPages(itemId), enabled: !gone });
 }
 
 /** A page with its text; nothing is asked for a page known to be deleted. */
@@ -195,15 +203,20 @@ function forget(queryClient: QueryClient, ids: Set<string>): void {
   queryClient.removeQueries({ predicate: (query) => roots.includes(query.queryKey[0]) && aboutPages(query, ids) });
 }
 
-/** The kept versions of a page, the newest first, without their text. */
-export function usePageVersions(pageId: string | null | undefined) {
-  const gone = usePageGone(pageId);
+/**
+ * The kept versions of a page, the newest first, without their text. Neither their keys nor their answers name the
+ * project: `projectId` (the ULID) tells that it was deleted, so a reconnect asks for none of them (404).
+ */
+export function usePageVersions(pageId: string | null | undefined, projectId: string | null | undefined) {
+  const projectGone = useLiveGone(projectId);
+  const gone = usePageGone(pageId) || projectGone;
   return useQuery({ queryKey: qk.pageVersions.list({ page: pageId }), queryFn: () => listPageVersions(pageId!), enabled: !!pageId && !gone });
 }
 
-/** One kept version with its text (A315). */
-export function usePageVersion(pageId: string | null | undefined, versionId: string | null | undefined) {
-  const gone = usePageGone(pageId);
+/** One kept version with its text (A315); `projectId` as for `usePageVersions`. */
+export function usePageVersion(pageId: string | null | undefined, versionId: string | null | undefined, projectId: string | null | undefined) {
+  const projectGone = useLiveGone(projectId);
+  const gone = usePageGone(pageId) || projectGone;
   return useQuery({
     queryKey: qk.pageVersions.detail(versionId ?? ''),
     queryFn: () => getPageVersion(pageId!, versionId!),

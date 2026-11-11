@@ -1,10 +1,13 @@
 <?php
 
+use App\Auth\TwoFactorDay;
 use App\Events\EventType;
 use App\Models\Event;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
+use PragmaRX\Google2FA\Google2FA;
 
 /*
  * The way back when the authenticator app and the recovery codes are lost: app:reset-two-factor turns the second factor
@@ -33,6 +36,28 @@ it('turns the second factor off, ends the sessions and notes why', function () {
     $this->post('/login', ['email' => $user->email, 'password' => 'password'])->assertRedirect('/my-items');
 });
 
+it('gives back the day of codes, so a second factor set up again works the same day', function () {
+    $user = User::factory()->create(['email' => 'mara@example.com', 'password' => 'secret-pass']);
+    $enable = function () use ($user): void {
+        app(EnableTwoFactorAuthentication::class)($user, true);
+        $user->forceFill(['two_factor_confirmed_at' => now()])->save();
+    };
+    $enable();
+    foreach (range(1, 30) as $i) {
+        RateLimiter::hit(TwoFactorDay::cacheKey($user->id), 86400);
+    }
+
+    $this->artisan('app:reset-two-factor', ['email' => 'mara@example.com'])->assertSuccessful();
+
+    expect(RateLimiter::attempts(TwoFactorDay::cacheKey($user->id)))->toBe(0);
+    $user->refresh();
+    $enable();
+    $this->post('/login', ['email' => 'mara@example.com', 'password' => 'secret-pass'])->assertRedirect('/two-factor-challenge');
+    $this->post('/two-factor-challenge', ['code' => app(Google2FA::class)->getCurrentOtp(decrypt((string) $user->two_factor_secret))])
+        ->assertRedirect('/my-items');
+    $this->assertAuthenticatedAs($user);
+});
+
 it('changes nothing for an account without a second factor', function () {
     $user = User::factory()->create();
 
@@ -47,4 +72,16 @@ it('fails for an unknown address', function () {
     $this->artisan('app:reset-two-factor', ['email' => 'nobody@example.com'])
         ->expectsOutputToContain('There is no account with this email.')
         ->assertFailed();
+});
+
+it('notes a cancelled setup, not a turned-off second factor, when the setup was never confirmed', function () {
+    $user = User::factory()->create();
+    app(EnableTwoFactorAuthentication::class)($user, true);
+
+    $this->artisan('app:reset-two-factor', ['email' => $user->email])->assertSuccessful();
+
+    $event = eventsOf(EventType::UserTwoFactorSetupCancelled, $user)->sole();
+    expect($user->refresh()->two_factor_secret)->toBeNull()
+        ->and([$event->actor_id, $event->meta['via'], $event->meta['reason']])->toBe([$user->id, 'system', 'two_factor_reset'])
+        ->and(eventsOf(EventType::UserTwoFactorDisabled, $user))->toHaveCount(0);
 });

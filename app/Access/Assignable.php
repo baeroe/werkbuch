@@ -6,7 +6,7 @@ use App\Enums\AccountType;
 use App\Models\Project;
 use App\Models\ProjectMember;
 use App\Models\User;
-use App\Support\MemberInput;
+use App\Support\ProjectMembership;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -23,7 +23,7 @@ final class Assignable
             return false;
         }
 
-        return MemberInput::isMember($project, $user) || ($user->isPerson() && Visibility::orgRole($user) === OrgRole::Admin);
+        return ProjectMembership::isMember($project, $user) || ($user->isPerson() && Visibility::orgRole($user) === OrgRole::Admin);
     }
 
     /**

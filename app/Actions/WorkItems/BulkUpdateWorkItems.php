@@ -10,6 +10,7 @@ use App\Exceptions\Problem;
 use App\Models\Label;
 use App\Models\WorkItem;
 use App\Support\Actor;
+use App\Support\BotIds;
 use App\Support\Ids;
 use App\Support\ItemLock;
 use Illuminate\Support\Facades\DB;
@@ -62,6 +63,11 @@ final class BulkUpdateWorkItems
         [$fields, $archived, $add, $remove] = self::patch($input['patch'] ?? null, $fail);
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
+        }
+
+        // whether the assignee is a bot, asked once for all items (`bot.assigned`, T10-M8)
+        if (is_string($fields['assignee_id'] ?? null)) {
+            app(BotIds::class)->preload([$fields['assignee_id']]);
         }
 
         $updated = [];

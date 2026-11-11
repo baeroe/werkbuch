@@ -14,7 +14,7 @@ import { listCommands } from '@/lib/commands';
 import { listShortcuts } from '@/lib/shortcuts/registry';
 import { useUiStore } from '@/store/ui';
 import { app, board, press, rankOf, renderBoard as renderWithServer, sent, startBoardServer, stopBoardServer, web } from '@/test/board';
-import { lene, organization } from '@/test/fixtures';
+import { lene, makeView, organization } from '@/test/fixtures';
 import type { WorkItem } from '@/types';
 import { PLANNED_DAYS, SAVE_DELAY } from './TimelineLayout';
 
@@ -73,10 +73,13 @@ vi.mock('@inertiajs/react', async () => {
 /** The scroll box: 1000 × 440 px, 100 px below the top of the window; the title column is 136 px wide. */
 const BOX = { left: 0, top: 100, width: 1000, height: 440 };
 const LABEL = 136;
+/** The list of "Ohne Datum" scrolls in a box of its own, 400 px tall; an epic there (card and button) is 120 px. */
+const UNPLANNED = { height: 400, entry: 120 };
 const descriptors = {
   clientHeight: Object.getOwnPropertyDescriptor(Element.prototype, 'clientHeight')!,
   clientWidth: Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth')!,
   offsetWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')!,
+  offsetHeight: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!,
 };
 const boundingRect = Element.prototype.getBoundingClientRect;
 /** Where the rows stand in the window (all at the same place): above the box at first, so a focused row scrolls up. */
@@ -88,7 +91,14 @@ beforeAll(() => {
   Object.defineProperty(Element.prototype, 'clientHeight', {
     configurable: true,
     get(this: Element) {
+      if (this.hasAttribute('data-unplanned-list')) return UNPLANNED.height;
       return this.hasAttribute('data-timeline-scroller') ? BOX.height : 0;
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.hasAttribute('data-unplanned-entry') ? UNPLANNED.entry : 0;
     },
   });
   Object.defineProperty(Element.prototype, 'clientWidth', {
@@ -123,6 +133,7 @@ afterAll(() => {
   Object.defineProperty(Element.prototype, 'clientHeight', descriptors.clientHeight);
   Object.defineProperty(Element.prototype, 'clientWidth', descriptors.clientWidth);
   Object.defineProperty(HTMLElement.prototype, 'offsetWidth', descriptors.offsetWidth);
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', descriptors.offsetHeight);
   Element.prototype.getBoundingClientRect = boundingRect;
   Element.prototype.scrollTo = scrollTo;
   Object.assign(window, windowScroll);
@@ -407,11 +418,34 @@ describe('the timeline', () => {
   });
 
   it('explains an empty timeline: only epics stand on it', async () => {
-    const filter = encodeURIComponent(JSON.stringify([{ field: 'type', op: 'is', value: 't_task' }]));
-    renderTimeline(`/projects/WEB?layout=timeline&filter=${filter}`);
+    board.items = [task];
+    renderTimeline('/projects/WEB?layout=timeline');
     expect(await screen.findByText('Keine Epics in dieser Liste')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Filter zurücksetzen' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Neues Epic' }));
     expect(useUiStore.getState()).toMatchObject({ createOpen: true, createDefaults: { project_id: 'p_web', type_id: 't_epic' } });
+  });
+
+  it('offers to reset the filter on an empty timeline', async () => {
+    const filter = encodeURIComponent(JSON.stringify([{ field: 'type', op: 'is', value: 't_task' }]));
+    renderTimeline(`/projects/WEB?layout=timeline&filter=${filter}`);
+    expect(await screen.findByText('Kein Epic passt zum Filter')).toBeTruthy();
+    expect(screen.getByText('Ändere die Bedingungen oder setze den Filter zurück.')).toBeTruthy();
+    expect(screen.queryByText('Keine Epics in dieser Liste')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter zurücksetzen' }));
+    // back to the filter of the project: its epics stand on the timeline again
+    await waitFor(() => expect(inertia.url).toBe('/projects/WEB?layout=timeline'));
+    expect(await findRow('WEB-30')).toBeTruthy();
+  });
+
+  it('says of an empty timeline of a view with its own conditions what the list says (19b-M2)', async () => {
+    board.view = makeView({ id: 'v_tasks', name: 'Nur Tasks', filter: { version: 1, conditions: [{ field: 'type', op: 'is', value: 't_task' }] }, display: { ...makeView().display, layout: 'timeline' } });
+    renderTimeline('/views/v_tasks');
+    expect(await screen.findByText('Keine Treffer in „Nur Tasks“')).toBeTruthy();
+    expect(screen.getByText('Gerade passt kein Epic zu den Bedingungen dieser View. Ohne Bedingungen zeigt sie alle Epics.')).toBeTruthy();
+    expect(screen.queryByText('Kein Epic passt zum Filter')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Filter zurücksetzen' })).toBeTruthy();
   });
 
   it('says where an epic of the list has no dates yet', async () => {
@@ -483,6 +517,48 @@ describe('the timeline', () => {
   });
 });
 
+describe('"Ohne Datum" with many epics', () => {
+  const unplannedList = () => document.querySelector<HTMLElement>('[data-unplanned-list]')!;
+  const cards = () => within(aside()).queryAllByRole('article');
+
+  it('renders only the visible undated epics (T21-M8)', async () => {
+    board.items = Array.from({ length: 500 }, (_, index) => web(index + 1, `Ohne Datum ${index + 1}`, 'std_backlog', epic({ rank: rankOf(index + 1) })));
+    renderTimeline();
+    await waitFor(() => expect(within(aside()).getByText('500')).toBeTruthy(), { timeout: 5000 });
+    // 400 px of 120 px each, and a few around them: never the 500
+    await waitFor(() => expect(cards().length).toBeGreaterThan(2));
+    expect(cards().length).toBeLessThan(15);
+    expect(card('WEB-1')).toBeTruthy();
+
+    // the card of the cursor stays while the list scrolls away from it
+    act(() => card('WEB-1').focus());
+    act(() => {
+      unplannedList().scrollTop = 500 * UNPLANNED.entry - UNPLANNED.height;
+      unplannedList().dispatchEvent(new Event('scroll'));
+    });
+    // (the cards not measured yet count 140 px: the window stands somewhere past the 400th)
+    await waitFor(() => expect(within(aside()).queryByRole('article', { name: /^WEB-2 / })).toBeNull());
+    expect(cards().some((element) => Number(/^WEB-(\d+) /.exec(element.getAttribute('aria-label')!)![1]) > 400)).toBe(true);
+    expect(document.activeElement).toBe(card('WEB-1'));
+    expect(cards().length).toBeLessThan(15);
+    // still one tab stop: the card of the cursor (14b2-M3)
+    expect([...document.querySelectorAll('[data-nav-target][tabindex="0"]')]).toEqual([card('WEB-1')]);
+    // the entries say how many there are and where each stands, not only the few rendered (14b2-M2)
+    // a list for assistive tech too: Safari drops the role of a ul without list style, and with it these counts
+    expect(unplannedList().querySelector('ul')!.getAttribute('role')).toBe('list');
+    const entries = [...unplannedList().querySelectorAll('li')];
+    expect(entries.every((entry) => entry.getAttribute('aria-setsize') === '500')).toBe(true);
+    expect(entries.map((entry) => entry.getAttribute('aria-posinset'))).toEqual(entries.map((entry) => String(Number(entry.getAttribute('data-index')) + 1)));
+    expect(entries.map((entry) => entry.getAttribute('aria-posinset'))).toContain('1');
+
+    // j goes to the next card, which is out of view: the list scrolls back to it
+    press('j');
+    await waitFor(() => expect(document.activeElement).toBe(card('WEB-2')));
+    expect(unplannedList().scrollTop).toBeLessThanOrEqual(2 * UNPLANNED.entry);
+    expect(cards().length).toBeLessThan(15);
+  });
+});
+
 describe('the keys and the palette', () => {
   it('takes the focus from the row of the list to the epic of the cursor with 4', async () => {
     renderTimeline('/my-items');
@@ -505,10 +581,12 @@ describe('the keys and the palette', () => {
     expect(inertia.url).toBe('/my-items?layout=timeline');
     // the timeline comes as a chunk of its own; the rows of the list before do not stand on it meanwhile
     await waitFor(() => expect(document.querySelector('[data-skeleton="timeline"]')).toBeTruthy());
+    // longer than the five frames the rescue waits without an outline: it waits for the timeline's (T18-M3)
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 400));
     });
     expect(document.querySelector('[data-skeleton="timeline"]')).toBeTruthy();
+    expect(document.activeElement).toBe(document.body);
     expect(screen.queryByRole('group', { name: /^WEB-30 / })).toBeNull();
 
     // then the focus is on the epic of the cursor
@@ -571,6 +649,23 @@ describe('dragging', () => {
     expect(barOf('wi_web_30').className).toContain('cursor-grabbing');
     pointerUp({ clientX: 584 });
     await waitFor(() => expect(patches('wi_web_30')).toEqual([{ start_date: '2026-10-08', due_date: '2026-11-22' }]));
+  });
+
+  it('puts the bar back when the server refuses the dates (T21-M6)', async () => {
+    board.refuseDates = true;
+    renderTimeline();
+    await findRow('WEB-30');
+    await editable('wi_web_30');
+    pointerDown(barOf('wi_web_30'), { clientX: 500 });
+    pointerMove({ clientX: 584 });
+    expect(row('WEB-30').getAttribute('aria-label')).toMatch(/08\.10\.2026 bis 22\.11\.2026/);
+    pointerUp({ clientX: 584 });
+    await waitFor(() => expect(patches('wi_web_30')).toHaveLength(1));
+    // the saved dates show again, nothing was stored, and the toast says the refusal
+    await waitFor(() => expect(row('WEB-30').getAttribute('aria-label')).toMatch(/01\.10\.2026 bis 15\.11\.2026/));
+    expect(stored('wi_web_30')).toMatchObject({ start_date: '2026-10-01', due_date: '2026-11-15' });
+    await waitFor(() => expect(lastToast()).toMatchObject({ tone: 'error' }));
+    expect(lastToast()?.title).toBe('Änderung nicht gespeichert');
   });
 
   it('keeps the dates of a drag that follows a key before the keys rest', async () => {
@@ -746,5 +841,72 @@ describe('dragging', () => {
     // the window hears nothing of it any more
     pointerUp({ clientX: 584 });
     expect(patches('wi_web_30')).toEqual([]);
+  });
+});
+
+describe('where the timeline starts', () => {
+  /** A stand-in for the browser's ResizeObserver (jsdom has none): the test says when an observed box changed size. */
+  const observers: { callback: ResizeObserverCallback; targets: Element[] }[] = [];
+  let measured = 0;
+
+  beforeEach(() => {
+    observers.length = 0;
+    measured = 0;
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        private entry: (typeof observers)[number];
+        constructor(callback: ResizeObserverCallback) {
+          this.entry = { callback, targets: [] };
+          observers.push(this.entry);
+        }
+        observe(target: Element) {
+          this.entry.targets.push(target);
+        }
+        unobserve() {}
+        disconnect() {
+          this.entry.targets = [];
+        }
+      },
+    );
+    const stubbed = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (this.hasAttribute('data-timeline-scroller')) measured += 1;
+      return stubbed.call(this);
+    };
+    const top = BOX.top;
+    onTestFinished(() => {
+      Element.prototype.getBoundingClientRect = stubbed;
+      BOX.top = top;
+      vi.unstubAllGlobals();
+    });
+  });
+
+  it('reads where its box starts not on every render (T21-M9)', async () => {
+    renderTimeline();
+    await focusRow('WEB-30');
+    // the count sees the box: the timeline read it when it laid out
+    expect(measured).toBeGreaterThan(0);
+
+    // the selection changes: a render with the same rows reads no box
+    measured = 0;
+    press('x');
+    await waitFor(() => expect(useUiStore.getState().selection).toEqual([web30.id]));
+    expect(measured).toBe(0);
+
+    // and a page that changes size is read again
+    act(() => observers.filter((entry) => entry.targets.includes(document.body)).forEach((entry) => entry.callback([], {} as ResizeObserver)));
+    expect(measured).toBeGreaterThan(0);
+  });
+
+  it('fills the window below a bar above it that grows', async () => {
+    renderTimeline();
+    await findRow('WEB-30');
+    expect(scroller().style.maxHeight).toContain(`- ${BOX.top}px`);
+
+    // the bulk bar pushes the box down: the page grows, the box keeps to the window
+    BOX.top += 40;
+    act(() => observers.filter((entry) => entry.targets.includes(document.body)).forEach((entry) => entry.callback([], {} as ResizeObserver)));
+    expect(scroller().style.maxHeight).toContain(`- ${BOX.top}px`);
   });
 });

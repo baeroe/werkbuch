@@ -1,5 +1,5 @@
 /*
- * Settings → Automations (spec 4.13, port of the clickdummy): four switches with their parameters. A switch applies at
+ * Settings → Automations (spec 4.13, port of the clickdummy): five switches with their parameters. A switch applies at
  * once; the days of Auto-Archive and Auto-Close apply when the field is left or on Enter, the Canceled status of
  * Auto-Close when it is chosen. Automations act as the default bot, keep to the allowed transitions and appear in the
  * history with their reason; the nightly ones notify nobody (A357). Auto-Close needs a Canceled status in the project's
@@ -38,6 +38,7 @@ const TITLE = {
   auto_close: 'automations.auto_close.title',
   close_parent: 'automations.close_parent.title',
   assign_on_start: 'automations.assign_on_start.title',
+  link_references: 'automations.link_references.title',
 } as const;
 
 const DESCRIPTION = {
@@ -45,10 +46,11 @@ const DESCRIPTION = {
   auto_close: 'automations.auto_close.description',
   close_parent: 'automations.close_parent.description',
   assign_on_start: 'automations.assign_on_start.description',
+  link_references: 'automations.link_references.description',
 } as const;
 
 /** The order of the rows when the server's list misses a key. */
-const KEYS: AutomationKey[] = ['auto_archive', 'auto_close', 'close_parent', 'assign_on_start'];
+const KEYS: AutomationKey[] = ['auto_archive', 'auto_close', 'close_parent', 'assign_on_start', 'link_references'];
 
 /** Where the nightly ones start (`AutomationKey::defaults`). */
 const DEFAULT_DAYS: Partial<Record<AutomationKey, number>> = { auto_archive: 30, auto_close: 90 };

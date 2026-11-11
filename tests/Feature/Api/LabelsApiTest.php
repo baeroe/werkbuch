@@ -97,7 +97,7 @@ it('deletes a label and answers how many items had it', function () {
     $this->deleteJson("/api/v1/labels/{$label->id}")->assertOk()->assertExactJson(['affected_items' => 0]);
 
     expect(Label::query()->count())->toBe(0)
-        ->and(eventsOf(EventType::LabelDeleted, $label)->sole()->meta)->toMatchArray(['name' => 'UX']);
+        ->and(eventsOf(EventType::LabelDeleted, $label)->sole()->meta)->toMatchArray(['name' => 'UX', 'item_ids' => []]);
 });
 
 it('counts the items of a deleted label and takes the label off them', function () {
@@ -114,7 +114,9 @@ it('counts the items of a deleted label and takes the label off them', function 
 
     expect($first->labels()->pluck('labels.id')->all())->toBe([$other->id])
         ->and($second->labels()->count())->toBe(0)
-        ->and($third->labels()->pluck('labels.id')->all())->toBe([$other->id]);
+        ->and($third->labels()->pluck('labels.id')->all())->toBe([$other->id])
+        // the items that had it, read before the cascade took it off (the search reindexes only them)
+        ->and(eventsOf(EventType::LabelDeleted, $label)->sole()->meta['item_ids'])->toBe(collect([$first->id, $second->id])->sort()->values()->all());
 });
 
 it('records nothing when nothing changes', function () {

@@ -1,9 +1,12 @@
 <?php
 
+use App\Actions\System\GetSystemStatus;
+use App\Models\User;
 use App\Search\MeilisearchEngine;
 use App\Search\ReportsStatus;
 use Laravel\Scout\EngineManager;
 use Meilisearch\Client;
+use Symfony\Component\Process\Process;
 use Tests\Support\Meili;
 
 /*
@@ -32,7 +35,36 @@ it('reads the tasks of Meilisearch', function () {
 });
 
 it('says down when Meilisearch does not answer', function () {
-    $engine = new MeilisearchEngine(app(Client::class), false, new Client('http://127.0.0.1:1'));
+    $engine = new MeilisearchEngine(app(Client::class), false, 'http://127.0.0.1:1', null);
 
     expect($engine->status())->toBe(['search' => 'down', 'search_tasks' => null]);
+});
+
+it('waits once for Meilisearch and Reverb together (K21)', function () {
+    // five requests of half a second each: asked one after the other they take two and a half seconds, in a pool about half a
+    // second; the server answers every request after half a second, none waits for another (tests/Support/slow-status.php)
+    $server = new Process([PHP_BINARY, dirname(__DIR__).'/Support/slow-status.php']);
+    $server->start();
+    try {
+        $server->waitUntil(fn (string $type, string $output) => str_contains($server->getOutput(), "\n"));
+        expect(preg_match('/^(\d+)$/m', $server->getOutput(), $match))->toBe(1, 'The slow server named no port.');
+        $port = (int) $match[1];
+        config([
+            'scout.driver' => 'meilisearch', 'scout.meilisearch.host' => "http://127.0.0.1:{$port}", 'scout.meilisearch.key' => null,
+            'broadcasting.default' => 'reverb',
+            'broadcasting.connections.reverb.options' => ['scheme' => 'http', 'host' => '127.0.0.1', 'port' => $port],
+        ]);
+        app(EngineManager::class)->forgetDrivers();
+        // the account apart: only the action is measured, its reads of the database and the pool
+        $admin = actor(User::factory()->admin()->create());
+
+        $started = microtime(true);
+        $status = GetSystemStatus::run($admin);
+        $took = microtime(true) - $started;
+    } finally {
+        $server->stop(0);
+    }
+
+    expect($status)->toMatchArray(['search' => 'ok', 'search_tasks' => ['enqueued' => 0, 'processing' => 0, 'failed_last_day' => 0], 'live' => 'ok'])
+        ->and($took > 0.45 && $took < 1.8)->toBeTrue(sprintf('The five requests took %.2f s, not between 0.45 s and 1.8 s.', $took));
 });

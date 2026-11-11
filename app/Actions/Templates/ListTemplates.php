@@ -27,6 +27,10 @@ final class ListTemplates
 {
     use AsAction;
 
+    /** The flag `lean` of the lists (the document and the MCP tool read the sentence from here). */
+    public const LEAN = 'Leave the texts out (`1`): no `description`, `description_json` and `values_markdown` in `payload`, '
+        .'the rest as usual (the list of a command palette).';
+
     private const BOOLEANS = [true, false, 0, 1, '0', '1'];
 
     /** The rules of `GET /templates` (A386, K11). */
@@ -36,6 +40,7 @@ final class ListTemplates
             filters: [ListFilter::ulid('project_id', 'templates.project_id'), ...self::common()],
             sorts: ['name' => 'templates.name', 'created_at' => 'templates.id'],
             default: ['name'],
+            flags: ['lean' => self::LEAN],
         );
     }
 
@@ -46,6 +51,7 @@ final class ListTemplates
             filters: self::common(),
             sorts: ['name' => 'templates.name', 'created_at' => 'templates.id'],
             default: ['name'],
+            flags: ['lean' => self::LEAN],
         );
     }
 

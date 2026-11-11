@@ -17,11 +17,12 @@
  *   come from `useSelection`. A refusal says why in a toast and changes nothing.
  * - Dates are saved with `useUpdateWorkItem` (optimistic, start and due in one patch); a refusal of the server puts the
  *   bar back and the toast of the mutation says why. A polite status line says what moved and what was saved.
- * - The rows are virtualized (`TimelineRows`, R34); the row of the cursor stays rendered.
+ * - The rows are virtualized (`TimelineRows`, R34), and so is "Ohne Datum" in a box of its own (T21-M8); the row or card
+ *   of the cursor stays rendered.
  */
 
 import { usePage, router } from '@inertiajs/react';
-import { ChartGantt, Plus } from 'lucide-react';
+import { ChartGantt, FunnelX, Plus } from 'lucide-react';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { formatDay } from '@/components/fields/format';
 import { archivedReason, useToday } from '@/components/fields/itemData';
@@ -47,6 +48,7 @@ import type { ListedItem } from '@/types';
 import type { LayoutProps } from '../layouts';
 import { ListSkeleton } from '../ListStates';
 import { focusIsNeutral, revealBelowToolbar, useSelection } from '../selection/useSelection';
+import { useDocumentTop } from '../useDocumentTop';
 import { AXIS_HEIGHT, TimelineAxis, TimelineGrid } from './TimelineAxis';
 import { TimelineBar } from './TimelineBar';
 import { TimelineRows, useTimelineRows, type TimelineSection } from './TimelineRows';
@@ -85,7 +87,7 @@ function addressWith(url: string, zoom: Zoom): string {
   return `${address.pathname}${address.search}`;
 }
 
-export function TimelineLayout({ groups, groupBy, project, createDefaults, selection, onSelect, onSelectAll, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
+export function TimelineLayout({ groups, groupBy, project, createDefaults, filtered = false, filterChanged = false, view, onResetFilter, selection, onSelect, onSelectAll, onOpen, onPeek, cursorId, onCursor }: LayoutProps) {
   const types = useWorkItemTypes().data?.items;
   const projects = useProjects({ include_archived: true }).data?.items;
   const { reason } = usePermissions();
@@ -156,6 +158,8 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
   const scroller = useRef<HTMLDivElement>(null);
   const grid = useRef<HTMLDivElement>(null);
   const rows = useRef(new Map<string, HTMLElement>());
+  /** Scrolls "Ohne Datum" to an epic's card (its list is virtualized as well). */
+  const revealUnplanned = useRef<((id: string) => void) | null>(null);
   const labelWidth = () => scroller.current?.querySelector<HTMLElement>('[data-timeline-label]')?.offsetWidth ?? 0;
   const { entries, virtualizer, indexOf } = useTimelineRows(dated, scroller, cursorId);
 
@@ -189,16 +193,7 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
   }
 
   // the box fills the window below the bars of the screen
-  const [top, setTop] = useState(0);
-  const measure = useCallback(() => {
-    const next = Math.round((scroller.current?.getBoundingClientRect().top ?? 0) + window.scrollY);
-    setTop((previous) => (previous === next ? previous : next));
-  }, []);
-  useLayoutEffect(measure);
-  useEffect(() => {
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [measure]);
+  const top = useDocumentTop(scroller, [entries.length, width]);
 
   /* --------------------------------------------------------------------------- focus */
 
@@ -244,6 +239,8 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
     (id: string) => {
       const index = indexOf(id);
       if (index >= 0 && !rows.current.get(id)?.isConnected) virtualizer.scrollToIndex(index, { align: 'auto' });
+      // a card of "Ohne Datum" scrolls into its box (its own scroll, not the axis's)
+      if (index < 0) revealUnplanned.current?.(id);
       let attempts = 0;
       const attempt = () => {
         const element = rows.current.get(id);
@@ -418,8 +415,8 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
 
   // the answer of the layout before (1–4 switched to the timeline) stands until the epics by project are there: the
   // skeleton, so the focus waits for the row of the cursor (the screen's focus rescue) instead of a row that goes again
-  if (groupBy !== 'project') return <ListSkeleton layout="timeline" />;
-  if (epics.length === 0) return <TimelineEmpty project={project} createDefaults={createDefaults} />;
+  if (groupBy !== 'project') return <ListSkeleton layout="timeline" loadingLayout />;
+  if (epics.length === 0) return <TimelineEmpty project={project} createDefaults={createDefaults} filtered={filtered} filterChanged={filterChanged} view={view} onResetFilter={onResetFilter} />;
 
   const stop = cursorId !== null && order.includes(cursorId) ? cursorId : order[0];
   const planningItem = drag.planning ? epicById.get(drag.planning.id) : undefined;
@@ -570,6 +567,7 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
         onPlanPointerDown={drag.onPlanPointerDown}
         onOpen={onOpen}
         onPeek={onPeek}
+        revealRef={revealUnplanned}
       />
 
       {drag.planning && planningItem && (
@@ -590,10 +588,25 @@ export function TimelineLayout({ groups, groupBy, project, createDefaults, selec
   );
 }
 
-/** No epic in the list: only epics stand on the timeline. */
-function TimelineEmpty({ project, createDefaults }: Pick<LayoutProps, 'project' | 'createDefaults'>) {
+/** No epic in the list: only epics stand on the timeline; with a filter that hides items, the way back to all of them. */
+function TimelineEmpty({ project, createDefaults, filtered, filterChanged, view, onResetFilter }: Pick<LayoutProps, 'project' | 'createDefaults' | 'filtered' | 'filterChanged' | 'view' | 'onResetFilter'>) {
   const types = useWorkItemTypes().data?.items ?? [];
   const { reason } = usePermissions();
+  if (filtered && onResetFilter) {
+    // a view names itself, and with its own conditions unchanged says that they match no epic (as `ListEmpty`, 19b-M2)
+    return (
+      <EmptyState
+        icon={FunnelX}
+        title={view ? t('items.empty.filtered.view_title', { name: view.name }) : t('items.timeline.empty.filtered_title')}
+        description={view && !filterChanged ? t('items.timeline.empty.filtered_view') : t('items.empty.filtered.changed')}
+        actions={
+          <Button variant="secondary" icon={FunnelX} onClick={onResetFilter}>
+            {t('items.empty.filtered.reset')}
+          </Button>
+        }
+      />
+    );
+  }
   const epicType = types.find((type) => type.is_epic && type.archived_at === null && (!project || project.enabled_type_ids.includes(type.id)));
   return (
     <EmptyState

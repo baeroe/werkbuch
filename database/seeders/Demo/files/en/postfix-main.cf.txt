@@ -1,0 +1,4 @@
+# /etc/postfix/main.cf (excerpt)
+smtpd_client_message_rate_limit = 100
+anvil_rate_time_unit = 3600s
+default_destination_rate_delay = 1s

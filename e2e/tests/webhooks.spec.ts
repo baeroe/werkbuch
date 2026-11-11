@@ -10,12 +10,15 @@ import { startReceiver, type ReceivedRequest } from '../webhookReceiver';
 // through the queue: the specs wait on the receiver and the log, never on a fixed pause (K18).
 
 const WEBHOOK = 30_000;
+// what goes through the queue (consume, deliver, notify) waits as long as the acceptance specs: locally `webhooks` comes after
+// `items` and `inbox`, a delivery took up to 50 s (K18)
+const QUEUED = 90_000;
 // the name createE2eWebhook() gives a webhook called `what`
 const name = (what: string) => `E2E ${variant()} ${runId()} ${what}`;
 const label = (key: string, params: Record<string, string | number> = {}) => tr('en', key, params);
 
 // the ddev calls and the queue take their time
-test.describe.configure({ timeout: 120_000 });
+test.describe.configure({ timeout: 240_000 });
 
 /** Whether the signature of a request is the one the secret makes (spec 6.3: HMAC-SHA256 over "timestamp.body"). */
 function signedWith(request: ReceivedRequest, secret: string): boolean {
@@ -56,11 +59,13 @@ test('creates a webhook with the keyboard, copies its secret once and pings the 
     // the secret is shown this one time; the button copies it
     const secretDialog = page.getByRole('dialog', { name: label('settings.webhooks.secret.created_title') });
     await expect(secretDialog).toBeVisible();
-    await expect(secretDialog.getByRole('textbox', { name: label('settings.webhooks.secret.label') })).toHaveValue(/\S+/);
+    const field = secretDialog.getByRole('textbox', { name: label('settings.webhooks.secret.label') });
+    await expect(field).toHaveValue(/^whsec_\S+$/);
     await tabTo(page, secretDialog.getByRole('button', { name: label('settings.webhooks.secret.copy') }));
     await page.keyboard.press('Enter');
-    const secret = await clipboard(page);
-    expect(secret.length).toBeGreaterThan(16);
+    // the clipboard belongs to the browser, not to the context: an earlier spec's token is still there until the copy
+    const secret = await field.inputValue();
+    await expect.poll(() => clipboard(page)).toBe(secret);
     await tabTo(page, secretDialog.getByRole('button', { name: label('settings.webhooks.secret.done') }));
     await page.keyboard.press('Enter');
     await expect(secretDialog).toHaveCount(0);
@@ -141,7 +146,7 @@ test('renews the secret without losing the form', async ({ page }) => {
     await expect(dialog).toHaveCount(0);
 
     await createItem(page, { project_id: project.id, title: 'E2E webhook Geheimnis' });
-    await expect.poll(() => receiver.requests.length, { timeout: WEBHOOK }).toBe(1);
+    await expect.poll(() => receiver.requests.length, { timeout: QUEUED }).toBe(1);
     expect(receiver.requests[0]!.headers['x-werkbuch-event']).toBe('work_item.created');
     expect(signedWith(receiver.requests[0]!, second)).toBe(true);
     expect(signedWith(receiver.requests[0]!, first)).toBe(false);
@@ -165,7 +170,7 @@ test('shows a switched-off webhook in the inbox and turns it on again', async ({
     expect(set).toBe('set');
     await createItem(page, { project_id: project.id, title: 'E2E webhook Ausfall' });
 
-    const notification = await waitForNotification(page, (entry) => entry.event === 'webhook_disabled' && entry.data.webhook_id === hook.id, WEBHOOK);
+    const notification = await waitForNotification(page, (entry) => entry.event === 'webhook_disabled' && entry.data.webhook_id === hook.id, QUEUED);
     expect(notification.read_at).toBeNull();
     expect(receiver.requests.length).toBeGreaterThan(0);
 
@@ -188,6 +193,42 @@ test('shows a switched-off webhook in the inbox and turns it on again', async ({
     await expect(page.getByText(label('settings.webhooks.reenable.title'))).toHaveCount(0);
     // the button went with the notice: the heading of the log takes the focus, not the page
     await expect(page.getByRole('heading', { name: label('settings.webhooks.deliveries_of', { name: title }) })).toBeFocused();
+  } finally {
+    await removeE2eWebhook(page, hook.id);
+    await removeE2eProject(page, project.identifier);
+    await receiver.close();
+  }
+});
+
+test('sends a delivery of the log again with the keyboard', async ({ page }) => {
+  const receiver = await startReceiver();
+  const project = await createE2eProject(page, `E2E webhook again ${variant()} ${runId()}`, { types: ['Task'] });
+  const hook = await createE2eWebhook(page, { name: 'again', url: receiver.url, events: ['work_item.created'], project_id: project.id });
+  const title = name('again');
+  try {
+    // a delivery with its first attempt, written before the first key: the test does not wait on the queue (a backlog
+    // of the full run held the first delivery longer than any sensible wait); "send again" itself runs in the request
+    const delivery = artisanEval(
+      [
+        `$delivery = App\\Models\\WebhookDelivery::create(['webhook_id' => '${hook.id}', 'event_id' => strtolower((string) Illuminate\\Support\\Str::ulid()), 'event' => 'work_item.created', 'body' => '{}', 'status' => 'succeeded', 'attempts' => 1]);`,
+        `App\\Models\\WebhookAttempt::create(['delivery_id' => $delivery->id, 'webhook_id' => '${hook.id}', 'attempt' => 1, 'kind' => 'scheduled', 'status_code' => 200, 'duration_ms' => 120, 'attempted_at' => now()]);`,
+        'echo $delivery->id;',
+      ].join(' '),
+    );
+    expect(delivery).toMatch(/^[0-9a-z]{26}$/);
+
+    await page.goto(`/settings/webhooks?deliveries=${hook.id}`);
+    await expect(page.getByRole('heading', { name: label('settings.webhooks.deliveries_of', { name: title }) })).toBeVisible();
+    const again = page.getByRole('button', { name: label('settings.webhooks.log.resend_named', { event: label('webhooks.event.work_item_created'), n: 1 }) });
+    await tabTo(page, again, { max: 80 });
+    await page.keyboard.press('Enter');
+    await expect(page.getByText(label('settings.webhooks.toast.arrived', { subject: label('settings.webhooks.log.subject_delivery'), name: title }))).toBeVisible({ timeout: WEBHOOK });
+
+    // the same delivery once more: its id at the receiver, a new attempt in the log
+    const sent = receiver.requests.filter((request) => request.headers['x-werkbuch-event'] === 'work_item.created');
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.headers['x-werkbuch-delivery']).toBe(delivery);
+    await expect(page.getByRole('list', { name: label('settings.webhooks.deliveries') }).getByRole('listitem')).toHaveCount(2);
   } finally {
     await removeE2eWebhook(page, hook.id);
     await removeE2eProject(page, project.identifier);

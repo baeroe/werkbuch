@@ -74,8 +74,12 @@ describe('System', () => {
     renderSystem(makeSystemStatus({ search_tasks: { enqueued: 1, processing: 1, failed_last_day: 1 } }));
 
     const instance = await screen.findByRole('group', { name: 'Zustand der Instanz' });
-    // a list of terms and their definitions (T19-M5)
-    expect(instance.tagName).toBe('DL');
+    // a list of terms and their definitions (T19-M5), named by the group around it: a role on the <dl> itself
+    // would take the list away from its terms (axe dlitem, WCAG 1.3.1)
+    const terms = instance.querySelector('dl')!;
+    expect(terms.hasAttribute('role')).toBe(false);
+    expect(within(instance).getAllByRole('term').every((term) => term.closest('dl') === terms)).toBe(true);
+    expect(within(instance).getAllByRole('term')).toHaveLength(6);
     expect(within(fact(instance, 'Version')).getByRole('definition').textContent).toBe('0.1.0-dev');
     expect(within(fact(instance, 'Version')).getByText('0.1.0-dev').getAttribute('translate')).toBe('no');
 

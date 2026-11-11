@@ -556,9 +556,9 @@ describe('Labels usage', () => {
     );
 
     await screen.findByRole('heading', { name: 'Formulare' });
-    expect(await within(rowOf2('Formulare')).findByText('2 Items')).toBeTruthy();
-    expect(within(rowOf2('UX')).getByText('1 Item')).toBeTruthy();
-    expect(within(rowOf2('Produktion')).getByText('0 Items')).toBeTruthy();
+    expect(await within(rowOf('Formulare')).findByText('2 Items')).toBeTruthy();
+    expect(within(rowOf('UX')).getByText('1 Item')).toBeTruthy();
+    expect(within(rowOf('Produktion')).getByText('0 Items')).toBeTruthy();
     expect(api!.calls.filter((entry) => entry.url === '/api/v1/work-items/groups')[0]!.body).toEqual({ group_by: 'label', include_archived: true });
   });
 
@@ -566,7 +566,6 @@ describe('Labels usage', () => {
     renderWith(<Labels readOnlyReason={null} />, { 'GET /api/v1/labels': () => ({ body: list(labels) }), 'POST /api/v1/work-items/groups': unavailable });
 
     await screen.findByRole('heading', { name: 'UX' });
-    await waitFor(() => expect(within(rowOf2('UX')).getByText('Anzahl nicht geladen')).toBeTruthy());
+    await waitFor(() => expect(within(rowOf('UX')).getByText('Anzahl nicht geladen')).toBeTruthy());
   });
 });
-const rowOf2 = (name: string) => screen.getByRole('heading', { name }).closest('li')!;

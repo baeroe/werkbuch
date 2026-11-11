@@ -50,7 +50,12 @@ export function tableColumns(fields: readonly string[], properties: readonly Pro
   });
 }
 
+/** The property as the item's type has it (whether it is required), or undefined when the type does not have it. */
+export function typePropertyOf(types: readonly WorkItemType[] | undefined, item: Pick<ListedItem, 'type_id'>, property: Pick<Property, 'id'>): WorkItemType['properties'][number] | undefined {
+  return types?.find((type) => type.id === item.type_id)?.properties.find((entry) => entry.property_id === property.id);
+}
+
 /** Whether the item's type has the property; without it the cell is a dash and nothing to edit. */
 export function typeHasProperty(types: readonly WorkItemType[] | undefined, item: Pick<ListedItem, 'type_id'>, property: Pick<Property, 'id'>): boolean {
-  return types?.find((type) => type.id === item.type_id)?.properties.some((entry) => entry.property_id === property.id) ?? false;
+  return typePropertyOf(types, item, property) !== undefined;
 }

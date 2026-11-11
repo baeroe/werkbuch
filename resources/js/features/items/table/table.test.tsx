@@ -6,18 +6,22 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type MouseEvent, type ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@/api/client';
+import { editReasonOf } from '@/components/fields/itemData';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { cachedZone } from '@/domain/tz';
+import { qk } from '@/hooks/keys';
 import { mockApi, type MockApi } from '@/test/api';
 import { ida, labels, lene, list, makeWorkItem, mara, organization, person, project, properties as catalog, standard, types as typeCatalog } from '@/test/fixtures';
 import { useUiStore } from '@/store/ui';
 import type { Display, ListedItem, Organization, Property, ProjectRole, WorkItemType } from '@/types';
 import type { GroupData, LayoutProps } from '../layouts';
-import { tableColumns, typeHasProperty } from './columns';
+import { tableColumns, typeHasProperty, typePropertyOf } from './columns';
+import { useRefusals } from './cells/PropertyCells';
 import { TableLayout } from './TableLayout';
 import { cellOf } from './useGridKeys';
 
@@ -258,6 +262,27 @@ const rightsLoaded = () =>
     expect(document.querySelector('[data-cell] [aria-disabled="true"]')).toBeNull();
   });
 
+/**
+ * A pointer presses in a cell and the focus lands on `target` meanwhile. The table forgets the press in the task after
+ * it (`setTimeout` 0): the fake timer runs that task at once, so the next focus is one without a pointer (20a-M3).
+ */
+function pointAt(inCell: HTMLElement, target: HTMLElement) {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    fireEvent.pointerDown(inCell);
+    act(() => target.focus());
+    const kept = document.activeElement;
+    act(() => vi.runOnlyPendingTimers());
+    // the timers ran no focus of their own
+    expect(document.activeElement).toBe(kept);
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+/** Two frames: Base UI opens a popup and sets its focus a frame after the render that asks for it. */
+const nextFrames = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
 /** Waits for the search field of an open picker to have the focus (Base UI sets it a frame later). */
 async function searchField(placeholder: string) {
   const field = await screen.findByPlaceholderText(placeholder);
@@ -280,6 +305,19 @@ describe('columns of the table', () => {
     expect(typeHasProperty(undefined, web1, effort)).toBe(false);
     expect(cellOf(null)).toBeNull();
     expect(cellOf(document.createElement('td'))).toBeNull();
+  });
+
+  it('shares the helpers of the cells: the assignment of a property and why an item does not change (T20-M2)', () => {
+    expect(typePropertyOf(types, web1, note)).toEqual({ property_id: 'pr_note', required: true, position: 7 });
+    expect(typePropertyOf(types, web2, note)).toBeUndefined();
+    expect(typePropertyOf(undefined, web1, note)).toBeUndefined();
+
+    const reason = vi.fn(() => 'Keine Rechte.');
+    expect(editReasonOf(web1, reason)).toBe('Keine Rechte.');
+    expect(reason).toHaveBeenCalledWith('item.edit', web1.project_id);
+    const archived = makeWorkItem({ key: 'WEB-9', archived_at: '2026-10-20T08:00:00Z' });
+    expect(editReasonOf(archived, reason)).toBe('WEB-9 ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.');
+    expect(reason).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -383,7 +421,12 @@ describe('TableLayout', () => {
     press('Enter');
     const field = await screen.findByRole('textbox', { name: 'Aufwand (h)' });
     await waitFor(() => expect(document.activeElement).toBe(field));
-    expect(screen.getByText('Enter speichert, Esc bricht ab.')).toBeTruthy();
+    // the keys come as keys, Escape says what each press does
+    const hint = document.getElementById(field.getAttribute('aria-describedby')!)!;
+    expect(within(hint).getByRole('img', { name: 'Eingabe' })).toBeTruthy();
+    // the key Enter is a picture without text (Kbd), so the sentence starts with its space: untrimmed on purpose, the
+    // space belongs between the key and the words (20a-M6)
+    expect(hint.textContent).toBe(' speichert. Esc nimmt das Getippte zurück, ein zweites schließt.');
     await user.clear(field);
     await user.keyboard('120,5{Enter}');
     await waitFor(() => expect(patches()).toEqual([{ values: { effort: 120.5 } }]));
@@ -431,7 +474,7 @@ describe('TableLayout', () => {
     await waitFor(() => expect(document.activeElement).toBe(cell('wi_1', 3)));
     press('Enter');
     expect(toastTexts()).toEqual([
-      ['Nicht änderbar', 'Das Projekt eines Items lässt sich in der Tabelle nicht ändern.'],
+      ['Nicht änderbar', 'Das Projekt eines Items lässt sich nicht ändern.'],
       ['Nicht änderbar', 'Wann ein Item angelegt wurde, lässt sich nicht ändern.'],
       ['Nicht änderbar', '„Geändert“ setzt werkbuch bei jeder Änderung selbst.'],
     ]);
@@ -452,8 +495,38 @@ describe('TableLayout', () => {
     act(() => cell('wi_9', 1)!.focus());
     press('Enter');
     const [viewer, archive] = toastTexts();
-    expect(viewer![1]).toMatch(/nur lesen|lesen/);
+    expect(viewer).toEqual(['Nicht änderbar', 'Im Projekt WEB darfst du nur lesen. Items ändern dürfen Member und Admins.']);
     expect(archive).toEqual(['Nicht änderbar', 'WEB-9 ist archiviert und schreibgeschützt. Stelle es zuerst wieder her.']);
+  });
+
+  it('closes an open editor for good when the rights go: when they come back, it stays closed', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const show = (entry: ListedItem) => (
+      <QueryClientProvider client={client}>
+        <Harness groups={[group('all', [entry])]} display={{ fields: ['state', 'labels', 'start_date', 'property:note'] }} />
+      </QueryClientProvider>
+    );
+    const archived = { ...web1, archived_at: '2026-10-20T08:00:00Z' };
+    const view = render(show(web1));
+    await rightsLoaded();
+    // each editor: a picker, the labels (a dash without the right and without labels), the calendar, a typed property
+    const editors: [number, string, () => HTMLElement | null][] = [
+      [1, 'Status', () => screen.queryByPlaceholderText('Status suchen …')],
+      [2, 'Labels', () => screen.queryByPlaceholderText('Label suchen …')],
+      [3, 'Start', () => screen.queryByRole('grid', { name: /^Start/ })],
+      [4, 'Notiz', () => screen.queryByRole('textbox', { name: 'Notiz' })],
+    ];
+    for (const [column, label, editor] of editors) {
+      await focusCell('wi_1', column, label);
+      press('Enter');
+      await waitFor(() => expect(editor()).toBeTruthy());
+      view.rerender(show(archived));
+      await waitFor(() => expect(editor()).toBeNull());
+      view.rerender(show(web1));
+      await rightsLoaded();
+      await act(nextFrames);
+      expect([label, editor()]).toEqual([label, null]);
+    }
   });
 
   it('keeps the group toggles out of the tab order', async () => {
@@ -716,14 +789,120 @@ describe('TableLayout', () => {
     renderTable({ groups: [group('all', [web1])] });
     await rightsLoaded();
     const trigger = within(cell('wi_1', 2)!).getByRole('combobox', { name: /^Priorität/ });
-    fireEvent.pointerDown(cell('wi_1', 2)!);
-    act(() => trigger.focus());
+    pointAt(cell('wi_1', 2)!, trigger);
     expect(document.activeElement).toBe(trigger);
     // without a pointer the cell takes it
-    await new Promise((resolve) => setTimeout(resolve, 5));
     act(() => cell('wi_1', 1)!.focus());
     act(() => trigger.focus());
     expect(document.activeElement).toBe(cell('wi_1', 2));
+  });
+
+  it('takes every step of held arrows, also two in one frame (T20-M3)', async () => {
+    renderTable({ groups: [group('all', [web1, web2, web3])] });
+    await focusCell('wi_1', 0);
+    // the cell is rendered: it has the focus at once, not a frame later
+    press('ArrowRight');
+    expect(document.activeElement).toBe(cell('wi_1', 1));
+    // so every press of a held key starts where the one before went
+    press('ArrowRight');
+    press('ArrowDown');
+    press('ArrowDown');
+    expect(document.activeElement).toBe(cell('wi_3', 2));
+    expect(cursor()).toBe('wi_3');
+    press('ArrowLeft');
+    press('ArrowUp');
+    expect(document.activeElement).toBe(cell('wi_2', 1));
+  });
+
+  it('moves with the arrows from a control a pointer left the focus on, while no editor is open (T20-M9)', async () => {
+    renderTable({ groups: [group('all', [web1, web2])] });
+    await rightsLoaded();
+    const trigger = (id: string) => within(cell(id, 2)!).getByRole('combobox', { name: /^Priorität/ });
+    const pointAtTrigger = (id: string) => {
+      pointAt(cell(id, 2)!, trigger(id));
+      expect(document.activeElement).toBe(trigger(id));
+    };
+    pointAtTrigger('wi_1');
+    press('ArrowRight');
+    await waitFor(() => expect(document.activeElement).toBe(cell('wi_1', 3)));
+    pointAtTrigger('wi_1');
+    press('ArrowDown');
+    await waitFor(() => expect(document.activeElement).toBe(cell('wi_2', 2)));
+    expect(cursor()).toBe('wi_2');
+    pointAtTrigger('wi_2');
+    press('End');
+    await waitFor(() => expect(document.activeElement).toBe(cell('wi_2', 3)));
+
+    // with its editor open, the keys on the control are the editor's
+    act(() => cell('wi_2', 2)!.focus());
+    press('Enter');
+    await searchField('Priorität suchen …');
+    act(() => trigger('wi_2').focus());
+    press('ArrowRight');
+    expect(document.activeElement).toBe(trigger('wi_2'));
+    expect(screen.getByPlaceholderText('Priorität suchen …')).toBeTruthy();
+  });
+
+  it('keeps the refusal of a property cell when its row scrolls away and back (T20-M5)', async () => {
+    const user = userEvent.setup();
+    patchAnswer = () => ({ status: 422, body: { status: 422, reason: 'validation_failed', errors: { 'values.effort': ['Höchstens 100 Stunden.'] } } });
+    renderTable({ groups: [group('all', [web1, ...items('a', 1999)])] });
+    await focusCell('wi_1', 3, 'Aufwand (h)');
+    press('Enter');
+    const field = await screen.findByRole('textbox', { name: 'Aufwand (h)' });
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    await user.clear(field);
+    await user.keyboard('120{Enter}');
+    await waitFor(() => expect(within(cell('wi_1', 3)!).getByText('Höchstens 100 Stunden.')).toBeTruthy());
+
+    // the cursor goes far away, the row is no longer rendered
+    scrollBox(1000 * ROW);
+    await waitFor(() => expect(cell('wi_a1000', 0)).toBeTruthy());
+    act(() => cell('wi_a1000', 0)!.focus());
+    await waitFor(() => expect(cell('wi_1', 3)).toBeNull());
+    // back in view, the cell still says it
+    scrollBox(0);
+    await waitFor(() => expect(cell('wi_1', 3)).toBeTruthy());
+    expect(within(cell('wi_1', 3)!).getByText('Höchstens 100 Stunden.')).toBeTruthy();
+    expect(cell('wi_1', 3)!.querySelector('[aria-invalid="true"]')).toBeTruthy();
+    expect(patches()).toEqual([{ values: { effort: 120 } }]);
+  });
+
+  it('keeps the editor open with a text it cannot read on a click beside it, and says why (T20-M10)', async () => {
+    const user = userEvent.setup();
+    renderTable({ groups: [group('all', [web1])] });
+    await focusCell('wi_1', 3, 'Aufwand (h)');
+    press('Enter');
+    const field = await screen.findByRole<HTMLInputElement>('textbox', { name: 'Aufwand (h)' });
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    await user.clear(field);
+    // a text that may still become valid: its error waits for Enter or a click beside it
+    await user.keyboard('1.500');
+    expect(field.getAttribute('aria-invalid')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'danach' }));
+    expect(await screen.findByText(/^Mehrdeutig/)).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Aufwand (h)' })).toBe(field);
+    expect(field.value).toBe('1.500');
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    expect(patches()).toEqual([]);
+
+    // the first Escape takes the typing back, the second closes
+    await user.keyboard('{Escape}');
+    expect(field.value).toBe('3');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Aufwand (h)' })).toBeNull());
+
+    // a text it can read goes out on a click beside it, and the editor closes
+    act(() => cell('wi_1', 3)!.focus());
+    press('Enter');
+    const again = await screen.findByRole('textbox', { name: 'Aufwand (h)' });
+    await waitFor(() => expect(document.activeElement).toBe(again));
+    await user.clear(again);
+    await user.keyboard('4');
+    await user.click(screen.getByRole('button', { name: 'danach' }));
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Aufwand (h)' })).toBeNull());
+    expect(patches()).toEqual([{ values: { effort: 4 } }]);
   });
 
   it('measures where its box starts when the window changes its size', () => {
@@ -784,6 +963,8 @@ describe('cells of the table', () => {
     press('ArrowRight');
     await waitFor(() => expect(document.activeElement).toBe(cell('wi_1', column('due_date'))));
     expect(cell('wi_1', column('due_date'))!.textContent).toMatch(/überfällig/);
+    // the cell shows the day without its year; its name says the whole day
+    expect(within(cell('wi_1', column('due_date'))!).getByRole('button', { name: 'Due-Date: 01.01. (1. Januar 2000), überfällig' })).toBeTruthy();
     press('Enter');
     await waitFor(() => expect(document.activeElement?.hasAttribute('data-day')).toBe(true));
     // the calendar starts on the day it has; the next one
@@ -893,8 +1074,96 @@ describe('cells of the table', () => {
     press('Enter');
     const area = await screen.findByRole('textbox', { name: 'Briefing' });
     await waitFor(() => expect(document.activeElement).toBe(area));
-    expect(screen.getByText('Mit ⌘↵ bzw. Strg+↵ speichern, Esc bricht ab.')).toBeTruthy();
+    const hint = document.getElementById(area.getAttribute('aria-describedby')!)!;
+    expect(within(hint).getByRole('img', { name: 'Steuerung Eingabe' })).toBeTruthy();
+    expect(hint.textContent).toBe('Strg speichert, Enter beginnt eine neue Zeile. Esc nimmt das Getippte zurück, ein zweites schließt.');
     await user.keyboard('Zeile eins{Control>}{Enter}{/Control}');
     await waitFor(() => expect(patches().at(-1)).toEqual({ values: { brief: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Zeile eins' }] }] } } }));
+  });
+});
+
+describe('the refusals of the property cells', () => {
+  const effortOf = catalog.find((entry) => entry.key === 'effort')!;
+  const refusal = (words: string) => new ApiError({ status: 422, reason: 'validation_failed', errors: { 'values.effort': [words] } });
+  /** A save that waits until the test answers it. */
+  const held = () => {
+    let answer: { resolve: (value: unknown) => void; reject: (error: Error) => void } = { resolve: () => {}, reject: () => {} };
+    const call = new Promise((resolve, reject) => (answer = { resolve, reject }));
+    return { call, ...answer };
+  };
+  const item = makeWorkItem({ id: 'wi_1', updated_at: '2026-10-28T09:00:00Z' });
+  /** The hook over a cache that holds a page of the table with the item as given. */
+  const refusalsOver = (shown: ListedItem) => {
+    const client = new QueryClient();
+    const cache = (now: ListedItem) => client.setQueryData(qk.workItems.list({ lean: true }), { items: [now], next_cursor: null, total: 1 });
+    cache(shown);
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    return { ...renderHook(() => useRefusals(), { wrapper }), cache };
+  };
+
+  it('keeps the words of the newest save only, when two saves of a cell are on their way at once (20a-M1)', async () => {
+    const { result } = refusalsOver(item);
+    const [first, second] = [held(), held()];
+    act(() => result.current('row', effortOf, item).track(first.call));
+    act(() => result.current('row', effortOf, item).track(second.call));
+    // the second goes through, then the first comes back refused
+    await act(async () => second.resolve({}));
+    await act(async () => first.reject(refusal('Höchstens 100 Stunden.')));
+    expect(result.current('row', effortOf, item).refusal).toBeNull();
+
+    // the newest save refused: its words stay, whatever an earlier one answers
+    const [third, fourth] = [held(), held()];
+    act(() => result.current('row', effortOf, item).track(third.call));
+    act(() => result.current('row', effortOf, item).track(fourth.call));
+    await act(async () => fourth.reject(refusal('Nur ganze Stunden.')));
+    await act(async () => third.reject(refusal('Höchstens 100 Stunden.')));
+    expect(result.current('row', effortOf, item).refusal).toBe('Nur ganze Stunden.');
+  });
+
+  it('keeps the words of a refused newest save when an earlier one of the cell went through first (B1 review M1)', async () => {
+    const { result, cache } = refusalsOver(item);
+    const [first, second] = [held(), held()];
+    act(() => result.current('row', effortOf, item).track(first.call));
+    act(() => result.current('row', effortOf, item).track(second.call));
+    // the earlier save went through: the item in the cache, which the table shows now, carries its stamp
+    await act(async () => first.resolve({}));
+    const saved = { ...item, updated_at: '2026-10-28T09:01:00Z' };
+    act(() => cache(saved));
+    expect(result.current('row', effortOf, saved).refusal).toBeNull();
+    // then the newest comes back refused: its words belong to the item as it stands now
+    await act(async () => second.reject(refusal('Nur ganze Stunden.')));
+    expect(result.current('row', effortOf, saved).refusal).toBe('Nur ganze Stunden.');
+  });
+
+  it('keeps the words of a row that scrolled away while live changed its item (B23-M2)', async () => {
+    const { result, cache } = refusalsOver(item);
+    const save = held();
+    act(() => result.current('row', effortOf, item).track(save.call));
+    // the row scrolled away (the table asks no more for it), then live changed the item in the cache
+    const changed = { ...item, updated_at: '2026-10-28T09:02:00Z' };
+    act(() => cache(changed));
+    await act(async () => save.reject(refusal('Höchstens 100 Stunden.')));
+    // back in view with the changed item: the words came after the change and belong to it
+    expect(result.current('row', effortOf, changed).refusal).toBe('Höchstens 100 Stunden.');
+  });
+
+  it('takes the item of the save for the words when the cache does not hold it any more', async () => {
+    const { result } = refusalsOver(makeWorkItem({ id: 'wi_other' }));
+    const save = held();
+    act(() => result.current('row', effortOf, item).track(save.call));
+    await act(async () => save.reject(refusal('Höchstens 100 Stunden.')));
+    expect(result.current('row', effortOf, item).refusal).toBe('Höchstens 100 Stunden.');
+  });
+
+  it('shows the words only while the item is as the refused save found it (20a-M2)', async () => {
+    const { result } = refusalsOver(item);
+    const save = held();
+    act(() => result.current('row', effortOf, item).track(save.call));
+    await act(async () => save.reject(refusal('Höchstens 100 Stunden.')));
+    expect(result.current('row', effortOf, item).refusal).toBe('Höchstens 100 Stunden.');
+    // the item changed another way (live, the preview, another row of it): the words are no longer its
+    expect(result.current('row', effortOf, { ...item, updated_at: '2026-10-28T09:05:00Z' }).refusal).toBeNull();
+    // other cells and rows have none
+    expect(result.current('other', effortOf, item).refusal).toBeNull();
   });
 });

@@ -16,7 +16,7 @@
 
 import { Combobox } from '@base-ui/react/combobox';
 import { Check, ChevronDown, LoaderCircle, RotateCw, Search } from 'lucide-react';
-import { useId, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
+import { useEffectEvent, useId, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode, type Ref } from 'react';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { ariaKeyshortcuts } from '@/components/ui/Kbd';
@@ -103,12 +103,39 @@ type ReadOnlyTriggerProps = {
   id?: string;
   /** Props that follow the focus across a swap between this trigger and the picker's own. */
   swap?: SwapProps;
+  /** More descriptions after the reason, by id (the hint of a field). */
+  describedBy?: string;
 };
 
 type SwapProps = { 'data-picker-trigger': string; onFocus: () => void; onBlur: () => void };
 
+/** Where the focus of a field can be besides its trigger: the open popup (a list, a calendar). */
+export type PopupFocusProps = { onFocus: () => void; onBlur: () => void };
+
+/**
+ * The focus across a swap between the read-only trigger and the trigger of a picker or a calendar: the rights may
+ * arrive after the first render (or go), and the focus stays on the trigger. It counts as the field's on the trigger
+ * (`swap`) and in its open popup (`popup`, React's focus events bubble out of the portal), so a popup that goes with
+ * the rights hands the focus to the read-only trigger. A popup that goes with the rights goes without saying so:
+ * `onReadOnly` closes the field's open state then, so it does not open again (and take the focus) when they come back.
+ */
+export function useFocusSwap(readOnly: boolean, onReadOnly?: () => void): { swap: SwapProps; popup: PopupFocusProps } {
+  const swapId = useId();
+  const hadFocus = useRef(false);
+  const holds = { onFocus: () => (hadFocus.current = true), onBlur: () => (hadFocus.current = false) };
+  const wasReadOnly = useRef(readOnly);
+  const turnedReadOnly = useEffectEvent(() => onReadOnly?.());
+  useLayoutEffect(() => {
+    if (wasReadOnly.current === readOnly) return;
+    wasReadOnly.current = readOnly;
+    if (readOnly) turnedReadOnly();
+    if (hadFocus.current) document.querySelector<HTMLElement>(`[data-picker-trigger="${swapId}"]`)?.focus();
+  }, [readOnly, swapId]);
+  return { swap: { 'data-picker-trigger': swapId, ...holds }, popup: holds };
+}
+
 /** The value as a trigger that does nothing but say why (tooltip and description). */
-export function ReadOnlyTrigger({ look, className, name, reason, children, tabIndex, id, swap }: ReadOnlyTriggerProps) {
+export function ReadOnlyTrigger({ look, className, name, reason, children, tabIndex, id, swap, describedBy }: ReadOnlyTriggerProps) {
   const reasonId = useId();
   return withTooltip(
     <button
@@ -116,7 +143,7 @@ export function ReadOnlyTrigger({ look, className, name, reason, children, tabIn
       id={id}
       aria-label={name}
       aria-disabled="true"
-      aria-describedby={reasonId}
+      aria-describedby={describedBy ? `${reasonId} ${describedBy}` : reasonId}
       {...swap}
       tabIndex={tabIndex}
       className={triggerClass(look, { readOnly: true, className })}
@@ -239,18 +266,25 @@ export function Picker(props: PickerProps) {
     </>
   );
 
+  // whether an uncontrolled list is open, and whether it may start open: only the first time, never after the rights
+  // went (the list then mounts anew)
+  const opened = useRef(Boolean(defaultOpen));
+  const [startOpen, setStartOpen] = useState(defaultOpen);
+  const changeOpen = (next: boolean) => {
+    opened.current = next;
+    if (!next) {
+      setQuery('');
+      onQueryChange?.('');
+    }
+    onOpenChange?.(next);
+  };
+
   // the rights may arrive after the first render: the read-only trigger gives way to the picker (or back) and the focus
-  // stays on the trigger
-  const swapId = useId();
-  const hadFocus = useRef(false);
-  const readOnly = Boolean(disabledReason);
-  const swap: SwapProps = { 'data-picker-trigger': swapId, onFocus: () => (hadFocus.current = true), onBlur: () => (hadFocus.current = false) };
-  const wasReadOnly = useRef(readOnly);
-  useLayoutEffect(() => {
-    if (wasReadOnly.current === readOnly) return;
-    wasReadOnly.current = readOnly;
-    if (hadFocus.current) document.querySelector<HTMLElement>(`[data-picker-trigger="${swapId}"]`)?.focus();
-  }, [readOnly, swapId]);
+  // stays on the trigger; a list open when they go is closed, so it stays closed when they come back
+  const { swap, popup } = useFocusSwap(Boolean(disabledReason), () => {
+    setStartOpen(false);
+    if (open ?? opened.current) changeOpen(false);
+  });
 
   if (disabledReason) {
     return (
@@ -315,18 +349,12 @@ export function Picker(props: PickerProps) {
       limit={LIMIT}
       autoHighlight
       open={open}
-      onOpenChange={(next) => {
-        if (!next) {
-          setQuery('');
-          onQueryChange?.('');
-        }
-        onOpenChange?.(next);
-      }}
+      onOpenChange={changeOpen}
       onInputValueChange={(next) => {
         setQuery(next);
         onQueryChange?.(next);
       }}
-      defaultOpen={defaultOpen}
+      defaultOpen={startOpen}
       modal={modal}
     >
       {withTooltip(
@@ -351,6 +379,7 @@ export function Picker(props: PickerProps) {
         <Combobox.Positioner align="start" sideOffset={6} collisionAvoidance={keepSide ? keptSide : undefined} className="z-50 outline-none">
           <Combobox.Popup
             {...popupFocus}
+            {...popup}
             initialFocus={() => {
               if (!startsOpen.current) return true;
               startsOpen.current = false;

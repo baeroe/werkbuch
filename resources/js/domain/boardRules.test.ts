@@ -50,7 +50,8 @@ describe('dropping a card on a status column', () => {
     const viewer = rules('state', { editReason: () => 'Im Projekt APP darfst du nur lesen. Items ändern dürfen Member und Admins.' });
     expect(checkMove(appItem('app_todo'), 'app_todo', 'app_progress', viewer)).toEqual({
       ok: false,
-      reason: { code: 'edit', params: { reason: 'Im Projekt APP darfst du nur lesen. Items ändern dürfen Member und Admins.' } },
+      // the finished sentence of the permissions, as it is
+      reason: { sentence: 'Im Projekt APP darfst du nur lesen. Items ändern dürfen Member und Admins.' },
     });
     expect(checkMove(appItem('app_todo'), 'app_todo', 'app_todo', viewer)).toMatchObject({ ok: false });
   });
@@ -278,7 +279,7 @@ describe('the remaining refusals', () => {
 
   it('reports a refusal that holds for every column only once when moving by keyboard', () => {
     const viewer = rules('state', { editReason: () => 'nur lesen' });
-    expect(nearestAllowed(appItem('app_todo'), APP_COLUMNS, 1, 1, viewer)).toEqual({ ok: false, reason: { code: 'edit', params: { reason: 'nur lesen' } } });
+    expect(nearestAllowed(appItem('app_todo'), APP_COLUMNS, 1, 1, viewer)).toEqual({ ok: false, reason: { sentence: 'nur lesen' } });
   });
 
   it('refuses a quick add in a status the workflow does not have', () => {

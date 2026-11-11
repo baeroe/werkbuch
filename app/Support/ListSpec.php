@@ -14,6 +14,8 @@ namespace App\Support;
  *
  * - `sortable`: whether `sort` is a parameter of the list; a list that is not (the inbox, the log) keeps its `default`
  *   order, `sort` is unknown there as on a fixed list;
+ * - `flags`: name → description of the query flags the list reads that are no filter (`include_archived`, `lean`); the
+ *   document names them as `1` or `0` (`ListFlags`);
  * - `tiebreak`: the direction of the ULID that ends the order (`desc` where the newest of equal stamps comes first).
  *
  * A fixed list (`fixed()`: the comments, the history, the notifications …) takes no filter, sort or include and keeps
@@ -39,6 +41,8 @@ final readonly class ListSpec
         public bool $sortable = true,
         /** @var 'asc'|'desc' */
         public string $tiebreak = 'asc',
+        /** @var array<string, string> */
+        public array $flags = [],
     ) {
         $byName = [];
         foreach ($filters as $filter) {

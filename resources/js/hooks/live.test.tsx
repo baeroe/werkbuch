@@ -12,6 +12,7 @@ import { mockApi, type MockApi } from '@/test/api';
 import { project, webTree } from '@/test/fixtures';
 import { qk } from './keys';
 import { LIVE_BURST_MS, LIVE_MAX_WAIT_MS, useLiveConnected, useLiveItem, useLiveSync } from './live';
+import { usePageVersion, usePageVersions } from './pages';
 import { useMembers, useProject, useProjects } from './projects';
 
 /* The live connection stands in as a bus the test sends messages over. */
@@ -244,6 +245,16 @@ describe('useLiveSync', () => {
     renderHook(() => useLiveSync(), { wrapper });
 
     send({ event_id: 'ev_1', type: 'project.updated', item_id: null });
+    await pass(LIVE_BURST_MS);
+
+    expect(items.fetches()).toBe(2);
+  });
+
+  it('reloads the items after the ranks of a project were redistributed (A448)', async () => {
+    const items = await shown(qk.workItems.list({ project: 'p_web' }));
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'project.ranks_redistributed', item_id: null });
     await pass(LIVE_BURST_MS);
 
     expect(items.fetches()).toBe(2);
@@ -515,6 +526,31 @@ describe('useLiveSync', () => {
     expect([page.fetches(), item.fetches(), inbox.fetches()]).toEqual([1, 1, 2]);
   });
 
+  it('asks for no version of a page whose project was deleted, also when the connection comes back', async () => {
+    const version = { id: 'pv_domain_1', page_id: 'pg_web_domain', version: 1, title: 'Domain-Umzug', author_id: 'u_mara', created_at: '2026-10-20T08:00:00Z' };
+    api = mockApi({
+      'GET /api/v1/pages/pg_web_domain/versions': () => ({ body: { data: [version], links: {}, meta: { next_cursor: null, total: 1 } } }),
+      'GET /api/v1/pages/pg_web_domain/versions/pv_domain_1': () => ({ body: { data: { ...version, content: null, content_json: null } } }),
+    });
+    const asked = () => api!.calls.filter((call) => call.url.startsWith('/api/v1/pages/pg_web_domain/versions')).map((call) => call.url);
+    const { result } = renderHook(
+      () => ({ list: usePageVersions('pg_web_domain', 'p_web'), text: usePageVersion('pg_web_domain', 'pv_domain_1', 'p_web') }),
+      { wrapper },
+    );
+    renderHook(() => useLiveSync(), { wrapper });
+    await vi.waitFor(() => expect(result.current.list.isSuccess && result.current.text.isSuccess).toBe(true));
+    expect(asked()).toHaveLength(2);
+
+    send({ event_id: 'ev_1', type: 'project.deleted', project_id: 'p_web', item_id: null });
+    await pass(LIVE_BURST_MS);
+    send({ event_id: null, type: 'live.reconnected', project_id: null, item_id: null });
+    await pass(LIVE_BURST_MS);
+    await pass(0);
+
+    // their keys and answers name the page, not its project: only the project tells they would answer 404 now
+    expect(asked()).toHaveLength(2);
+  });
+
   it('does not load again a fetch it waited for when its project went meanwhile', async () => {
     const members = await shown(qk.members.list({ project: 'p_web' }));
     renderHook(() => useLiveSync(), { wrapper });
@@ -609,6 +645,38 @@ describe('useLiveSync', () => {
     finish();
     await pass(0);
     expect(items.fetches()).toBe(2);
+  });
+
+  it('keeps a reload it waited for out of the undo window when the screen cancels it and hides an item (T7-I1)', async () => {
+    const items = await shown(qk.workItems.list({}));
+    renderHook(() => useLiveSync(), { wrapper });
+    const release = items.hold();
+    void queryClient.refetchQueries({ queryKey: qk.workItems.all });
+    await pass(0);
+    send({ event_id: 'ev_1' });
+    await pass(LIVE_BURST_MS);
+    expect(items.fetches()).toBe(2);
+
+    // as `hideAtOnce` does: cancel the reload on its way, take the item out of the list, then offer undo
+    let finish = () => {};
+    const removal = vi.fn(() => queryClient.getMutationCache().build(queryClient, { mutationFn: () => new Promise<void>((resolve) => (finish = resolve)) }).execute(undefined));
+    act(() => {
+      void queryClient.cancelQueries({ queryKey: qk.workItems.all });
+      queryClient.setQueryData(qk.workItems.list({}), 0);
+      runWithUndo({ label: 'WEB-47 archiviert', run: removal });
+    });
+    release();
+    await pass(0);
+    // a reload now would answer the item as the server still has it and put it back
+    expect(items.fetches()).toBe(2);
+
+    await pass(5_000);
+    expect(removal).toHaveBeenCalledTimes(1);
+    expect(items.fetches()).toBe(2);
+
+    finish();
+    await pass(0);
+    expect(items.fetches()).toBe(3);
   });
 
   it('loads what came during the undo window once the change is taken back', async () => {
@@ -974,5 +1042,77 @@ describe('useLiveItem', () => {
 
     expect(bus.watched).toEqual(['wi_web_47', 'wi_web_30']);
     expect(bus.released).toEqual(['wi_web_47', 'wi_web_30']);
+  });
+});
+
+describe('the reference of an item', () => {
+  it('loads again after work_item.updated and work_item.deleted of its item, not of another (14b2-M1a)', async () => {
+    const own = await shown(qk.references.item('wi_web_30'));
+    const other = await shown(qk.references.item('wi_web_47'));
+    renderHook(() => useLiveSync(), { wrapper });
+
+    // a renamed epic: the closed parent chip and the references in texts show its new title
+    send({ event_id: 'ev_1', type: 'work_item.updated', item_id: 'wi_web_30' });
+    await pass(LIVE_BURST_MS);
+    expect(own.fetches()).toBe(2);
+    expect(other.fetches()).toBe(1);
+
+    // a deleted one: `GET /references` leaves it out without a 404, the reference reads it as gone
+    send({ event_id: 'ev_2', type: 'work_item.deleted', item_id: 'wi_web_30' });
+    await pass(LIVE_BURST_MS);
+    expect(own.fetches()).toBe(3);
+    expect(other.fetches()).toBe(1);
+  });
+});
+
+describe('the wiki pages of an item', () => {
+  const key = qk.pages.item('wi_web_47');
+
+  it('loads again after page.updated, page.moved and page.deleted, also when the answer names the deleted page', async () => {
+    const pages = await shown(key);
+    queryClient.setQueryData(key, { items: [{ id: 'pg_web_tech', project_id: 'p_web' }], next_cursor: null, total: 1 });
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'page.updated', page_id: 'pg_web_tech', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect(pages.fetches()).toBe(2);
+
+    send({ event_id: 'ev_2', type: 'page.deleted', page_id: 'pg_web_tech', page_ids: ['pg_web_tech'], item_id: null });
+    await pass(LIVE_BURST_MS);
+
+    // the server leaves a deleted page out without a 404: the list reads it again instead of keeping the page
+    expect(pages.fetches()).toBe(3);
+  });
+
+  it('asks nothing for an item that was deleted', async () => {
+    const pages = await shown(key);
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'work_item.deleted', item_id: 'wi_web_47' });
+    await pass(LIVE_BURST_MS);
+    send({ event_id: 'ev_2', type: 'page.updated', page_id: 'pg_web_tech', item_id: null });
+    await pass(LIVE_BURST_MS);
+
+    expect(pages.fetches()).toBe(1);
+  });
+
+  it('loads again after page.deleted that cannot name its pages, once the tree has been read', async () => {
+    api = mockApi({ 'GET /api/v1/projects/p_web/pages': () => ({ body: { data: webTree, meta: { total: 12 } } }) });
+    const pages = await shown(key);
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'page.deleted', page_id: 'pg_web_tech', page_ids: null, item_id: null });
+    await pass(LIVE_BURST_MS);
+    await vi.waitFor(() => expect(pages.fetches()).toBe(2));
+  });
+
+  it('loads again when a project is deleted: a page of it may have named the item', async () => {
+    const pages = await shown(key);
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'project.deleted', project_id: 'p_ops', item_id: null });
+    await pass(LIVE_BURST_MS);
+
+    expect(pages.fetches()).toBe(2);
   });
 });

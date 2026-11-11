@@ -174,6 +174,24 @@ describe('a conflict on a wiki page', () => {
     expect(saves().at(-1)).toMatchObject({ base_version: 4, keep_current: true });
   });
 
+  it('an undo of Neu laden that a blank title holds up says so and puts the focus in the title', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const { editor, banner } = await meetConflict(user);
+    await user.click(within(banner).getByRole('button', { name: 'Neu laden' }));
+    await waitFor(() => expect(editor.textContent).toBe('Idas Nachtrag.'));
+    const title = screen.getByRole('textbox', { name: 'Titel der Seite' });
+    await user.clear(title);
+    act(() => editor.focus());
+
+    act(() => runToastAction(toastTitled('Deine Fassung verworfen')!.id));
+
+    await waitFor(() => expect(document.activeElement).toBe(title));
+    expect(toastTitled('Deine Fassung nicht zurückgeholt: Gib der Seite erst einen Titel.')?.tone).toBe('error');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(editor.textContent).toBe('Idas Nachtrag.');
+  });
+
   it('a conflict met on leaving comes back with the page as the server has it', async () => {
     const user = userEvent.setup();
     const first = renderPage();

@@ -264,7 +264,8 @@ describe('placeItems', () => {
     expect(placed.delta.get('std_progress')).toBe(-1);
   });
 
-  it('counts an item once and takes the version cached last', () => {
+  it('counts an item once and takes its later entry in served', () => {
+    // the later entry in served wins: here the second page holds the fresh version
     const old = makeWorkItem({ id: 'a', state_id: 'std_todo', title: 'old' });
     const fresh = makeWorkItem({ id: 'a', state_id: 'std_todo', title: 'fresh' });
     const placed = placeItems(

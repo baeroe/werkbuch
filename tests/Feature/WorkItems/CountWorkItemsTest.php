@@ -98,6 +98,25 @@ it('refuses more than 50 filters and a bad name', function () use ($world, $erro
         ->toBe(['group_by' => __('field.query.unknown', ['keys' => 'filters, include_archived']), 'include_archived' => __('field.include_archived.invalid')]);
 });
 
+it('refuses more than 500 conditions over all filters', function () use ($world, $errors, $filter) {
+    [$mara] = $world();
+    // 50 conditions each, the most one filter takes
+    $full = $filter(...array_map(fn (int $n) => ['field' => 'title', 'op' => 'contains', 'value' => "wort{$n}"], range(1, 50)));
+    $filters = fn (int $count): array => array_combine(array_map(fn (int $n) => "f{$n}", range(1, $count)), array_fill(0, $count, $full));
+    $tooMany = __('field.filters.too_many', ['max' => 500]);
+
+    expect(CountWorkItems::MAX_CONDITIONS_TOTAL)->toBe(500)
+        ->and(CountWorkItems::run(actor($mara), ['filters' => $filters(10)]))->toHaveCount(10)
+        ->and($errors(fn () => CountWorkItems::run(actor($mara), ['filters' => $filters(11)])))->toBe(['filters' => $tooMany])
+        ->and($tooMany)->toContain('500');
+
+    // over REST the refusal is a problem the OpenAPI contract checks
+    $this->actingAs($mara)->postJson('/api/v1/work-items/counts', ['filters' => $filters(11)])
+        ->assertUnprocessable()
+        ->assertJsonPath('reason', 'validation_failed')
+        ->assertJsonPath('errors.filters.0', $tooMany);
+});
+
 it('names the condition that is wrong', function () use ($world, $errors, $filter) {
     [$mara] = $world();
 

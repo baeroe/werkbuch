@@ -45,7 +45,7 @@ return [
     // all queues of the app in the order the workers take them (A278): the DDEV daemons `queue`, `queue-index` and
     // `queue-webhooks` split them (search and media apart, A301; webhooks apart, T16-M5), so do the three workers of the CI
     // and the three queue services of docker-compose.yml
-    'queues' => ['default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk'],
+    'queues' => ['mail', 'default', 'live', 'notifications', 'webhooks', 'search', 'media', 'bulk'],
 
     // requests per minute
     'rate_limits' => [
@@ -55,6 +55,11 @@ return [
         // /mcp per valid token, else per address, a quota of its own beside the API's (phase 13)
         'mcp' => (int) env('MCP_RATE_LIMIT', 300),
         'login_per_ip' => 20,
+        // failed sign-ins per address over all IPs within `login_account_decay` seconds; a known device is not held (A434)
+        'login_per_account' => 50,
+        'login_account_decay' => 3600,
+        // attempts at the second factor per account within 24 hours, codes and recovery codes together (A435)
+        'two_factor_per_day' => 30,
         // requests for a reset link (POST /forgot-password), over all addresses
         'password_reset_per_ip' => 6,
         // new passwords from a reset link (POST /reset-password), over all addresses

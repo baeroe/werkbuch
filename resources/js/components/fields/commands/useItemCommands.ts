@@ -33,7 +33,7 @@ import {
   activeMount,
   addMount,
   announceTargets,
-  cachedItem,
+  cachedItems,
   closedIn,
   nextMountId,
   subscribeMounts,
@@ -93,9 +93,11 @@ export function useItemCommands(options: ItemCommandsOptions): void {
   // with the options of this render: a page that just got its item would be one render late otherwise
   const { ids, fromList } = targetsNow({ id: mountId, options });
   // the detail of an item page or of the preview is loaded here, so the commands know it even before its screen has;
-  // the items of a list are in its pages (`cachedItem`), and their children count is on them
+  // the items of a list are in its pages (`cachedItems`), and their children count is on them
   const detail = useWorkItem(ids.length === 1 && !fromList ? ids[0]! : null).data;
-  const shown = ids.flatMap((id) => (detail && (detail.item.id === id || detail.item.key === id) ? [detail.item] : (cachedItem(queryClient, id) ?? [])));
+  // read once per render, and only with a target: every mount renders on many changes
+  const cached = ids.length > 0 ? cachedItems(queryClient) : undefined;
+  const shown = ids.flatMap((id) => (detail && (detail.item.id === id || detail.item.key === id) ? [detail.item] : (cached?.(id) ?? [])));
   const single = shown.length === 1 ? shown[0] : undefined;
   const projectIds = [...new Set(shown.map((item) => item.project_id))];
   const peopleQuery = useCommonPeople(projectIds);
@@ -112,7 +114,8 @@ export function useItemCommands(options: ItemCommandsOptions): void {
 
   const context = (): ItemCommandContext => {
     const { ids: now, fromList: listed } = targetsNow();
-    const targets = now.flatMap((id) => cachedItem(queryClient, id) ?? []);
+    const cached = cachedItems(queryClient);
+    const targets = now.flatMap((id) => cached(id) ?? []);
     // only the data of the targets' own projects (other targets load theirs on the next render)
     const own = targets.length > 0 && [...new Set(targets.map((item) => item.project_id))].join(' ') === projectsKey;
     const one = own && targets.length === 1 ? targets[0]! : undefined;
@@ -131,9 +134,9 @@ export function useItemCommands(options: ItemCommandsOptions): void {
       properties: properties ?? [],
       people: own ? people : undefined,
       peopleFailed: own && peopleQuery.error !== null && people === undefined,
-      // the children: those of the detail of this very target (another detail may still be in `detail`), or for an item
-      // of a list its count, which counts archived children too
-      hasChildren: one && detail?.item.id === one.id ? detail.children.length > 0 : one && listed ? one.children_progress !== null : undefined,
+      // the children: the count of the detail of this very target (another detail may still be in `detail`), or for an
+      // item of a list its own; both count archived children too, and never the embedded list, which ends after 100 (A449)
+      hasChildren: one && detail?.item.id === one.id ? detail.item.children_progress !== null : one && listed ? one.children_progress !== null : undefined,
       projectItems: one ? projectItems : undefined,
       projectItemsFailed: one !== undefined && projectItemsQuery.isError && projectItems === undefined,
       reason: (permission, project) => reason(permission, project),

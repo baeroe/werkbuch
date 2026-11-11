@@ -18,7 +18,7 @@ import { formatDay, formatPropertyValue } from '@/components/fields/format';
 import { ItemKey } from '@/components/items/ItemKey';
 import { PRIORITIES, priorityName } from '@/components/ui/PriorityIcon';
 import { useWorkItem } from '@/hooks/workItems';
-import { hasTranslation, intlLocale, t, tn, type TranslationKey } from '@/lib/i18n';
+import { hasTranslation, intlLocale, t, tn, tx, type TranslationKey } from '@/lib/i18n';
 import type { ItemEvent, Priority, Property, PropertyValue, RelationChange, RichText, User, WorkItemDetail } from '@/types';
 import { isGone } from '../shared';
 
@@ -35,16 +35,6 @@ export interface PhraseContext {
 }
 
 /* ------------------------------------------------------------------------ text */
-
-/** A translated text with nodes in its placeholders: `tx('items.activity.line', { actor: <b>Ida</b> })`. */
-export function tx(key: TranslationKey, parts: Record<string, ReactNode>): ReactNode {
-  return t(key)
-    .split(/(:[a-z_]+)/)
-    .map((piece, index) => {
-      const name = piece.slice(1);
-      return <Fragment key={index}>{piece.startsWith(':') && Object.hasOwn(parts, name) ? parts[name] : piece}</Fragment>;
-    });
-}
 
 /** "A", "A und B", "A, B und C" in the language of the page. */
 export function joined(parts: readonly ReactNode[]): ReactNode {

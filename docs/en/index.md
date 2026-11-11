@@ -4,20 +4,68 @@ layout: home
 hero:
   name: werkbuch
   text: Project management you host yourself.
-  tagline: Projects, work items with your own types, properties and workflows, a wiki per project, team-wide views, recurring work and switchable automations. Built to be driven from the keyboard and fully controllable over a REST API, an MCP server for AI agents and webhooks.
+  tagline: Work items with your own types, fields and workflows, a wiki per project and views across all of them. Made for the keyboard, and open to scripts and AI agents through a REST API, MCP and webhooks.
+  image:
+    light:
+      src: /screenshots/en/board.png
+      width: 1440
+      height: 900
+    dark:
+      src: /screenshots/en/board-dark.png
+      width: 1440
+      height: 900
+    alt: The board of a project, its work items in one column per status
   actions:
     - theme: brand
-      text: Run it locally
-      link: /en/development
+      text: Setup
+      link: /en/setup
     - theme: alt
       text: GitHub
       link: https://github.com/baeroe/werkbuch
+
+features:
+  - title: Types and workflows
+    details: Task, bug, client request – you decide which types there are, which fields each one has and which states an item goes through. A matrix says which moves are allowed, if you want one.
+    link: /en/concepts/types-and-properties
+    linkText: Types and properties
+  - title: Views
+    details: Filter across every project, group by status, assignee or label and save it for the whole team. As a list, board, table or timeline.
+    link: /en/concepts/views
+    linkText: Views
+  - title: Wiki
+    details: Every project has its own wiki. Pages in a tree, versions, and references to work items and other pages.
+    link: /en/concepts/wiki
+    linkText: Wiki
+  - title: Templates and automations
+    details: Recurring work comes from a template on a schedule. Automations do the small stuff, like closing the epic once its last child is done.
+    link: /en/concepts/templates
+    linkText: Templates
+  - title: Keyboard
+    details: Almost everything has a shortcut, and ⌘K finds the rest – items, pages, projects and every command.
+    link: /en/keyboard
+    linkText: Keyboard
+  - title: REST, MCP and webhooks
+    details: Everything the app does, the REST API does too. AI agents work through MCP, and webhooks tell your other tools what happened.
+    link: /en/api
+    linkText: REST API
 ---
 
-# werkbuch
+werkbuch is project management for teams that want to keep their data on their own server. It runs as a Docker Compose stack: one image, MariaDB and Meilisearch, one port. The interface is in English and German.
 
-werkbuch is an open, self-hosted project management tool for teams: projects, work items with your own types, properties and workflows, a wiki per project, team-wide views across projects, recurring work items and switchable automations. It is built to be driven from the keyboard, and fully controllable over a REST API, an MCP server for AI agents and webhooks.
+## A look inside
+
+A work item on its own page: description, fields, relations, the wiki pages that mention it and the whole history.
+
+![The page of the work item WEB-47 with its description, fields, relations and activity](/screenshots/en/item.png)
+
+⌘K searches work items, wiki pages and projects at once, and runs every command.
+
+![The command palette searching for WEB, with work items, wiki pages and the project](/screenshots/en/palette.png)
+
+And the same page in the dark.
+
+![The page of the work item WEB-47 in the dark theme](/screenshots/en/item-dark.png)
 
 ## Status
 
-werkbuch is in development: phase 14 of 15 (Docker) is done, phase 15 (polish) is next; sign-in, the app shell, people and bots, tokens, roles and permissions, projects with members, the catalogs (workflows, types, properties, labels, relation types, resolutions), work items with relations and history, item lists with filters, saved views, board, table and timeline, search in the command palette and over REST, rich text with comments and attachments, notifications with mail and live updates, the wiki per project, templates with schedules, automations, webhooks, the complete REST API with its OpenAPI reference, the MCP server for AI agents and the Docker image with its Compose stack are in place. There is no release yet. How to run werkbuch on a server is described under [Setup](/en/setup), [Reverse proxy](/en/reverse-proxy), [Operations](/en/operations), [Upgrading](/en/upgrading) and [Backup](/en/backup), running it locally for development on the [development page](/en/development); how roles, projects, workflows, types, work items, rich text, the wiki, views, templates, automations, notifications, search, bots, the REST API, MCP and webhooks work is under [Concepts](/en/concepts/permissions).
+The build is done. Before v0.1.0 everything gets one more round of testing by hand, so there is no release yet. Until then you build the image yourself. How to do that and how to run werkbuch on a server is covered by [Setup](/en/setup), [Reverse proxy](/en/reverse-proxy), [Operations](/en/operations), [Upgrading](/en/upgrading) and [Backup](/en/backup), working on the code by the [development page](/en/development). How everything works is under [Concepts](/en/concepts/permissions).

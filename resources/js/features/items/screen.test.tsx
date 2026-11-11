@@ -6,7 +6,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MouseEvent, ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,7 +18,9 @@ import { agency, labels, lene, list, makeView, makeWorkItem, mara, organization,
 import { useUiStore } from '@/store/ui';
 import type { Condition, GroupBy, Project, View, WorkItem } from '@/types';
 import { resultMessage, selectionMessage } from './ListAnnouncer';
+import { ListSkeleton } from './ListStates';
 import { ItemsScreen, type ItemsScreenProps } from './ItemsScreen';
+import { useListState } from './useListState';
 
 /* --------------------------------------------------------------------- fake Inertia */
 
@@ -358,6 +360,33 @@ describe('the item list screen', () => {
     ]);
   });
 
+  it('changes the address once when × removes a chip with typed text', async () => {
+    const user = userEvent.setup();
+    inertia.go(`/projects/WEB?filter=${filterOf([{ field: 'property:effort', op: 'gt', value: 2.5 }])}`);
+    renderScreen();
+    const effort = await screen.findByRole('group', { name: /^Filter: Aufwand \(h\) größer als 2,5$/ });
+    const field = within(effort).getByRole('textbox', { name: 'Aufwand (h) größer als' });
+    await user.clear(field);
+    await user.type(field, '5');
+    inertia.get.mockClear();
+
+    // the × takes the focus from the field: the typed text is not kept first, the chip just goes
+    await user.click(within(effort).getByRole('button', { name: 'Filter „Aufwand (h)“ entfernen' }));
+    expect(inertia.get).toHaveBeenCalledTimes(1);
+    expect(inertia.url).toBe('/projects/WEB');
+
+    // Tab from the field to the × leaves the field: the typed text is kept, as on leaving it anywhere
+    act(() => inertia.go(`/projects/WEB?filter=${filterOf([{ field: 'property:effort', op: 'gt', value: 2.5 }])}`));
+    const again = within(await screen.findByRole('group', { name: /^Filter: Aufwand \(h\) größer als 2,5$/ })).getByRole('textbox', { name: 'Aufwand (h) größer als' });
+    await user.clear(again);
+    await user.type(again, '7');
+    inertia.get.mockClear();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Filter „Aufwand (h)“ entfernen' }));
+    expect(inertia.get).toHaveBeenCalledTimes(1);
+    expect(inertia.url).toBe(`/projects/WEB?filter=${filterOf([{ field: 'property:effort', op: 'gt', value: 7 }])}`);
+  });
+
   it('sends no unfinished condition', async () => {
     const unfinished: Condition[] = [
       { field: 'state', op: 'in', value: [] },
@@ -462,10 +491,27 @@ describe('the item list screen', () => {
     inertia.go(`/projects/WEB?layout=${layout}`);
     renderScreen();
     await screen.findByRole('heading', { level: 1, name: 'Website-Relaunch' });
-    // only after a moment, so a quick answer shows without it
-    expect(document.querySelector('[data-skeleton]')).toBeNull();
-    await waitFor(() => expect(document.querySelector(`[data-skeleton="${layout}"]`)).toBeTruthy());
-    expect(screen.getByText('Items werden geladen …')).toBeTruthy();
+    // only after a moment, so a quick answer shows without it: the outline holds the place, unseen and unsaid
+    const outline = document.querySelector(`[data-skeleton="${layout}"]`)!;
+    expect(outline.closest('.invisible')).not.toBeNull();
+    const label = screen.getByText('Items werden geladen …');
+    expect(label.closest('[role="status"]')).toBeNull();
+    await waitFor(() => expect(outline.closest('.invisible')).toBeNull());
+    expect(label.closest('[role="status"]')?.textContent).toBe('Items werden geladen …');
+  });
+
+  it('marks only the outline of a layout that is still loading as such (T18-M3)', async () => {
+    // the focus rescue waits for a loading layout (its chunk, the timeline before its epics), not for every outline
+    const { unmount } = render(<ListSkeleton layout="board" loadingLayout />);
+    expect(document.querySelector('[data-layout-skeleton] [data-skeleton="board"]')).not.toBeNull();
+    unmount();
+
+    hold((_body, path) => path.endsWith('/groups'));
+    inertia.go('/projects/WEB?layout=board');
+    renderScreen();
+    await screen.findByRole('heading', { level: 1, name: 'Website-Relaunch' });
+    expect(document.querySelector('[data-skeleton="board"]')).not.toBeNull();
+    expect(document.querySelector('[data-layout-skeleton]')).toBeNull();
   });
 
   it('says that it grouped by category when the items have several workflows', async () => {
@@ -549,6 +595,32 @@ describe('the item list screen', () => {
       expect(board().getAttribute('aria-pressed')).toBe('true');
     } finally {
       inertia.answer = answer;
+    }
+  });
+
+  it('shows the address the server answers, also one with another state than asked for', async () => {
+    renderScreen();
+    await screen.findByText('Kontaktformular sendet doppelt');
+    const layout = (name: RegExp) => within(screen.getAllByRole('group', { name: 'Layout' })[0]!).getByRole('button', { name });
+    const answer = inertia.answer;
+    // the server answers the board with the table
+    inertia.answer = (url, options) => answer(url.replace('layout=board', 'layout=table'), options);
+    try {
+      press('2');
+      expect(inertia.url).toBe('/projects/WEB?layout=table');
+      await waitFor(() => expect(layout(/Tabelle/).getAttribute('aria-pressed')).toBe('true'));
+      expect(layout(/Board/).getAttribute('aria-pressed')).toBe('false');
+    } finally {
+      inertia.answer = answer;
+    }
+  });
+
+  it('has no base for a view list without its view', () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => renderHook(() => useListState({ preset: 'view' }))).toThrow('A view list needs its view.');
+    } finally {
+      quiet.mockRestore();
     }
   });
 
@@ -757,6 +829,38 @@ describe('the item list screen', () => {
     failing.delete('groups');
     fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
     expect(await screen.findByText('Kontaktformular sendet doppelt')).toBeTruthy();
+  });
+
+  it('says while it retries', async () => {
+    failing.add('groups');
+    renderScreen();
+    await screen.findByText('Die Items konnten nicht geladen werden');
+    const retry = screen.getByRole('button', { name: 'Erneut versuchen' });
+    expect(retry.getAttribute('aria-busy')).toBeNull();
+
+    failing.delete('groups');
+    const gate = hold((_body, path) => path.endsWith('/groups'));
+    fireEvent.click(retry);
+    await waitFor(() => expect(gate.held()).toBe(true));
+    // the error stays until the answer is there, and its button says that it runs
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Erneut versuchen' }).getAttribute('aria-busy')).toBe('true'));
+    expect(screen.getByText('Die Items konnten nicht geladen werden')).toBeTruthy();
+
+    await act(async () => gate.release());
+    expect(await screen.findByText('Kontaktformular sendet doppelt')).toBeTruthy();
+  });
+
+  it('says the retry is over when it fails again', async () => {
+    failing.add('groups');
+    renderScreen();
+    await screen.findByText('Die Items konnten nicht geladen werden');
+    const gate = hold((_body, path) => path.endsWith('/groups'));
+    fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Erneut versuchen' }).getAttribute('aria-busy')).toBe('true'));
+
+    await act(async () => gate.release());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Erneut versuchen' }).getAttribute('aria-busy')).toBeNull());
+    expect(screen.getByText('Die Items konnten nicht geladen werden')).toBeTruthy();
   });
 
   it('offers to load a group again whose first page failed', async () => {

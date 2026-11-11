@@ -19,6 +19,8 @@ A built-in list is a view that is never saved. You can filter and change its dis
 
 Saved views live under **Views** (`/views`) and at `/views/<id>`. A star puts a view into the sidebar, in your own order; deleting a view takes it out of everybody's sidebar.
 
+![The overview of the views of the team, with layout and creator of each](/screenshots/en/views.png)
+
 ## Permissions
 
 | Action | Who |
@@ -39,6 +41,8 @@ A filter may name a project, person or item the reader does not see. werkbuch ke
 
 Items in groups that fold, the fields of the display as chips behind the title, child items indented below their epic. Each group shows the number of its items from the server and loads its items page by page while you scroll; groups that are folded or far away load nothing.
 
+![My items as a list, grouped by category because the items lie in two workflows](/screenshots/en/my-items.png)
+
 ### Board
 
 Every group is a column, empty ones included. Dragging a card, or `shift+left` and `shift+right`, changes the grouped field:
@@ -48,15 +52,21 @@ Every group is a column, empty ones included. Dragging a card, or `shift+left` a
 - **Priority** and **assignee:** the new value; a person who is not a member of the project cannot take the item.
 - **Type, project, parent item:** cards stay in their column. **Label:** a board grouped by label cannot be dragged, because an item stands in the column of each of its labels.
 
-The order within a column follows the sort of the display. With the sort **Manual**, `alt+up` and `alt+down` or dragging within the column move a card between its neighbours; with any other sort, werkbuch says that the order follows the sort. When there is no room left between two neighbours, the card stays where it was and a toast says so. A move the server refuses puts the card back, and the numbers of the columns are right again. **+** in the head of a column creates an item that fits the column.
+The order within a column follows the sort of the display. With the sort **Manual**, `alt+up` and `alt+down` or dragging within the column move a card between its neighbours; with any other sort, werkbuch says that the order follows the sort. When there is no room left between two neighbours, werkbuch first redistributes the order of the card's project (the order stays, the ranks get short again, see [Order items by hand](./work-items.md#order-items-by-hand)) and then moves the card; moves of other cards of the project wait for it. The card stays where it was, and a toast says why: there is no room left when the two neighbours belong to another project; the order has changed when other cards now stand between the two neighbours (in a list of several projects after the redistribution, or after another change of the column), so move the card again from the new order; and the new order has not loaded when it takes longer than five seconds. A move the server refuses puts the card back, and the numbers of the columns are right again. **+** in the head of a column creates an item that fits the column.
+
+![The board of a project, its work items in one column per status](/screenshots/en/board.png)
 
 ### Table
 
 One row per item, one column per field of the display, properties included. The head and the first column (key and title) stay in place while you scroll. Cells can be changed in place: `enter` opens the editor of a cell, `escape` closes it. Cells of properties the type of the item does not have show "—". Project, created and changed cannot be changed here.
 
+![A view as a table, with the properties client and effort as columns](/screenshots/en/table.png)
+
 ### Timeline
 
 The timeline shows the epics of the list (items of a type marked "Epic"), grouped by project and ordered by start date, whatever the grouping and the sort of the display say. A bar runs from the start date to the due date and is filled by the share of closed child items. Drag a bar to move it and its ends to change one date. Epics without dates stand in the side list **No dates**; drag them onto the axis, or use **Plan from today** (two weeks from today). The zoom (week, month, quarter) stays in the address as `?zoom=week` or `?zoom=quarter`; **Today** scrolls to today.
+
+![The roadmap as a timeline: three epics with their progress, and the marker for today](/screenshots/en/timeline.png)
 
 ## Grouping
 
@@ -82,11 +92,11 @@ Grouping by status works only while all items found share one workflow; otherwis
 | Priority | `priority` | Urgent first |
 | Due date, start date | `due_date`, `start_date` | Earliest first |
 | Created, changed | `created_at`, `updated_at` | Oldest first |
-| Key | `key` | Identifier of the project, then the number (`WEB-9` before `WEB-10`) |
+| Key | `key` | Identifier of the project, then the number (`A2-1` before `A10-1`, `WEB-9` before `WEB-10`) |
 | Category | `state_category` | Backlog first |
-| A property (number, date, text or address) | `property:<key>` | Smallest, earliest or alphabetical first |
+| A property (number, date, text or address) | `property:<key>` | Smallest, earliest or alphabetical first (`Item 9` before `Item 10`) |
 
-Items without a value come last in both directions; equal values keep the manual order. Texts are compared without regard to case and accents.
+Items without a value come last in both directions; equal values keep the manual order. Texts and identifiers are compared without regard to case and accents, and numbers in them as numbers: `Item 9` comes before `Item 10`, `Version 1.2` before `Version 1.10`. Leading zeros do not count (`Item 007` and `Item 7` are equal), and only the digits 0 to 9 are numbers.
 
 <!-- reference:start -->
 ## Filters

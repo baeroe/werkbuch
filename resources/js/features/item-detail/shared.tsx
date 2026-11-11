@@ -24,7 +24,7 @@ import { useProjects } from '@/hooks/projects';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t } from '@/lib/i18n';
 import { useUiStore } from '@/store/ui';
-import type { WorkItem } from '@/types';
+import type { ListedItem } from '@/types';
 
 export type DetailSurface = 'peek' | 'page';
 
@@ -115,7 +115,7 @@ export function useUnsavedGuard(active: boolean): void {
 }
 
 type LinkedItemProps = {
-  item: WorkItem;
+  item: ListedItem;
   /** Controls after the title (remove, avatar); they sit above the link. */
   trailing?: ReactNode;
 };

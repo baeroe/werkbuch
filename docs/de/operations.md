@@ -8,11 +8,11 @@ Alle Arbeit im Hintergrund läuft über Queues in der Datenbank. Drei Worker-Die
 
 | Dienst | Queues, in dieser Reihenfolge | Tut |
 |---|---|---|
-| `queue` | `default`, `live`, `notifications`, `bulk` | gibt jedes Event an seine Konsumenten, schickt die Live-Updates an Reverb, schreibt die Inbox und sendet Mails (Benachrichtigungen, Einladungen, Passwort zurücksetzen), löscht Projekte, führt Vorlagen und die nächtlichen Automatisierungen aus |
+| `queue` | `mail`, `default`, `live`, `notifications`, `bulk` | gibt jedes Event an seine Konsumenten, schickt die Live-Updates an Reverb, schreibt die Inbox und sendet Mails (zuerst die Anmelde-Mails: Einladungen und Passwort zurücksetzen auf der Queue `mail`, dann Benachrichtigungen), löscht Projekte, führt Vorlagen und die nächtlichen Automatisierungen aus |
 | `queue-index` | `search`, `media` | hält den Suchindex mit jeder Änderung Schritt, erzeugt die Vorschauen hochgeladener Bilder |
 | `queue-webhooks` | `webhooks` | stellt Webhooks zu |
 
-Ein Worker nimmt die erste Queue seiner Liste, die einen Job hat. Suche und Vorschauen haben einen eigenen Worker, weil jedes Event Jobs für `default`, `live` und `notifications` macht; Webhooks haben einen, weil ein hängender Empfänger seinen Worker bis zu 17 Sekunden je Versuch hält. Jeder Worker endet nach einer Stunde (`--max-time=3600`), und Docker startet ihn neu (`restart: unless-stopped`); ein scheiternder Job wird bis zu dreimal versucht, wenn er keine eigene Zahl von Versuchen setzt.
+Ein Worker nimmt die erste Queue seiner Liste, die einen Job hat. Suche und Vorschauen haben einen eigenen Worker, weil jedes Event Jobs für `default`, `live` und `notifications` macht; die Queue `mail` steht davor, ein Reset-Link oder eine Einladung wartet also nie dahinter; Webhooks haben einen, weil ein hängender Empfänger seinen Worker bis zu 17 Sekunden je Versuch hält. Jeder Worker endet nach einer Stunde (`--max-time=3600`), und Docker startet ihn neu (`restart: unless-stopped`); ein scheiternder Job wird bis zu dreimal versucht, wenn er keine eigene Zahl von Versuchen setzt.
 
 Genau ein `queue-index` laufen lassen, nie skalieren: Zwei Worker auf `search` können beim Neuaufbau eine ältere Fassung eines Dokuments über eine neuere schreiben, und die Suche zeigt den älteren Text, bis sich das Item wieder ändert.
 
@@ -63,6 +63,10 @@ In der `.env` setzen und `docker compose up -d` ausführen. Mehr zu den Grenzen 
 
 Jede Grenze je IP-Adresse, und die Grenzen der Anmeldung (20 Versuche je Minute und Adresse, 5 Fehlversuche je E-Mail und Adresse), brauchen die echte Adresse des Clients. Hinter einem Proxy liest werkbuch sie aus `X-Forwarded-For`, aber nur von einem Proxy aus `TRUSTED_PROXIES`. Steht der Proxy nicht darin, kommt jede Anfrage von der Adresse des Proxys: Alle Clients teilen sich ein Kontingent, und ein paar falsche Passwörter sperren alle von dieser Adresse aus. Leer heißt `TRUSTED_PROXIES` localhost und die privaten Netze; das deckt einen Proxy in einem Docker-Netz, glaubt den Header aber auch vom Gateway von Docker, sodass jeder, der den veröffentlichten Port direkt erreicht, eine beliebige Adresse angeben kann. Wie man es eingrenzt, steht unter [Reverse Proxy](/de/reverse-proxy#was-werkbuch-glaubt).
 
+Weil sich eine Adresse fälschen lässt, hat die Anmeldung eine dritte Grenze, die sie nicht beachtet: 50 Fehlversuche je E-Mail-Adresse und Stunde, über alle IP-Adressen. Ist sie erreicht, kann sich diese E-Mail-Adresse für den Rest der Stunde nicht anmelden, auch nicht mit dem richtigen Passwort, und die Meldung nennt die Wartezeit in Minuten. Ein Browser, der sich schon einmal mit genau dieser Adresse angemeldet hat, ist davon ausgenommen: Nach jeder Anmeldung, auch nach dem zweiten Faktor, setzt werkbuch ein verschlüsseltes Cookie `werkbuch_device` für ein Jahr. So kann niemand, der nur die Adresse kennt, die Besitzerin aus ihrem eigenen Browser aussperren. Das Cookie hängt am aktuellen Passwort: Ein neues Passwort macht jeden solchen Browser wieder unbekannt, bis er sich einmal neu anmeldet. Ausgenommen ist der Browser, in dem das Passwort in den Einstellungen geändert wurde. Die beiden anderen Grenzen gelten für diesen Browser wie für jeden anderen. Eine erfolgreiche Anmeldung setzt den Zähler zurück, „Passwort vergessen“ bleibt offen, und ein neues Passwort über den Link aus der Mail hebt die Grenze auf. `php artisan app:reset-password` tut dasselbe.
+
+Auch der Schritt des zweiten Faktors ist begrenzt: fünf Versuche je Minute und 30 Versuche je Konto und 24 Stunden, über alle Anmeldungen. Codes, Recovery-Codes und erfolgreiche Codes zählen alle, darum spricht die Meldung von Versuchen. Sind die 30 verbraucht, kommt das Konto für den Rest der 24 Stunden nicht mehr durch den zweiten Faktor, und die Meldung nennt die Wartezeit in Stunden und verweist auf den Betreiber, der den zweiten Faktor mit `php artisan app:reset-two-factor` zurücksetzen kann. Ein neues Passwort setzt den Zähler zurück.
+
 ## Live-Updates
 
 Der Browser hält einen WebSocket zu Reverb (Dienst `reverb`) offen, solange ein Tab offen ist: `wss://<Host aus APP_URL>/app/…`, weitergeleitet von nginx in `werkbuch`. Reverb läuft in dieser Version ohne `ext-uv`, und seine Event-Schleife wartet mit PHPs `stream_select` auf die Verbindungen, das bei 1024 Verbindungen endet. Eine Instanz trägt darum etwa 1000 offene Tabs gleichzeitig. Wer Verbindungen über einer eigenen Grenze abweisen will, setzt `REVERB_APP_MAX_CONNECTIONS` in der `environment` von `reverb` (in einer `docker-compose.override.yml`):
@@ -100,7 +104,7 @@ Nie `php artisan config:clear` oder `php artisan optimize:clear` per `docker com
 
 ## Leere Variablen
 
-Nie eine Variable, die mit `PHP_`, `NGINX_`, `SSL_`, `LOG_` oder `TRUSTED_PROXY` beginnt, in einem `environment`-Block (in der `docker-compose.override.yml` oder in der Standalone-Datei) auf einen leeren Wert setzen: Das Startskript des Basis-Images stoppt dann den Web-Dienst (`LOG_LEVEL: ""` genügt). Eine Variable weglassen, um ihren Standard zu behalten. Über die `.env` passiert das nicht: `docker-compose.yml` reicht nur die Variablen aus `.env.docker.example` weiter, die einzige davon mit einem solchen Präfix ist `TRUSTED_PROXIES`, und ein leeres `TRUSTED_PROXIES=` fällt auf seinen Standard zurück.
+Nie eine Variable, die mit `PHP_`, `NGINX_`, `SSL_`, `LOG_`, `APACHE_`, `HEALTHCHECK_PATH` oder `TRUSTED_PROXY` beginnt, in einem `environment`-Block (in der `docker-compose.override.yml` oder in der Standalone-Datei) auf einen leeren Wert setzen: Das Startskript des Basis-Images stoppt dann den Web-Dienst (`LOG_LEVEL: ""` genügt). Eine Variable weglassen, um ihren Standard zu behalten. Über die `.env` passiert das nicht: `docker-compose.yml` reicht nur die Variablen aus `.env.docker.example` weiter, die einzige davon mit einem solchen Präfix ist `TRUSTED_PROXIES`, und ein leeres `TRUSTED_PROXIES=` fällt auf seinen Standard zurück.
 
 ## Suche
 
@@ -112,7 +116,7 @@ Die Indizes von Hand neu aufbauen, wenn die Suche Änderungen verpasst hat, etwa
 docker compose exec werkbuch php artisan app:search-import
 ```
 
-Während des Imports ist die Suche kurz leer. Wie sich die Suche verhält, solange Meilisearch weg ist, steht unter [Suche](/de/search#betrieb).
+Während des Imports antwortet die Suche weiter aus dem alten Index, den der neue am Ende ersetzt. Wie sich die Suche verhält, solange Meilisearch weg ist, steht unter [Suche](/de/search#betrieb).
 
 ## Mail
 

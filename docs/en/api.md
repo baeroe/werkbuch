@@ -9,6 +9,8 @@ Every instance describes its API itself:
 
 Both are public: they hold no data of the instance, only the shape of the API, so an integration can be built before it has a token. Generating the document is costly, so both allow 30 requests a minute per address. The reference page loads its scripts from the instance itself, not from a CDN. This page explains what the reference cannot: how to sign in, errors, lists, limits and how the API changes. AI agents reach the same operations through the [MCP server](/en/mcp).
 
+![The API reference of an instance under /api/docs, with the endpoints grouped by area](/screenshots/en/api-docs.png)
+
 ## Authentication
 
 ### Tokens
@@ -131,6 +133,7 @@ Without `sort`, every list keeps its own order (the default in the table). Fixed
 | `GET /favorites` | – | – | your order | – |
 | `GET /work-items/{item}/comments` | – | – | oldest first | – |
 | `GET /work-items/{item}/history` | – | – | oldest first | – |
+| `GET /work-items/{item}/pages` | – | – | title | – |
 | `GET /pages/{page}/versions` | – | – | newest first | – |
 | `GET /templates/{template}/runs` | – | – | newest first | – |
 <!-- lists:end -->
@@ -151,12 +154,13 @@ Items have their own filter engine, the one of the views. The full reference of 
 - `POST /work-items/query` takes a full filter, a sort and the cursor in the body, a read like `GET`.
 - `POST /work-items/groups` and `/work-items/counts` give the numbers of a grouping or of named filters.
 - `lean=1` (`"lean": true`) leaves out `description`, `description_json` and `values_markdown`.
+- `POST /projects/{project}/redistribute-ranks` gives the items of a project new short ranks in their order when no rank fits between two neighbours any more; it answers `{"redistributed": n}` ([Work items](/en/concepts/work-items#order-items-by-hand)).
 
-`GET /work-items/{item}?include=children,relations,type,workflow,attachments` embeds what the item page needs in one request.
+`GET /work-items/{item}?include=children,relations,type,workflow,attachments` embeds what the item page needs in one request. `children` holds the first 100 children in manual order, archived ones included; `children_progress.total` says how many there are, and `GET /work-items?filter[parent]=<key>&include_archived=1` pages through all of them in the same order.
 
 ## Rich text
 
-Descriptions, rich-text values, comments, wiki pages and templates come in two forms: `description` in Markdown and `description_json` as the Tiptap document (`body`/`body_json` for comments, `content`/`content_json` for pages). Write in one of them; both at once is a `422`. Markdown is written for the reader: mentions show the current handle, references the current key or title, and references to what you may not see stay `[hidden](item:<ulid>)`. What a text may contain and how mentions, references, images and files are written is on the page [Rich text](/en/concepts/rich-text#writing-over-rest).
+Descriptions, rich-text values, comments, wiki pages and templates come in two forms: `description` in Markdown and `description_json` as the Tiptap document (`body`/`body_json` for comments, `content`/`content_json` for pages). Write in one of them; both at once is a `422`. Markdown is written for the reader: mentions show the current handle, references the current key or title, and references to what you may not see stay `[hidden](item:<ulid>)` or `[hidden](page:<ulid>)`. What a text may contain and how mentions, references, images and files are written is on the page [Rich text](/en/concepts/rich-text#writing-over-rest).
 
 ## Conflicts
 

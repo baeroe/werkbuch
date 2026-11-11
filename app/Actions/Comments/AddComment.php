@@ -14,6 +14,7 @@ use App\Support\Actor;
 use App\Support\AttachmentLinks;
 use App\Support\CommentInput;
 use App\Support\ItemLock;
+use App\Support\ItemReferences;
 use App\Support\Mentions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -71,6 +72,7 @@ final class AddComment
 
             EventRecorder::record(EventType::CommentCreated, $actor, $locked, $locked->project, null, ['comment_id' => $comment->id] + Mentions::meta($mentioned));
             UpdateWorkItem::announceBots($actor, $locked, $mentioned, $comment->id);
+            ItemReferences::queue($actor, $locked, ItemReferences::anew($locked, [], [$key => $body]));
 
             return $comment;
         }, 3);

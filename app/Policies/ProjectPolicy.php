@@ -80,6 +80,15 @@ final class ProjectPolicy
         return self::inProject($user, $project, Permission::ProjectManage, __('problem.detail.automations_admins_only'));
     }
 
+    /**
+     * New short ranks for the items of the project in their order (A448): whoever may change its items, `item.edit`
+     * (members and admins of the project), the same as moving one item by hand.
+     */
+    public function redistributeRanks(User $user, Project $project): Response
+    {
+        return self::inProject($user, $project, Permission::ItemEdit, __('problem.detail.items_members_only'));
+    }
+
     private static function inProject(User $user, Project $project, Permission $permission, string $refusal): Response
     {
         if (Visibility::roleIn($user, $project) === null) {

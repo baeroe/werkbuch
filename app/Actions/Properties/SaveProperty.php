@@ -16,6 +16,7 @@ use App\Support\CatalogInput;
 use App\Support\CatalogLock;
 use App\Support\ClientKeys;
 use App\Support\PropertyInput;
+use App\Views\CatalogProperties;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -48,6 +49,8 @@ final class SaveProperty
 
         return DB::transaction(function () use ($actor, $property, $input): Property {
             CatalogLock::take();
+            // filters, sorts and displays of this process look the properties up: let them read the new ones (T3-M2)
+            DB::afterCommit(fn () => app()->forgetInstance(CatalogProperties::class));
 
             $current = $property === null
                 ? null

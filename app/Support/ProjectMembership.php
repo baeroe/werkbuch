@@ -3,34 +3,17 @@
 namespace App\Support;
 
 use App\Access\ProjectRole;
-use App\Exceptions\Problem;
 use App\Models\Project;
 use App\Models\ProjectMember;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
 
 /**
- * What the actions on the members of a project share: the lock on the project row, the role of the input and the
- * member as the REST resource wants it. The lock is taken by other actions on a project too (UpdateProject,
- * CreateWorkItem, templates); the class keeps its name, because the lock belongs to the members first (Phase 12 looked
- * at renaming it and kept it).
+ * What the actions on the members of a project share: the role of the input, whether an account is a member and the
+ * member as the REST resource wants it.
  */
-final class MemberInput
+final class ProjectMembership
 {
-    /**
-     * The project afresh and under `lockForUpdate`, for the transaction of a change of members: two changes at the same
-     * time (two joins, a removal and a new lead) run one after the other and check what the first one left. A project
-     * that is being deleted by now is gone.
-     *
-     * @throws Problem 404
-     */
-    public static function lock(Project $project): Project
-    {
-        $locked = Project::query()->lockForUpdate()->findOrFail($project->id);
-
-        return $locked->deleting_at === null ? $locked : throw Problem::notFound();
-    }
-
     /**
      * @throws ValidationException at `role`
      */

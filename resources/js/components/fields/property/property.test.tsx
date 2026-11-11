@@ -14,6 +14,7 @@ import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { initI18n } from '@/lib/i18n';
 import type { WorkItemPatch } from '@/api/workItems';
 import { useWorkItems } from '@/hooks/workItems';
+import { expectLabelInName } from '@/test/a11y';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, lene, list, makeWorkItem, organization, person, project, properties, standard, theo, web47 } from '@/test/fixtures';
 import type { ListedItem, Organization, Project, ProjectMember, Property, PropertyValue, RichText, User, WorkItem } from '@/types';
@@ -63,6 +64,8 @@ const hafen = customer.options[1]!;
 // Gärtnerei Moos archived meanwhile, but still the customer of the item
 const customerArchived: Property = { ...customer, options: customer.options.map((option) => (option.id === 'opt_moos' ? { ...option, archived_at: '2026-10-01T08:00:00.000Z' } : option)) };
 
+/** Two frames: Base UI opens a popup and sets its focus a frame after the render that asks for it. */
+const nextFrames = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 const paragraph = (text: string): RichText => ({ type: 'paragraph', content: [{ type: 'text', text }] });
 const doc = (...content: RichText[]): RichText => ({ type: 'doc', content });
 const listDoc = doc(paragraph('So lässt sich der Fehler nachstellen:'), {
@@ -497,7 +500,7 @@ describe('PropertyField, chosen', () => {
     const user = userEvent.setup();
     renderWith(<PropertyField item={item({ launch: '2026-11-02' })} property={launch} required={false} />);
 
-    const trigger = await writable('Go-Live: 02.11.2026');
+    const trigger = await writable(/^Go-Live: 02\.11\.2026, /);
     await user.click(trigger);
     await waitFor(() => expect(document.activeElement).toBe(day('2026-11-02')));
     await user.click(day('2026-11-05'));
@@ -512,7 +515,7 @@ describe('PropertyField, chosen', () => {
     const user = userEvent.setup();
     renderWith(<PropertyField item={item({ launch: '2026-11-02' })} property={launch} required />);
 
-    const trigger = await writable('Go-Live: 02.11.2026');
+    const trigger = await writable(/^Go-Live: 02\.11\.2026, /);
     await user.click(trigger);
     await user.click(await screen.findByRole('button', { name: 'Entfernen' }));
     expect(await screen.findByText('„Go-Live“ ist ein Pflichtfeld und lässt sich nicht leeren.')).toBeTruthy();
@@ -731,10 +734,39 @@ describe('DateField', () => {
     expect(within(due).getByText('überfällig')).toBeTruthy();
     expect(due.getAttribute('aria-keyshortcuts')).toBe('D');
     // the start is no deadline, and a done item is overdue no more
-    expect(screen.getByRole('button', { name: 'Start-Date: 20.10.2026' }).textContent).toContain('vor 11 Tagen');
-    const done = screen.getByRole('button', { name: 'Due-Date: 28.10.2026' });
+    expect(screen.getByRole('button', { name: 'Start-Date: 20.10.2026, vor 11 Tagen' }).textContent).toContain('vor 11 Tagen');
+    const done = screen.getByRole('button', { name: 'Due-Date: 28.10. (28. Oktober 2026)' });
     expect(done.textContent).toBe('28.10.');
     expect(done.hasAttribute('aria-keyshortcuts')).toBe(false);
+  });
+
+  it('names every date trigger with the words it shows (WCAG 2.5.3)', async () => {
+    today();
+    const late = item({}, { due_date: '2026-10-28', start_date: '2026-10-20', state_id: 'std_progress' });
+    const { container } = renderWith(
+      <>
+        <DateField item={late} field="due_date" />
+        <DateField item={late} field="start_date" />
+        <DateField item={late} field="due_date" look="chip" />
+        <DateField item={{ ...late, id: 'wi_done', state_id: 'std_done' }} field="due_date" look="chip" />
+        <DateField item={{ ...late, id: 'wi_none', due_date: null }} field="due_date" />
+        <PropertyValueInput property={launch} value="2026-11-02" onChange={() => undefined} projectId="p_web" />
+        <PropertyValueInput property={launch} value={null} onChange={() => undefined} projectId="p_web" />
+      </>,
+    );
+
+    // overdue once the workflow is there
+    await screen.findByRole('button', { name: 'Due-Date: 28.10.2026, überfällig' });
+    await waitFor(() => expect(container.querySelectorAll('[data-picker-trigger]')).toHaveLength(7));
+    const triggers = [...container.querySelectorAll('[data-picker-trigger]')];
+    for (const trigger of triggers) expectLabelInName(trigger);
+    // the words in order: the day as shown, then what the field says beside it
+    expect(screen.getByRole('button', { name: 'Due-Date: 28.10.2026, überfällig' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Start-Date: 20.10.2026, vor 11 Tagen' })).toBeTruthy();
+    // a chip shows the day without its year; the name says the whole day after it (axe leaves out what is in brackets)
+    expect(screen.getByRole('button', { name: 'Due-Date: 28.10. (28. Oktober 2026), überfällig' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Due-Date: 28.10. (28. Oktober 2026)' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Due-Date: Kein Due-Date' })).toBeTruthy();
   });
 
   it('sets a day, removes it, and says when there is none', async () => {
@@ -743,7 +775,7 @@ describe('DateField', () => {
     const user = userEvent.setup();
     renderWith(<Live>{(entry) => <DateField item={entry} field="due_date" />}</Live>);
 
-    const trigger = await writable('Due-Date: nicht gesetzt');
+    const trigger = await writable('Due-Date: Kein Due-Date');
     expect(trigger.textContent).toBe('Kein Due-Date');
     await user.click(trigger);
     await user.click(day('2026-11-04'));
@@ -772,7 +804,7 @@ describe('DateField', () => {
       { 'PATCH /api/v1/work-items/wi_web_47': () => invalid({ due_date: ['Das Start-Date liegt nach dem Due-Date.'] }) },
     );
 
-    const start = await writable('Start-Date: 27.10.2026');
+    const start = await writable('Start-Date: 27.10.2026, vor 4 Tagen');
     expect(start.getAttribute('aria-keyshortcuts')).toBe('Shift+D');
     await user.click(start);
     // a day after the due date is refused in the calendar, which stays open
@@ -789,7 +821,7 @@ describe('DateField', () => {
     expect(toastTitles()).toContain('Änderung nicht gespeichert');
 
     // the due date before the start is refused in its calendar as well
-    await user.click(screen.getByRole('button', { name: 'Due-Date: 31.10.2026' }));
+    await user.click(screen.getByRole('button', { name: 'Due-Date: 31.10.2026, heute' }));
     await user.click(day('2026-10-26'));
     expect(await screen.findByText('Das Due-Date liegt vor dem Start (27.10.2026). Wähle einen Tag ab dann oder verschiebe zuerst den Start.')).toBeTruthy();
   });
@@ -813,7 +845,7 @@ describe('DateField', () => {
     today();
     signedIn = theo;
     renderWith(<DateField item={web47} field="due_date" />, {}, { projects: [project('WEB', 'viewer')] });
-    const value = await screen.findByRole('button', { name: 'Due-Date: 31.10.2026' });
+    const value = await screen.findByRole('button', { name: 'Due-Date: 31.10.2026, heute' });
     await waitFor(() => expect(value.getAttribute('aria-disabled')).toBe('true'));
 
     const before = document.activeElement;
@@ -841,6 +873,86 @@ describe('DateField', () => {
     await waitFor(() => expect(screen.queryByRole('grid')).toBeNull());
   });
 
+  it('keeps the focus on the trigger when the rights arrive or go, also from an open calendar', async () => {
+    const user = userEvent.setup();
+    function Dated({ reason }: { reason?: string }) {
+      const { today: now } = useToday();
+      return (
+        <DatePopover
+          label="Termin"
+          value={null}
+          onChoose={() => undefined}
+          display={<DayValue value={null} today={now} overdue={false} empty="Kein Termin" />}
+          displayText="nicht gesetzt"
+          disabledReason={reason}
+        />
+      );
+    }
+    const view = renderWith(<Dated reason="Rechte laden noch." />);
+    const readOnly = screen.getByRole('button', { name: 'Termin: nicht gesetzt' });
+    act(() => readOnly.focus());
+
+    // the rights arrive: the calendar's trigger takes the focus over
+    view.rerender(<Dated />);
+    const trigger = screen.getByRole('button', { name: 'Termin: nicht gesetzt' });
+    expect(trigger).not.toBe(readOnly);
+    expect(trigger.getAttribute('aria-disabled')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+
+    // they go while the calendar is open: the focus lands on the read-only trigger
+    await user.click(trigger);
+    const day = await screen.findByRole('grid', { name: /^Termin/ });
+    await waitFor(() => expect(day.contains(document.activeElement)).toBe(true));
+    view.rerender(<Dated reason="Im Projekt darfst du nur lesen." />);
+    const back = screen.getByRole('button', { name: 'Termin: nicht gesetzt' });
+    expect(back.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(back);
+
+    // the rights come back: the calendar they closed stays closed, and a trigger that never had the focus does not take it
+    act(() => back.blur());
+    view.rerender(<Dated />);
+    const again = screen.getByRole('button', { name: 'Termin: nicht gesetzt' });
+    await act(nextFrames);
+    expect(again.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('grid')).toBeNull();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('tells its owner that the rights closed an open calendar, which stays closed when they come back', async () => {
+    const user = userEvent.setup();
+    const changes: boolean[] = [];
+    function Owned({ reason }: { reason?: string }) {
+      const { today: now } = useToday();
+      const [open, setOpen] = useState(false);
+      return (
+        <DatePopover
+          label="Termin"
+          value={null}
+          onChoose={() => undefined}
+          display={<DayValue value={null} today={now} overdue={false} empty="Kein Termin" />}
+          displayText="nicht gesetzt"
+          disabledReason={reason}
+          open={open}
+          onOpenChange={(next) => {
+            changes.push(next);
+            setOpen(next);
+          }}
+        />
+      );
+    }
+    const view = renderWith(<Owned />);
+    await user.click(screen.getByRole('button', { name: 'Termin: nicht gesetzt' }));
+    await screen.findByRole('grid', { name: /^Termin/ });
+    view.rerender(<Owned reason="Im Projekt darfst du nur lesen." />);
+    expect(changes).toEqual([true, false]);
+
+    view.rerender(<Owned />);
+    const trigger = screen.getByRole('button', { name: 'Termin: nicht gesetzt' });
+    await act(nextFrames);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('grid')).toBeNull();
+  });
+
   it('knows overdue items, as the filter does', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-31T10:00:00.000Z'));
@@ -865,6 +977,6 @@ describe('DateField', () => {
 
     org = { ...organization, timezone: 'America/New_York' };
     renderWith(<DateField item={due} field="due_date" />);
-    expect(await screen.findByRole('button', { name: 'Due-Date: 30.10.2026' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Due-Date: 30.10.2026, heute' })).toBeTruthy();
   });
 });

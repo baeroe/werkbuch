@@ -14,6 +14,7 @@ use App\RichText\Document;
 use App\Support\Actor;
 use App\Support\AttachmentLinks;
 use App\Support\PageInput;
+use App\Support\PageItemReferences;
 use App\Support\PageLock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -31,9 +32,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  *   (`current`) and the name of whoever saved it last; nothing written (A308: without `base_version` the save goes);
  * - VersionRule: before a foreign state, a state that rested ten minutes or when the writer asks (`keep_current`, A307),
  *   the stored state stays as a version (its number, title, text, author and time; an existing one stays);
- * - then the new state as version + 1 by the writer, its uploads linked to the page (AttachmentLinks), and
- *   `page.updated` with the title, the emoji and the version, never the text (A306), `meta.kept_version` when a
- *   state was kept.
+ * - then the new state as version + 1 by the writer, its uploads linked to the page (AttachmentLinks), the items a
+ *   changed text references recorded (PageItemReferences), and `page.updated` with the title, the emoji and the
+ *   version, never the text (A306), `meta.kept_version` when a state was kept.
  */
 final class UpdatePage
 {
@@ -79,6 +80,7 @@ final class UpdatePage
                 throw self::conflict($actor, $locked);
             }
 
+            $textChanged = $text !== null && json_encode($after['content']) !== json_encode($locked->content);
             $kept = self::keep($actor, $locked, $keep);
             $changes = [];
             foreach (['title', 'emoji'] as $field) {
@@ -94,8 +96,15 @@ final class UpdatePage
                 'version' => $locked->version + 1,
                 'updated_by' => $actor->user->id,
             ]);
+            // as DeleteWorkItem locks: the items (a new row), the attachments, then the rows it drops (21u-M1)
+            if ($textChanged) {
+                PageItemReferences::add($locked, $text[0]);
+            }
             if ($text !== null && $text[0] !== null) {
                 AttachmentLinks::link($locked, $locked->project, $actor->user, [$text[1] => $text[0]]);
+            }
+            if ($textChanged) {
+                PageItemReferences::prune($locked, $text[0]);
             }
 
             EventRecorder::record(EventType::PageUpdated, $actor, $locked, $locked->project, $changes, $kept === null ? [] : ['kept_version' => $kept]);

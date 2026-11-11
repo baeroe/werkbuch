@@ -151,7 +151,7 @@ export function BoardColumn({ column, groupBy, keepIndex, sortable, drag, reveal
         ref={box}
         data-board-list=""
         className={cx(
-          'min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-card px-1.5 pb-4 transition-[opacity,background-color] duration-160',
+          'min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain rounded-card px-1.5 pb-4 transition-[opacity,background-color] duration-160',
           dim && 'opacity-40',
           drag.active && drag.over && !dim && 'bg-hover',
         )}
@@ -178,35 +178,35 @@ export function BoardColumn({ column, groupBy, keepIndex, sortable, drag, reveal
           </p>
         ) : (
           <SortableContext id={column.key} items={sortable ? column.ids : []} strategy={drag.sorts ? verticalListSortingStrategy : keepOrder}>
-          <ul aria-labelledby={headingId} className="relative" style={{ height: virtualizer.getTotalSize() }}>
-            {virtual.map((entry) => {
-              const item = items[entry.index];
-              const place = { ref: virtualizer.measureElement, 'data-index': entry.index, style: { transform: `translateY(${entry.start}px)` } };
-              if (!item) {
+            <ul aria-labelledby={headingId} className="relative" style={{ height: virtualizer.getTotalSize() }}>
+              {virtual.map((entry) => {
+                const item = items[entry.index];
+                const place = { ref: virtualizer.measureElement, 'data-index': entry.index, style: { transform: `translateY(${entry.start}px)` } };
+                if (!item) {
+                  return (
+                    <li key={entry.key} {...place} className="absolute inset-x-0 top-0 pt-3">
+                      {column.moreError ? (
+                        <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+                          {t('items.list.not_loaded')}
+                          <Button variant="secondary" size="sm" onClick={() => column.retry()}>
+                            {t('common.retry')}
+                          </Button>
+                        </div>
+                      ) : (
+                        <SkeletonGroup label={t('items.board.loading_more')}>
+                          <Skeleton className="h-20 w-full rounded-card" />
+                        </SkeletonGroup>
+                      )}
+                    </li>
+                  );
+                }
                 return (
-                  <li key={entry.key} {...place} className="absolute inset-x-0 top-0 pt-3">
-                    {column.moreError ? (
-                      <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
-                        {t('items.list.not_loaded')}
-                        <Button variant="secondary" size="sm" onClick={() => column.retry()}>
-                          {t('common.retry')}
-                        </Button>
-                      </div>
-                    ) : (
-                      <SkeletonGroup label={t('items.board.loading_more')}>
-                        <Skeleton className="h-20 w-full rounded-card" />
-                      </SkeletonGroup>
-                    )}
+                  <li key={entry.key} {...place} className="absolute inset-x-0 top-0 pb-2.5">
+                    {renderCard(item)}
                   </li>
                 );
-              }
-              return (
-                <li key={entry.key} {...place} className="absolute inset-x-0 top-0 pb-2.5">
-                  {renderCard(item)}
-                </li>
-              );
-            })}
-          </ul>
+              })}
+            </ul>
           </SortableContext>
         )}
       </div>

@@ -63,17 +63,21 @@ type ItemRowBaseProps = Omit<ComponentProps<'div'>, 'children'> & {
   depth: number;
   /** The display fields in their order (`Display.fields`): key, state, assignee, priority, labels, start_date, due_date, project, created_at, updated_at, property:<key>. */
   fields: readonly string[];
-  /** Enter on the row of a list with a cursor: the item's page. */
-  onOpen: (itemId: string) => void;
   /** A plain click on the title: the preview. Without it the title leads to the item's page. */
   onPeek?: (itemId: string) => void;
   /** Before the type icon, after the indentation: e.g. the list's selection checkbox. */
   lead?: ReactNode;
   /** Part of the selection: the highlighter's wash. */
   selected?: boolean;
-  /** The row belongs to a list with a keyboard cursor: true for its tab stop, false for the other rows (see above). */
-  cursor?: boolean;
-};
+} & (
+    | {
+        /** The row belongs to a list with a keyboard cursor: true for its tab stop, false for the other rows (see above). */
+        cursor: boolean;
+        /** Enter on the row of a list with a cursor: the item's page. */
+        onOpen: (itemId: string) => void;
+      }
+    | { cursor?: undefined; onOpen?: undefined }
+  );
 
 export function ItemRowBase({ item, depth, fields, onOpen, onPeek, lead, selected = false, cursor, className, style, onKeyDown, ...rest }: ItemRowBaseProps) {
   const type = useWorkItemTypes().data?.items.find((entry) => entry.id === item.type_id);

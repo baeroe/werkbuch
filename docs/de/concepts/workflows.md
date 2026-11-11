@@ -41,6 +41,8 @@ Ein Workflow ist entweder frei oder hat eine Übergangsmatrix.
 
 Im selben Status bleiben ist immer erlaubt. Die Regel gilt überall gleich: in der Oberfläche und über die REST-API, für [Automatisierungen](/de/concepts/automations) und Läufe von [Vorlagen](/de/concepts/templates), auch über [MCP](/de/mcp). Wer ein Item direkt in einem anderen Status anlegt, durchläuft dieselbe Prüfung wie ein Übergang vom Startstatus dorthin.
 
+![Der Editor eines Workflows mit seinen Status und der Matrix der erlaubten Übergänge](/screenshots/de/settings-workflow.png)
+
 ## Der Standard-Workflow
 
 Genau ein Workflow ist der Standard. Ein neues Projekt bekommt ihn, wenn du keinen anderen wählst. werkbuch liefert den Workflow „Standard“ als Standard mit: frei, mit Backlog (Backlog), Todo (Unstarted), In Progress und Pending (beide Started), Done (Completed) und Cancelled (Canceled), Start in Backlog.
@@ -68,6 +70,7 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Lesen darf jedes 
 | Anfrage | Antwort |
 |---|---|
 | `GET /api/v1/workflows` | Die Liste, mit Status und Übergängen. |
+| `GET /api/v1/workflows/{id}` | Ein Workflow mit Status und Übergängen. |
 | `POST /api/v1/workflows` | `201` mit dem neuen Workflow. |
 | `PUT /api/v1/workflows/{id}` | `200` mit dem Workflow. |
 | `DELETE /api/v1/workflows/{id}` | `204`. |

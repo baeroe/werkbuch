@@ -59,6 +59,18 @@ it('keeps the two-factor columns out of the array form', function () {
         ->and($user->fresh()?->two_factor_secret)->toBe('secret');
 });
 
+it('leaves the guard of the default bot out of the array of a user', function () {
+    $bot = User::defaultBot();
+    $person = User::query()->findOrFail(User::factory()->create()->id);
+
+    // every select of users reads the generated column; the array form (event snapshots, debug output) leaves it out
+    expect($bot->getAttributes()['default_bot_guard'])->toBe(1)
+        ->and(array_key_exists('default_bot_guard', $person->getAttributes()))->toBeTrue()
+        ->and($person->getAttributes()['default_bot_guard'])->toBeNull()
+        ->and(array_key_exists('default_bot_guard', $bot->toArray()))->toBeFalse()
+        ->and(array_key_exists('default_bot_guard', $person->toArray()))->toBeFalse();
+});
+
 it('keeps a description on an account', function () {
     expect(User::factory()->bot()->create(['description' => 'Imports tickets'])->description)->toBe('Imports tickets');
 });

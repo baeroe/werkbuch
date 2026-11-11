@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, createE2eProject, createE2eView, createItem, isPhone, removeE2eProject, removeE2eView, runId, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, createE2eProject, createE2eView, createItem, isPhone, pressMod, removeE2eProject, removeE2eView, runId, tabTo, tr, variant } from '../helpers';
 
 // The item list of a project with the keyboard only, signed in as the e2e person (playwright.config.ts), in English.
 // The tests that only read share one project (`E2E …`, removed after them) with 30 items over the API: 20 in Backlog
@@ -107,6 +107,67 @@ test('collapses a group from the keyboard', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(backlog).toHaveAttribute('aria-expanded', 'true');
   await expect(row(page, `${identifier}-1`)).toBeVisible();
+});
+
+test('moves with the arrows, extends the selection with shift, selects all with mod+a and clears it with Escape', async ({ page }) => {
+  const { identifier } = shared;
+  await openList(page, identifier);
+  const bar = page.getByRole('group', { name: tr('en', 'items.bulk.label') });
+  const chosen = (count: number) => `${count} ${tr('en', 'items.bulk.of_total', { total: 30 })}`;
+
+  // ↓ and ↑ move the cursor only
+  await page.keyboard.press('ArrowDown');
+  await expect(row(page, `${identifier}-2`)).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(row(page, `${identifier}-1`)).toBeFocused();
+  await expect(bar).toBeHidden();
+
+  // shift+j and shift+↓ grow the range down from the cursor
+  await page.keyboard.press('Shift+J');
+  await expect(row(page, `${identifier}-2`)).toBeFocused();
+  await expect(bar).toContainText(chosen(2));
+  await page.keyboard.press('Shift+ArrowDown');
+  await expect(row(page, `${identifier}-3`)).toBeFocused();
+  await expect(bar).toContainText(chosen(3));
+  // Escape clears it; the next range starts at the cursor: shift+k and shift+↑ grow it up
+  await page.keyboard.press('Escape');
+  await expect(bar).toBeHidden();
+  await expect(row(page, `${identifier}-3`)).toBeFocused();
+  await page.keyboard.press('Shift+K');
+  await expect(row(page, `${identifier}-2`)).toBeFocused();
+  await expect(bar).toContainText(chosen(2));
+  await page.keyboard.press('Shift+ArrowUp');
+  await expect(row(page, `${identifier}-1`)).toBeFocused();
+  await expect(bar).toContainText(chosen(3));
+
+  // mod+a: every item of the list, Escape: none
+  await pressMod(page, 'a');
+  await expect(bar).toContainText(chosen(30));
+  await page.keyboard.press('Escape');
+  await expect(bar).toBeHidden();
+  await expect(row(page, `${identifier}-1`)).toBeFocused();
+});
+
+test('unfolds a group with → and goes from header to header with ↑ and ↓', async ({ page }) => {
+  const { identifier } = shared;
+  await openList(page, identifier);
+  const backlog = heading(page, 'Backlog', 20);
+  const progress = heading(page, 'In Progress', 10);
+  await page.keyboard.press('ArrowLeft');
+  await expect(backlog).toBeFocused();
+  // ← on the header folds it, ↓ goes to the next header and ↑ back
+  await page.keyboard.press('ArrowLeft');
+  await expect(backlog).toHaveAttribute('aria-expanded', 'false');
+  await page.keyboard.press('ArrowDown');
+  await expect(progress).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(backlog).toBeFocused();
+  // → unfolds it, a second → goes to its first row
+  await page.keyboard.press('ArrowRight');
+  await expect(backlog).toHaveAttribute('aria-expanded', 'true');
+  await expect(backlog).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(row(page, `${identifier}-1`)).toBeFocused();
 });
 
 test('switches to the board with 2 and back with 1, also in the address', async ({ page }) => {

@@ -6,6 +6,7 @@ import {
   archiveWorkItem,
   bulkUpdateWorkItems,
   changeWorkItemType,
+  type ListWorkItemsArgs,
   countWorkItems,
   createWorkItem,
   deleteWorkItem,
@@ -28,11 +29,11 @@ afterEach(() => api.restore());
 const sent = (index = 0) => `${api.calls[index]!.method} ${decodeURIComponent(api.calls[index]!.url)}`;
 
 describe('reading work items', () => {
-  it('lists items as a page through the query and sends the project, parent and text as the short form', async () => {
+  it('lists items as a page through the query and sends the project and parent as the short form', async () => {
     api = mockApi({ 'POST /api/v1/work-items/query': () => ({ body: { data: [web47], links: {}, meta: { next_cursor: 'c2', total: 3 } } }) });
 
-    expect(await listWorkItems({ project_id: 'WEB', q: 'kontakt' })).toEqual({ items: [web47], next_cursor: 'c2', total: 3 });
-    expect(api.calls[0]).toEqual({ method: 'POST', url: '/api/v1/work-items/query', body: { shorthand: { project: 'WEB', q: 'kontakt' } } });
+    expect(await listWorkItems({ project_id: 'WEB', parent_id: 'WEB-30' })).toEqual({ items: [web47], next_cursor: 'c2', total: 3 });
+    expect(api.calls[0]).toEqual({ method: 'POST', url: '/api/v1/work-items/query', body: { shorthand: { project: 'WEB', parent: 'WEB-30' } } });
 
     await listWorkItems({ parent_id: 'WEB-30', include_archived: true, cursor: 'c2', per_page: 50 });
     expect(api.calls[1]!.body).toEqual({ shorthand: { parent: 'WEB-30' }, include_archived: true, cursor: 'c2', per_page: 50 });
@@ -40,6 +41,14 @@ describe('reading work items', () => {
     // the first page has no cursor: nothing at all is sent
     await listWorkItems({ cursor: null });
     expect(api.calls[2]!.body).toEqual({});
+  });
+
+  it('takes no q in the list args', () => {
+    // the check is the type: `pnpm typecheck` goes RED once the list takes `q` again (the directive is then unused);
+    // the assertion below only keeps the value used (21b-M5)
+    // @ts-expect-error the list has no search text; only the groups carry `q`
+    const args: ListWorkItemsArgs = { q: 'kontakt' };
+    expect(args).toEqual({ q: 'kontakt' });
   });
 
   it('sends a view, filter, sort, group and lean under their own names, and no empty filter', async () => {

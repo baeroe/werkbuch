@@ -15,9 +15,9 @@ import { Avatar } from '@/components/ui/Avatar';
 import { cx } from '@/components/ui/cx';
 import { RichTextView } from '@/editor/RichTextView';
 import { useOrganization } from '@/hooks/organization';
-import { t } from '@/lib/i18n';
+import { t, tx } from '@/lib/i18n';
 import type { RichText, User } from '@/types';
-import { earlierVersions, joined, linePhrases, lineReason, tx, type PhraseContext } from './phrases';
+import { earlierVersions, joined, linePhrases, lineReason, type PhraseContext } from './phrases';
 import type { EventsLine } from './timeline';
 import { formatMoment, formatWhen } from './when';
 

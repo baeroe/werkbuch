@@ -12,7 +12,7 @@ use Meilisearch\Exceptions\ApiException;
 $engineAnswering = function (Response ...$responses): MeilisearchEngine {
     $http = new Guzzle(['handler' => HandlerStack::create(new MockHandler($responses)), 'http_errors' => false]);
 
-    return new MeilisearchEngine(new Client('http://meili.test', null, $http), false, new Client('http://meili.test', null, $http));
+    return new MeilisearchEngine(new Client('http://meili.test', null, $http), false, 'http://meili.test', null);
 };
 
 it('describes the documents of an index from its stats: how many, and how many hold each field', function () use ($engineAnswering) {

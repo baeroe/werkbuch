@@ -20,7 +20,7 @@
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
 import { ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
-import { archivedReason } from '@/components/fields/itemData';
+import { editReasonOf } from '@/components/fields/itemData';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
 import { ItemKey } from '@/components/items/ItemKey';
 import { ItemLink } from '@/components/items/ItemLink';
@@ -41,6 +41,7 @@ import { GroupHeader } from '../list/GroupHeader';
 import { listRows, rowKey, type ListRow } from '../list/rows';
 import { useSelection } from '../selection/useSelection';
 import { Cell } from './cells/Cell';
+import { useRefusals } from './cells/PropertyCells';
 import { tableColumns, typeHasProperty, type Column } from './columns';
 import { useGridKeys } from './useGridKeys';
 
@@ -94,6 +95,8 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
   const [column, setColumn] = useState(0);
   /** The open editor: the row (`rowKey`, an item has a row in each of its label groups) and the field. */
   const [editing, setEditing] = useState<{ row: string; field: string } | null>(null);
+  /** The server's refusals at the property cells, by row: a row scrolled away and back keeps them (T20-M5). */
+  const refusals = useRefusals();
   const peekItemId = useUiStore((state) => state.peekItemId);
   const flashIds = useUiStore((state) => state.flashIds);
   const scroller = useRef<HTMLDivElement>(null);
@@ -161,13 +164,22 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
   // last, so the box keeps its height and its scroll position
   const padBottom = virtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0);
 
-  /** Brings a row into view and gives an element of it the focus once it is rendered. */
+  /**
+   * Gives an element of a row the focus: at once when it is rendered, so every press of a held arrow starts where the
+   * one before went (T20-M3); else it brings the row into view and focuses the element once it is there.
+   */
   const pending = useRef<string | null>(null);
   const focusAt = useCallback(
     (index: number, selector: string) => {
-      pending.current = selector;
       const find = () => scroller.current?.querySelector<HTMLElement>(selector);
-      if (!find()) virtualizer.scrollToIndex(index, { align: 'auto' });
+      const rendered = find();
+      if (rendered) {
+        pending.current = null;
+        rendered.focus();
+        return;
+      }
+      pending.current = selector;
+      virtualizer.scrollToIndex(index, { align: 'auto' });
       let attempts = 0;
       const tryFocus = () => {
         if (pending.current !== selector) return;
@@ -248,7 +260,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
       const type = types?.find((entry) => entry.id === item.type_id)?.name ?? '';
       return refuse(t('items.table.not_applicable_detail', { property: target.property.label, type }));
     }
-    const denied = item.archived_at !== null ? archivedReason(item.key) : reason('item.edit', item.project_id);
+    const denied = editReasonOf(item, reason);
     if (denied) return refuse(denied);
     setEditing({ row: key, field: target.field });
   }
@@ -268,6 +280,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
       focusHeading(rowsByKey.get(key)!.group.key);
       return true;
     },
+    editing: editing !== null,
   });
 
   // a group loads once a row of it is rendered and it is open; its next page once its last loaded row is rendered
@@ -461,6 +474,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
                   item={item}
                   column={entry}
                   editing={cellEditing}
+                  {...(entry.property && { refusal: refusals(key, entry.property, item) })}
                   onEditingChange={(open) => {
                     if (open) startEditing(item, entry, key);
                     else if (cellEditing) setEditing(null);
@@ -488,7 +502,7 @@ export function TableLayout({ groups, groupBy, display, selection, onSelect, onS
         aria-rowcount={rowCount}
         aria-colcount={span}
         aria-multiselectable="true"
-        onKeyDown={gridKeys}
+        {...gridKeys}
         // a fixed table needs its width: the first column (14 rem, 22 rem from md on) and the fields
         style={{ width: `calc(var(--title-w) + ${columns.reduce((sum, entry) => sum + entry.width, 0)}rem)` }}
         className="min-w-full table-fixed border-separate border-spacing-0 text-ui [--title-w:14rem] md:[--title-w:22rem]"

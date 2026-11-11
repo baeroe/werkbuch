@@ -11,6 +11,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expectLabelInName } from '@/test/a11y';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { firstMonday, mara, organization } from '@/test/fixtures';
 import type { Schedule } from '@/types';
@@ -178,7 +179,7 @@ describe('ScheduleEditor', () => {
     expect(last()).toEqual(defaultSchedule('2026-10-28'));
     expect(within(region()).getByText('Wöchentlich am Mittwoch um 09:00')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Donnerstag' }));
+    await user.click(screen.getByRole('button', { name: /\(Donnerstag\)$/ }));
     await user.click(screen.getByRole('switch', { name: 'Nach Zeitplan anlegen' }));
     expect(last()).toBeNull();
     expect(screen.queryByRole('group', { name: 'Frequenz' })).toBeNull();
@@ -206,17 +207,27 @@ describe('ScheduleEditor', () => {
     const user = userEvent.setup();
     renderEditor({ initial: weekly });
     const days = screen.getByRole('group', { name: 'Wochentage' });
-    expect(within(days).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag']);
+    // a day is named by the short day it shows, then the whole one (WCAG 2.5.3)
+    expect(within(days).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Mo (Montag)',
+      'Di (Dienstag)',
+      'Mi (Mittwoch)',
+      'Do (Donnerstag)',
+      'Fr (Freitag)',
+      'Sa (Samstag)',
+      'So (Sonntag)',
+    ]);
     expect(within(days).getAllByRole('button').map((button) => button.textContent)).toEqual(['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']);
-    await user.click(within(days).getByRole('button', { name: 'Sonntag' }));
+    for (const day of within(days).getAllByRole('button')) expectLabelInName(day);
+    await user.click(within(days).getByRole('button', { name: /\(Sonntag\)$/ }));
     // the normal form of the server: 0 = Sunday first
     expect(last()).toMatchObject({ weekdays: [0, 1] });
-    await user.click(within(days).getByRole('button', { name: 'Montag' }));
+    await user.click(within(days).getByRole('button', { name: /\(Montag\)$/ }));
     expect(last()).toMatchObject({ weekdays: [0] });
     const count = changes.length;
-    await user.click(within(days).getByRole('button', { name: 'Sonntag' }));
+    await user.click(within(days).getByRole('button', { name: /\(Sonntag\)$/ }));
     expect(changes).toHaveLength(count);
-    expect(within(days).getByRole('button', { name: 'Sonntag' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(days).getByRole('button', { name: /\(Sonntag\)$/ }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('runs monthly on a day, on the last one, and says that a short month takes its last day', async () => {

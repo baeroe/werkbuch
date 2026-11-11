@@ -4,6 +4,8 @@ Jedes Projekt hat ein Wiki: einen Baum aus Seiten für das, was das Team wissen 
 
 Das Wiki eines Projekts liegt unter `/projects/WEB/wiki`; in der Seitenleiste ist es **Wiki** unter einem Projekt. Ohne offene Seite zeigt es die sechs zuletzt geänderten Seiten.
 
+![Eine Wiki-Seite mit dem Baum der Seiten daneben und einem Verweis auf ein Work Item](/screenshots/de/wiki.png)
+
 ## Der Baum
 
 Der Baum nennt jede Seite des Projekts: auf breiten Bildschirmen links neben der Seite, auf kleineren auf der Übersicht des Wikis.
@@ -53,6 +55,7 @@ Eine Version behält Titel, Text, wer sie geschrieben hat und wann; das Emoji ge
 - `#` in jedem Text eines Projekts bietet Wiki-Seiten unter den Items an. Ein Verweis speichert nur die ULID der Seite; wer ihn liest, sieht das aktuelle Emoji und den aktuellen Titel und kommt über ihn zur Seite. Eine Seite, die der Leser nicht sehen darf, steht als **verborgen** da, ohne Titel. In Markdown ist ein Verweis `[Titel](page:<ulid>)`, in Mails ein Link auf die Seite.
 - **Erwähnungen** in einer Seite funktionieren wie in anderen Texten, benachrichtigen aber niemanden: Seiten haben keine Beobachter, und Inbox und Mails gehören zu Work Items.
 - **Suche:** Die Befehlspalette findet Seiten über Titel und Text unter **Seiten**, unter den Items (siehe [Suche](/de/search)).
+- **Im Item:** Das Item zeigt die Seiten, die auf es verweisen, in einem eigenen Abschnitt **Wiki-Seiten** zwischen Relationen und Dateien, jede als Link auf die Seite mit dem zugehörigen Wiki. Den Abschnitt gibt es nur, wenn mindestens eine Seite auf das Item verweist und du sie sehen darfst; er folgt Änderungen im Wiki. Es zählt nur der aktuelle Text einer Seite, nicht ihre Versionen, und ein Key als einfacher Text ist kein Verweis.
 - **Links:** `/projects/WEB/wiki/<ulid>` öffnet eine Seite. Eine Seite eines anderen Projekts führt ins Wiki dieses Projekts, eine frühere Kennung zur aktuellen; eine Seite, die es nicht gibt (oder die du nicht sehen darfst), zeigt „Diese Seite gibt es nicht“, mit dem Baum.
 
 ## Rechte
@@ -79,6 +82,7 @@ Lesen braucht ein Token mit `read`, Ändern eins mit `write`. Projekte gehen üb
 | `GET /api/v1/pages/{page}/versions` | Die Versionen ohne Text, die neueste zuerst, mit `cursor` und `per_page`. |
 | `GET /api/v1/pages/{page}/versions/{version}` | Eine Version mit `content` und `content_json`. |
 | `POST /api/v1/pages/{page}/versions/{version}/restore` | `200` mit der Seite in ihrem neuen Stand. |
+| `GET /api/v1/work-items/{item}/pages` | Die Seiten, deren aktueller Text auf das Item verweist, ohne Text, nach Titel; es zählen nur Seiten, die du siehst, auch in `meta.total`. |
 
 ### Den Baum lesen
 

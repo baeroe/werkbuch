@@ -4,6 +4,7 @@ namespace Database\Seeders\Demo;
 
 use App\Models\PersonalAccessToken;
 use App\Models\User;
+use Database\Seeders\Demo\Texts\DemoTexts;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
@@ -22,9 +23,9 @@ class TokensSeeder extends Seeder
     public function run(): void
     {
         $tokens = [
-            ['mara', 'Claude Code', ['read', 'write', 'mcp'], null, '2026-10-28 09:05', '2026-10-02 11:00'],
-            ['mara', 'CI-Skript', ['read'], '2026-09-30 23:59', '2026-09-29 22:15', '2026-06-30 10:00'],
-            ['kira', 'MCP', ['read', 'write', 'mcp'], null, '2026-10-27 09:41', '2026-10-05 14:30'],
+            ['mara', DemoTexts::get('token.claude_code.name'), ['read', 'write', 'mcp'], null, '2026-10-28 09:05', '2026-10-02 11:00'],
+            ['mara', DemoTexts::get('token.ci_script.name'), ['read'], '2026-09-30 23:59', '2026-09-29 22:15', '2026-06-30 10:00'],
+            ['kira', DemoTexts::get('token.mcp.name'), ['read', 'write', 'mcp'], null, '2026-10-27 09:41', '2026-10-05 14:30'],
         ];
 
         $ownerType = (new User)->getMorphClass();

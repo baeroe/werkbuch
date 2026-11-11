@@ -1,31 +1,12 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, createE2eProject, createItem, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { createE2eProject, createItem, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { plus, range, shown, stateId, today, typeId } from '../timelineHelpers';
 
 // The timeline of a project with the keyboard only, signed in as the e2e person (playwright.config.ts), in English.
 // Each test works in a project of its own (`E2E …`, removed after it) with an epic, and its children, over the API.
 
 const name = (what: string) => `E2E timeline ${what} ${variant()} ${runId()}`;
-
-/** The id of an entry of a catalog by its name: a type, or a state of the default workflow. */
-async function typeId(page: Page, type: string): Promise<string> {
-  return String((await allEntries(page, 'work-item-types')).find((entry) => entry.name === type)!.id);
-}
-async function stateId(page: Page, state: string): Promise<string> {
-  const workflow = (await allEntries(page, 'workflows')).find((entry) => entry.is_default === true) as { states: { id: string; name: string }[] };
-  return workflow.states.find((entry) => entry.name === state)!.id;
-}
-
-/** A day as the app writes it in English (31/10/2026), and a day some days later. */
-const shown = (day: string) => new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`));
-const plus = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
-const range = (start: string, due: string) => tr('en', 'items.timeline.range', { start: shown(start), due: shown(due) });
-
-/** Today in the time zone of the organisation. */
-async function today(page: Page): Promise<string> {
-  const { data } = (await (await api(page, 'GET', '/api/v1/organization')).json()) as { data: { timezone: string } };
-  return new Intl.DateTimeFormat('en-CA', { timeZone: data.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-}
 
 /** An epic's row on the axis, named by its key. */
 const row = (page: Page, key: string) => page.getByRole('group', { name: new RegExp(`^${key} `) });
@@ -85,6 +66,32 @@ test('keeps the focus on an epic that moves past another of its project', async 
     await expect(status(page)).toHaveText(tr('en', 'items.timeline.saved', { key: first.key, range: range('2026-10-01', '2026-10-05') }));
     await expect(rows.first()).toHaveAccessibleName(new RegExp(`^${first.key} `));
     await expect(row(page, first.key)).toBeFocused();
+  } finally {
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
+test('moves the due date of an epic with alt+right and alt+left', async ({ page }) => {
+  await page.goto('/my-items');
+  const project = await createE2eProject(page, name('length'), { types: ['Task', 'Epic'] });
+  try {
+    const epic = await createItem(page, { project_id: project.id, type_id: await typeId(page, 'Epic'), title: 'Migration', start_date: '2026-10-01', due_date: '2026-10-20' });
+    await page.goto(`/projects/${project.identifier}?layout=timeline`);
+    await expect(row(page, epic.key)).toBeVisible();
+    await tabTo(page, row(page, epic.key), { max: 80 });
+
+    // at month zoom a unit is a week: alt+→ moves the due date only, alt+← takes it back
+    await page.keyboard.press('Alt+ArrowRight');
+    await expect(status(page)).toHaveText(tr('en', 'items.timeline.saved', { key: epic.key, range: range('2026-10-01', '2026-10-27') }));
+    await expect(row(page, epic.key)).toBeFocused();
+    await page.keyboard.press('Alt+ArrowLeft');
+    await page.keyboard.press('Alt+ArrowLeft');
+    await expect(status(page)).toHaveText(tr('en', 'items.timeline.saved', { key: epic.key, range: range('2026-10-01', '2026-10-13') }));
+    await expect(row(page, epic.key)).toHaveAccessibleName(`${epic.key} Migration, ${range('2026-10-01', '2026-10-13')}`);
+
+    // the server has the shorter epic
+    await page.reload();
+    await expect(row(page, epic.key)).toHaveAccessibleName(`${epic.key} Migration, ${range('2026-10-01', '2026-10-13')}`);
   } finally {
     await removeE2eProject(page, project.identifier);
   }

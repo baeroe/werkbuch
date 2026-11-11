@@ -4,6 +4,8 @@ Ein Work Item ist ein Stück Arbeit in einem Projekt: ein Task, ein Bug, ein Epi
 
 Wer ein Projekt sieht, liest seine Items. Member und Admins des Projekts legen sie an und ändern sie; Viewer lesen nur. Löschen dürfen nur Admins des Projekts. Wer ein Projekt sieht und wer welche Rolle hat, steht unter [Rollen und Rechte](/de/concepts/permissions).
 
+![Die Seite des Work Items WEB-47: Beschreibung, Felder, Relationen, Wiki-Seiten und Aktivität](/screenshots/de/item.png)
+
 ## Felder
 
 | Feld | Hinweise |
@@ -43,7 +45,7 @@ Wechselt ein Item in einen Status der Kategorie Completed oder Canceled, ist es 
 
 ## Eltern und Kinder
 
-Items eines Epic-Typs können Kind-Items haben; Epics haben selbst kein Eltern-Item, es gibt also zwei Ebenen. Das Eltern-Item ist ein Epic desselben Projekts. Ein Epic zeigt den Fortschritt seiner Kinder: die geschlossenen (Completed oder Canceled) von allen. **Kind-Item** im Abschnitt Kinder eines Epics legt eins mit dem Epic als Eltern-Item an.
+Items eines Epic-Typs können Kind-Items haben; Epics haben selbst kein Eltern-Item, es gibt also zwei Ebenen. Das Eltern-Item ist ein Epic desselben Projekts. Ein Epic zeigt den Fortschritt seiner Kinder: die geschlossenen (Completed oder Canceled) von allen. **Kind-Item** im Abschnitt Kinder eines Epics legt eins mit dem Epic als Eltern-Item an. Hat ein Epic mehr als 100 Kinder, zeigt der Abschnitt die ersten 100, **Weitere Kind-Items laden** holt die nächsten.
 
 ## Relationen
 
@@ -52,6 +54,10 @@ Eine Relation verbindet zwei Items über einen [Relationstyp](/de/concepts/types
 Ein Item am anderen Ende, das du nicht sehen darfst, erscheint als **verborgenes Item**, ohne Key und Titel. Eine Relation entfernen darf, wer eines ihrer Enden ändern darf.
 
 Nur „blockiert“ hat eine Folge: Solange ein offenes Item ein anderes offenes blockiert, zeigt das blockierte einen Hinweis. werkbuch hindert niemanden daran, es zu beginnen. Der Hinweis zählt auch einen Blocker, den du nicht sehen darfst, ohne ihn zu nennen. Alle anderen Relationstypen sind reine Beschriftung.
+
+## Wiki-Seiten
+
+Verweisen Wiki-Seiten per `#` auf ein Item, zeigt das Item sie im Abschnitt **Wiki-Seiten** zwischen Relationen und Dateien: jede Seite als Link in ihr Wiki. Den Abschnitt gibt es nur, wenn mindestens eine solche Seite existiert, die du sehen darfst. Er liest den aktuellen Text der Seiten und folgt darum Änderungen, Verschiebungen und Löschungen im Wiki. Siehe [Wiki](/de/concepts/wiki#verweise-und-suche).
 
 ## Kommentare
 
@@ -103,7 +109,7 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Items sprichst du
 |---|---|
 | `GET /api/v1/work-items` | Items, die du siehst: `view`, eine Kurzform wie `filter[project]`, `filter[assignee]=me`, `filter[q]` (ein Key oder ein Teil des Titels), `sort`, `show_sub_items`, `include_archived`, `lean`, `cursor`, `per_page`. Filter, Gruppen und Zahlen stehen unter [Views](/de/concepts/views#rest). |
 | `POST /api/v1/work-items` | `201` mit dem neuen Item. |
-| `GET /api/v1/work-items/{item}` | Das Item; `?include=children,relations,type,workflow,attachments` bettet diese mit ein. |
+| `GET /api/v1/work-items/{item}` | Das Item; `?include=children,relations,type,workflow,attachments` bettet diese mit ein (`children`: die ersten 100 nach Rang, archivierte eingeschlossen; `children_progress.total` zählt alle, die Liste `?filter[parent]=WEB-30&include_archived=1` hat den Rest). |
 | `PATCH /api/v1/work-items/{item}` | `200` mit dem Item. |
 | `POST /api/v1/work-items/{item}/transition` | `200`; `to_state_id`, `resolution_id`. |
 | `PUT /api/v1/work-items/{item}/type` | `200`; `type_id`, `values`. |
@@ -115,6 +121,8 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Items sprichst du
 | `GET /api/v1/work-items/{item}/subscribers` | Wer das Item beobachtet. |
 | `PUT`, `DELETE /api/v1/work-items/{item}/subscription` | Beobachten an oder aus; `200` mit dem Item. |
 | `GET /api/v1/work-items/{item}/history` | Die History, älteste zuerst. |
+| `GET /api/v1/work-items/{item}/pages` | Die [Wiki-Seiten](#wiki-seiten), die auf das Item verweisen und die du siehst, nach Titel. |
+| `POST /api/v1/projects/{project}/redistribute-ranks` | `200` mit `{"redistributed": n}`; siehe [Items von Hand ordnen](#items-von-hand-ordnen). |
 | `GET`, `POST /api/v1/work-items/{item}/comments` | Die Kommentare, älteste zuerst; `201` mit dem neuen. Kommentare, Reaktionen und Dateien stehen unter [Rich Text](/de/concepts/rich-text#rest). |
 
 Ein Item, das das Konto des Tokens nicht sieht, ist ein `404`, wie eines, das es nicht gibt. Ein unbekannter Filter oder ein unbekanntes `include` ist ein `422`, nie still übergangen. Meldungen (`detail`, Feldfehler) kommen in der Sprache des Kontos, sonst in der Standardsprache der Organisation.
@@ -223,6 +231,21 @@ Im Demo-Workflow „Agentur-Freigabe“ darf Todo nicht direkt nach Done:
 ```
 
 Bei einem geschlossenen Status wählt `resolution_id` die Resolution; ohne behält das Item die, die es in dieser Kategorie hatte, oder bekommt den Standard. Ein Status außerhalb des Workflows des Projekts ist ein `422` an `state_id`.
+
+### Items von Hand ordnen
+
+Die Sortierung „Manuell“ folgt dem Rang jedes Items (`rank`): ein kurzer Text, Byte für Byte verglichen, bei gleichen entscheidet die ULID. Wer ein Item von Hand verschiebt, schickt einen Rang zwischen seinen Nachbarn (`PATCH` mit `rank`, höchstens 128 Zeichen). Ist zwischen zwei Nachbarn kein Platz mehr, bekommen die Items des Projekts neue kurze Ränge in ihrer Ordnung:
+
+```bash
+curl -X POST https://werkbuch.example.com/api/v1/projects/WEB/redistribute-ranks \
+  -H "Authorization: Bearer <token>"
+```
+
+```json
+{ "redistributed": 57 }
+```
+
+`redistributed` zählt die Items, deren Rang sich geändert hat. Jedes Item des Projekts behält seinen Platz, archivierte eingeschlossen; keins bekommt ein neues `updated_at`, und die History eines Items zeigt es nicht. Eine Liste mehrerer Projekte nach „Manuell“ kann ihre Items danach anders mischen. Mitglieder und Admins des Projekts dürfen es (`item.edit`, die Fähigkeit `write`), in einem archivierten Projekt niemand (`409 project_archived`). Änderungen an Items des Projekts warten, bis die neuen Ränge gespeichert sind.
 
 ### Mehrere Items ändern
 

@@ -210,7 +210,7 @@ final class FilterSchema
             FieldKind::Enum => self::word($field, $value),
             FieldKind::Date, FieldKind::Stamp => self::day($value),
             FieldKind::Flag => is_bool($value) ? $value : null,
-            FieldKind::Text, FieldKind::Rich => is_string($value) && trim($value) !== '' && mb_strlen($value) <= self::TEXT_MAX ? $value : null,
+            FieldKind::Text, FieldKind::Rich => is_string($value) && preg_match('/^[\s\p{Z}]*\z/u', $value) === 0 && mb_strlen($value) <= self::TEXT_MAX ? $value : null,
             FieldKind::Number => (is_int($value) || is_float($value)) && is_finite($value) && abs($value) < ItemValue::NUMBER_LIMIT ? $value : null,
         };
 

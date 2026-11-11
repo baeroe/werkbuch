@@ -201,6 +201,7 @@ Projekte, ihre Mitglieder und die eigenen Favoriten. Ein Projekt ändern seine A
 | `restore` | Holt ein archiviertes Projekt zurück. | `project` | `POST /projects/{project}/restore` |
 | `delete` | Löscht ein Projekt sofort für alle; seine Daten gehen im Hintergrund. | `project` | `DELETE /projects/{project}` |
 | `set-workflow` | Wechselt den Workflow; jeder benutzte Status braucht ein Ziel in `mapping`, sonst 422 mit `states`. | `project`, `input` | `PUT /projects/{project}/workflow` |
+| `redistribute-ranks` | Gibt den Items neue kurze Ränge in ihrer Ordnung; antwortet `{redistributed}`. | `project` | `POST /projects/{project}/redistribute-ranks` |
 | `join` | Tritt einem Projekt als Mitglied bei. | `project` | `POST /projects/{project}/join` |
 | `add-member` | Fügt ein Konto mit einer Rolle hinzu. | `project`, `input` | `POST /projects/{project}/members` |
 | `update-member` | Ändert die Rolle eines Mitglieds. | `project`, `user`, `input` | `PATCH /projects/{project}/members/{user}` |
@@ -209,7 +210,7 @@ Projekte, ihre Mitglieder und die eigenen Favoriten. Ein Projekt ändern seine A
 
 ### `automations`
 
-Die vier Automatisierungen eines Projekts mit ihren Einstellungen. (Braucht `read`.)
+Die fünf Automatisierungen eines Projekts mit ihren Einstellungen; `link_references` ist ohne gespeicherte Zeile an. (Braucht `read`.)
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
@@ -310,7 +311,7 @@ Löscht eine Datei aus der Dateiliste eines Items oder einen eigenen Upload, den
 
 ### `pages`
 
-Das Wiki eines Projekts: der Baum, eine Seite mit ihrem Text, die Versionen einer Seite. (Braucht `read`.)
+Das Wiki eines Projekts: der Baum, eine Seite mit ihrem Text, die Versionen einer Seite, die Seiten, die ein Work Item nennen. (Braucht `read`.)
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
@@ -318,6 +319,7 @@ Das Wiki eines Projekts: der Baum, eine Seite mit ihrem Text, die Versionen eine
 | `get` | Eine Seite mit ihrem Text. | `page` | `GET /pages/{page}` |
 | `versions` | Die Versionen einer Seite, neueste zuerst, ohne Text. | `page` | `GET /pages/{page}/versions` |
 | `version` | Eine Version einer Seite mit ihrem Text. | `page`, `page_version` | `GET /pages/{page}/versions/{pageVersion}` |
+| `item` | Die Seiten, die ein Work Item nennen, nach Titel, ohne Text. | `item` | `GET /work-items/{item}/pages` |
 
 ### `manage-pages`
 

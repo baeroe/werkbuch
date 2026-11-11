@@ -2,7 +2,9 @@
 
 # Tastatur
 
-werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, die dort gerade gelten; diese Seite nennt alle. Hat eine Taste zwei Namen, gilt der erste auf dem Mac und der zweite unter Windows und Linux. Beim Tippen in einem Feld wirken nur <kbd>⌘ / Strg</kbd>+<kbd>K</kbd>, <kbd>Esc</kbd> und <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd>. Solange ein Dialog offen ist, ruhen die Kürzel der Seite dahinter.
+werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, die dort gerade gelten; diese Seite nennt alle. Hat eine Taste zwei Namen, gilt der erste auf dem Mac und der zweite unter Windows und Linux. Beim Tippen in einem Feld wirken nur <kbd>⌘ / Strg</kbd>+<kbd>K</kbd>, <kbd>Esc</kbd> und <kbd>⌘ / Strg</kbd>+<kbd>↵ / Eingabe</kbd>. Solange ein Dialog offen ist, ruhen die Kürzel der Seite dahinter.
+
+`e2e/keyboard-flows.ts` ordnet jedes Kürzel dieser Seite und jede Taste eines Widgets einem Playwright-Test zu, der sie nur mit der Tastatur drückt, und jeden Ablauf der Liste `FLOWS` (aus Kapitel 4 und 5.2 der Spec) einem Test, der ihn ohne Maus durchläuft. `scripts/keyboard-flows.test.mjs` prüft, dass es den Test gibt und er keine Maus benutzt, bei einem Kürzel, dass er eine der Tasten drückt, bei einem Ablauf, dass er nur vor der ersten Taste über die API schreibt, und dass die Tests die Breiten von Desktop und Handy abdecken. Fehlt einer Breite ein solcher Test, nennt das Manifest den Grund.
 
 ## Allgemein
 
@@ -26,15 +28,17 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 
 | Taste | Aktion |
 | --- | --- |
-| <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd> | Dialog speichern |
+| <kbd>⌘ / Strg</kbd>+<kbd>↵ / Eingabe</kbd> | Dialog speichern |
 
 ## Einstellungen
 
 | Taste | Aktion |
 | --- | --- |
-| <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd> | Einstellungen speichern |
+| <kbd>⌘ / Strg</kbd>+<kbd>↵ / Eingabe</kbd> | Einstellungen speichern |
 
 ## Items
+
+<kbd>C</kbd> wirkt auf jedem Bildschirm. Die übrigen Tasten wirken auf das Item der Seite oder der Vorschau, in einer Liste auf die ausgewählten Items, ohne Auswahl auf das Item am Cursor.
 
 | Taste | Aktion |
 | --- | --- |
@@ -46,13 +50,12 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>L</kbd> | Labels ändern … |
 | <kbd>T</kbd> | Typ ändern … |
 | <kbd>D</kbd> | Due-Date setzen … |
-| <kbd>⇧</kbd>+<kbd>D</kbd> | Start-Date setzen … |
-| <kbd>⇧</kbd>+<kbd>P</kbd> | Eltern-Item setzen … |
+| <kbd>⇧ / Umschalt</kbd>+<kbd>D</kbd> | Start-Date setzen … |
+| <kbd>⇧ / Umschalt</kbd>+<kbd>P</kbd> | Eltern-Item setzen … |
 | <kbd>M</kbd> | Kommentar schreiben |
 | <kbd>R</kbd> | Relation hinzufügen |
 | <kbd>E</kbd> | Titel bearbeiten |
-| <kbd>⌘ / Strg</kbd>+<kbd>⌫</kbd> | Archivieren bzw. löschen (mit Rückgängig) |
-| <kbd>Esc</kbd> | Vorschau schließen |
+| <kbd>⌘ / Strg</kbd>+<kbd>⌫ / Rückschritt</kbd> | Archivieren bzw. löschen (mit Rückgängig) |
 
 ## Liste
 
@@ -60,18 +63,18 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | --- | --- |
 | <kbd>J</kbd> / <kbd>↓</kbd> | Nächstes Item |
 | <kbd>K</kbd> / <kbd>↑</kbd> | Voriges Item |
-| <kbd>⇧</kbd>+<kbd>J</kbd> / <kbd>⇧</kbd>+<kbd>↓</kbd> | Auswahl nach unten erweitern |
-| <kbd>⇧</kbd>+<kbd>K</kbd> / <kbd>⇧</kbd>+<kbd>↑</kbd> | Auswahl nach oben erweitern |
+| <kbd>⇧ / Umschalt</kbd>+<kbd>J</kbd> / <kbd>⇧ / Umschalt</kbd>+<kbd>↓</kbd> | Auswahl nach unten erweitern |
+| <kbd>⇧ / Umschalt</kbd>+<kbd>K</kbd> / <kbd>⇧ / Umschalt</kbd>+<kbd>↑</kbd> | Auswahl nach oben erweitern |
 | <kbd>X</kbd> | Item auswählen |
-| <kbd>⇧</kbd>+<kbd>X</kbd> | Bereich bis hier auswählen |
+| <kbd>⇧ / Umschalt</kbd>+<kbd>X</kbd> | Bereich bis hier auswählen |
 | <kbd>⌘ / Strg</kbd>+<kbd>A</kbd> | Alle auswählen |
 | <kbd>Esc</kbd> | Auswahl aufheben |
-| <kbd>↵</kbd> | Item öffnen |
+| <kbd>↵ / Eingabe</kbd> | Item öffnen |
 | <kbd>Leertaste</kbd> | Vorschau zeigen oder schließen |
 | <kbd>F</kbd> | Bedingung hinzufügen |
 | <kbd>/</kbd> | Nach Titel filtern |
-| <kbd>⇧</kbd>+<kbd>←</kbd> | Item nach links verschieben |
-| <kbd>⇧</kbd>+<kbd>→</kbd> | Item nach rechts verschieben |
+| <kbd>⇧ / Umschalt</kbd>+<kbd>←</kbd> | Item nach links verschieben |
+| <kbd>⇧ / Umschalt</kbd>+<kbd>→</kbd> | Item nach rechts verschieben |
 | <kbd>⌥ / Alt</kbd>+<kbd>↑</kbd> | Item nach oben verschieben |
 | <kbd>⌥ / Alt</kbd>+<kbd>↓</kbd> | Item nach unten verschieben |
 
@@ -104,29 +107,35 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | --- | --- |
 | <kbd>E</kbd> | Als gelesen markieren |
 | <kbd>U</kbd> | Als ungelesen markieren |
-| <kbd>⇧</kbd>+<kbd>E</kbd> | Alle als gelesen markieren |
+| <kbd>⇧ / Umschalt</kbd>+<kbd>E</kbd> | Alle als gelesen markieren |
 | <kbd>#</kbd> | Benachrichtigung löschen |
 
 ## Wiki
 
 | Taste | Aktion |
 | --- | --- |
-| <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd> | Seite jetzt speichern |
-| <kbd>⌘ / Strg</kbd>+<kbd>⌫</kbd> | Seite löschen (mit Rückfrage) |
+| <kbd>⌘ / Strg</kbd>+<kbd>↵ / Eingabe</kbd> | Seite jetzt speichern |
+| <kbd>⌘ / Strg</kbd>+<kbd>⌫ / Rückschritt</kbd> | Seite löschen (mit Rückfrage) |
 
 ## Vorlage
 
 | Taste | Aktion |
 | --- | --- |
-| <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd> | Vorlage speichern |
+| <kbd>⌘ / Strg</kbd>+<kbd>↵ / Eingabe</kbd> | Vorlage speichern |
+
+## Vorschau
+
+| Taste | Aktion |
+| --- | --- |
+| <kbd>Esc</kbd> | Vorschau schließen |
 
 ## Befehlspalette
 
 | Taste | Aktion |
 | --- | --- |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Treffer wählen |
-| <kbd>↵</kbd> | Ausführen |
-| <kbd>⌫</kbd> | Zurück zu allen Befehlen (im leeren Feld) |
+| <kbd>↵ / Eingabe</kbd> | Ausführen |
+| <kbd>⌫ / Rückschritt</kbd> | Zurück zu allen Befehlen (im leeren Feld) |
 | <kbd>Esc</kbd> | Schließen |
 
 ## Tabelle
@@ -135,11 +144,11 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | --- | --- |
 | <kbd>←</kbd> / <kbd>→</kbd> | Spalte wechseln |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Zeile wechseln |
-| <kbd>⇧</kbd>+<kbd>↑</kbd> / <kbd>⇧</kbd>+<kbd>↓</kbd> | Auswahl erweitern |
+| <kbd>⇧ / Umschalt</kbd>+<kbd>↑</kbd> / <kbd>⇧ / Umschalt</kbd>+<kbd>↓</kbd> | Auswahl erweitern |
 | <kbd>Pos1</kbd> / <kbd>Ende</kbd> | Erste bzw. letzte Spalte |
 | <kbd>⌘ / Strg</kbd>+<kbd>Pos1</kbd> / <kbd>⌘ / Strg</kbd>+<kbd>Ende</kbd> | Erste bzw. letzte Zeile |
-| <kbd>↵</kbd> | Zelle bearbeiten (erste Spalte: Item öffnen) |
-| <kbd>Esc</kbd> | Bearbeiten beenden |
+| <kbd>↵ / Eingabe</kbd> | Zelle bearbeiten (erste Spalte: Item öffnen) |
+| <kbd>Esc</kbd> | Getipptes zurücknehmen, dann Bearbeiten beenden |
 
 ## Gruppenköpfe (Liste und Tabelle)
 
@@ -148,7 +157,7 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>←</kbd> | Gruppe zuklappen bzw. zum Kopf |
 | <kbd>→</kbd> | Gruppe aufklappen bzw. zur ersten Zeile |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Voriger bzw. nächster Kopf |
-| <kbd>↵</kbd> / <kbd>Leertaste</kbd> | Gruppe auf- oder zuklappen |
+| <kbd>↵ / Eingabe</kbd> / <kbd>Leertaste</kbd> | Gruppe auf- oder zuklappen |
 
 ## Seitenbaum des Wikis
 
@@ -158,19 +167,20 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>→</kbd> | Unterseiten aufklappen bzw. zur ersten Unterseite |
 | <kbd>←</kbd> | Unterseiten zuklappen bzw. zur Eltern-Seite |
 | <kbd>Pos1</kbd> / <kbd>Ende</kbd> | Erste bzw. letzte Seite |
-| <kbd>↵</kbd> | Seite öffnen |
-| <kbd>⌘ / Strg</kbd>+<kbd>⌫</kbd> | Seite der Zeile löschen (mit Rückfrage) |
+| <kbd>↵ / Eingabe</kbd> | Seite öffnen |
+| <kbd>⌘ / Strg</kbd>+<kbd>⌫ / Rückschritt</kbd> | Seite der Zeile löschen (mit Rückfrage) |
 
 ## Editoren und Felder
 
 | Taste | Aktion |
 | --- | --- |
-| <kbd>⌘ / Strg</kbd>+<kbd>↵</kbd> | Speichern bzw. absenden |
+| <kbd>⌘ / Strg</kbd>+<kbd>↵ / Eingabe</kbd> | Speichern bzw. absenden |
 | <kbd>Esc</kbd> | Feld verlassen |
 | <kbd>/</kbd> | Block einfügen (am Zeilenanfang oder nach einem Leerzeichen) |
 | <kbd>@</kbd> | Person oder Bot erwähnen (mit Projekt) |
 | <kbd>#</kbd> | Auf ein Item oder eine Seite verweisen (mit Projekt) |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Eintrag der Liste wählen |
-| <kbd>↵</kbd> / <kbd>Tab</kbd> | Eintrag übernehmen |
+| <kbd>↵ / Eingabe</kbd> / <kbd>Tab</kbd> | Eintrag übernehmen |
 | <kbd>Esc</kbd> | Liste schließen |
-| <kbd>↵</kbd> | Alternativtext des ausgewählten Bilds bearbeiten |
+| <kbd>↵ / Eingabe</kbd> | Alternativtext des ausgewählten Bilds bearbeiten |
+| <kbd>⌥ / Alt</kbd>+<kbd>F10</kbd> | Tabelle bearbeiten (Cursor in einer Tabelle) |

@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { api, artisan, runId, tabTo, tr, variant } from '../helpers';
+import { api, flushCache, runId, tabTo, tr, variant } from '../helpers';
 import type { Page } from '@playwright/test';
 
 // The e2e person (an org admin, signed in by the setup project) invites through the API; the invited person then opens the
@@ -7,7 +7,7 @@ import type { Page } from '@playwright/test';
 
 // The four projects accept a handful of invitations within a minute: emptying the cache resets the limit per IP
 // (10 a minute, config/werkbuch.php), once per project; the limit itself is tested in Pest.
-test.beforeAll(() => artisan('cache:clear'));
+test.beforeAll(() => flushCache());
 
 const ORGANIZATION = 'Feldwerk';
 

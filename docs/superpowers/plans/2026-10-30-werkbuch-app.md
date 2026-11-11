@@ -347,6 +347,10 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 
 **Abnahme:** alle Erfolgskriterien aus Spec 1 grün in CI; Doku baut in beiden Sprachen vollständig. Danach manuelle Tests durch Rafael; Release v0.1.0 erst nach seiner Freigabe.
 
+**Stand 2026-11-08 (Phase läuft, PR #32):** erledigt sind die Sicherheits- und Robustheitspunkte (Tasks 1–5b), die CI je Playwright-Projekt (6a, 6b), die Flakes (7, Wiederholungsläufe offen), Last mit 50 000 Items samt Fixes (8a–13b, keine Zeile über Budget), OpenAPI und MCP (14), Frontend-Leistung (14b), das Tastatur-Manifest (17a, 17b), die Deferred-Punkte (19a–21c, 21i–21m), Block E2 (21d–21h), Block E3 (21n–21v), englische Demo-Daten (22a–22d), die Doku-Durchsicht (24a–24c) und die Checkliste der manuellen Tests (26). Offen: axe (15a, 15b, 16), die fehlenden Tastatur-Abläufe (18), Screenshots (22e, 22f), Landingpage, README und `docs.yml` (23); diese warten auf Rafaels OK für die Entwicklungsdatenbank. Dazu die zeitgebundenen Updates (25 ab 2026-11-16, 25b ab 2026-11-18/19), das Final-Review mit dem vollen G3 und die finale Fix-Welle.
+
+**Abweichungen in der Umsetzung** (Rulings A434–A464): Rafael hat am 2026-11-07 vier Punkte aus „nach v0.1.0“ vorgezogen (Block E2: Ränge neu verteilen A448, Kinder seitenweise A449, natürliche Sortierung A450, Live für Personen ohne Projektkanal A451) und vier Wünsche nachgereicht (Block E3: „Erwähnte Items verknüpfen“, standardmäßig an, A452/A453; Board scrollt waagerecht über einer Spalte; Tabellen im Editor A454/A455; Wiki-Seiten im Item A456). Die englische Doku bekommt englische Demo-Daten (`DemoSeederEn`, A443), die Doku läuft unter `https://werkbuch.dev` (A444). Der Job `e2e` läuft je Playwright-Projekt (A438), dazu der Job `load` (A439); `tests` hat 60 statt 45 Minuten (A464). Der Login hat einen Deckel je Konto mit bekanntem Gerät (A434), TOTP einen Tagesdeckel (A435), die Anmelde-Mails eine Queue `mail` (A437). Die Suche baut neben dem Live-Index neu und tauscht (A460), Labels und Workflows indexieren gezielt neu (A459).
+
 ---
 
 ## Entscheidungen dieses Plans (bitte prüfen)
@@ -376,4 +380,4 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 12: REST vollständig und OpenAPI (PR #26)
 - [x] Phase 13: MCP (PR #28)
 - [x] Phase 14: Docker und Release (PR #30)
-- [ ] Phase 15: Feinschliff
+- [ ] Phase 15: Feinschliff (PR #32; offen nur die Pins der Images, Tasks 25 und 25b, danach manuelle Tests)

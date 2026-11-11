@@ -3,8 +3,9 @@
  * fold away, with the count of the server; children right below their parent, indented; the display fields as chips.
  *
  * - Virtualized against the page's scroll (`useWindowVirtualizer`): only the rows in view are mounted, each with its
- *   pickers. Rows measure themselves, so a row whose chips wrap (phones) takes the room it needs. The cursor row stays
- *   rendered while it scrolls away (`rangeExtractor`), so the focus is not lost (13c).
+ *   pickers. Rows measure themselves, so a row whose chips wrap (phones) takes the room it needs. The cursor row and the
+ *   row or heading with the focus stay rendered while they scroll away (`rangeExtractor`), so the focus is not lost
+ *   (13c).
  * - Loading group by group: a group asks for its first page once its heading is rendered and open (`enable`), for the
  *   next once its last loaded row is rendered (`loadMore`). A page that fails leaves the rows loaded so far and adds a
  *   row "Nicht geladen. Erneut versuchen" (13c).
@@ -19,7 +20,7 @@
  */
 
 import { defaultRangeExtractor, useWindowVirtualizer, type Range } from '@tanstack/react-virtual';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { ItemRowBase } from '@/components/items/ItemRowBase';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
@@ -30,12 +31,15 @@ import { useIsWide } from '@/lib/media';
 import { useUiStore } from '@/store/ui';
 import type { LayoutProps } from '../layouts';
 import { revealBelowToolbar, useSelection } from '../selection/useSelection';
+import { useDocumentTop } from '../useDocumentTop';
 import { GroupHeader } from './GroupHeader';
 import { listRows, rowKey, type ListRow } from './rows';
 
 /** How tall a row is before it has measured itself: 36 px, 44 px on phones (touch targets). */
 const ROW_HEIGHT = { wide: 36, narrow: 44 };
 const HEADING_HEIGHT = 48;
+/** Frames to wait for a focus on its way back to the list before its row is let go. */
+const SETTLE_FRAMES = 5;
 
 /** Plain arrow keys only: with ⇧ they extend the selection (`useSelection`). */
 const plain = (event: KeyboardEvent) => !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey;
@@ -73,25 +77,22 @@ export function ListLayout({ groups, groupBy, display, selection, onSelect, onSe
   }, [groups, rows, grouped, collapsed]);
 
   // the list starts below the bars of the screen; their height changes with the filter chips
-  const [scrollMargin, setScrollMargin] = useState(0);
-  const measure = useCallback(() => {
-    const top = (container.current?.getBoundingClientRect().top ?? 0) + window.scrollY;
-    setScrollMargin((previous) => (Math.abs(previous - top) < 1 ? previous : top));
-  }, []);
-  useLayoutEffect(measure);
-  useEffect(() => {
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [measure]);
+  const scrollMargin = useDocumentTop(container, [rows.length, wide]);
 
-  // the cursor row stays rendered while it scrolls away, so it keeps the focus (13c)
+  // the cursor row and the row with the focus stay rendered while they scroll away, so the focus is not lost (13c): the
+  // focus may sit on a heading, or on the second row of an item with two labels, which the cursor does not name
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
+  const focusInside = useRef(false);
+  const leaving = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(leaving.current), []);
   const cursorIndex = useMemo(() => rows.findIndex((row) => row.kind === 'item' && row.item.id === cursorId), [rows, cursorId]);
+  const focusedIndex = useMemo(() => (focusedKey === null ? -1 : rows.findIndex((row) => rowKey(row) === focusedKey)), [rows, focusedKey]);
   const rangeExtractor = useCallback(
     (range: Range) => {
-      const indexes = defaultRangeExtractor(range);
-      return cursorIndex < 0 || indexes.includes(cursorIndex) ? indexes : [...indexes, cursorIndex].sort((a, b) => a - b);
+      const kept = [cursorIndex, focusedIndex].filter((index) => index >= 0);
+      return [...new Set([...defaultRangeExtractor(range), ...kept])].sort((a, b) => a - b);
     },
-    [cursorIndex],
+    [cursorIndex, focusedIndex],
   );
 
   const rowHeight = wide ? ROW_HEIGHT.wide : ROW_HEIGHT.narrow;
@@ -209,11 +210,39 @@ export function ListLayout({ groups, groupBy, display, selection, onSelect, onSe
   }
 
   return (
-    <ul ref={container} aria-label={t('items.list.label')} className="relative" style={{ height: virtualizer.getTotalSize() }}>
+    <ul
+      ref={container}
+      aria-label={t('items.list.label')}
+      className="relative"
+      style={{ height: virtualizer.getTotalSize() }}
+      onFocus={(event) => {
+        focusInside.current = true;
+        cancelAnimationFrame(leaving.current);
+        // a picker's popup (a portal of a row) leaves the row it belongs to
+        const key = event.target.closest<HTMLElement>('[data-row-key]')?.dataset.rowKey;
+        if (key !== undefined) setFocusedKey(key);
+      }}
+      onBlur={() => {
+        // the focus left the list (its rows and their popups: React events cross portals) for good: the row it had
+        // need not stay rendered any more, nor ask for pages out of view (20b-M9)
+        focusInside.current = false;
+        cancelAnimationFrame(leaving.current);
+        const check = (left: number) => {
+          // leaving the window (another tab or app) fires a blur, yet the list keeps the active element: the row
+          // stays rendered, the focus is back on it when the window is
+          if (focusInside.current || container.current?.contains(document.activeElement)) return;
+          // the focus is on its way (a closing popup gives it back to its trigger a frame later): wait for it
+          const lost = document.activeElement === null || document.activeElement === document.body;
+          if (lost && left > 0) leaving.current = requestAnimationFrame(() => check(left - 1));
+          else setFocusedKey(null);
+        };
+        leaving.current = requestAnimationFrame(() => check(SETTLE_FRAMES));
+      }}
+    >
       {virtualRows.map((virtual) => {
         const row = rows[virtual.index]!;
         const style = { transform: `translateY(${virtual.start - virtualizer.options.scrollMargin}px)` };
-        const place = { ref: virtualizer.measureElement, 'data-index': virtual.index, style };
+        const place = { ref: virtualizer.measureElement, 'data-index': virtual.index, 'data-row-key': rowKey(row), style };
         const { group } = row;
 
         if (row.kind === 'group') {

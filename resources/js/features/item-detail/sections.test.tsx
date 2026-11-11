@@ -17,7 +17,7 @@ import { resetForUser } from '@/hooks/queryClient';
 import { descriptionDraft, drafts } from '@/lib/drafts';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, labels, lene, list, makeWorkItem, mara, organization, project, properties, relationTypes, resolutions, searchResults, standard, types, web30, web47, web48 } from '@/test/fixtures';
+import { ida, labels, lene, list, makeAttachment, makeWorkItem, makePage, mara, organization, pageSummary, project, properties, relationTypes, resolutions, searchResults, standard, types, web30, web47, web48 } from '@/test/fixtures';
 import type { Project, ProjectMember, RelationEntry, RichText, User, WorkItem } from '@/types';
 import { DESCRIPTION_PAUSE_MS } from './Description';
 import { ItemPage } from './ItemPage';
@@ -951,7 +951,8 @@ describe('Children', () => {
   });
 
   it('invites an epic without children to split the work, and leaves the section out where it has nothing to show', async () => {
-    items = items.filter((entry) => entry.id !== web48.id);
+    // without children the server answers no progress either (`children_progress` null)
+    items = items.filter((entry) => entry.id !== web48.id).map((entry) => (entry.id === web30.id ? { ...web30, children_progress: null } : entry));
     const view = renderWith(<ItemPage itemKey="WEB-30" />);
     const children = await screen.findByRole('region', { name: 'Kinder' });
     expect(within(children).getByText('Noch keine Kind-Items. Teile die Arbeit auf, dann zeigt sich hier der Fortschritt.')).toBeTruthy();
@@ -964,6 +965,124 @@ describe('Children', () => {
     await screen.findByRole('region', { name: 'Beschreibung' });
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Kinder' })).toBeNull());
     expect(screen.queryByRole('region', { name: 'Kinder' })).toBeNull();
+  });
+
+  /**
+   * WEB-30 with 130 children: the detail embeds the first 100 (as the server does, A449), the list with the parent
+   * answers them in pages of 100. `failFirstMore` lets the second page fail once, `failFirstPage` the first one.
+   */
+  function manyChildren({ failFirstMore = false, failFirstPage = false } = {}) {
+    const many = Array.from({ length: 130 }, (_, index) =>
+      makeWorkItem({ id: `wi_child_${index}`, number: 100 + index, key: `WEB-${100 + index}`, title: `Teil ${index + 1}`, parent_id: 'wi_web_30', rank: `b${String(index).padStart(3, '0')}` }),
+    );
+    items = items.filter((entry) => entry.id !== web48.id).map((entry) => (entry.id === web30.id ? { ...web30, children_progress: { done: 0, total: 130 } } : entry));
+    let failed = !failFirstMore;
+    let firstFailed = !failFirstPage;
+    return {
+      detail: () => ({ body: { data: { ...items.find((entry) => entry.id === web30.id)!, children: many.slice(0, 100), relations: [], type: types.find((type) => type.id === 't_epic'), workflow: standard, attachments: [] } } }),
+      query: (body: unknown) => {
+        const query = body as { shorthand?: { parent?: string }; include_archived?: boolean; show_sub_items?: boolean; lean?: boolean; sort?: unknown; cursor?: string };
+        expect(query).toMatchObject({ shorthand: { parent: 'wi_web_30' }, include_archived: true, show_sub_items: true, lean: true, sort: { field: 'rank', direction: 'asc' } });
+        if (query.cursor === undefined && !firstFailed) {
+          firstFailed = true;
+          return problem(500, 'server_error');
+        }
+        if (query.cursor === undefined) return { body: { data: many.slice(0, 100), links: {}, meta: { next_cursor: 'page-2', total: 130 } } };
+        if (!failed) {
+          failed = true;
+          return problem(500, 'server_error');
+        }
+        return { body: list(many.slice(100), 130) };
+      },
+    };
+  }
+
+  it('says how many children it shows', async () => {
+    const children = manyChildren();
+    renderWith(<ItemPage itemKey="WEB-30" />, { routes: { 'GET /api/v1/work-items/WEB-30': children.detail, 'POST /api/v1/work-items/query': children.query } });
+
+    const section = await screen.findByRole('region', { name: 'Kinder' });
+    // the count of all children, from children_progress, not the 100 the detail embeds
+    expect(within(section).getByText('130')).toBeTruthy();
+    expect(within(section).getByRole('progressbar', { name: 'Fortschritt der Kind-Items' }).getAttribute('aria-valuemax')).toBe('130');
+    expect(await within(section).findByText('100 von 130')).toBeTruthy();
+    expect(within(section).getAllByRole('listitem')).toHaveLength(100);
+    expect(within(section).getByRole('button', { name: 'Weitere Kind-Items laden' })).toBeTruthy();
+  });
+
+  it('loads the further children page by page', async () => {
+    const user = userEvent.setup();
+    const children = manyChildren({ failFirstMore: true });
+    renderWith(<ItemPage itemKey="WEB-30" />, { routes: { 'GET /api/v1/work-items/WEB-30': children.detail, 'POST /api/v1/work-items/query': children.query } });
+
+    const section = await screen.findByRole('region', { name: 'Kinder' });
+    await user.click(await within(section).findByRole('button', { name: 'Weitere Kind-Items laden' }));
+    // the second page fails: the 100 stay, and the section offers the page again
+    const retry = await within(section).findByRole('button', { name: 'Erneut versuchen' });
+    expect(within(section).getByText('Nicht geladen.')).toBeTruthy();
+    expect(within(section).getAllByRole('listitem')).toHaveLength(100);
+    await user.click(retry);
+
+    await waitFor(() => expect(within(section).getAllByRole('listitem')).toHaveLength(130));
+    const rows = within(section).getAllByRole('listitem');
+    expect(rows.at(-1)!.querySelector('a')!.textContent).toBe('WEB-229Teil 130');
+    // the button went with the last page: the focus is on the first child that came with it
+    await waitFor(() => expect(document.activeElement).toBe(rows[100]!.querySelector('a')));
+    // everything is there: no button, no count of the shown ones
+    expect(within(section).queryByRole('button', { name: 'Weitere Kind-Items laden' })).toBeNull();
+    expect(within(section).queryByText('130 von 130')).toBeNull();
+    expect(sent('POST', '/api/v1/work-items/query').map((body) => (body as { cursor?: string }).cursor)).toEqual([undefined, 'page-2', 'page-2']);
+  });
+
+  it('moves the focus on to the first child that came, however long the last page takes', async () => {
+    // the clock of the browser runs on by hand: a page that comes after more than 2 s must still hand the focus on
+    vi.useFakeTimers({ toFake: ['performance', 'requestAnimationFrame', 'cancelAnimationFrame'] });
+    const user = userEvent.setup();
+    const children = manyChildren();
+    renderWith(<ItemPage itemKey="WEB-30" />, { routes: { 'GET /api/v1/work-items/WEB-30': children.detail, 'POST /api/v1/work-items/query': children.query } });
+    // the second page waits until `release`
+    const original = globalThis.fetch;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    globalThis.fetch = async (input, init) => {
+      if (init?.method === 'POST' && String(init.body).includes('page-2')) await gate;
+      return original(input, init);
+    };
+    try {
+      const section = await screen.findByRole('region', { name: 'Kinder' });
+      const more = await within(section).findByRole('button', { name: 'Weitere Kind-Items laden' });
+      await waitFor(() => expect(more.getAttribute('aria-busy')).toBeNull());
+      await user.click(more);
+      await waitFor(() => expect(more.getAttribute('aria-busy')).toBe('true'));
+      expect(document.activeElement).toBe(more);
+      act(() => vi.advanceTimersByTime(5_000));
+      await act(async () => release());
+
+      await waitFor(() => expect(within(section).getAllByRole('listitem')).toHaveLength(130));
+      expect(more.isConnected).toBe(false);
+      await waitFor(() => expect(document.activeElement).toBe(within(section).getAllByRole('listitem')[100]!.querySelector('a')));
+      // the state of the list was said in a region that stays: now that everything is there, it says nothing more
+      expect(section.querySelector('[data-children-status]')!.textContent).toBe('');
+    } finally {
+      globalThis.fetch = original;
+      vi.useRealTimers();
+    }
+  });
+
+  it('offers the first page of the list again when it fails, and shows the embedded children meanwhile', async () => {
+    const user = userEvent.setup();
+    const children = manyChildren({ failFirstPage: true });
+    renderWith(<ItemPage itemKey="WEB-30" />, { routes: { 'GET /api/v1/work-items/WEB-30': children.detail, 'POST /api/v1/work-items/query': children.query } });
+
+    const section = await screen.findByRole('region', { name: 'Kinder' });
+    const retry = await within(section).findByRole('button', { name: 'Erneut versuchen' });
+    expect(within(section).getByText('Nicht geladen.')).toBeTruthy();
+    expect(within(section).getAllByRole('listitem')).toHaveLength(100);
+    await user.click(retry);
+    // the same button, now for the next page
+    await waitFor(() => expect(retry.textContent).toBe('Weitere Kind-Items laden'));
+    expect(within(section).queryByText('Nicht geladen.')).toBeNull();
+    expect(sent('POST', '/api/v1/work-items/query').map((body) => (body as { cursor?: string }).cursor)).toEqual([undefined, undefined]);
   });
 
   it('shows no children section on a task', async () => {
@@ -1082,6 +1201,93 @@ describe('Relations', () => {
     expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Startseite umbauenWEB-48', 'Impressum aktualisierenWEB-50']);
   });
 
+  it('offers no hit of an earlier query while the search answers', async () => {
+    const user = userEvent.setup();
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    // the search for the new text waits until the test lets it answer
+    const original = globalThis.fetch;
+    let release = () => {};
+    let held = false;
+    globalThis.fetch = async (input, init) => {
+      if (new URL(String(input), 'https://werkbuch.test').searchParams.get('q') === 'impressum') {
+        held = true;
+        await new Promise<void>((resolve) => (release = resolve));
+      }
+      return original(input, init);
+    };
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    await user.keyboard('startseite');
+    expect((await screen.findByRole('option', { name: /Startseite umbauen/ })).getAttribute('aria-disabled')).not.toBe('true');
+
+    await user.keyboard('{Backspace>10/}impressum');
+    // the hits of "startseite" stay while the new text is asked, but none of them can be chosen
+    const earlier = screen.getByRole('option', { name: /Startseite umbauen/ });
+    expect(earlier.getAttribute('aria-disabled')).toBe('true');
+    await waitFor(() => expect(held).toBe(true));
+    expect(screen.getByRole('option', { name: /Startseite umbauen/ }).getAttribute('aria-disabled')).toBe('true');
+    // in the hint under the field and in the live region
+    expect(within(dialog).getAllByText('Sucht …')).toHaveLength(2);
+    await user.keyboard('{Enter}');
+    expect(within(dialog).getByRole('combobox', { name: 'Item: keins gewählt' })).toBeTruthy();
+
+    await act(async () => release());
+    const fresh = await screen.findByRole('option', { name: /Impressum aktualisieren/ });
+    expect(fresh.getAttribute('aria-disabled')).not.toBe('true');
+    expect(screen.queryByRole('option', { name: /Startseite umbauen/ })).toBeNull();
+    expect(within(dialog).queryByText('Sucht …')).toBeNull();
+    await user.keyboard('{Enter}');
+    expect(within(dialog).getByRole('combobox', { name: 'Item: WEB-50 Impressum aktualisieren' })).toBeTruthy();
+  });
+
+  it('takes the hits of a text it searched before at once, without the pause (CI-sections)', async () => {
+    const user = userEvent.setup();
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    await user.keyboard('startseite');
+    expect((await screen.findByRole('option', { name: /Startseite umbauen/ })).getAttribute('aria-disabled')).not.toBe('true');
+    await user.keyboard('{Backspace}');
+    // "startseit" is asked after the pause and answered
+    await waitFor(() => expect(api!.calls.some((call) => call.url.includes('q=startseit&'))).toBe(true));
+    await waitFor(() => expect(screen.getByRole('option', { name: /Startseite umbauen/ }).getAttribute('aria-disabled')).not.toBe('true'));
+    // the answer to "startseite" is in the cache: no pause of SEARCH_PAUSE_MS before its hits can be chosen
+    await user.keyboard('e');
+    expect(screen.getByRole('option', { name: /Startseite umbauen/ }).getAttribute('aria-disabled')).not.toBe('true');
+  });
+
+  it('says "Sucht …" in a polite live region while the hits are stale (20b-M4)', async () => {
+    const user = userEvent.setup();
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    const live = dialog.querySelector('[data-relation-status]');
+    expect(live?.getAttribute('aria-live')).toBe('polite');
+    expect(live?.textContent).toBe('');
+    // what describes the field (its trigger): said with it, so "Sucht …" is not in it while the region says it (B23-M4)
+    const field = within(dialog).getByRole('combobox', { name: /^Item:/, hidden: true });
+    const description = () =>
+      (field.getAttribute('aria-describedby') ?? '')
+        .split(' ')
+        .map((id) => (id ? document.getElementById(id)?.textContent : ''))
+        .join(' ');
+    await user.keyboard('impressum');
+    expect(live?.textContent).toBe('Sucht …');
+    expect(screen.getByText('Sucht …', { selector: ':not([data-relation-status])' })).toBeTruthy();
+    expect(description()).not.toContain('Sucht …');
+    await screen.findByRole('option', { name: /Impressum aktualisieren/ });
+    await waitFor(() => expect(live?.textContent).toBe(''));
+    expect(description()).toContain('Key, Titel oder Text tippen, Enter wählt.');
+  });
+
   it('asks nothing until something is typed and says what to type', async () => {
     const user = userEvent.setup();
     renderWith(<ItemPage itemKey="WEB-47" />);
@@ -1089,7 +1295,7 @@ describe('Relations', () => {
     press('r');
     const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
-    expect(await screen.findByText('Key oder Titel eingeben')).toBeTruthy();
+    expect(await screen.findByText('Key, Titel oder Text eingeben')).toBeTruthy();
     expect(screen.queryByRole('option')).toBeNull();
     await act(() => new Promise((resolve) => setTimeout(resolve, SEARCH_PAUSE_MS + 50)));
     const searches = () => api!.calls.filter((call) => call.url.startsWith('/api/v1/search'));
@@ -1099,7 +1305,7 @@ describe('Relations', () => {
     await user.keyboard('impressum');
     await screen.findByRole('option', { name: /Impressum aktualisieren/ });
     await user.keyboard('{Backspace>9/}');
-    expect(await screen.findByText('Key oder Titel eingeben')).toBeTruthy();
+    expect(await screen.findByText('Key, Titel oder Text eingeben')).toBeTruthy();
     expect(screen.queryByRole('option')).toBeNull();
     await act(() => new Promise((resolve) => setTimeout(resolve, SEARCH_PAUSE_MS + 50)));
     expect(screen.queryByRole('option')).toBeNull();
@@ -1191,11 +1397,46 @@ describe('Relations', () => {
     // inward: the chosen item becomes the source, so it has to be one the person may change
     await user.click(within(dialog).getByRole('combobox', { name: 'Item: keins gewählt' }));
     await waitFor(() => expect(document.activeElement).toBe(screen.getByPlaceholderText('Key, Titel oder Text suchen …')));
-    await user.keyboard('e');
-    const readOnly = await screen.findByRole('option', { name: /Mail-Limits/ });
+    // another text than before: the hits of "e" stay greyed out until the search for "i" answers, on a fast machine as on
+    // a slow one (with "e" again the lock depended on whether the pause for the emptied field had run out)
+    await user.keyboard('i');
+    // the lock of the earlier text ends when the field stops saying it searches; what stays disabled then is the rights
+    await waitFor(() => expect(within(dialog).queryByText('Sucht …')).toBeNull());
+    expect(within(dialog).getByText('Key, Titel oder Text tippen, Enter wählt.')).toBeTruthy();
+    expect(api!.calls.some((call) => call.url === '/api/v1/search?q=i&types=items&limit=20')).toBe(true);
+    const readOnly = screen.getByRole('option', { name: /Mail-Limits/ });
     expect(readOnly.getAttribute('aria-disabled')).toBe('true');
     expect(readOnly.textContent).toContain('Im Projekt OPS darfst du nur lesen');
-    expect(screen.getByRole('option', { name: /Startseite umbauen/ }).getAttribute('aria-disabled')).not.toBe('true');
+    const writable = screen.getByRole('option', { name: /Startseite umbauen/ });
+    expect(writable.getAttribute('aria-disabled')).not.toBe('true');
+    expect(writable.textContent).not.toContain('darfst du');
+  });
+
+  it('refuses a target after the kind turned to :in', async () => {
+    const user = userEvent.setup();
+    // OPS is a project the member only reads
+    projects = [project('WEB', 'member'), project('OPS', 'viewer')];
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      routes: { 'GET /api/v1/search': () => ({ body: { data: searchResults({ items: [web48, ops12] }) } }) },
+    });
+    await screen.findByRole('region', { name: 'Relationen' });
+    press('r');
+    const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
+    const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    await user.keyboard('e');
+    // outward: OPS-12 becomes the target, which it may be
+    await user.click(await screen.findByRole('option', { name: /Mail-Limits/ }));
+    const chosen = within(dialog).getByRole('combobox', { name: 'Item: OPS-12 Mail-Limits am Server erhöhen' });
+
+    // inward: OPS-12 would become the source, a change of an item the person only reads
+    await user.click(within(dialog).getByRole('combobox', { name: /^Art der Relation/ }));
+    await user.click(await screen.findByRole('option', { name: 'wird blockiert von' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Hinzufügen' }));
+    expect(await within(dialog).findByText(/^Im Projekt OPS darfst du nur lesen/)).toBeTruthy();
+    expect(chosen.getAttribute('aria-invalid')).toBe('true');
+    await waitFor(() => expect(document.activeElement).toBe(chosen));
+    expect(api!.calls.filter((call) => call.method === 'POST')).toEqual([]);
   });
 
   it('shows a duplicate at the field', async () => {
@@ -1273,11 +1514,11 @@ describe('Relations', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Relation hinzufügen' });
     const search = await screen.findByPlaceholderText('Key, Titel oder Text suchen …');
     await waitFor(() => expect(document.activeElement).toBe(search));
-    expect(within(dialog).getByText('Key oder Titel tippen, Enter wählt.')).toBeTruthy();
+    expect(within(dialog).getByText('Key, Titel oder Text tippen, Enter wählt.')).toBeTruthy();
     await user.keyboard('startseite');
     expect(await screen.findByText(`Die Auswahl konnte nicht geladen werden: ${unavailable}`)).toBeTruthy();
     // the hint under the field gives way to the error in the list
-    expect(within(dialog).queryByText('Key oder Titel tippen, Enter wählt.')).toBeNull();
+    expect(within(dialog).queryByText('Key, Titel oder Text tippen, Enter wählt.')).toBeNull();
     failing = false;
     await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
     expect(await screen.findByRole('option', { name: /Startseite umbauen/ })).toBeTruthy();
@@ -1344,5 +1585,152 @@ describe('Relations', () => {
       expect(lastToast()).toMatchObject({ title: 'Nicht möglich', description: 'Im Projekt WEB darfst du nur lesen. Items ändern dürfen Member und Admins.', tone: 'error' });
     });
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+/* --------------------------------------------------------------------- wiki pages */
+
+describe('WikiPages', () => {
+  const zeitplan = pageSummary(makePage({ id: 'pg_zeitplan', title: 'Zeitplan', emoji: '🗓' }));
+  const handbuch = pageSummary(makePage({ id: 'pg_handbuch', title: 'Handbuch', emoji: null }));
+  const pagesOf = (data: ReturnType<typeof pageSummary>[]): Record<string, MockRoute> => ({
+    'GET /api/v1/work-items/wi_web_47/pages': () => ({ body: list(data) }),
+  });
+
+  it('lists the wiki pages that reference the item between relations and files', async () => {
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      routes: {
+        ...pagesOf([zeitplan, handbuch]),
+        'GET /api/v1/work-items/wi_web_47': () => ({ body: { ...detail(web47).body, data: { ...detail(web47).body.data, attachments: [makeAttachment({ id: 'att_f', kind: 'file', inline: false })] } } }),
+      },
+    });
+    const section = await screen.findByRole('region', { name: 'Wiki-Seiten' });
+    await screen.findByRole('region', { name: 'Dateien' });
+
+    expect(within(section).getByRole('list', { name: 'Wiki-Seiten, die dieses Item nennen' })).toBeTruthy();
+    expect(within(section).getAllByRole('listitem').map((row) => row.textContent)).toEqual(['🗓ZeitplanWiki WEB', 'HandbuchWiki WEB']);
+    expect(within(section).getByText('2')).toBeTruthy();
+    // the sections come in the order of the body: after the relations, before the files
+    const order = [...document.querySelectorAll('[data-item-detail] section')].map((node) => node.querySelector('h2')?.textContent);
+    expect(order.indexOf('Wiki-Seiten')).toBeGreaterThan(order.indexOf('Relationen'));
+    expect(order.indexOf('Wiki-Seiten')).toBeLessThan(order.indexOf('Dateien'));
+  });
+
+  /** Holds the answer to the wiki pages of WEB-47 back until `release()`; installed after `renderWith`, over its fake API. */
+  function holdPages() {
+    const original = globalThis.fetch;
+    let release = () => {};
+    let asked = false;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    globalThis.fetch = async (input, init) => {
+      if (String(input).includes('/work-items/wi_web_47/pages')) {
+        asked = true;
+        await gate;
+      }
+      return original(input, init);
+    };
+    return { asked: () => asked, release: () => act(async () => release()), restore: () => (globalThis.fetch = original) };
+  }
+
+  it('shows no section while the pages load, and the section once they are there', async () => {
+    renderWith(<ItemPage itemKey="WEB-47" />, { routes: pagesOf([zeitplan]) });
+    const held = holdPages();
+    try {
+      await screen.findByRole('region', { name: 'Relationen' });
+      await waitFor(() => expect(held.asked()).toBe(true));
+      expect(screen.queryByRole('region', { name: 'Wiki-Seiten' })).toBeNull();
+
+      await held.release();
+      expect(await screen.findByRole('region', { name: 'Wiki-Seiten' })).toBeTruthy();
+    } finally {
+      held.restore();
+    }
+  });
+
+  it('shows no section without pages, once the answer is there', async () => {
+    const client = newClient();
+    renderWith(<ItemPage itemKey="WEB-47" />, { client, routes: pagesOf([]) });
+    await screen.findByRole('region', { name: 'Relationen' });
+    await waitFor(() => expect(client.getQueryState(qk.pages.item('wi_web_47'))?.status).toBe('success'));
+
+    expect(client.getQueryData<{ items: unknown[] }>(qk.pages.item('wi_web_47'))?.items).toEqual([]);
+    expect(screen.queryByRole('region', { name: 'Wiki-Seiten' })).toBeNull();
+  });
+
+  it('links each page to its wiki with the identifier', async () => {
+    renderWith(<ItemPage itemKey="WEB-47" />, { routes: pagesOf([zeitplan]) });
+    const link = await screen.findByRole('link', { name: 'Zeitplan, Wiki WEB' });
+
+    expect(link.getAttribute('href')).toBe('/projects/WEB/wiki/pg_zeitplan');
+  });
+
+  it('says it when the pages cannot be read, and tries again', async () => {
+    let fail = true;
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      routes: { 'GET /api/v1/work-items/wi_web_47/pages': () => (fail ? problem(500, 'server_error') : { body: list([zeitplan]) }) },
+    });
+    const section = await screen.findByRole('region', { name: 'Wiki-Seiten' });
+    expect(within(section).getByText('Wiki-Seiten nicht geladen.')).toBeTruthy();
+
+    fail = false;
+    await userEvent.click(within(section).getByRole('button', { name: 'Erneut versuchen' }));
+
+    expect(await within(section).findByRole('link', { name: 'Zeitplan, Wiki WEB' })).toBeTruthy();
+    expect(within(section).queryByText('Wiki-Seiten nicht geladen.')).toBeNull();
+  });
+
+  it('keeps the list when a reload fails', async () => {
+    let fail = false;
+    const client = newClient();
+    renderWith(<ItemPage itemKey="WEB-47" />, {
+      client,
+      routes: { 'GET /api/v1/work-items/wi_web_47/pages': () => (fail ? problem(500, 'server_error') : { body: list([zeitplan]) }) },
+    });
+    await screen.findByRole('link', { name: 'Zeitplan, Wiki WEB' });
+
+    fail = true;
+    await act(() => client.invalidateQueries({ queryKey: qk.pages.all }));
+
+    expect(screen.getByRole('link', { name: 'Zeitplan, Wiki WEB' })).toBeTruthy();
+    expect(screen.queryByText('Wiki-Seiten nicht geladen.')).toBeNull();
+  });
+
+  it('is part of the preview too', async () => {
+    renderWith(<ItemPeek itemId="WEB-47" panel={{ current: null }} />, { routes: pagesOf([zeitplan]) });
+
+    expect(await screen.findByRole('link', { name: 'Zeitplan, Wiki WEB' })).toBeTruthy();
+  });
+
+  describe('when a live update takes a page away', () => {
+    let shown = [zeitplan, handbuch];
+    const routes = (): Record<string, MockRoute> => ({ 'GET /api/v1/work-items/wi_web_47/pages': () => ({ body: list(shown) }) });
+
+    it('moves the focus to the neighbouring row', async () => {
+      const client = newClient();
+      shown = [zeitplan, handbuch];
+      renderWith(<ItemPage itemKey="WEB-47" />, { client, routes: routes() });
+      const link = await screen.findByRole('link', { name: 'Zeitplan, Wiki WEB' });
+      act(() => link.focus());
+
+      shown = [handbuch];
+      await act(() => client.invalidateQueries({ queryKey: qk.pages.all }));
+
+      const next = await screen.findByRole('link', { name: 'Handbuch, Wiki WEB' });
+      await waitFor(() => expect(document.activeElement).toBe(next));
+    });
+
+    it('moves the focus to the title when the last row goes and the section with it', async () => {
+      const client = newClient();
+      shown = [zeitplan];
+      renderWith(<ItemPage itemKey="WEB-47" />, { client, routes: routes() });
+      const link = await screen.findByRole('link', { name: 'Zeitplan, Wiki WEB' });
+      act(() => link.focus());
+
+      shown = [];
+      await act(() => client.invalidateQueries({ queryKey: qk.pages.all }));
+
+      await waitFor(() => expect(screen.queryByRole('region', { name: 'Wiki-Seiten' })).toBeNull());
+      await waitFor(() => expect(document.activeElement).toBe(document.querySelector('[data-item-detail] [data-item-title]')));
+    });
   });
 });

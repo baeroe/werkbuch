@@ -103,6 +103,13 @@ const toastTitles = () => currentToasts().map((entry) => entry.title);
 const toastNamed = (title: string) => currentToasts().find((entry) => entry.title === title)!;
 const lastCall = (method: string, path: string) => api!.calls.filter((call) => call.method === method && call.url === path).at(-1);
 const calls = (method: string, path: string) => api!.calls.filter((call) => call.method === method && call.url === path);
+/** The text an element points at with `aria-describedby`. */
+const described = (element: Element) =>
+  (element.getAttribute('aria-describedby') ?? '')
+    .split(' ')
+    .map((id) => document.getElementById(id)?.textContent ?? '')
+    .join(' ');
+const READ_ONLY_REASON = 'Projekteinstellungen ändern dürfen nur Admins des Projekts WEB.';
 
 afterEach(() => {
   api?.restore();
@@ -202,6 +209,28 @@ describe('ProjectSettings', () => {
     expect((await screen.findByRole('textbox', { name: 'Name' })).hasAttribute('readonly')).toBe(true);
     expect(screen.queryByRole('button', { name: /Speichern/ })).toBeNull();
     expect(screen.queryByText('Gefahrenzone')).toBeNull();
+  });
+
+  it('shows the lead as text to a reader', async () => {
+    signedIn = lene;
+    renderSettings('general', {}, { project: { ...web, my_role: 'member' } });
+
+    // a value to read, not a field to fill in: focusable, the value in its name, the reason and the hint as its description
+    const lead = await screen.findByRole('button', { name: 'Lead: Ida Brenner' });
+    expect(lead.getAttribute('aria-disabled')).toBe('true');
+    expect(lead).toHaveProperty('disabled', false);
+    expect(lead.tabIndex).toBe(0);
+    expect(described(lead)).toContain(READ_ONLY_REASON);
+    expect(described(lead)).toContain('Der Lead bekommt alle Benachrichtigungen des Projekts');
+    const visibility = screen.getByRole('button', { name: 'Sichtbarkeit: Öffentlich' });
+    expect(visibility.getAttribute('aria-disabled')).toBe('true');
+    expect(described(visibility)).toContain('Alle Personen der Organisation');
+    // the picture as words: there is none, so the badge shows the first letter
+    expect(screen.getByRole('group', { name: 'Bild' }).textContent).toContain('Kein Bild');
+    expect(screen.queryByRole('combobox', { name: /Lead/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Bild wählen/ })).toBeNull();
+    // nothing on the screen is greyed out
+    expect(document.body.querySelectorAll(':disabled')).toHaveLength(0);
   });
 
   it('says that an archived project is read-only, and where admins restore it', async () => {
@@ -473,9 +502,26 @@ describe('Members', () => {
     expect(await screen.findByText('Standard-Bot')).toBeTruthy();
   });
 
-  it('says when there are no members', async () => {
-    renderSettings('members', { 'GET /api/v1/projects/p_web/members': () => ({ body: list([]) }) });
+  it('names the next step for an empty member list', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderSettings('members', { 'GET /api/v1/projects/p_web/members': () => ({ body: list([]) }) });
+
     expect(await screen.findByText('Noch keine Mitglieder')).toBeTruthy();
+    // it only moves the focus to the form above: the one primary action is that form's own (19a-M2)
+    const toForm = screen.getByRole('button', { name: 'Person oder Bot hinzufügen' });
+    expect(toForm.className).not.toContain('bg-accent');
+    expect(toForm.className).toContain('border-line-strong');
+    await user.click(toForm);
+    expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Person oder Bot' }));
+    unmount();
+    api?.restore();
+
+    // somebody who only reads gets the sentence of who adds members, and nothing to press
+    signedIn = lene;
+    renderSettings('members', { 'GET /api/v1/projects/p_web/members': () => ({ body: list([]) }) }, { project: { ...web, my_role: 'member' } });
+    expect(await screen.findByText('Noch keine Mitglieder')).toBeTruthy();
+    expect(screen.getByText('Admins des Projekts und Org-Admins fügen Mitglieder hinzu.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Person oder Bot hinzufügen' })).toBeNull();
   });
 
   it('adds an active person or bot that is no member yet', async () => {
@@ -560,13 +606,19 @@ describe('Members', () => {
     await waitFor(() => expect(calls('DELETE', '/api/v1/projects/p_web/members/u_theo')).toHaveLength(1));
   });
 
-  it('lets somebody who does not manage the project only read the members', async () => {
+  it('reads the roles of members without a disabled control', async () => {
     signedIn = lene;
     renderSettings('members', {}, { project: { ...web, my_role: 'member' } });
 
-    expect(await screen.findByRole('combobox', { name: 'Rolle von Lene Vogt' })).toHaveProperty('disabled', true);
+    const role = await screen.findByRole('button', { name: 'Rolle von Lene Vogt: Member' });
+    expect(role.getAttribute('aria-disabled')).toBe('true');
+    expect(role.tabIndex).toBe(0);
+    expect(described(role)).toContain(READ_ONLY_REASON);
+    expect(screen.getByRole('button', { name: 'Rolle von Ida Brenner: Admin' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: /Rolle von/ })).toBeNull();
     expect(screen.queryByRole('form', { name: 'Mitglied hinzufügen' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Theo Okafor entfernen' })).toBeNull();
+    expect(document.body.querySelectorAll(':disabled')).toHaveLength(0);
   });
 
   it('says when the members could not be loaded', async () => {
@@ -654,13 +706,28 @@ describe('Workflow', () => {
     expect(screen.getByText('Mit interner Prüfung und Kundenfreigabe vor dem Abschluss.')).toBeTruthy();
   });
 
-  it('lets somebody who does not manage the project only read the workflow', async () => {
+  it('reads the workflow and the types without a disabled control', async () => {
     signedIn = lene;
-    renderSettings('workflow', {}, { project: { ...web, my_role: 'member' } });
+    const { unmount } = renderSettings('workflow', {}, { project: { ...web, my_role: 'member' } });
 
     const open = await screen.findByRole('button', { name: /Workflow wechseln …/ });
-    expect(document.getElementById(open.getAttribute('aria-describedby')!)!.textContent).toBe('Projekteinstellungen ändern dürfen nur Admins des Projekts WEB.');
-    expect(screen.getByRole('combobox', { name: /Neuer Workflow/ })).toHaveProperty('disabled', true);
+    expect(document.getElementById(open.getAttribute('aria-describedby')!)!.textContent).toBe(READ_ONLY_REASON);
+    // the workflows to choose from as words, not a list nobody may open
+    expect(screen.getByText('Zur Wahl stehen: Agentur-Freigabe.')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: /Neuer Workflow/ })).toBeNull();
+    expect(document.body.querySelectorAll(':disabled')).toHaveLength(0);
+    unmount();
+    api?.restore();
+
+    renderSettings('types', {}, { project: { ...web, my_role: 'member', enabled_type_ids: ['t_task', 't_bug'] } });
+    const rows = within(await screen.findByRole('list', { name: 'Typen der Organisation' })).getAllByRole('listitem');
+    const row = (name: string) => rows.find((entry) => entry.textContent!.startsWith(name))!;
+    expect(within(row('Task')).getByText('Standard')).toBeTruthy();
+    expect(within(row('Bug')).getByText('Verwendet')).toBeTruthy();
+    expect(within(row('Epic')).getByText('Nicht verwendet')).toBeTruthy();
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    expect(document.body.querySelectorAll(':disabled')).toHaveLength(0);
   });
 
   it('says when there is no other workflow', async () => {
@@ -1056,12 +1123,19 @@ describe('Types', () => {
     renderSettings('types', {}, { project: { ...web, enabled_type_ids: ['t_task', 't_legacy'] } });
 
     await screen.findByRole('list', { name: 'Typen der Organisation' });
-    expect(box('Task').hasAttribute('data-disabled')).toBe(true);
-    expect(screen.getByText('Mindestens ein Typ bleibt aktiv.')).toBeTruthy();
-    // the archived one may go; the active one stays
-    expect(box('Altlast').hasAttribute('data-disabled')).toBe(false);
-    await user.click(box('Bug'));
+    // blocked by its reason, not greyed out: it keeps its tab stop and says why
+    expect(box('Task').getAttribute('aria-disabled')).toBe('true');
     expect(box('Task').hasAttribute('data-disabled')).toBe(false);
+    expect(box('Task').tabIndex).toBe(0);
+    expect(described(box('Task'))).toBe('Mindestens ein Typ bleibt aktiv.');
+    await user.click(box('Task'));
+    expect(box('Task').getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByText('Nicht gespeicherte Änderungen')).toBeNull();
+    expect(screen.getByText('Mindestens ein Typ bleibt aktiv.', { selector: 'p' })).toBeTruthy();
+    // the archived one may go; the active one stays
+    expect(box('Altlast').getAttribute('aria-disabled')).toBeNull();
+    await user.click(box('Bug'));
+    expect(box('Task').getAttribute('aria-disabled')).toBeNull();
     expect(screen.queryByText('Mindestens ein Typ bleibt aktiv.')).toBeNull();
   });
 
@@ -1149,12 +1223,14 @@ describe('Types', () => {
 
   it('lets somebody who does not manage the project only read the types', async () => {
     signedIn = lene;
-    renderSettings('types', {}, { project: { ...web, my_role: 'member' } });
+    // one active type: for those who switch types this is the last one, and its rule would show
+    renderSettings('types', {}, { project: { ...web, my_role: 'member', enabled_type_ids: ['t_task'], default_type_id: 't_task' } });
 
     await screen.findByRole('list', { name: 'Typen der Organisation' });
-    expect(box('Epic').hasAttribute('data-disabled')).toBe(true);
-    expect(radio('Bug')).toHaveProperty('disabled', true);
+    expect(screen.getAllByText('Nicht verwendet')).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /Speichern/ })).toBeNull();
+    // the rule for the last type is the business of those who switch types
+    expect(screen.queryByText('Mindestens ein Typ bleibt aktiv.')).toBeNull();
   });
 
   it('keeps the draft when the types fail to load again in the background', async () => {

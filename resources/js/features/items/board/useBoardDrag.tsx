@@ -8,9 +8,10 @@
  *   sort puts it; in its own column of a board sorted by rank the cards make room under the pointer.
  * - Dropped on another column: `checkMove`, then the board's `move` (`applyMove`: a status as a transition, after the
  *   resolution where it closes, else the priority or the assignee). Dropped in its own column sorted by rank: the
- *   board's `reorder` (`rankForSlot` between the cards above and below, `PATCH rank`); a rank that would grow too long
- *   moves nothing (P23). A column sorted by something else keeps its order and says so once. A refused drop springs
- *   back and a toast says why.
+ *   board's `reorder` (`rankForSlot` between the cards above and below, `PATCH rank`); where a rank would grow too long
+ *   the board redistributes the ranks of the card's project first and tries once more (A448), the card waiting in its
+ *   new place. A column sorted by something else keeps its order and says so once. A refused drop springs back and a
+ *   toast says why.
  * - A dropped card keeps its new place (`placements`) until the move has landed: the optimistic change of the
  *   mutation stands in for it then, and a refusal of the server puts it back with the counts (`useItemMutation`).
  * - Escape cancels a drag and nothing else: dnd-kit's sensors cancel on the document's keydown, before the shortcuts
@@ -100,7 +101,7 @@ export interface BoardDragOptions {
   onPutBack(id: string, column: string): void;
   /** Sends a move the rules allowed to another column; settles once the move has landed or was refused. */
   move(item: ListedItem, check: Extract<MoveCheck, { ok: true }>, origin: BoardColumnData, target: BoardColumnData): Promise<unknown>;
-  /** Sends a new place in a column sorted by rank, or refuses it (no room) and returns null. */
+  /** Sends a new place in a column sorted by rank, or refuses it (cards not loaded below it) and returns null. */
   reorder(item: ListedItem, column: BoardColumnData, ids: string[], index: number): Promise<unknown> | null;
   refuse(item: ListedItem, reason: BoardReason): void;
   /** The hint that a sorted column keeps its order, once. */
@@ -351,5 +352,7 @@ export function useBoardDrag(served: BoardColumnData[], rules: BoardRules, optio
     lifted,
     context,
     dropAnimation,
+    /** Keeps a card at a place of a column until a call settles (a place sent by key or by "Try again"). */
+    hold,
   };
 }

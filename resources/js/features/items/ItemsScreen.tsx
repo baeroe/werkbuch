@@ -38,6 +38,7 @@ import { cx } from '@/components/ui/cx';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { toast } from '@/components/ui/toast';
 import { sameFilter, scopeConditions, type ItemsPreset } from '@/domain/viewState';
+import { copyName } from '@/features/views/viewForm';
 import { useSettle } from '@/hooks/mutation';
 import { useProject } from '@/hooks/projects';
 import { useProperties } from '@/hooks/properties';
@@ -60,12 +61,11 @@ import { ListAnnouncer } from './ListAnnouncer';
 import { ListHeader } from './ListHeader';
 import { FilterBar } from './filter/FilterBar';
 import { isComplete } from './filter/fieldOps';
-import { DelayedSkeleton, ListEmpty, ListError, ListSkeleton, ScreenSkeleton } from './ListStates';
+import { LayoutBoundary, ListEmpty, ListError, ListSkeleton, ScreenSkeleton } from './ListStates';
 import { MY_TABS } from './MyTabs';
 import { SaveAsDialog } from './save/SaveAsDialog';
 import { UnsavedBar } from './save/UnsavedBar';
 import { useListSave } from './save/useListSave';
-import { VIEW_NAME_MAX } from './save/ViewFields';
 import { BulkBar } from './selection/BulkBar';
 import { useListData } from './useListData';
 import { useListState } from './useListState';
@@ -110,12 +110,12 @@ function useFocusRescue(root: RefObject<HTMLElement | null>, layout: Display['la
     last.current = null;
     if (fromRow && !switched) return;
     // the rows of a layout render a frame later (they measure themselves): wait a few frames for the list's tab stop,
-    // and as long as a skeleton stands for it (a layout that comes as a chunk of its own, the board, is loading)
+    // and as long as the outline of a loading layout stands for it (a chunk of its own, the timeline before its epics)
     let attempts = 0;
     const rescue = () => {
       if (document.activeElement !== null && document.activeElement !== document.body) return;
       const target = root.current?.querySelector<HTMLElement>(FOCUS_TARGETS);
-      const loading = root.current?.querySelector('[data-skeleton]') != null;
+      const loading = root.current?.querySelector('[data-layout-skeleton]') != null;
       if (target) target.focus({ preventScroll: true });
       else if (attempts++ < 5 || (loading && attempts < RESCUE_FRAMES)) requestAnimationFrame(rescue);
       else root.current?.querySelector<HTMLElement>('[data-items-toolbar] button:not([disabled])')?.focus({ preventScroll: true });
@@ -148,20 +148,14 @@ function StickyToolbar({ children }: { children: ReactNode }) {
   );
 }
 
-/** The name of a copy, „:name (Kopie)“, within the 60 characters of a name (K26). */
-function copyName(name: string): string {
-  const room = VIEW_NAME_MAX - [...t('items.save.copy_name', { name: '' })].length;
-  return t('items.save.copy_name', { name: [...name].slice(0, room).join('').trimEnd() });
-}
-
 /* ------------------------------------------------------------------------- the list */
 
 function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: Project; view?: View }) {
   const me = useCurrentUser();
-  const { reason } = usePermissions();
+  const { reason, loading: rightsLoading, failed: rightsFailed } = usePermissions();
   const { base, state, setState, clearChanges, unsaved } = useListState({ preset, project, view });
   const scope = useMemo(() => scopeConditions(preset, project?.id), [preset, project?.id]);
-  const data = useListData(state, scope, { preset, project });
+  const data = useListData(state, scope);
 
   const title = view?.name ?? project?.name ?? t(MY_TABS.find((tab) => tab.preset === preset)!.title);
   useDocumentTitle(title);
@@ -225,17 +219,22 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
   /* ------------------------------------------------------------------------- saving */
 
   const settle = useSettle();
-  const properties = useProperties().data?.items ?? [];
+  const propertyList = useProperties();
+  // unknown while they load: a sort on a property is then neither unknown nor named (T17-M3); after a failure as before
+  const properties = propertyList.data?.items ?? (propertyList.isError ? [] : undefined);
   const users = useAllUsers();
   const saving = useListSave({ view, state, scope });
   const [savingAs, setSavingAs] = useState(false);
   const creatorName = users.data?.items.find((user) => user.id === view?.created_by)?.name ?? t('items.save.creator');
+  // while the rights load (or failed to), their reason says so: who may save it is known only with them (T17-M7)
+  const foreign = view && view.created_by !== me?.id ? view : null;
+  const foreignReason = (other: View): string | null => {
+    const manageReason = reason('view.manage_any');
+    if (manageReason === null) return null;
+    return rightsLoading || rightsFailed ? manageReason : `${t('problem.detail.view_creator_only', { name: creatorName, view: other.name })} ${t('items.save.copy_instead')}`;
+  };
   // a condition on a field that is gone blocks both: the server would refuse the filter
-  const saveReason =
-    saving.blocked ??
-    (view && view.created_by !== me?.id && reason('view.manage_any') !== null
-      ? `${t('problem.detail.view_creator_only', { name: creatorName, view: view.name })} ${t('items.save.copy_instead')}`
-      : null);
+  const saveReason = saving.blocked ?? (foreign ? foreignReason(foreign) : null);
   const saveAsReason = saving.blocked ?? reason('view.create');
   /** Back to what is saved: a view drops every change, a built-in list its filter (its display was no unsaved change). */
   const discard = () => {
@@ -270,12 +269,15 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
   const filterChanged = !sameFilter(base.filter, { version: 1, conditions: sent });
   const filtered = sent.length > 0;
   const Layout = layouts[state.display.layout];
+  // an empty list because of its filter offers the way back to all of it (ListEmpty, the timeline's own empty state)
+  const hidesItems = filtered && (filterChanged || preset === 'view');
+  const resetFilter = () => setState({ ...state, filter: filterChanged ? base.filter : { version: 1, conditions: [] } });
 
   let content: ReactNode;
   if (data.status === 'error') {
-    content = <ListError error={data.error} onRetry={data.retry} retrying={false} />;
+    content = <ListError error={data.error} onRetry={data.retry} retrying={data.retrying} />;
   } else if (data.status === 'pending') {
-    content = <DelayedSkeleton layout={state.display.layout} />;
+    content = <ListSkeleton layout={state.display.layout} />;
   } else if (data.total === 0 && data.items.length === 0 && state.display.layout !== 'timeline') {
     content = (
       <ListEmpty
@@ -284,7 +286,7 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
         view={view}
         filtered={filtered}
         filterChanged={filterChanged}
-        onResetFilter={() => setState({ ...state, filter: filterChanged ? base.filter : { version: 1, conditions: [] } })}
+        onResetFilter={resetFilter}
         createReason={createReason}
         onCreate={create}
       />
@@ -297,6 +299,10 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
       total: data.total,
       ...(project && { project }),
       ...(createDefaults && { createDefaults }),
+      filtered: hidesItems,
+      filterChanged,
+      ...(view && { view }),
+      onResetFilter: resetFilter,
       selection,
       onSelect: setSelection,
       onSelectAll: () => void selectAll(),
@@ -305,10 +311,13 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
       cursorId,
       onCursor,
     };
+    // a layout of its own chunk that did not load shows the error with "Erneut versuchen"; another layout starts afresh
     content = (
-      <Suspense fallback={<ListSkeleton layout={state.display.layout} />}>
-        <Layout {...props} />
-      </Suspense>
+      <LayoutBoundary key={state.display.layout}>
+        <Suspense fallback={<ListSkeleton layout={state.display.layout} loadingLayout />}>
+          <Layout {...props} />
+        </Suspense>
+      </LayoutBoundary>
     );
   }
 

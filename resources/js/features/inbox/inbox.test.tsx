@@ -11,11 +11,13 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { useSyncExternalStore, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import en from '../../../../lang/en.json';
 import type { LiveEvent } from '@/api/live';
 import { currentToasts, dismissToast, resetToasts } from '@/components/ui/toast';
 import { CommandPalette } from '@/features/palette/CommandPalette';
 import { useLiveSync } from '@/hooks/live';
 import { listCommands } from '@/lib/commands';
+import { initI18n } from '@/lib/i18n';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { canUndo, undoLatest } from '@/lib/undo';
 import { useUiStore } from '@/store/ui';
@@ -240,6 +242,16 @@ describe('the inbox', () => {
     await waitFor(() => expect(status().textContent).toBe('3 ungelesen'));
     // the list asks for the newest fifty
     expect(api.calls.some((call) => call.url === '/api/v1/notifications?per_page=50')).toBe(true);
+  });
+
+  it('quotes an excerpt in the quotation marks of the language', async () => {
+    initI18n({ locale: 'en', translations: en });
+    renderInbox();
+    await loaded();
+
+    const mention = screen.getByRole('link', { name: /Hero-Entwurf/ });
+    expect(mention.textContent).toContain('“Hero-Entwurf ist drin, die Teaser kommen heute Nachmittag.');
+    expect(mention.textContent).not.toContain('„');
   });
 
   it('says who did what, with an excerpt and how long ago', async () => {

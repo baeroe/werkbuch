@@ -14,6 +14,7 @@ use App\Actions\Views\DeleteView;
 use App\Actions\Webhooks\DeleteWebhook;
 use App\Actions\Workflows\DeleteWorkflow;
 use App\Actions\WorkItemTypes\DeleteWorkItemType;
+use App\Domain\Automations\AutomationKey;
 use App\Domain\Notifications\NotificationKind;
 use App\Enums\AccountType;
 use App\Enums\Locale;
@@ -91,6 +92,13 @@ class E2eSeeder extends Seeder
         // night archives or cancels a demo item and no Monday adds one, also after something plans them anew (a zone
         // change, a restored project: RescheduleTemplates, W2); `updated_at` stays (the mark of a template's version)
         $demo = Project::query()->whereIn('identifier', ['WEB', 'APP', 'OPS'])->select('id');
+        // a row for every key first: a key without one reads as its default, and link_references starts on (A452), also
+        // on a database seeded before that key existed
+        foreach (Project::query()->whereIn('identifier', ['WEB', 'APP', 'OPS'])->pluck('id') as $projectId) {
+            foreach (AutomationKey::cases() as $key) {
+                Automation::query()->firstOrCreate(['project_id' => $projectId, 'key' => $key], ['enabled' => false, 'settings' => $key->defaults()]);
+            }
+        }
         Automation::query()->whereIn('project_id', $demo)->toBase()->update(['enabled' => false]);
         Template::query()->whereIn('project_id', $demo)->toBase()->update(['next_run_at' => null]);
         Template::query()->whereIn('project_id', $demo)->whereNotNull('schedule')->toBase()->update(['schedule->paused' => true]);

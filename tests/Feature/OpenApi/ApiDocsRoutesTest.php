@@ -1,6 +1,12 @@
 <?php
 
 use App\Providers\ApiServiceProvider;
+use Dedoc\Scramble\CacheableGenerator;
+use Dedoc\Scramble\Contracts\RouteProvider;
+use Dedoc\Scramble\Generator;
+use Dedoc\Scramble\GeneratorConfig;
+use Dedoc\Scramble\GeneratorResult;
+use Dedoc\Scramble\Support\OperationBuilder;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
@@ -21,6 +27,28 @@ it('serves the document without signing in', function () {
         ->and($response->json('servers'))->toBe([['url' => rtrim((string) config('app.url'), '/').'/api/v1']])
         ->and($response->json('paths'))->toHaveKey('/work-items/{item}')
         ->and($response->headers->getCookies())->toBe([]);
+});
+
+it('serves the cached document in production without generating it', function () {
+    // the rule of the provider: the store of the package stays in production (it is null elsewhere)
+    config(['scramble.cache.store' => 'array', 'cache.stores.array.serialize' => true]);
+    $this->app->detectEnvironment(fn () => 'production');
+    (new ApiServiceProvider($this->app))->register();
+    expect(config('scramble.cache.store'))->toBe('array');
+
+    $this->artisan('scramble:cache')->assertSuccessful();
+
+    // a generator that must not run: the second request reads the cache `scramble:cache` wrote
+    $this->app->forgetInstance(CacheableGenerator::class);
+    $this->app->bind(Generator::class, fn () => new class(app(OperationBuilder::class), app(RouteProvider::class)) extends Generator
+    {
+        public function generate(GeneratorConfig $config): GeneratorResult
+        {
+            throw new RuntimeException('the document was generated, not read from the cache');
+        }
+    });
+
+    $this->getJson('/api/openapi.json')->assertOk()->assertJsonPath('info.title', 'werkbuch API')->assertJsonStructure(['paths' => ['/work-items/{item}']]);
 });
 
 it('serves the docs page without signing in', function () {
@@ -52,6 +80,17 @@ it('sends the CSP with the docs page', function () {
         "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
         ."connect-src 'self'; font-src 'self'; frame-ancestors 'none'",
     );
+});
+
+it('sends the CSP with the docs page asked for with a query', function () {
+    $this->get('/api/docs?foo=1')->assertOk()
+        ->assertHeader('Content-Security-Policy', ApiServiceProvider::DOCS_CSP)
+        ->assertHeader('X-Content-Type-Options', 'nosniff');
+});
+
+it('keeps eval out of the script of the docs page', function () {
+    // script-src 'self' without 'unsafe-eval': an eval in the own script would fail in the browser
+    expect(file_get_contents(public_path('api-docs.js')))->toBeString()->toContain('X-XSRF-TOKEN')->not->toContain('eval');
 });
 
 it('keeps the checked in Stoplight Elements as they came from npm', function () {

@@ -21,6 +21,7 @@ use App\Models\User;
 use App\Support\Actor;
 use App\Support\MailSetup;
 use App\Support\NotificationFacts;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -33,11 +34,19 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * claim of the outbox. A row with mail on joins the open mail collection of its person and item (phase plan 8 "Mail",
  * A273; of its template for a failed run, A348), which the first one opens; SendNotificationMail sends it once it is due. Runs in the claim transaction of
  * NotificationConsumer; work of a job without an event of its own, like PurgeProject. After the commit, every person
- * with a new row in the inbox hears `notifications.changed` on their live channel (NotificationsChanged).
+ * with a new row in the inbox hears `notifications.changed` on their live channel (NotificationsChanged). Every statement
+ * takes at most BLOCK rows or IDs: an event with thousands of watchers stays below the 65 535 placeholders MariaDB takes
+ * in one statement, with a fixed number of queries per block.
  */
 final class NotifyRecipients
 {
     use AsAction;
+
+    /**
+     * Rows or IDs per statement, here and in SendDueReminders: a notification binds 13 values, a mail collection 9, so
+     * 1 000 rows stay far below the 65 535 placeholders MariaDB takes in one statement.
+     */
+    public const BLOCK = 1000;
 
     /**
      * @return int how many notifications it wrote
@@ -104,7 +113,12 @@ final class NotifyRecipients
         $inboxes = array_column(array_filter($rows, fn (array $row) => $row['inbox']), 'user_id');
         NotificationsChanged::dispatchFor(array_values(array_intersect($inboxes, $fresh)), null);
 
-        return Notification::query()->insertOrIgnore($rows);
+        $written = 0;
+        foreach (array_chunk($rows, self::BLOCK) as $block) {
+            $written += Notification::query()->insertOrIgnore($block);
+        }
+
+        return $written;
     }
 
     /**
@@ -130,17 +144,18 @@ final class NotifyRecipients
      */
     private function unwritten(Event $event, array $ids): array
     {
-        if ($ids === []) {
-            return [];
+        $written = [];
+        foreach (array_chunk($ids, self::BLOCK) as $block) {
+            array_push($written, ...Notification::query()->where('dedupe_key', "event:{$event->id}")->whereIn('user_id', $block)->pluck('user_id')->all());
         }
-        $written = Notification::query()->where('dedupe_key', "event:{$event->id}")->whereIn('user_id', $ids)->pluck('user_id')->all();
 
         return array_values(array_diff($ids, $written));
     }
 
     /**
-     * The open mail collection of each person for the scope, by person, locked until the claim commits (K7): one insert
-     * for all that are missing, which the unique `open_key` decides against a second consumer, then one locking read.
+     * The open mail collection of each person for the scope, by person, locked until the claim commits (K7): per BLOCK
+     * people one insert for all that are missing, which the unique `open_key` decides against a second consumer, then
+     * one locking read; the people go in the order of their IDs, so two callers lock the same keys in the same order.
      * The insert of a key whose collection SendNotificationMail is sending waits for the send and then opens a new one;
      * should a collection close between the insert and the read all the same, the read does not find it and a second
      * round opens a new one: no line ever joins a mail that went out. A collection that is due but not sent yet stays
@@ -153,23 +168,26 @@ final class NotifyRecipients
     public static function collect(array $ids, string $scope): array
     {
         $due = now()->addMinutes((int) config('werkbuch.notification_mail_delay'));
+        sort($ids);
         $open = [];
         for ($round = 0; $round < 2 && count($open) < count($ids); $round++) {
-            $new = [];
-            foreach (array_diff($ids, array_keys($open)) as $id) {
-                $new["{$id}:{$scope}"] = [
-                    'id' => (new NotificationMail)->newUniqueId(), 'user_id' => $id, 'scope' => $scope, 'open_key' => "{$id}:{$scope}",
-                    // its job tries first at `due_at`: the sweeper counts its pause from there (T7-M2)
-                    'due_at' => $due, 'dispatched_at' => $due, 'created_at' => now(), 'updated_at' => now(),
-                ];
-            }
-            NotificationMail::query()->insertOrIgnore(array_values($new));
+            foreach (array_chunk(array_diff($ids, array_keys($open)), self::BLOCK) as $block) {
+                $new = [];
+                foreach ($block as $id) {
+                    $new["{$id}:{$scope}"] = [
+                        'id' => (new NotificationMail)->newUniqueId(), 'user_id' => $id, 'scope' => $scope, 'open_key' => "{$id}:{$scope}",
+                        // its job tries first at `due_at`: the sweeper counts its pause from there (T7-M2)
+                        'due_at' => $due, 'dispatched_at' => $due, 'created_at' => now(), 'updated_at' => now(),
+                    ];
+                }
+                NotificationMail::query()->insertOrIgnore(array_values($new));
 
-            $found = NotificationMail::query()->whereIn('open_key', array_keys($new))->whereNull('sent_at')->lockForUpdate()->get(['id', 'user_id', 'open_key']);
-            foreach ($found as $collection) {
-                $open[$collection->user_id] = $collection->id;
-                if ($collection->id === $new[(string) $collection->open_key]['id']) {
-                    SendNotificationMailJob::dispatch($collection->id)->delay($due)->afterCommit();
+                $found = NotificationMail::query()->whereIn('open_key', array_keys($new))->whereNull('sent_at')->lockForUpdate()->get(['id', 'user_id', 'open_key']);
+                foreach ($found as $collection) {
+                    $open[$collection->user_id] = $collection->id;
+                    if ($collection->id === $new[(string) $collection->open_key]['id']) {
+                        SendNotificationMailJob::dispatch($collection->id)->delay($due)->afterCommit();
+                    }
                 }
             }
         }
@@ -178,9 +196,9 @@ final class NotifyRecipients
     }
 
     /**
-     * The candidates who are active people and see the project now (without a project: active org admins), by ID, with a fixed number of queries however many
-     * there are (Visibility::seeing); the role index is read afresh (A35), a change of access earlier in the same
-     * process counts.
+     * The candidates who are active people and see the project now (without a project: active org admins), by ID, with
+     * one query per BLOCK candidates and a fixed number besides (Visibility::seeing); the role index is read afresh
+     * (A35), a change of access earlier in the same process counts.
      *
      * @param  list<string>  $ids
      * @return Collection<string, User>
@@ -188,7 +206,10 @@ final class NotifyRecipients
     private function reachable(?string $projectId, array $ids): Collection
     {
         Visibility::forget();
-        $people = User::query()->whereKey($ids)->where('type', AccountType::Person)->get();
+        $people = new EloquentCollection;
+        foreach (array_chunk($ids, self::BLOCK) as $block) {
+            $people = $people->concat(User::query()->whereKey($block)->where('type', AccountType::Person)->get());
+        }
         if ($projectId === null) {
             // no project (`webhook_disabled`, K12): the rule of Notification::visibleTo, active org admins
             return $people->filter(fn (User $person) => ! $person->isDisabled() && Visibility::orgRole($person) === OrgRole::Admin)->keyBy('id');

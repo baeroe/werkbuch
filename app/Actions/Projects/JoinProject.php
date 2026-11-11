@@ -12,7 +12,8 @@ use App\Exceptions\Problem;
 use App\Models\Project;
 use App\Models\ProjectMember;
 use App\Support\Actor;
-use App\Support\MemberInput;
+use App\Support\ProjectLock;
+use App\Support\ProjectMembership;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -35,9 +36,9 @@ final class JoinProject
         Authorize::check($actor, 'join', $project);
 
         $member = DB::transaction(function () use ($actor, $project): ProjectMember {
-            $project = MemberInput::lock($project);
+            $project = ProjectLock::lock($project);
 
-            if (MemberInput::isMember($project, $actor->user)) {
+            if (ProjectMembership::isMember($project, $actor->user)) {
                 throw Problem::conflict('already_member', detail: __('problem.detail.already_member', ['identifier' => $project->identifier]));
             }
 
@@ -46,7 +47,7 @@ final class JoinProject
                 'member' => ['old' => null, 'new' => ['user_id' => $actor->user->id, 'role' => ProjectRole::Member->value]],
             ]);
 
-            return MemberInput::membership($project, $actor->user);
+            return ProjectMembership::membership($project, $actor->user);
         });
 
         // the new membership counts from the next check of this request on (P33)

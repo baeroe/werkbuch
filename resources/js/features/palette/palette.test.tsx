@@ -8,9 +8,10 @@ import { router } from '@inertiajs/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { useCommand } from '@/lib/commands';
+import { registerShortcut } from '@/lib/shortcuts/registry';
 import { PaletteHost } from '@/shell/PaletteHost';
 import { useShellBindings } from '@/shell/bindings';
 import { useUiStore } from '@/store/ui';
@@ -252,6 +253,31 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
+
+  it('gives the keys back to the page the moment it closes, while it still animates out (⌘Z after a command)', async () => {
+    const run = vi.fn();
+    onTestFinished(registerShortcut({ id: 'test.list.next', keys: 'j', scope: 'list', label: 'shortcuts.shell.help', group: 'shortcuts.group.general', run }));
+    const press = () => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true, cancelable: true }));
+    renderShell();
+    await openPalette();
+    act(() => (document.activeElement as HTMLElement).blur());
+    press();
+    expect(run).not.toHaveBeenCalled();
+
+    // jsdom runs no animations: one that ends only when the test says so keeps the palette in the DOM
+    let finish!: () => void;
+    const fading = { pending: false, playState: 'running', effect: { getTiming: () => ({ duration: 160, iterations: 1 }) }, finished: new Promise<void>((resolve) => (finish = resolve)) };
+    Element.prototype.getAnimations = () => [fading as unknown as Animation];
+    onTestFinished(() => void delete (Element.prototype as Partial<Element>).getAnimations);
+    act(() => useUiStore.getState().setPaletteOpen(false));
+    expect(screen.getByRole('dialog', { name: 'Befehlspalette', hidden: true }).isConnected).toBe(true);
+    press();
+    expect(run).toHaveBeenCalledTimes(1);
+
+    fading.playState = 'finished';
+    await act(async () => finish());
+    await waitFor(() => expect(screen.queryByRole('dialog', { hidden: true })).toBeNull());
+  });
 });
 
 describe('search', () => {
@@ -381,8 +407,8 @@ describe('search', () => {
     await openPalette();
     await user.keyboard('kontakt');
     expect(live()).toBe('Suche läuft …');
-    // nothing to show yet: a skeleton says the same
-    expect(within(screen.getByRole('dialog')).getAllByRole('status').map((status) => status.textContent)).toEqual(['Suche läuft …', 'Suche läuft …']);
+    // nothing to show yet: a skeleton says the same, after a moment
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getAllByRole('status').map((status) => status.textContent)).toEqual(['Suche läuft …', 'Suche läuft …']));
 
     await waitFor(() => expect(search.asked('kontakt')).toBe(true));
     search.release('kontakt');

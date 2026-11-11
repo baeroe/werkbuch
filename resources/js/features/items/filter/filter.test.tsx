@@ -10,7 +10,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '@/components/ui/Tooltip';
-import { mockApi, type MockApi, type MockRoute } from '@/test/api';
+import { mockApi, queried, type MockApi, type MockRoute } from '@/test/api';
 import { agency, labels, lene, list, makeWorkItem, mara, organization, person, project, properties, queryItems, standard, theo, types, web30, web47 } from '@/test/fixtures';
 import type { Condition, Filter, Project, Property, User } from '@/types';
 import { FilterBar } from './FilterBar';
@@ -123,6 +123,12 @@ function visibleText(element: Element): string {
   return copy.textContent ?? '';
 }
 
+/** Tab until `reached` holds, a few steps at most (a popover is short). */
+async function tabUntil(user: ReturnType<typeof userEvent.setup>, reached: () => boolean) {
+  for (let step = 0; step < 12 && !reached(); step++) await user.tab();
+  expect(reached()).toBe(true);
+}
+
 const chip = (name: RegExp) => screen.getByRole('group', { name });
 const findChip = (name: RegExp) => screen.findByRole('group', { name });
 
@@ -167,11 +173,12 @@ describe('the filter bar', () => {
   it('changes the operator and keeps the values that still fit', async () => {
     const user = userEvent.setup();
     const { last } = renderBar(conditions({ field: 'state', op: 'in', value: ['std_todo', 'std_progress'] }));
-    const state = await findChip(/Status ist eines von Todo, In Progress/);
+    // both workflows in view have a Todo and an In Progress: the chip names the workflow too (20b-M5)
+    const state = await findChip(/Status ist eines von Todo \(Standard\), In Progress \(Standard\)/);
     await user.click(within(state).getByRole('button', { name: 'Operator: ist eines von' }));
     await user.click(await screen.findByRole('menuitemradio', { name: 'ist nicht' }));
     expect(last()).toEqual([{ field: 'state', op: 'not_in', value: ['std_todo', 'std_progress'] }]);
-    expect(await findChip(/Status ist keines von Todo, In Progress/)).toBeTruthy();
+    expect(await findChip(/Status ist keines von Todo \(Standard\), In Progress \(Standard\)/)).toBeTruthy();
     // "ist leer" needs no value, and Status cannot be empty: not offered
     await user.click(within(chip(/Status/)).getByRole('button', { name: /Operator/ }));
     expect(screen.queryByRole('menuitemradio', { name: 'ist leer' })).toBeNull();
@@ -276,7 +283,7 @@ describe('the filter bar', () => {
 
   it('removes a new condition before it has a value, and Backspace in its field stays typing', async () => {
     const user = userEvent.setup();
-    const { changes, last } = renderBar(conditions({ field: 'blocked', op: 'is', value: true }));
+    const { changes } = renderBar(conditions({ field: 'blocked', op: 'is', value: true }));
     await addField(user, 'Notiz');
     const notes = await screen.findByRole('textbox', { name: 'Notiz enthält' });
     await waitFor(() => expect(document.activeElement).toBe(notes));
@@ -289,13 +296,14 @@ describe('the filter bar', () => {
     expect(chip(/Blockiert/).contains(document.activeElement)).toBe(true);
     expect(changes).toHaveLength(0);
 
-    // typed and then removed: what was typed applies as the field is left, then the chip goes
+    // typed and then removed: the × keeps nothing typed first, the chip just goes (T16-M4)
     await addField(user, 'Notiz');
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Notiz enthält' })));
     await user.keyboard('Rückruf');
     await user.click(within(chip(/Notiz/)).getByRole('button', { name: 'Filter „Notiz“ entfernen' }));
     expect(screen.queryByRole('group', { name: /Notiz/ })).toBeNull();
-    expect(last()).toEqual([{ field: 'blocked', op: 'is', value: true }]);
+    expect(changes).toHaveLength(0);
+    expect(chip(/^Filter: Blockiert ist ja$/)).toBeTruthy();
   });
 
   it('focuses the title search with / and filters by title on Enter', async () => {
@@ -384,6 +392,57 @@ describe('the filter bar', () => {
     expect((await screen.findAllByRole('option')).map(visibleText)).toEqual(standard.states.map((state) => state.name));
   });
 
+  /** `GET /references` for the epics of the fixtures: an id it does not know the reader does not see. */
+  const references: MockRoute = (_body, url) => ({
+    body: { data: { items: [web30, web47, appEpic].filter((item) => (url.searchParams.get('items') ?? '').split(',').includes(item.id)), pages: [] } },
+  });
+  const epicLists = () => api!.calls.filter((call) => call.url === '/api/v1/work-items/query' && queried(call.body).epic);
+
+  it('names a parent chip without loading the epics (T16-M1)', async () => {
+    const user = userEvent.setup();
+    renderBar(conditions({ field: 'parent', op: 'in', value: ['wi_web_30', 'wi_app_9'] }), { routes: { 'GET /api/v1/references': references } });
+    expect(await findChip(/^Filter: Eltern-Item ist eines von Relaunch Phase 1, App 2\.0$/)).toBeTruthy();
+    // the names came from the references of the two values, in one request; no list of every epic was read for them
+    expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/references')).map((call) => call.url)).toEqual(['/api/v1/references?items=wi_web_30%2Cwi_app_9']);
+    expect(epicLists()).toHaveLength(0);
+
+    // the list opens: now the epics load, and the chosen ones stay checked
+    await user.click(within(chip(/Eltern-Item/)).getByRole('combobox', { name: /^Eltern-Item:/ }));
+    await searchFocused('Eltern-Item suchen …');
+    expect(await screen.findByRole('option', { name: /Relaunch Phase 1/, selected: true })).toBeTruthy();
+    expect(epicLists()).toHaveLength(1);
+  });
+
+  it('names a parent the reader does not see hidden, without the epics', async () => {
+    renderBar(conditions({ field: 'parent', op: 'is', value: 'wi_secret' }), { routes: { 'GET /api/v1/references': references } });
+    expect(await findChip(/^Filter: Eltern-Item ist Verborgen$/)).toBeTruthy();
+    expect(api!.calls.some((call) => call.url.startsWith('/api/v1/references'))).toBe(true);
+    expect(epicLists()).toHaveLength(0);
+  });
+
+  it('says a parent could not be loaded when its reference failed, not that it is hidden (14b2-M1b)', async () => {
+    renderBar(conditions({ field: 'parent', op: 'is', value: 'wi_web_30' }), {
+      routes: { 'GET /api/v1/references': () => ({ status: 503, body: { reason: 'service_unavailable' } }) },
+    });
+    expect(await findChip(/^Filter: Eltern-Item ist Nicht geladen$/)).toBeTruthy();
+    expect(screen.queryByText('Verborgen')).toBeNull();
+  });
+
+  it('names a state by its workflow too when another workflow in view has one of the same name (20b-M5)', async () => {
+    // both Standard and Agentur-Freigabe have a "Done"; Kundenfreigabe is a name only the Agentur-Freigabe has
+    renderBar(conditions({ field: 'state', op: 'is', value: 'std_done' }, { field: 'state', op: 'is', value: 'app_done' }, { field: 'state', op: 'is', value: 'app_approval' }));
+    expect(await findChip(/^Filter: Status ist Done \(Standard\)$/)).toBeTruthy();
+    expect(await findChip(/^Filter: Status ist Done \(Agentur-Freigabe\)$/)).toBeTruthy();
+    expect(await findChip(/^Filter: Status ist Kundenfreigabe$/)).toBeTruthy();
+  });
+
+  it('names a state of a workflow out of view by its workflow when the project list has one of the same name (20b-M5)', async () => {
+    renderBar(conditions({ field: 'state', op: 'is', value: 'app_done' }, { field: 'state', op: 'is', value: 'std_done' }), { project: web });
+    expect(await findChip(/^Filter: Status ist Done \(Agentur-Freigabe\)$/)).toBeTruthy();
+    // the state of the list's own workflow keeps its plain name
+    expect(await findChip(/^Filter: Status ist Done$/)).toBeTruthy();
+  });
+
   it('offers the states of every workflow in view, named by workflow', async () => {
     const user = userEvent.setup();
     renderBar();
@@ -449,6 +508,91 @@ describe('the filter bar', () => {
     expect(last()).toEqual([{ field: 'project', op: 'is', value: 'p_web' }]);
   });
 
+  it('names a deactivated person and a state of another workflow by their names, not as hidden (T16-M2)', async () => {
+    // a project list of WEB offers only the states of its workflow; Kundenfreigabe is one of the Agentur-Freigabe
+    renderBar(conditions({ field: 'assignee', op: 'is', value: 'u_sven' }, { field: 'state', op: 'is', value: 'app_approval' }), { project: web });
+    expect(await findChip(/^Filter: Assignee ist Sven Roth \(deaktiviert\)$/)).toBeTruthy();
+    expect(await findChip(/^Filter: Status ist Kundenfreigabe$/)).toBeTruthy();
+  });
+
+  it('says a property chip could not be loaded and loads the properties again (T16-M5)', async () => {
+    const user = userEvent.setup();
+    let failing = true;
+    const { last } = renderBar(conditions({ field: 'property:customer', op: 'is', value: 'opt_moos' }, { field: 'blocked', op: 'is', value: true }), {
+      routes: { 'GET /api/v1/properties': () => (failing ? { status: 503, body: { reason: 'service_unavailable' } } : { body: list(catalog) }) },
+    });
+    const failed = await findChip(/^Filter: Property „customer“, nicht geladen$/);
+    expect(visibleText(failed)).toBe('customerNicht geladenErneut versuchen');
+    expect(screen.queryByText('Unbekanntes Feld')).toBeNull();
+    failing = false;
+    await user.click(within(failed).getByRole('button', { name: 'Erneut versuchen: customer' }));
+    const loaded = await findChip(/^Filter: Kunde ist Gärtnerei Moos$/);
+    // the pressed button went with the chip: the focus goes on to the new chip, never to the page (20b-M2)
+    await waitFor(() => expect(document.activeElement).toBe(within(loaded).getAllByRole('button')[0]));
+    // the condition itself never changed
+    expect(last()).toBeUndefined();
+  });
+
+  it('gives the focus to the chip of a field that turns out to be gone after loading again (20b-M2)', async () => {
+    const user = userEvent.setup();
+    let failing = true;
+    renderBar(conditions({ field: 'property:customer', op: 'is', value: 'opt_moos' }), {
+      routes: {
+        'GET /api/v1/properties': () =>
+          failing ? { status: 503, body: { reason: 'service_unavailable' } } : { body: list(catalog.filter((property) => property.key !== 'customer')) },
+      },
+    });
+    const failed = await findChip(/^Filter: Property „customer“, nicht geladen$/);
+    failing = false;
+    await user.click(within(failed).getByRole('button', { name: 'Erneut versuchen: customer' }));
+    const unknown = await findChip(/^Filter: Unbekanntes Feld property:customer$/);
+    await waitFor(() => expect(document.activeElement).toBe(within(unknown).getByRole('button', { name: 'Filter „Unbekanntes Feld“ entfernen' })));
+  });
+
+  it('names the retry button of each chip that could not be loaded by its field (20b-M3)', async () => {
+    renderBar(conditions({ field: 'property:customer', op: 'is', value: 'opt_moos' }, { field: 'property:effort', op: 'gt', value: 2 }), {
+      routes: { 'GET /api/v1/properties': () => ({ status: 503, body: { reason: 'service_unavailable' } }) },
+    });
+    const customer = await findChip(/^Filter: Property „customer“, nicht geladen$/);
+    const effort = await findChip(/^Filter: Property „effort“, nicht geladen$/);
+    expect(within(customer).getByRole('button', { name: 'Erneut versuchen: customer' })).toBeTruthy();
+    expect(within(effort).getByRole('button', { name: 'Erneut versuchen: effort' })).toBeTruthy();
+  });
+
+  it('forgets a retry that failed again: the press that loads them gives the focus to its own chip (20b-M2)', async () => {
+    const user = userEvent.setup();
+    let failing = true;
+    let asked = 0;
+    renderBar(conditions({ field: 'property:customer', op: 'is', value: 'opt_moos' }, { field: 'property:effort', op: 'gt', value: 2 }), {
+      routes: {
+        'GET /api/v1/properties': () => {
+          asked += 1;
+          return failing ? { status: 503, body: { reason: 'service_unavailable' } } : { body: list(catalog) };
+        },
+      },
+    });
+    const customer = await findChip(/^Filter: Property „customer“, nicht geladen$/);
+    const before = asked;
+    const retry = within(customer).getByRole('button', { name: 'Erneut versuchen: customer' });
+    await user.click(retry);
+    await waitFor(() => expect(asked).toBeGreaterThan(before));
+    await waitFor(() => expect(retry.getAttribute('aria-busy')).toBeNull());
+    failing = false;
+    await user.click(within(chip(/^Filter: Property „effort“, nicht geladen$/)).getByRole('button', { name: 'Erneut versuchen: effort' }));
+    const effort = await findChip(/^Filter: Aufwand \(h\) /);
+    await waitFor(() => expect(document.activeElement).toBe(within(effort).getAllByRole('button')[0]));
+  });
+
+  it('removes a property chip that could not be loaded', async () => {
+    const user = userEvent.setup();
+    const { last } = renderBar(conditions({ field: 'property:customer', op: 'is', value: 'opt_moos' }, { field: 'blocked', op: 'is', value: true }), {
+      routes: { 'GET /api/v1/properties': () => ({ status: 503, body: { reason: 'service_unavailable' } }) },
+    });
+    const failed = await findChip(/^Filter: Property „customer“, nicht geladen$/);
+    await user.click(within(failed).getByRole('button', { name: 'Filter „customer“ entfernen' }));
+    expect(last()).toEqual([{ field: 'blocked', op: 'is', value: true }]);
+  });
+
   it('says the value of a choice is loading while its list loads, and offers to try again when it failed', async () => {
     const user = userEvent.setup();
     let failing = true;
@@ -502,6 +646,52 @@ describe('the filter bar', () => {
     await user.click(await screen.findByRole('option', { name: 'Tagen' }));
     await user.type(within(third).getByRole('textbox', { name: 'Anzahl' }), '{Enter}');
     expect(last()).toEqual([{ field: 'due_date', op: 'is', value: { relative: '+2d' } }]);
+  });
+
+  it('goes the date popover with the keyboard only: quick choice, distance and calendar', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T10:00:00.000Z'));
+    try {
+      const user = userEvent.setup();
+      const { last } = renderBar();
+      await addField(user, 'Due-Date');
+      const popover = await screen.findByRole('dialog', { name: 'Due-Date' });
+      // the quick choice first: the arrows go through it, Enter takes one
+      const today = within(within(popover).getByRole('group', { name: 'Schnellauswahl' })).getByRole('button', { name: 'Heute' });
+      await waitFor(() => expect(document.activeElement).toBe(today));
+      await user.keyboard('{ArrowRight}');
+      expect(document.activeElement?.textContent).toBe('Diese Woche');
+      await user.keyboard('{Enter}');
+      expect(last()).toEqual([{ field: 'due_date', op: 'is', value: 'this_week' }]);
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Due-Date' })).toBeNull());
+      const trigger = within(chip(/Due-Date ist diese Woche/)).getByRole('button', { name: 'Due-Date: diese Woche' });
+      await waitFor(() => expect(document.activeElement).toBe(trigger));
+
+      // the distance: Tab to the amount, Enter applies it
+      await user.keyboard('{Enter}');
+      const distance = await screen.findByRole('dialog', { name: 'Due-Date' });
+      const amount = within(distance).getByRole('textbox', { name: 'Anzahl' });
+      await waitFor(() => expect(distance.contains(document.activeElement)).toBe(true));
+      await tabUntil(user, () => document.activeElement === amount);
+      await user.keyboard('{Control>}a{/Control}3{Enter}');
+      expect(last()).toEqual([{ field: 'due_date', op: 'is', value: { relative: '+3d' } }]);
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Due-Date' })).toBeNull());
+
+      // the calendar: Tab to its day, the arrows move it, Enter picks
+      const relative = within(chip(/Due-Date/)).getByRole('button', { name: /^Due-Date: heute/ });
+      await waitFor(() => expect(document.activeElement).toBe(relative));
+      await user.keyboard('{Enter}');
+      const calendar = await screen.findByRole('dialog', { name: 'Due-Date' });
+      const grid = within(calendar).getByRole('grid');
+      await waitFor(() => expect(calendar.contains(document.activeElement)).toBe(true));
+      await tabUntil(user, () => grid.contains(document.activeElement));
+      expect(document.activeElement?.getAttribute('aria-label')).toMatch(/^Mittwoch, 28\. Oktober 2026/);
+      await user.keyboard('{ArrowRight}{ArrowDown}{Enter}');
+      expect(last()).toEqual([{ field: 'due_date', op: 'is', value: '2026-11-05' }]);
+      expect(await findChip(/^Filter: Due-Date ist 05\.11\.2026$/)).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('picks a day from the calendar, and two for between', async () => {

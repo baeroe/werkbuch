@@ -6,6 +6,7 @@
  */
 
 import { ChartGantt, List, SquareKanban, Table2, type LucideIcon } from 'lucide-react';
+import { VIEW_NAME_MAX } from '@/features/items/save/ViewFields';
 import { t, type TranslationKey } from '@/lib/i18n';
 import type { Display, Filter, GroupBy, ViewInput } from '@/types';
 
@@ -52,12 +53,9 @@ export function newView(name: string, icon: string, layout: Display['layout']): 
   };
 }
 
-/** The longest name a view may have (`ViewInput::NAME_MAX`), in characters. */
-const NAME_MAX = 60;
-
-/** "Roadmap (Kopie)"; a long name is cut before the suffix, so the copy keeps within the 60 characters (K26). */
+/** "Roadmap (Kopie)", the one rule of the overview and of "save as a new view"; a long name is cut before the suffix, so the copy keeps within the 60 characters (K26). */
 export function copyName(name: string): string {
-  const room = NAME_MAX - Array.from(t('views.copy_name', { name: '' })).length;
+  const room = VIEW_NAME_MAX - Array.from(t('views.copy_name', { name: '' })).length;
   return t('views.copy_name', { name: Array.from(name).slice(0, room).join('').trimEnd() });
 }
 

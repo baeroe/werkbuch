@@ -15,14 +15,16 @@ use App\Models\Workflow;
 use App\Models\WorkflowState;
 use App\Models\WorkflowTransition;
 use App\Models\WorkItemType;
+use Database\Seeders\Demo\Texts\DemoTexts;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 /**
- * The catalog of the clickdummy (src/api/seed/config.ts, src/domain/fixtures.ts): the German texts of the shipped
- * entries, the workflow „Agentur-Freigabe“, the properties, the type „Kundenwunsch“, the labels and the relation type
- * „testet“. Every entry is found by a stable key (workflow, type and label name, property key, `built_in` or name of a
- * relation type), so running it again changes nothing. It never moves the mark of the default workflow and never
+ * The catalog of the clickdummy (src/api/seed/config.ts, src/domain/fixtures.ts): the texts of the shipped entries in
+ * the language of the demo, the workflow „Agentur-Freigabe“, the properties, the type „Kundenwunsch“, the labels and
+ * the relation type „testet“ (DemoTexts, keyed `catalog.*` by the keys below; „Agency approval“, „Client request“ and
+ * „tests“ in English). Every entry is found by a stable key (workflow, type and label name in the language of the
+ * demo, property key, `built_in` or name of a relation type), so running it again changes nothing. It never moves the mark of the default workflow and never
  * creates „Standard“ (the migration does). It writes the rows directly, like the other demo seeders: the
  * demo data come without events. The shipped resolutions already are the ones of the clickdummy.
  */
@@ -41,45 +43,45 @@ class CatalogSeeder extends Seeder
 
     private function workflows(): void
     {
-        // the shipped workflow gets its German text, if it still has its name; it is never created here: the migration
-        // made it with its states, an empty one of that name would be no workflow at all
-        Workflow::query()->where('name', 'Standard')->first()?->update([
-            'description' => 'Der Standard-Workflow: Jeder Status ist von überall erreichbar.',
+        // the shipped workflow gets its text, if it still has its name; it is never created here: the migration made it
+        // with its states, an empty one of that name would be no workflow at all
+        Workflow::query()->where('name', DemoTexts::get('catalog.workflow.standard.name'))->first()?->update([
+            'description' => DemoTexts::get('catalog.workflow.standard.description'),
         ]);
 
         // never the default when it is made, and it keeps the mark if an admin gave it one: one default at all times
-        $agency = Workflow::query()->firstOrNew(['name' => 'Agentur-Freigabe'], ['is_default' => false]);
+        $agency = Workflow::query()->firstOrNew(['name' => DemoTexts::get('catalog.workflow.agency.name')], ['is_default' => false]);
         $agency->fill([
-            'description' => 'Mit interner Prüfung und Kundenfreigabe vor dem Abschluss.',
+            'description' => DemoTexts::get('catalog.workflow.agency.description'),
             'is_free' => false,
         ])->save();
 
-        /** @var array<string, WorkflowState> $states by name */
+        /** @var array<string, WorkflowState> $states by key */
         $states = [];
 
         foreach ([
-            ['Backlog', StateIcon::Dashed, StateCategory::Backlog],
-            ['Todo', StateIcon::Circle, StateCategory::Unstarted],
-            ['In Progress', StateIcon::Half, StateCategory::Started],
-            ['Review', StateIcon::ThreeQuarter, StateCategory::Started],
-            ['Kundenfreigabe', StateIcon::Pause, StateCategory::Started],
-            ['Done', StateIcon::Check, StateCategory::Completed],
-            ['Cancelled', StateIcon::Cross, StateCategory::Canceled],
-        ] as $position => [$name, $icon, $category]) {
-            $states[$name] = WorkflowState::query()->updateOrCreate(
-                ['workflow_id' => $agency->id, 'name' => $name],
+            ['backlog', StateIcon::Dashed, StateCategory::Backlog],
+            ['todo', StateIcon::Circle, StateCategory::Unstarted],
+            ['progress', StateIcon::Half, StateCategory::Started],
+            ['review', StateIcon::ThreeQuarter, StateCategory::Started],
+            ['approval', StateIcon::Pause, StateCategory::Started],
+            ['done', StateIcon::Check, StateCategory::Completed],
+            ['cancelled', StateIcon::Cross, StateCategory::Canceled],
+        ] as $position => [$key, $icon, $category]) {
+            $states[$key] = WorkflowState::query()->updateOrCreate(
+                ['workflow_id' => $agency->id, 'name' => DemoTexts::get("catalog.state.{$key}")],
                 ['icon' => $icon, 'category' => $category, 'position' => $position],
             );
         }
 
-        $agency->update(['initial_state_id' => $states['Backlog']->id]);
+        $agency->update(['initial_state_id' => $states['backlog']->id]);
 
         // only these moves are allowed; every open status can be cancelled, Done and Cancelled reopen
         foreach ([
-            ['Backlog', 'Todo'], ['Todo', 'In Progress'], ['In Progress', 'Review'], ['Review', 'In Progress'],
-            ['Review', 'Kundenfreigabe'], ['Kundenfreigabe', 'Done'], ['Kundenfreigabe', 'In Progress'],
-            ['Backlog', 'Cancelled'], ['Todo', 'Cancelled'], ['In Progress', 'Cancelled'], ['Review', 'Cancelled'], ['Kundenfreigabe', 'Cancelled'],
-            ['Done', 'Todo'], ['Cancelled', 'Backlog'],
+            ['backlog', 'todo'], ['todo', 'progress'], ['progress', 'review'], ['review', 'progress'],
+            ['review', 'approval'], ['approval', 'done'], ['approval', 'progress'],
+            ['backlog', 'cancelled'], ['todo', 'cancelled'], ['progress', 'cancelled'], ['review', 'cancelled'], ['approval', 'cancelled'],
+            ['done', 'todo'], ['cancelled', 'backlog'],
         ] as [$from, $to]) {
             WorkflowTransition::query()->firstOrCreate([
                 'workflow_id' => $agency->id,
@@ -97,34 +99,29 @@ class CatalogSeeder extends Seeder
         $properties = [];
 
         foreach ([
-            ['customer', 'Kunde', FieldType::Dropdown, 'Für wen das Item gemacht wird.', [], [
-                ['Studio Nordlicht', Tone::Sky], ['Hafenkontor', Tone::Ochre], ['Gärtnerei Moos', Tone::Moss],
-            ], null],
-            ['effort', 'Aufwand (h)', FieldType::Number, 'Geschätzte Stunden, auf eine Nachkommastelle.', ['decimals' => 1], [], null],
-            ['environment', 'Umgebung', FieldType::Dropdown, 'Wo der Fehler aufgetreten ist.', [], [
-                ['Produktion', Tone::Plum], ['Staging', Tone::Ochre], ['Lokal', Tone::Slate],
-            ], null],
-            ['browser', 'Browser', FieldType::Text, 'Browser und Version, z. B. „Safari 18 auf iOS“.', [], [], null],
-            ['ticket_url', 'Ticket beim Kunden', FieldType::Url, 'Link auf das Ticket im System des Kunden.', [], [], null],
-            ['approved', 'Abgenommen', FieldType::Boolean, 'Der Kunde hat die Umsetzung abgenommen.', [], [], false],
-            ['reviewer', 'Reviewer', FieldType::Member, 'Wer das Ergebnis prüft.', [], [], null],
-            ['steps', 'Schritte zum Nachstellen', FieldType::RichText, 'So lässt sich der Fehler reproduzieren.', [], [], null],
-            ['target_quarter', 'Zielquartal', FieldType::Dropdown, 'Bis wann das Vorhaben fertig sein soll.', [], [
-                ['Q4 2026', Tone::Sky], ['Q1 2027', Tone::Moss], ['Q2 2027', Tone::Sand],
-            ], null],
-        ] as [$key, $label, $fieldType, $help, $settings, $options, $default]) {
+            ['customer', FieldType::Dropdown, [], ['nordlicht' => Tone::Sky, 'hafenkontor' => Tone::Ochre, 'moos' => Tone::Moss], null],
+            ['effort', FieldType::Number, ['decimals' => 1], [], null],
+            ['environment', FieldType::Dropdown, [], ['prod' => Tone::Plum, 'staging' => Tone::Ochre, 'local' => Tone::Slate], null],
+            ['browser', FieldType::Text, [], [], null],
+            ['ticket_url', FieldType::Url, [], [], null],
+            ['approved', FieldType::Boolean, [], [], false],
+            ['reviewer', FieldType::Member, [], [], null],
+            ['steps', FieldType::RichText, [], [], null],
+            ['target_quarter', FieldType::Dropdown, [], ['q4_2026' => Tone::Sky, 'q1_2027' => Tone::Moss, 'q2_2027' => Tone::Sand], null],
+        ] as [$key, $fieldType, $settings, $options, $default]) {
             $property = Property::query()->updateOrCreate(['key' => $key], [
-                'label' => $label,
+                'label' => DemoTexts::get("catalog.property.{$key}.label"),
                 'field_type' => $fieldType,
-                'help' => $help,
+                'help' => DemoTexts::get("catalog.property.{$key}.help"),
                 'settings' => $settings,
                 'default_value' => $default,
             ]);
+            $position = 0;
 
-            foreach ($options as $position => [$optionLabel, $color]) {
+            foreach ($options as $option => $color) {
                 PropertyOption::query()->updateOrCreate(
-                    ['property_id' => $property->id, 'label' => $optionLabel],
-                    ['color' => $color, 'position' => $position, 'archived_at' => null],
+                    ['property_id' => $property->id, 'label' => DemoTexts::get("catalog.property.{$key}.option.{$option}")],
+                    ['color' => $color, 'position' => $position++, 'archived_at' => null],
                 );
             }
 
@@ -141,21 +138,21 @@ class CatalogSeeder extends Seeder
     {
         // the shipped ones keep their order (their ids); a new one comes after them
         foreach ([
-            ['Task', 'square-check', Tone::Sky, 'Eine Aufgabe, die jemand erledigt.', false, ['customer' => false, 'effort' => false]],
-            ['Bug', 'bug', Tone::Ochre, 'Ein Fehler, der behoben werden muss. Die Umgebung, in der er auftritt, ist Pflicht.', false, [
+            ['task', 'square-check', Tone::Sky, false, ['customer' => false, 'effort' => false]],
+            ['bug', 'bug', Tone::Ochre, false, [
                 'customer' => false, 'effort' => false, 'environment' => true, 'browser' => false, 'steps' => false,
             ]],
-            ['Epic', 'zap', Tone::Moss, 'Ein größeres Vorhaben, das in Items zerfällt. Erscheint in der Timeline.', true, [
+            ['epic', 'zap', Tone::Moss, true, [
                 'target_quarter' => false, 'customer' => false,
             ]],
-            ['Kundenwunsch', 'message-square-heart', Tone::Plum, 'Ein Wunsch einer Kundin oder eines Kunden, der vor der Umsetzung freigegeben wird.', false, [
+            ['wish', 'message-square-heart', Tone::Plum, false, [
                 'customer' => true, 'ticket_url' => false, 'approved' => false, 'reviewer' => false,
             ]],
-        ] as [$name, $icon, $tone, $description, $isEpic, $asks]) {
-            $type = WorkItemType::query()->updateOrCreate(['name' => $name], [
+        ] as [$key, $icon, $tone, $isEpic, $asks]) {
+            $type = WorkItemType::query()->updateOrCreate(['name' => DemoTexts::get("catalog.type.{$key}.name")], [
                 'icon' => $icon,
                 'tone' => $tone,
-                'description' => $description,
+                'description' => DemoTexts::get("catalog.type.{$key}.description"),
                 'is_epic' => $isEpic,
                 'archived_at' => null,
             ]);
@@ -163,9 +160,9 @@ class CatalogSeeder extends Seeder
             // the properties it asks for, in this order (the shipped Bug asked for the effort alone)
             $position = 0;
 
-            foreach ($asks as $key => $required) {
+            foreach ($asks as $propertyKey => $required) {
                 TypeProperty::query()->updateOrCreate(
-                    ['type_id' => $type->id, 'property_id' => $properties[$key]->id],
+                    ['type_id' => $type->id, 'property_id' => $properties[$propertyKey]->id],
                     ['required' => $required, 'position' => $position++],
                 );
             }
@@ -175,30 +172,27 @@ class CatalogSeeder extends Seeder
     private function labels(): void
     {
         foreach ([
-            ['UX', Tone::Sky], ['Formulare', Tone::Ochre], ['Produktion', Tone::Plum], ['Performance', Tone::Moss],
-            ['SEO', Tone::Sand], ['Barrierefreiheit', Tone::Slate], ['Backend', Tone::Sky], ['Design', Tone::Plum],
-        ] as [$name, $color]) {
-            Label::query()->updateOrCreate(['name' => $name], ['color' => $color]);
+            'ux' => Tone::Sky, 'forms' => Tone::Ochre, 'production' => Tone::Plum, 'performance' => Tone::Moss,
+            'seo' => Tone::Sand, 'a11y' => Tone::Slate, 'backend' => Tone::Sky, 'design' => Tone::Plum,
+        ] as $key => $color) {
+            Label::query()->updateOrCreate(['name' => DemoTexts::get("catalog.label.{$key}")], ['color' => $color]);
         }
     }
 
     private function relationTypes(): void
     {
-        foreach ([
-            ['blocks', 'blockiert', 'blockiert', 'wird blockiert von'],
-            ['duplicates', 'Duplikat', 'ist Duplikat von', 'hat Duplikat'],
-            ['relates', 'verwandt', 'verwandt mit', null],
-        ] as [$builtIn, $name, $outward, $inward]) {
+        // `relates` reads the same from both ends: it has no inward label
+        foreach (['blocks' => true, 'duplicates' => true, 'relates' => false] as $builtIn => $directed) {
             RelationType::query()->updateOrCreate(['built_in' => $builtIn], [
-                'name' => $name,
-                'outward_label' => $outward,
-                'inward_label' => $inward,
+                'name' => DemoTexts::get("catalog.relation.{$builtIn}.name"),
+                'outward_label' => DemoTexts::get("catalog.relation.{$builtIn}.outward"),
+                'inward_label' => $directed ? DemoTexts::get("catalog.relation.{$builtIn}.inward") : null,
             ]);
         }
 
-        RelationType::query()->updateOrCreate(['name' => 'testet'], [
-            'outward_label' => 'testet',
-            'inward_label' => 'wird getestet von',
+        RelationType::query()->updateOrCreate(['name' => DemoTexts::get('catalog.relation.tests.name')], [
+            'outward_label' => DemoTexts::get('catalog.relation.tests.outward'),
+            'inward_label' => DemoTexts::get('catalog.relation.tests.inward'),
             'built_in' => null,
         ]);
     }

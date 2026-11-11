@@ -271,11 +271,18 @@ const isDetail = (data: unknown): data is WorkItemDetail => typeof data === 'obj
 const isPage = (data: unknown): data is Page<ListedItem> => typeof data === 'object' && data !== null && Array.isArray((data as Page<ListedItem>).items);
 
 /**
- * An item from the cache, by id or key: its detail (which the mount loads for an item page or the preview), else the
- * pages of the lists it is in, so a selection or a list's cursor acts without loading a detail.
+ * The items in the cache, by id and by key: their details first (which the mount loads for an item page or the
+ * preview), then the pages of the lists they are in, so a selection or a list's cursor acts without loading a detail.
+ * Built once per look at the targets (T15-M2): a selection of 1 000 items reads every page once, not once per item.
  */
-export function cachedItem(queryClient: QueryClient, ref: string): ListedItem | undefined {
+export function cachedItems(queryClient: QueryClient): (ref: string) => ListedItem | undefined {
   const cached = queryClient.getQueriesData<unknown>({ queryKey: qk.workItems.all }).map(([, data]) => data);
-  const matches = (item: ListedItem) => item.id === ref || item.key === ref;
-  return cached.flatMap((data) => (isDetail(data) ? [data.item] : [])).find(matches) ?? cached.flatMap((data) => (isPage(data) ? data.items : [])).find(matches);
+  const found = new Map<string, ListedItem>();
+  const add = (item: ListedItem) => {
+    if (!found.has(item.id)) found.set(item.id, item);
+    if (!found.has(item.key)) found.set(item.key, item);
+  };
+  for (const data of cached) if (isDetail(data)) add(data.item);
+  for (const data of cached) if (isPage(data)) data.items.forEach(add);
+  return (ref) => found.get(ref);
 }

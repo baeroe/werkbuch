@@ -32,7 +32,7 @@ A property is a field that types add to their items, beyond the core fields ever
 
 ### Keys
 
-The key names the property in the API and, later, in MCP and filters. It is `snake_case`: lowercase letters, digits and `_`, starting with a letter, at most 40 characters. It is unique and **cannot be changed** once the property is saved. It must not be the name of a core field: `id`, `key`, `project`, `type`, `title`, `description`, `state`, `state_category`, `resolution`, `assignee`, `priority`, `label`, `labels`, `start_date`, `due_date`, `parent`, `created_by`, `created_at`, `updated_at`, `started_at`, `closed_at`, `archived`, `archived_at` and `rank` are taken.
+The key names the property in the API, in MCP and in [filters](/en/concepts/views#properties) (`property:<key>`). It is `snake_case`: lowercase letters, digits and `_`, starting with a letter, at most 40 characters. It is unique and **cannot be changed** once the property is saved. It must not be the name of a core field: `id`, `key`, `project`, `type`, `title`, `description`, `state`, `state_category`, `resolution`, `assignee`, `priority`, `label`, `labels`, `start_date`, `due_date`, `parent`, `created_by`, `created_at`, `updated_at`, `started_at`, `closed_at`, `archived`, `archived_at` and `rank` are taken.
 
 <!-- reference:start -->
 ### Field types
@@ -84,7 +84,7 @@ Each of the two categories always has exactly one default. Making a resolution t
 
 Every account may read the catalogs; only org admins create, change and delete entries. Lists come in pages of up to 100 (`per_page`, `cursor`), like every list of the API.
 
-| Catalog | List and create | Change and delete |
+| Catalog | List and create | Read, change and delete |
 |---|---|---|
 | Types | `/api/v1/work-item-types` | `/api/v1/work-item-types/{id}` |
 | Properties | `/api/v1/properties` | `/api/v1/properties/{id}` |

@@ -164,8 +164,9 @@ test('switches a type on and makes it the default', async ({ page }) => {
   try {
     await page.goto(`/projects/${project.identifier}/settings/types`);
     await expect(use('Task')).toHaveAttribute('aria-checked', 'true');
-    // the only type that is on stays on
-    await expect(page.getByText(tr('en', 'settings.project.types.last'))).toBeVisible();
+    // the only type that is on stays on: blocked by its reason, which the box also carries as its description
+    await expect(use('Task')).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByText(tr('en', 'settings.project.types.last')).filter({ visible: true })).toBeVisible();
 
     await tabTo(page, use('Bug'), { max: 100 });
     await page.keyboard.press('Space');

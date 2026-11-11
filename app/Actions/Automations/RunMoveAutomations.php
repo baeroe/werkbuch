@@ -10,7 +10,6 @@ use App\Domain\Automations\AutomationKey;
 use App\Domain\Automations\CloseParentRule;
 use App\Events\EventRecorder;
 use App\Events\EventType;
-use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkflowState;
 use App\Models\WorkItem;
@@ -105,18 +104,6 @@ final class RunMoveAutomations
             return;
         }
 
-        TransitionWorkItem::move(self::onBehalf(Actor::automation('close_parent'), $actor), $parent, $target, null, chain: $chain + 1);
-    }
-
-    /**
-     * The automation acting for the person whose move it was, or for the person the acting automation acted for; quiet
-     * when the move was (A357: a parent the night of Auto-Close closes tells nobody either).
-     */
-    private static function onBehalf(Actor $automation, Actor $actor): Actor
-    {
-        $automation = $actor->quiet ? $automation->quietly() : $automation;
-        $person = $actor->user->isPerson() ? $actor->user : ($actor->onBehalfOf === null ? null : User::query()->find($actor->onBehalfOf));
-
-        return $person === null ? $automation : $automation->onBehalfOf($person);
+        TransitionWorkItem::move(Actor::automationFor('close_parent', $actor), $parent, $target, null, chain: $chain + 1);
     }
 }

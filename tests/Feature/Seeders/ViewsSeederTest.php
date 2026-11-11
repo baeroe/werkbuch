@@ -6,6 +6,7 @@ use App\Models\PropertyOption;
 use App\Models\User;
 use App\Models\View;
 use App\Models\WorkItemType;
+use Database\Seeders\Demo\ItemsSeeder;
 use Database\Seeders\DemoSeeder;
 use Illuminate\Support\Facades\Storage;
 
@@ -29,13 +30,26 @@ $clickdummy = function (): array {
 
             return $match[1] ?? null;
         };
-        preg_match_all("/field: '([\w:]+)', op: '(\w+)'/", $chunk, $conditions, PREG_SET_ORDER);
+        preg_match_all("/field: '([\w:]+)', op: '(\w+)', value: ([^}]+?) \}/", $chunk, $conditions, PREG_SET_ORDER);
         $name = (string) $field("/name: '([^']+)'/");
+        // a view that uses listByState() has its display in the helper of the file
+        $display = $field('/display: (listByState\(\))/') !== null
+            ? ['group_by' => 'state', 'sort' => ['rank', 'asc'], 'fields' => ['key', 'title', 'state', 'assignee', 'priority', 'due_date'], 'show_sub_items' => true]
+            : [
+                'group_by' => $field("/group_by: '(\w+)'/"),
+                'sort' => [$field("/sort: \{ field: '(\w+)'/"), $field("/direction: '(\w+)'/")],
+                'fields' => str_contains($chunk, 'fields: [...FIELDS]')
+                    ? ['key', 'title', 'state', 'assignee', 'priority', 'due_date']
+                    : array_map(fn (string $f) => trim($f, " '"), explode(',', (string) $field('/fields: \[([^\]]+)\]/'))),
+                'show_sub_items' => $field('/show_sub_items: (true|false)/') === 'true',
+            ];
         $views[$name] = [
             'icon' => $field("/icon: '([\w-]+)'/"),
             'layout' => $field("/layout: '(\w+)'/") ?? 'list',
             'creator' => $field('/created_by: USER_IDS\.(\w+)/'),
-            'conditions' => array_map(fn (array $match) => [$match[1], $match[2]], $conditions),
+            'created_at' => $field("/created_at: at\('([^']+)'\)/"),
+            'display' => $display,
+            'conditions' => array_map(fn (array $match) => [$match[1], $match[2], $match[3]], $conditions),
         ];
     }
 
@@ -56,6 +70,17 @@ $clickdummy = function (): array {
 it('seeds the six views of the clickdummy with their filters', function () use ($clickdummy) {
     $this->seed(DemoSeeder::class);
     $expected = $clickdummy();
+    // the values the clickdummy names by id or constant, as the seeder finds them by name, label and handle
+    $option = fn (string $label) => PropertyOption::where('label', $label)->value('id');
+    $value = fn (string $source) => match (true) {
+        $source === '[...OPEN]' => ['backlog', 'unstarted', 'started'],
+        $source === 'true' => true,
+        $source === "'t_bug'" => WorkItemType::where('name', 'Bug')->value('id'),
+        $source === "'opt_env_prod'" => $option('Produktion'),
+        $source === "'opt_nordlicht'" => $option('Studio Nordlicht'),
+        str_starts_with($source, 'USER_IDS.') => User::where('handle', substr($source, 9))->value('id'),
+        default => trim($source, "'"),
+    };
 
     expect($expected['views'])->toHaveCount(6)
         ->and(View::count())->toBe(6);
@@ -66,8 +91,14 @@ it('seeds the six views of the clickdummy with their filters', function () use (
         expect($seeded->icon)->toBe($view['icon'])
             ->and($seeded->display['layout'])->toBe($view['layout'])
             ->and($seeded->creator->handle)->toBe($view['creator'])
-            ->and(array_map(fn (array $c) => [$c['field'], $c['op']], $seeded->filter['conditions']))->toBe($view['conditions'])
-            ->and($seeded->filter['version'])->toBe(1);
+            ->and(array_map(fn (array $c) => [$c['field'], $c['op']], $seeded->filter['conditions']))->toBe(array_map(fn (array $c) => [$c[0], $c[1]], $view['conditions']))
+            ->and($seeded->filter['version'])->toBe(1)
+            // the value of each condition, through the stable keys of the seed data
+            ->and(array_map(fn (array $c) => $c['value'], $seeded->filter['conditions']))->toBe(array_map(fn (array $c) => $value($c[2]), $view['conditions']))
+            ->and([$seeded->display['group_by'], [$seeded->display['sort']['field'], $seeded->display['sort']['direction']], $seeded->display['fields'], $seeded->display['show_sub_items']])
+            ->toBe([$view['display']['group_by'], $view['display']['sort'], $view['display']['fields'], $view['display']['show_sub_items']])
+            ->and($seeded->created_at->equalTo(ItemsSeeder::at($view['created_at'])))->toBeTrue()
+            ->and($seeded->updated_at->equalTo($seeded->created_at))->toBeTrue();
     }
 });
 

@@ -80,6 +80,18 @@ it('escapes names and titles', function () use ($mail) {
         ->and(substr_count($html, '&lt;script&gt;alert(1)&lt;/script&gt;'))->toBe(4);
 });
 
+it('renders the header row and the header column of a table as header cells', function () use ($mail) {
+    $html = $mail(F::doc(F::table(
+        [F::cell('tableHeader', 'Browser'), F::cell('tableHeader', 'Mails')],
+        [F::cell('tableHeader', 'Safari'), F::cell('tableCell', '2')],
+    )));
+
+    expect($html)->toBe('<table><tbody>'
+        .'<tr><th rowspan="1" colspan="1"><p>Browser</p></th><th rowspan="1" colspan="1"><p>Mails</p></th></tr>'
+        .'<tr><th rowspan="1" colspan="1"><p>Safari</p></th><td rowspan="1" colspan="1"><p>2</p></td></tr>'
+        .'</tbody></table>');
+});
+
 it('renders an empty document as nothing', function () use ($mail) {
     expect($mail(['type' => 'doc']))->toBe('');
 });

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Actions\Auth\FindChallengedUser;
 use App\Actions\Auth\PassTwoFactorChallenge;
+use App\Auth\AccountLoginRateLimiter;
 use App\Auth\FailedTwoFactorLogin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -22,7 +23,7 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
  */
 final class TwoFactorChallengeController extends Controller
 {
-    public function __construct(private readonly StatefulGuard $guard) {}
+    public function __construct(private readonly StatefulGuard $guard, private readonly AccountLoginRateLimiter $limiter) {}
 
     public function create(Request $request): Response|RedirectResponse
     {
@@ -56,6 +57,8 @@ final class TwoFactorChallengeController extends Controller
         $request->session()->forget(['login.id', 'login.password']);
         $this->guard->login($user, $remember);
         $request->session()->regenerate();
+        // the pipeline ended before PrepareAuthenticatedSession, which clears it for everybody else (A434)
+        $this->limiter->clearAccount((string) $user->email);
 
         return redirect()->intended(Fortify::redirects('login'));
     }

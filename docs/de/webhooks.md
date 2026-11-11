@@ -31,7 +31,7 @@ Beim Anlegen zeigt werkbuch das **Geheimnis** einmal: `whsec_` und 43 weitere Ze
 | `project.member_added` | Jemand ist einem Projekt beigetreten oder wurde hinzugefügt |
 | `project.member_removed` | Jemand wurde aus einem Projekt entfernt |
 | `work_item.created` | Ein Item wurde angelegt |
-| `work_item.updated` | Felder eines Items haben sich geändert: Titel, Beschreibung, Priorität, Daten, Labels, Properties, Typ, Eltern-Item, Rang, Dateien |
+| `work_item.updated` | Felder eines Items haben sich geändert: Titel, Beschreibung, Priorität, Daten, Labels, Properties, Typ, Eltern-Item, Resolution, Rang, Dateien |
 | `work_item.state_changed` | Ein Item ist in einen anderen Status gewechselt |
 | `work_item.assigned` | Ein Item hat einen anderen oder keinen Assignee bekommen |
 | `work_item.archived` | Ein Item wurde archiviert |
@@ -159,7 +159,7 @@ Die Pausen zählen ab jedem Fehlschlag, die echten Zeiten verschieben sich also 
 Was ein Empfänger wissen sollte:
 
 - **Entdopple über `X-Werkbuch-Delivery`.** Ein Absturz zwischen Senden und Protokoll kann einen Versuch doppelt schicken, immer mit derselben Zustellungs-ID und demselben Body.
-- **Die Reihenfolge ist nicht garantiert.** Wiederholungen und parallele Worker können ein späteres Ereignis zuerst zustellen; sortiere nach `occurred_at` oder lies den aktuellen Stand über REST.
+- **Die Reihenfolge ist nicht garantiert, auch nicht für ein Item.** Jede Zustellung hat ihren eigenen Job und ihre eigenen Wiederholungen, ein späteres Ereignis desselben Items kann also zuerst ankommen; ordne die Ereignisse nach `occurred_at` und dann nach `id` (beide im Body) oder lies den aktuellen Stand über REST.
 - **Antworte schnell** und arbeite danach. Zehn Sekunden sind die Grenze für die ganze Anfrage.
 
 ## Abgeschaltet und wieder an
@@ -184,6 +184,8 @@ Ist ein Webhook 24 Stunden lang gescheitert (ein geplanter Versuch scheitert, un
 | `connection` | Die Verbindung ist gescheitert |
 
 Ein Fehlertext maskiert Benutzer, Passwort und Query jeder URL darin, aber nicht den Pfad: ein Empfänger, der sein Token im Pfad trägt wie Slack und Discord, zeigt es Org-Admins im Protokoll. Zustellungen und ihre Versuche werden 30 Tage nach ihrer letzten Änderung gelöscht. Eine Zustellung, die 36 Stunden nach ihrem letzten Versuch noch wartet (ihr Job ging verloren), wird `failed`, aber nie, solange die Queue `webhooks` noch fällige Jobs hält: nach einem Ausfall des Workers gehen ihre wartenden Versuche noch raus.
+
+![Das Zustellprotokoll eines Webhooks, jeder Versuch mit Antwort und Dauer](/screenshots/de/webhooks.png)
 
 ## Test-Ping und erneut senden
 

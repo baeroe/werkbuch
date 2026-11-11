@@ -8,11 +8,11 @@ All work in the background goes through queues in the database. Three worker ser
 
 | Service | Queues, in this order | Does |
 |---|---|---|
-| `queue` | `default`, `live`, `notifications`, `bulk` | hands every event to its consumers, sends the live updates to Reverb, writes the inbox and sends mails (notifications, invitations, password reset), deletes projects, runs templates and the nightly automations |
+| `queue` | `mail`, `default`, `live`, `notifications`, `bulk` | hands every event to its consumers, sends the live updates to Reverb, writes the inbox and sends mails (sign-in mails first: invitations and password reset on the queue `mail`, then notifications), deletes projects, runs templates and the nightly automations |
 | `queue-index` | `search`, `media` | keeps the search index in step with every change, makes the previews of uploaded pictures |
 | `queue-webhooks` | `webhooks` | delivers webhooks |
 
-A worker takes the first queue of its list that has a job. Search and previews have a worker of their own because every event makes jobs for `default`, `live` and `notifications`; webhooks have one because a receiver that hangs holds its worker for up to 17 seconds per attempt. Every worker ends after an hour (`--max-time=3600`) and Docker starts it again (`restart: unless-stopped`); a job that fails is tried up to three times unless it sets its own number of attempts.
+A worker takes the first queue of its list that has a job. Search and previews have a worker of their own because every event makes jobs for `default`, `live` and `notifications`; the queue `mail` comes first, so a reset link or an invitation never waits behind them; webhooks have one because a receiver that hangs holds its worker for up to 17 seconds per attempt. Every worker ends after an hour (`--max-time=3600`) and Docker starts it again (`restart: unless-stopped`); a job that fails is tried up to three times unless it sets its own number of attempts.
 
 Run exactly one `queue-index`, never scale it: two workers on `search` can write an older version of a document over a newer one while they rebuild, and the search shows the older text until the item changes again.
 
@@ -63,6 +63,10 @@ Set them in `.env` and run `docker compose up -d`. More about the limits under [
 
 Every limit per IP address, and the limits of the sign-in (20 attempts a minute per address, 5 failed attempts per email and address), need the real address of the client. Behind a proxy werkbuch reads it from `X-Forwarded-For`, but only from a proxy in `TRUSTED_PROXIES`. If your proxy is not in it, every request comes from the proxy's address: all clients share one quota, and a few wrong passwords lock out everyone from that address. Left empty, `TRUSTED_PROXIES` is localhost and the private networks; that covers a proxy in a Docker network, and it also believes the header from the Docker gateway, so anyone who reaches the published port directly can claim any address. [Reverse proxy](/en/reverse-proxy#what-werkbuch-trusts) explains how to narrow it.
 
+Because an address can be faked, the sign-in has a third limit that ignores it: 50 failed attempts per email address and hour, over all IP addresses. Once it is reached, that email address cannot sign in for the rest of the hour, not even with the right password, and the message names the wait in minutes. A browser that has signed in to exactly this address before is not held by it: after every sign-in, also after the second factor, werkbuch sets an encrypted cookie `werkbuch_device` for a year, so whoever only knows the address cannot lock the owner out of her own browser. The cookie is tied to the current password: a new password makes every such browser unknown again until it signs in once more, except the browser in which the password was changed in the settings. The other two limits hold that browser like any other. A successful sign-in clears the count, "Forgot password?" stays open, and a new password from the reset link lifts the limit. `php artisan app:reset-password` does the same.
+
+The second-factor step is limited too: five attempts a minute and 30 attempts per account and 24 hours, over all sign-ins. Codes, recovery codes and successful codes all count, so the message speaks of attempts. Once the 30 are used, the account cannot pass the second factor for the rest of the 24 hours, and the message names the wait in hours and points to the operator, who can reset the second factor with `php artisan app:reset-two-factor`. A new password clears the count.
+
 ## Live updates
 
 The browser keeps a WebSocket open to Reverb (service `reverb`) as long as a tab is open: `wss://<host of APP_URL>/app/…`, forwarded by nginx in `werkbuch`. Reverb runs without `ext-uv` in this version, and its event loop waits on its connections with PHP's `stream_select`, which ends at 1024 connections. One instance therefore carries about 1000 open tabs at once. To refuse connections above a limit of your own, set `REVERB_APP_MAX_CONNECTIONS` in the `environment` of `reverb` (in a `docker-compose.override.yml`):
@@ -100,7 +104,7 @@ Never run `php artisan config:clear` or `php artisan optimize:clear` through `do
 
 ## Empty variables
 
-Never set a variable that starts with `PHP_`, `NGINX_`, `SSL_`, `LOG_` or `TRUSTED_PROXY` to an empty value in an `environment` block (in `docker-compose.override.yml` or in the standalone file): the start script of the base image stops the web service then (`LOG_LEVEL: ""` is enough). Leave a variable out to keep its default. `.env` cannot do this: `docker-compose.yml` passes on only the variables of `.env.docker.example`, the only one of them with such a prefix is `TRUSTED_PROXIES`, and an empty `TRUSTED_PROXIES=` falls back to its default.
+Never set a variable that starts with `PHP_`, `NGINX_`, `SSL_`, `LOG_`, `APACHE_`, `HEALTHCHECK_PATH` or `TRUSTED_PROXY` to an empty value in an `environment` block (in `docker-compose.override.yml` or in the standalone file): the start script of the base image stops the web service then (`LOG_LEVEL: ""` is enough). Leave a variable out to keep its default. `.env` cannot do this: `docker-compose.yml` passes on only the variables of `.env.docker.example`, the only one of them with such a prefix is `TRUSTED_PROXIES`, and an empty `TRUSTED_PROXIES=` falls back to its default.
 
 ## Search
 
@@ -112,7 +116,7 @@ Rebuild the indexes by hand when the search missed changes, for example after Me
 docker compose exec werkbuch php artisan app:search-import
 ```
 
-During the import the search is briefly empty. How the search behaves while Meilisearch is down is under [Search](/en/search#operation).
+During the import the search keeps answering from the old index, which the new one replaces at the end. How the search behaves while Meilisearch is down is under [Search](/en/search#operation).
 
 ## Mail
 

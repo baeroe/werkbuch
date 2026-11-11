@@ -49,8 +49,6 @@ export interface ListWorkItemsArgs extends PageArgs {
   project_id?: string;
   /** The children of one item: its ULID or key (the short form). */
   parent_id?: string;
-  /** The key of an item names exactly that item; any other text is a part of the title. */
-  q?: string;
   /** Also archived items and the items of archived projects. */
   include_archived?: boolean;
   /** Items without the description and the Markdown of rich text values (`ListedItem`), for rows and cards. */
@@ -61,8 +59,8 @@ export interface ListWorkItemsArgs extends PageArgs {
 const given = (entries: Record<string, unknown>) => Object.fromEntries(Object.entries(entries).filter(([, value]) => value !== undefined && value !== null));
 
 /** The body of a query: the short form under `shorthand`, the rest under its own names; nothing left out is sent. */
-function queryBody({ project_id, parent_id, q, filter, ...rest }: ListWorkItemsArgs): Record<string, unknown> {
-  const shorthand = given({ project: project_id, parent: parent_id, q });
+function queryBody({ project_id, parent_id, filter, ...rest }: ListWorkItemsArgs): Record<string, unknown> {
+  const shorthand = given({ project: project_id, parent: parent_id });
   const body = given(rest);
   if (filter && filter.conditions.length > 0) body.filter = filter;
   if (Object.keys(shorthand).length > 0) body.shorthand = shorthand;
@@ -81,7 +79,11 @@ export function listWorkItems(args: ListWorkItemsArgs = {}): Promise<Page<Listed
  * What the groups of a list are asked for: the list's arguments without page, group and `lean`. The groups take no
  * short form (K8): a project or a parent is a condition of `filter`; the search `q` goes as it is.
  */
-export type GroupWorkItemsArgs = Omit<ListWorkItemsArgs, 'group' | 'cursor' | 'per_page' | 'lean' | 'project_id' | 'parent_id'> & { group_by: GroupBy };
+export type GroupWorkItemsArgs = Omit<ListWorkItemsArgs, 'group' | 'cursor' | 'per_page' | 'lean' | 'project_id' | 'parent_id'> & {
+  group_by: GroupBy;
+  /** The key of an item names exactly that item; any other text is a part of the title. */
+  q?: string;
+};
 
 /** The groups of a list in their order with their counts, and the grouping the server applied (P14). */
 export function groupWorkItems(args: GroupWorkItemsArgs): Promise<ItemGroups> {
@@ -237,6 +239,14 @@ export function restoreWorkItem(id: string): Promise<WorkItem> {
 /** Deletes an item for good (project admins only); its children lose their parent. The UI calls it after the undo toast. */
 export function deleteWorkItem(id: string): Promise<void> {
   return del<void>(itemPath(id));
+}
+
+/**
+ * Gives the items of a project short ranks in their order (archived ones included, A448): the board calls it where the
+ * rank between two neighbours would grow past what the server takes. Answers how many ranks changed.
+ */
+export function redistributeRanks(projectId: string): Promise<{ redistributed: number }> {
+  return post<{ redistributed: number }>(`/projects/${encodeURIComponent(projectId)}/redistribute-ranks`);
 }
 
 /** Watch an item or stop watching it; the answer is the item with `subscribed` for the signed-in account. */

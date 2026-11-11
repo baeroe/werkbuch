@@ -244,7 +244,7 @@ it('runs the workers with the commands of DDEV, one container per queue list', f
     $services = $compose()['services'];
 
     expect($services['reverb']['command'])->toBe('php artisan reverb:start --host=0.0.0.0 --port=6001')
-        ->and($services['queue']['command'])->toBe('php artisan queue:work --queue=default,live,notifications,bulk --sleep=1 --tries=3 --max-time=3600 --memory=384')
+        ->and($services['queue']['command'])->toBe('php artisan queue:work --queue=mail,default,live,notifications,bulk --sleep=1 --tries=3 --max-time=3600 --memory=384')
         ->and($services['queue-index']['command'])->toContain('--queue=search,media')
         ->and($services['queue-webhooks']['command'])->toContain('--queue=webhooks')
         ->and($services['scheduler']['command'])->toBe('php artisan schedule:work');

@@ -7,6 +7,7 @@ use App\Models\PageVersion;
 use App\Models\Project;
 use App\Models\User;
 use Tests\Support\Mcp\McpClient;
+use Tests\Support\RichTextFixtures as F;
 
 /*
  * The pair `pages` / `manage-pages` (phase 13, task 9; K6, K8, K17): the wikis over MCP. That every action answers what
@@ -80,6 +81,23 @@ it('keeps the stored state as a version only when asked to keep the current one'
     expect(array_column($versions['structuredContent']['data'], 'id'))->toBe([$version->id])
         ->and($versions['structuredContent']['meta']['per_page'])->toBe(25)
         ->and($read['structuredContent']['data']['content'])->toBe('Zweite Fassung');
+});
+
+it('keeps a table without a header row when an agent writes back the markdown it read (A455)', function () use ($world) {
+    [, $page, , $theo] = $world();
+    $table = fn (string $chrome) => F::doc(F::table(
+        [F::cell('tableCell', 'Safari'), F::cell('tableCell', '2')],
+        [F::cell('tableCell', 'Chrome'), F::cell('tableCell', $chrome)],
+    ));
+    $page->forceFill(['content' => $table('1')])->save();
+    $mcp = McpClient::for($this, apiToken($theo, ['read', 'write', 'mcp']));
+
+    $markdown = $mcp->call('pages', ['action' => 'get', 'page' => $page->id])['structuredContent']['data']['content'];
+    $saved = $mcp->call('manage-pages', ['action' => 'update', 'page' => $page->id, 'input' => ['content' => str_replace('| Chrome | 1 |', '| Chrome | 0 |', $markdown)]]);
+
+    expect($markdown)->toBe("| Safari | 2 |\n| --- | --- |\n| Chrome | 1 |")
+        ->and($saved['isError'])->toBeFalse((string) json_encode($saved))
+        ->and($page->fresh()?->content)->toBe($table('0'));
 });
 
 it('refuses to move a page into its own subtree', function () use ($world) {

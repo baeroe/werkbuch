@@ -202,6 +202,8 @@ it('refuses a condition with the path and code of what is wrong', function (mixe
     'in with one value of a wrong form' => [['field' => 'label', 'op' => 'in', 'value' => [$project, 7]], ['conditions.1.value' => 'value']],
     'contains nothing' => [['field' => 'title', 'op' => 'contains', 'value' => ''], ['conditions.1.value' => 'value']],
     'contains blanks' => [['field' => 'property:notes', 'op' => 'contains', 'value' => '   '], ['conditions.1.value' => 'value']],
+    'contains a no-break space' => [['field' => 'title', 'op' => 'contains', 'value' => "\u{00A0}"], ['conditions.1.value' => 'value']],
+    'contains an ideographic space' => [['field' => 'title', 'op' => 'contains', 'value' => "\u{3000} \u{2003}"], ['conditions.1.value' => 'value']],
     'contains too much' => [['field' => 'title', 'op' => 'contains', 'value' => str_repeat('a', 256)], ['conditions.1.value' => 'value']],
     'contains a number' => [['field' => 'title', 'op' => 'contains', 'value' => 7], ['conditions.1.value' => 'value']],
     'a flag as text' => [['field' => 'archived', 'op' => 'is', 'value' => 'true'], ['conditions.1.value' => 'value']],

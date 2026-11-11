@@ -25,7 +25,7 @@ import { FIELD_TYPE_LABELS } from '../../catalog/choices';
 import { ReadOnlyNotice } from '../../frame/access';
 import { Badge, Loaded, Panel, Row, Rows, RowsSkeleton, SectionHeader } from '../../frame/parts';
 import { useDialogRound } from '../../frame/useDialogRound';
-import { UsageCount, usePropertyUsage } from '../../catalog/usage';
+import { UsageCount, UsageStatus, usePropertyUsage } from '../../catalog/usage';
 import type { SectionProps } from '../sections';
 import { PropertyDialog } from './PropertyDialog';
 
@@ -128,6 +128,8 @@ export default function Properties({ readOnlyReason }: SectionProps) {
           }
           return (
             <Panel>
+              {/* one status for the counts of the whole list (T23-M8) */}
+              <UsageStatus usage={usage} />
               <Rows label={t('settings.org.section.properties')}>
                 {shown.map((property) => {
                   const users = typesWith(property, types.data?.items ?? []);

@@ -3,10 +3,16 @@
  * states of the one workflow of a project list or of all workflows of the projects in view, the categories, people
  * with "Ich" first, the priorities, labels, the epics as parents (lean), the options of a dropdown property. A value
  * the reader does not know (an id in a view of somebody else, of a project the reader does not see) reads "Verborgen"
- * (P21); names come only from the lists of the reader.
+ * (P21); names come only from the lists of the reader. One the reader knows but the list does not offer keeps its name:
+ * a deactivated account ("Sven Roth (deaktiviert)"), a state of a workflow out of view (T16-M2).
+ *
+ * The epics load only while the list of a parent chip is open (A153, T16-M1): a closed chip names its values through
+ * `GET /references` (`itemRefQuery`, one request for the ids of a tick), not through every epic of the organisation.
  */
 
+import { useQueries } from '@tanstack/react-query';
 import { UserRoundCheck } from 'lucide-react';
+import { isGone } from '@/api/client';
 import { personOption } from '@/components/fields/AssigneePicker';
 import { labelOption } from '@/components/fields/LabelsPicker';
 import type { PickerOption } from '@/components/fields/Picker';
@@ -21,6 +27,7 @@ import { useLabels } from '@/hooks/catalog';
 import { useProjects } from '@/hooks/projects';
 import { useAllUsers, useCurrentUser } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
+import { itemRefQuery } from '@/hooks/richText';
 import { useEpics } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { intlLocale, t } from '@/lib/i18n';
@@ -49,7 +56,14 @@ function people(users: readonly User[]): User[] {
     .sort((a, b) => (a.type === b.type ? collator.compare(a.name, b.name) : a.type === 'person' ? -1 : 1));
 }
 
-export function useValueOptions(def: FieldDef, project?: Project): ValueOptions {
+export interface ValueOptionsUse {
+  /** The list of the chip is open: only then are the epics read. */
+  open: boolean;
+  /** The values of the condition: a parent names them by their references while the list is closed. */
+  values: readonly unknown[];
+}
+
+export function useValueOptions(def: FieldDef, project: Project | undefined, { open, values }: ValueOptionsUse): ValueOptions {
   const source = def.source;
   const projects = useProjects({ include_archived: true });
   const workflows = useWorkflows();
@@ -57,7 +71,9 @@ export function useValueOptions(def: FieldDef, project?: Project): ValueOptions 
   const users = useAllUsers();
   const labels = useLabels();
   const me = useCurrentUser();
-  const epics = useEpics(project?.id, source === 'parent');
+  const epics = useEpics(project?.id, source === 'parent' && open);
+  const refIds = source === 'parent' ? values.filter((value): value is string => typeof value === 'string') : [];
+  const refs = useQueries({ queries: refIds.map((id) => itemRefQuery(id)) });
 
   const used =
     source === 'project'
@@ -70,12 +86,17 @@ export function useValueOptions(def: FieldDef, project?: Project): ValueOptions 
             ? [users]
             : source === 'label'
               ? [labels]
-              : source === 'parent'
+              : source === 'parent' && open
                 ? [epics, types]
                 : [];
   const loading = used.some((query) => query.isPending);
   const error = used.find((query) => query.error)?.error ?? null;
   const retry = () => used.forEach((query) => void query.refetch());
+
+  // the workflow of a project list, else the workflows of the projects the reader sees
+  const workflowIds = project ? [project.workflow_id] : [...new Set((projects.data?.items ?? []).map((entry) => entry.workflow_id))];
+  const allWorkflows = workflows.data?.items ?? [];
+  const shownWorkflows = source === 'state' ? allWorkflows.filter((workflow) => workflowIds.includes(workflow.id)) : [];
 
   let options: PickerOption[] = [];
   switch (source) {
@@ -85,13 +106,9 @@ export function useValueOptions(def: FieldDef, project?: Project): ValueOptions 
     case 'type':
       options = (types.data?.items ?? []).map((type) => ({ ...typeOption(type), hint: type.archived_at ? t('items.filter.value.archived') : undefined }));
       break;
-    case 'state': {
-      // the workflow of a project list, else the workflows of the projects the reader sees
-      const ids = project ? [project.workflow_id] : [...new Set((projects.data?.items ?? []).map((entry) => entry.workflow_id))];
-      const shown = (workflows.data?.items ?? []).filter((workflow) => ids.includes(workflow.id));
-      options = shown.flatMap((workflow) => statesInOrder(workflow).map((state) => ({ ...stateOption(state), hint: shown.length > 1 ? workflow.name : undefined })));
+    case 'state':
+      options = shownWorkflows.flatMap((workflow) => statesInOrder(workflow).map((state) => ({ ...stateOption(state), hint: shownWorkflows.length > 1 ? workflow.name : undefined })));
       break;
-    }
     case 'category':
       options = CATEGORY_ORDER.map((category) => {
         const label = t(CATEGORY_LABEL_KEYS[category]);
@@ -132,10 +149,32 @@ export function useValueOptions(def: FieldDef, project?: Project): ValueOptions 
       break;
   }
 
+  /**
+   * A state by its name, and by its workflow too when another workflow in view (or the list's, for a state out of view)
+   * has a state of the same name: two "Done" of a chip are told apart (20b-M5).
+   */
+  const stateName = (value: unknown): string | null => {
+    const owner = allWorkflows.find((workflow) => workflow.states.some((entry) => entry.id === value));
+    const state = owner?.states.find((entry) => entry.id === value);
+    if (!owner || !state) return null;
+    const clash = shownWorkflows.some((workflow) => workflow.id !== owner.id && workflow.states.some((entry) => entry.name === state.name));
+    return clash ? t('items.filter.value.state_in', { state: state.name, workflow: owner.name }) : state.name;
+  };
+
   const nameOf = (value: unknown): string => {
+    // readable, just not offered: a state of a workflow out of view (T16-M2)
+    const state = source === 'state' ? stateName(value) : null;
+    if (state) return state;
     const known = options.find((option) => option.value === value);
     if (known) return known.label;
-    return loading ? t('items.filter.value.loading') : t('items.filter.value.hidden');
+    // readable, just not offered: a deactivated account (T16-M2)
+    const user = source === 'person' || source === 'member' ? users.data?.items.find((entry) => entry.id === value) : undefined;
+    if (user) return t('items.filter.value.disabled', { name: user.name });
+    const ref = refs[refIds.indexOf(value as string)];
+    if (ref?.data) return ref.data.title;
+    if (loading || ref?.isPending) return t('items.filter.value.loading');
+    // a reference that failed (5xx, no answer) is not one the reader does not see (14b2-M1b)
+    return ref?.error && !isGone(ref.error) ? t('items.filter.value.not_loaded') : t('items.filter.value.hidden');
   };
   return { options, loading, error, retry, nameOf };
 }

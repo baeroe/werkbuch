@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Webhook;
 use App\Models\WebhookAttempt;
 use App\Models\WebhookDelivery;
+use App\Support\Redact;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Demo\ItemsSeeder;
 use Database\Seeders\Demo\WebhooksSeeder;
@@ -58,7 +59,8 @@ $clickdummy = function () use ($utc): array {
             'status' => $match[5] === 'null' ? null : (int) $match[5],
             'duration' => (int) $match[6],
             'excerpt' => preg_match("/excerpt: '([^']*)'/", $options, $e) === 1 ? $e[1] : ($match[5] === '200' ? '{"ok":true}' : null),
-            'error' => preg_match('/error: (TIMEOUT)/', $options) === 1 ? 'Zeitüberschreitung nach 10 s' : null,
+            // the clickdummy's free text, stored as the app stores a timeout
+            'error' => preg_match('/error: (TIMEOUT)/', $options) === 1 ? WebhooksSeeder::TIMEOUT_ERROR : null,
             'at' => $utc($match[4]),
         ];
         if ($attempt === 1) {
@@ -173,3 +175,12 @@ it('fails clearly when the project of a webhook is missing instead of making it 
 
     $this->seed(WebhooksSeeder::class);
 })->throws(RuntimeException::class, 'No project APP.');
+
+it('stores a timeout as the app stores one', function () {
+    // DeliverWebhook keeps the reason before the redacted message of curl; the log reads the reason in the reader's
+    // language (settings.webhooks.log.error.timeout), as for a real timeout
+    $message = 'cURL error 28: Operation timed out after 10000 milliseconds with 0 bytes received';
+
+    expect(WebhooksSeeder::TIMEOUT_ERROR)->toBe('timeout: '.Redact::text($message))
+        ->and(WebhooksSeeder::TIMEOUT_ERROR)->toMatch('/^timeout: cURL error 28\b/');
+});

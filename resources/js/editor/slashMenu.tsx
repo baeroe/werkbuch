@@ -1,9 +1,10 @@
 /*
  * The `/` menu (spec 4.16): typed at the start of a line or after a space (not in code, not right after a mark or an
- * atom, `slashAllowed`), it lists the blocks the
- * editor's level knows (presets.ts); typing narrows the list, Enter turns the line into the block. Each entry shows its
- * Markdown shortcut, which works while typing as well. Tables only on `page` (`slashTable`), the rule only on `page`;
- * "Bild oder Datei" opens the file choice (Task 17) and is there only with a project and a way to upload.
+ * atom, `slashAllowed`), it lists the blocks the editor's level knows (presets.ts); typing narrows the list, Enter
+ * turns the line into the block. Each entry shows its Markdown shortcut, which works while typing as well. Tables only
+ * on `page` (`slashTable`), the rule only on `page`; inside a table a group "Tabelle" edits its rows, columns and
+ * headers (tables.tsx); "Bild oder Datei" opens the file choice (Task 17) and is there only with a project and a way
+ * to upload.
  */
 
 import type { ResolvedPos } from '@tiptap/pm/model';
@@ -15,7 +16,8 @@ import { Heading1, Heading2, Heading3, ImagePlus, List, ListChecks, ListOrdered,
 import { t } from '@/lib/i18n';
 import type { EditorEnv, EditorEnvRef } from './EditorEnv';
 import { PRESETS, type EditorPreset, type PresetFeatures } from './presets';
-import { popupRenderer, SuggestionMenu, type PopupProps, type SuggestionEntry } from './suggestions';
+import { popupRenderer, SuggestionMenu, type PopupProps, type SuggestionEntry, type SuggestionSection } from './suggestions';
+import { tableSlashCommands } from './tables';
 
 export interface SlashItem {
   id: string;
@@ -29,6 +31,9 @@ export interface SlashItem {
   offered: (features: PresetFeatures, env: EditorEnv) => boolean;
   run: (editor: Editor, env: EditorEnv) => void;
 }
+
+/** What taking an entry runs: a block of the list or a command of the table. */
+type SlashPick = Pick<SlashItem, 'run'>;
 
 const always = () => true;
 
@@ -126,26 +131,41 @@ export function slashItemsFor(preset: EditorPreset, query: string, env: EditorEn
   );
 }
 
+/** An entry of the list: its icon, its name and the Markdown shortcut, if it has one. */
+function entryContent(icon: LucideIcon, label: string, hint?: string) {
+  const Icon = icon;
+  return (
+    <>
+      <Icon className="size-4 shrink-0 text-muted" aria-hidden="true" />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {hint && (
+        <span aria-hidden="true" translate="no" className="shrink-0 text-sm text-muted tabular-nums">
+          {hint}
+        </span>
+      )}
+    </>
+  );
+}
+
+const matches = (needle: string, text: string) => needle === '' || text.toLocaleLowerCase().includes(needle);
+
 function SlashSuggestions({ suggestion, preset, env, ref }: PopupProps<{ preset: EditorPreset }>) {
-  const entries: SuggestionEntry[] = slashItemsFor(preset, suggestion.query, env.current).map((item) => {
-    const Icon = item.icon;
-    return {
-      key: item.id,
-      content: (
-        <>
-          <Icon className="size-4 shrink-0 text-muted" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate">{item.label()}</span>
-          {item.hint && (
-            <span aria-hidden="true" translate="no" className="shrink-0 text-sm text-muted tabular-nums">
-              {item.hint}
-            </span>
-          )}
-        </>
-      ),
-      pick: () => suggestion.command(item),
-    };
-  });
-  return <SuggestionMenu ref={ref} editor={suggestion.editor} label={t('editor.slash.label')} sections={[{ entries }]} status={t('editor.slash.none', { query: suggestion.query })} />;
+  const entries: SuggestionEntry[] = slashItemsFor(preset, suggestion.query, env.current).map((item) => ({
+    key: item.id,
+    content: entryContent(item.icon, item.label(), item.hint),
+    pick: () => suggestion.command(item),
+  }));
+  const needle = suggestion.query.trim().toLocaleLowerCase();
+  // in a table: rows, columns and headers of it, after the blocks (tables.tsx)
+  const table: SuggestionEntry[] = tableSlashCommands(suggestion.editor)
+    .filter((command) => matches(needle, command.label()))
+    .map((command) => ({
+      key: command.id,
+      content: entryContent(command.icon, command.label()),
+      pick: () => suggestion.command({ run: command.run } satisfies SlashPick),
+    }));
+  const sections: SuggestionSection[] = table.length > 0 ? [{ label: t('editor.slash.label'), entries }, { label: t('editor.table.group'), entries: table }] : [{ entries }];
+  return <SuggestionMenu ref={ref} editor={suggestion.editor} label={t('editor.slash.label')} sections={sections} status={t('editor.slash.none', { query: suggestion.query })} />;
 }
 
 const slashKey = new PluginKey('slashMenu');
@@ -170,13 +190,13 @@ export function slashMenu(preset: EditorPreset, env: EditorEnvRef) {
     priority: 200,
     addProseMirrorPlugins() {
       return [
-        Suggestion<SlashItem, SlashItem>({
+        Suggestion<SlashItem, SlashPick>({
           editor: this.editor,
           pluginKey: slashKey,
           char: '/',
           items: () => [],
           allow: ({ state, range }) => slashAllowed(state.doc.resolve(range.from)),
-          command: ({ editor, range, props }: { editor: Editor; range: Range; props: SlashItem }) => {
+          command: ({ editor, range, props }: { editor: Editor; range: Range; props: SlashPick }) => {
             editor.chain().focus().deleteRange(range).run();
             props.run(editor, env.current);
           },

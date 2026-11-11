@@ -22,6 +22,7 @@ ddev artisan migrate
 ddev artisan app:search-import                # builds the search indexes in Meilisearch
 ddev artisan app:ensure-admin                 # creates the account from ADMIN_EMAIL / ADMIN_PASSWORD in .env
 ddev artisan db:seed --class=DemoSeeder       # optional: the fictional team Feldwerk (builds the search indexes again at the end)
+# or, in English instead: ddev artisan db:seed --class=DemoSeederEn   (the same team as Fieldwork)
 ```
 
 Start the Vite dev server and keep it running:
@@ -30,7 +31,7 @@ Start the Vite dev server and keep it running:
 ddev exec pnpm dev
 ```
 
-Open <https://werkbuch.ddev.site/login> and sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env` (`admin@example.com` and `password` in `.env.example`). The demo people use `<handle>@feldwerk.example.com` with the password `werkbuch-demo`.
+Open <https://werkbuch.ddev.site/login> and sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env` (`admin@example.com` and `password` in `.env.example`). The demo people use `<handle>@feldwerk.example.com` with the password `werkbuch-demo`. `DemoSeederEn` seeds the same demo in English: the team Fieldwork with the same handles, projects, keys and times, people at `<handle>@fieldwork.example.com`. One database holds one language: each seeder refuses a database that holds the demo of the other one, so switch with `ddev artisan migrate:fresh` first. `tests/Feature/Seeders/DemoLanguagesTest.php` seeds both and holds the English demo to the shape of the German one; the e2e seeder stays on the German demo.
 
 ## Services
 
@@ -45,9 +46,11 @@ Open <https://werkbuch.ddev.site/login> and sign in with `ADMIN_EMAIL` and `ADMI
 | Mail | `ddev mailpit` |
 | Database | `ddev mysql`, user, password and database `db` |
 
-Three queue workers, the scheduler and Reverb run as DDEV daemons and start with `ddev start`. The worker `queue` takes the queues in this order: `default` (handing every event to its consumers), `live` (live updates through Reverb), `notifications` (the inbox, notification mails, reminders, password reset and invitation mails) and `bulk` (deleting projects). The worker `queue-webhooks` takes `webhooks` alone: a receiver that hangs holds its worker up to about 17 seconds per attempt. The worker `queue-index` takes `search` (keeps the search indexes in step with every change) and `media` (previews of uploaded images, `MEDIA_QUEUE` in `.env`). `queue:listen` starts PHP anew for every job and always takes the first queue that has a job, and every event makes jobs for `default`, `live` and `notifications`: behind them search results and previews came minutes late, so they have a worker of their own. The order of all queues is `config('werkbuch.queues')`. The Meilisearch dashboard asks for the key `MEILISEARCH_KEY` from `.env`.
+Three queue workers, the scheduler and Reverb run as DDEV daemons and start with `ddev start`. The worker `queue` takes the queues in this order: `mail` (invitation and password reset mails, ahead of everything so nobody waits for them), `default` (handing every event to its consumers), `live` (live updates through Reverb), `notifications` (the inbox, notification mails, reminders) and `bulk` (deleting projects). The worker `queue-webhooks` takes `webhooks` alone: a receiver that hangs holds its worker up to about 17 seconds per attempt. The worker `queue-index` takes `search` (keeps the search indexes in step with every change) and `media` (previews of uploaded images, `MEDIA_QUEUE` in `.env`). `queue:listen` starts PHP anew for every job and always takes the first queue that has a job, and every event makes jobs for `default`, `live` and `notifications`: behind them search results and previews came minutes late, so they have a worker of their own. The order of all queues is `config('werkbuch.queues')`. The Meilisearch dashboard asks for the key `MEILISEARCH_KEY` from `.env`.
 
-The scheduler runs `app:redispatch-events` and `app:send-notification-mails` every minute, and every hour it clears uploads nobody took, sends the reminders for everyone for whom it is now 08:00, and prunes old notifications (all in `routes/console.php`).
+Sessions, the cache and the counters of the rate limits live in the database too (`SESSION_DRIVER=database` and `CACHE_STORE=database` in `.env.example`, the same in the image). The cache store `database` runs on the driver `retrying-database` (`App\Support\RetryingDatabaseStore`, `config/cache.php`): two requests of one person that write the same expired counter at once can deadlock in InnoDB, and the store tries such a statement up to three times outside a transaction, never after a lock wait. Keep that driver; Laravel's own driver `database` lets the deadlock through as a `500`. The tests run with `CACHE_STORE=array`; `tests/Integration/CacheDeadlockTest.php` checks the store against MariaDB.
+
+The scheduler runs `app:redispatch-events`, `app:send-notification-mails` and `app:run-templates` every minute, and every hour it clears uploads nobody took, sends the reminders for everyone for whom it is now 08:00, prunes old notifications and the webhook log, and runs the nightly automations once it is 03:00 for the organization (all in `routes/console.php`). It works for real, on the database of the app: on a fresh demo, WEB archives done items at night and the templates of the demo add items on their days. The e2e seeder switches the demo automations off and pauses the schedules of the demo templates, so a database the Playwright suite has seeded runs neither.
 
 Every mail of the app lands in Mailpit (`ddev mailpit`): password resets, invitations and notification mails. Notification mails are collected per person and item for `NOTIFICATION_MAIL_DELAY` minutes (5 in `.env.example`); `ddev artisan app:send-notification-mails --now` sends everything that is open right away. With `MAIL_MAILER=log` or `array`, werkbuch counts as having no mail server: there are no notification mails at all, only the inbox.
 
@@ -63,7 +66,7 @@ Every check runs inside DDEV, so the versions match the CI.
 
 ```bash
 ddev artisan test --coverage --min=100                    # Pest, 100 % line coverage (PCOV)
-ddev artisan test --filter=LoginTest               # one file or test
+ddev artisan test --filter=LoginTest                      # one file or test
 ddev exec vendor/bin/phpstan analyse --memory-limit=1G    # Larastan, level 8
 ddev exec vendor/bin/pint                                 # format PHP
 ddev exec pnpm typecheck                                  # tsc
@@ -85,9 +88,48 @@ pnpm --dir e2e test                          # seeds the e2e data, then runs the
 ddev exec pnpm coverage:merge                # Vitest and Playwright together: 100 % lines over resources/js
 ```
 
-The CI job `e2e` runs the same suite against `php artisan serve` with MariaDB, Meilisearch and Mailpit as services, Reverb on port 8080 (`e2e/ci.env`) and two workers, one on `default,live,notifications,webhooks,bulk` and one on `search,media`. Live specs need Reverb and the queue `live`; without them, the banner "Live updates paused" shows and the specs wait in vain.
+In CI, the suite runs in three jobs, none of them a required check. `e2e-build` builds the instrumented frontend once (`pnpm build:coverage`) and runs Vitest with coverage. `e2e (<project>)` runs the suite once per Playwright project (`desktop-light`, `desktop-dark`, `phone-light`, `phone-dark`), the four in parallel. Each one serves that build with `php artisan serve` and has its own MariaDB, Meilisearch and Mailpit as services, Reverb on port 8080 (`e2e/ci.env`) and three workers, one on `mail,default,live,notifications,bulk`, one on `search,media` and one on `webhooks`. Live specs need Reverb and the queue `live`; without them, the banner "Live updates paused" shows and the specs wait in vain. A project job runs `--project=setup --project=<project>` with `E2E_MERGE=0`, maps its coverage back with `--remap-only` and uploads only that file as `e2e-coverage-<project>`, also after failed tests, but not in a cancelled run: a newer push cancels the whole run, and a project that runs into its 60 minutes is cancelled as well, uploads nothing, and `e2e-coverage` then fails at `--expect-shards` before its report. `e2e-coverage` merges Vitest and the four files with `--expect-shards=desktop-light,desktop-dark,phone-light,phone-dark` and uploads the report as `frontend-coverage`. It fails below 100 % lines, when a project left no coverage, and in its last step whenever a project job failed: the coverage can reach 100 % while tests fail.
 
 The frontend must be covered to 100 % lines by Vitest and Playwright together. After the Playwright run, `coverage:merge` fails below that. Run `ddev exec pnpm build` afterwards to leave an uninstrumented build behind.
+
+Playwright keeps its coverage per project: the fixture writes `coverage/e2e/<project>/<test>-<n>.json`, and `coverage:merge` reads every file below `coverage/e2e`, at any depth. The 100 % hold for the sum of Vitest and all four projects only. No project gets there alone (the drawer of the phone, the dark theme, the touch menus), so a single project has no gate of its own. At the start of every run, `globalSetup` empties `coverage/e2e`, the folders of the projects the run leaves out (`--project=desktop-light`) included. That is on purpose: a partial run is never the sum, and the leftovers of an earlier run would make it look like one.
+
+For a CI job per project, the merge has two options:
+
+```bash
+E2E_MERGE=0 pnpm --dir e2e test                # leaves coverage/e2e/<project>/ unmerged
+node scripts/coverage-merge.mjs --remap-only --out coverage/e2e-<project>.json
+node scripts/coverage-merge.mjs --expect-shards=desktop-light,desktop-dark,phone-light,phone-dark
+```
+
+`--remap-only` maps every file below `coverage/e2e` back to the sources once and writes them as one file, with no report and no gate; without a single file below `coverage/e2e` it writes nothing and ends with exit code 1. A full project leaves well over a thousand files of about 2 MB; mapped, they come to about 4 MB. The hits add up the same before and after the mapping, because every project runs the same build with the same source maps. `--expect-shards` reads exactly the projects it names, each from `coverage/e2e/<name>.json`, `coverage/e2e/<name>/` or `coverage/e2e/<prefix>-<name>/` (the folder `actions/download-artifact` makes of the artifact `e2e-coverage-<name>`). It fails naming every project without coverage, with an empty folder or with two such sources; a project whose files hold only entries outside the sources the merge keeps (`node_modules`, tests) counts as without coverage.
+
+### Load tests
+
+The suite `Load` (`tests/Load`) measures the API against 50 000 items. It has its own configuration `phpunit.load.xml` and its own database `load`, which DDEV creates on start next to `testing`; it is neither part of `phpunit.xml` nor of the coverage.
+
+```bash
+ddev exec vendor/bin/pest --configuration=phpunit.load.xml                    # the whole suite
+ddev exec vendor/bin/pest --configuration=phpunit.load.xml --filter=SeedLoad  # only the data
+```
+
+Call Pest directly: `ddev artisan test` puts `--configuration=phpunit.xml` in front of yours, PHPUnit warns that the option came twice and ends with exit code 1, even when every test passes.
+
+`phpunit.load.xml` forces every value, the database `load` and the search prefix `load_` among them, because the environment of DDEV would win otherwise. `Tests\Load\LoadWorld::ensure()` checks both before its first statement and refuses anything else. It then runs `migrate --force`, so a seeded database gets new migrations, and seeds anew (`migrate:fresh` and `Database\Seeders\LoadSeeder`) when the table `load_meta` lacks the version of the seeder or its numbers. Every change to the seeder raises `LoadSeeder::VERSION`.
+
+The seeder writes the demo catalog, 30 people `load-NN@example.com` (`load-01` is the org admin, password `werkbuch-load`), 5 bots, 20 projects `L01` to `L20` with 2 500 items each and their history (about 266 000 events), 5 000 relations, 100 000 comments (one item per project with 40), 2 000 wiki pages in `L01` four levels deep, 200 templates (50 come due in the same minute) and 50 switched-off webhooks. The first epic of every project has the 40 items after it as children, 12 fixed relations and three files. It writes in bulk without the app's events and takes its texts from a fixed pool of Tiptap JSON, never from Markdown. Then it builds the search index (`load_work_items` and the others) anew. In DDEV the first run takes about a minute (23 s for the rows, 33 s for the search index); the database comes to about 580 MB (the events about 210 MB). Later runs reuse it.
+
+`tests/Load/ApiLoadTest.php` measures the answers of the browser against these data: the first page of the item list in every sort and both directions, the list of a project, every grouping over all projects and in one, ten counts, the board of a project, an epic with everything it can include, the comments and the history of an item, the search, the projects, the wiki and the pages that name an item. A few rows read as a member instead of the org admin. Each row runs once to warm up, then three times, and before every run the app forgets its scoped instances and the visibility (`Tests\Load\Support\Budget`). The budget is 1.5 seconds per answer for the median of the three runs. Every run has to answer 200. The number of queries is the hard check, in two ways. In every run it has to be the same as in a small world, the same requests in a transaction (rolled back) that keeps only the first 100 items of every project and the top pages of the wiki: no query grows with the data outside the answer. Where an answer is as big in both worlds (a page of items, comments, history or projects, the board, the epic with its children, relations and files), a smaller answer in the big world has to ask as often: a page of 25 instead of 100 (5 or 2 projects), the epic with 10 of its 40 children, three relations and one file fewer. So none of these answers asks the database once more per item, comment, event, project, child, relation or file. The groupings and the counts have no smaller answer: their groups are the same in both worlds (only the grouping by parent grows, 2 500 epics against 100) and the counts ask once per filter on purpose, so a query per group or per filter is left to the feature tests. The search compares itself with a search of 50 hits per kind, the wiki its 2 000 pages with 20. Not measured, and the same for every row: the suite keeps the session and the counters of the rate limit in memory and acts with one account object for every run; a request in production reads them, a few queries and milliseconds more. A test of its own redistributes the ranks of the 2 500 items of a project, within 1.5 seconds.
+
+`tests/Load/SearchLoadTest.php` measures the search the palette asks 150 ms after the last key, so with a budget of its own, 0.5 seconds for the median: one, two and three words, all kinds and only items, as the org admin (20 projects) and as a person who sees one project (in a transaction that is rolled back). It also checks the document of the item with 40 comments against the limit of its comment text, and rebuilds every index at the end: within five minutes until Meilisearch holds every document, with at most 512 MB of PHP. The rebuild empties the indexes on the way, so it runs last.
+
+`tests/Load/WorkLoadTest.php` measures the work behind the API, each part once (a second run would find it done) and with a budget of its own: a bulk change of 100 items (a bot as assignee and a priority) with the 50 webhooks switched on, within 3 seconds, then the consumption of its 300 events (search, notifications, live and webhooks: 15 000 deliveries, the biggest body for an item with a description of 200 KB within the limit of a payload), only measured; the night of Auto-Close over the 20 projects within 10 minutes and 256 MB; the scheduler with the 50 due templates within 1.5 seconds; and a template run that copies 20 pictures of 2 MB, within 10 seconds and 256 MB. Its tests use `DatabaseTransactions`: the actions commit into the transaction of the test, so their work after the commit runs, and the end of the test rolls everything back. The search consumer writes into the in-memory engine of the feature tests, never into Meilisearch, and the pictures go to a fake disk. Its constant for rows over the budget is `WORK_OVER_BUDGET`. Its numbers are a lower bound, not what production takes: in the transaction of the test every commit of an action is a savepoint (no write to disk per transaction; in production each of the 100 transactions of the bulk change and the 8 396 of the night commits on its own, and the locks of the night pile up until the rollback, so no lock wait is measured), the night runs without consumers (in production its roughly 16 800 events go to four consumers each, in the queues), and the consumption of the bulk change has one receiver of notifications (the seed has no watchers, only the lead of the project hears of each item).
+
+At the end the suite prints a table of every row (median, the three runs, the queries, the peak of memory of a row that runs once, the queries against 100 items and for the smaller answer) and writes it to `storage/logs/load-budget.md`. A row the constant `OVER_BUDGET` in `ApiLoadTest` names (`'<row>' => 'Task <n>: <reason>'`) still runs and shows up in the table; only its median is not checked, its queries are. A test makes sure the constant names only rows that exist.
+
+In GitHub Actions the job `load` runs the suite next to `tests` on every pull request, with its own MariaDB (database `load`) and Meilisearch. It is no required check; the table is the artifact `load-budget`. Before the suite, the job sets the buffer pool of its MariaDB to 1 GiB (`SET GLOBAL innodb_buffer_pool_size`), as DDEV has it; the image's 128 MiB would not hold the 580 MB of data. Like `tests` and the e2e jobs, it also sets `max_allowed_packet` to 64 MiB, as the stack has it. Its runner is still slower than DDEV, so a median close to the budget there is worth a look.
+
+Never run the load suite at the same time as the other tests or the browser tests: they share MariaDB, Meilisearch and the CPU of the VM, and the measurements would be off.
 
 ## Lost password
 
@@ -116,21 +158,31 @@ curl https://werkbuch.ddev.site/mcp \
 ## Maintenance commands
 
 ```bash
-ddev artisan app:sync-roles            # compares the roles and rights in the database with the code
-ddev artisan app:redispatch-events     # hands events that got stuck to their consumers again
-ddev artisan app:send-notification-mails   # queues collected notification mails that have no job; --now sends all open ones at once
-ddev artisan app:search-sync           # sends the settings of the search indexes (config/scout.php) to Meilisearch
-ddev artisan app:search-import         # empties the search indexes and fills them again from the database
-ddev artisan app:prune-attachments --dry-run --min-age=30   # lists pictures and files no text names any more
+ddev artisan app:sync-roles                                # compares the roles and rights in the database with the code
+ddev artisan app:redispatch-events                         # hands events that got stuck to their consumers again
+ddev artisan app:send-notification-mails                   # queues collected notification mails that have no job; --now sends all open ones at once
+ddev artisan app:run-templates                             # queues the templates that are due; --now runs them here, --template=<ULID> only that one
+ddev artisan app:run-automations                           # the nightly automations, at 03:00 of the organization only; --now runs them at once, --project=<ULID>
+ddev artisan app:search-sync                               # sends the settings of the search indexes (config/scout.php) to Meilisearch
+ddev artisan app:search-import                             # builds the search indexes again from the database and swaps them in
+ddev artisan app:prune-attachments --dry-run --min-age=30  # lists pictures and files no text names any more
 ```
 
 `app:sync-roles` is what the migration of the roles runs; call it by hand only after a rights table in the code changed without a migration. `app:redispatch-events` runs every minute in the scheduler, so you only need it by hand to catch up after the scheduler was down.
 
 `app:send-notification-mails` runs every minute as well: it hands collected mails that are due and lost their job to the queue again, once no try ran for 35 minutes. With `--now` it sends every open collection in its own process, due or not; use it before maintenance, or locally instead of waiting five minutes.
 
-`app:search-sync` is needed after a change of the index settings in `config/scout.php`. `app:search-import` builds the indexes from scratch: on the first start, after `migrate:fresh`, and as the repair when the search missed changes (for example after Meilisearch was down for hours). During the import the search is briefly empty. More under [Search](/en/search#operation).
+`app:run-templates` runs every minute too. With `--now` it runs every due template in its own process: one that fails is named, the others still run, and the command ends with an error. `app:run-automations` runs auto-archive and auto-close (the scheduler does it every hour, and they act at 03:00 of the organization); `--now` runs them at once, `--project=<ULID>` in that project only. Both work on the database of the app, just like the scheduler.
 
-Pictures and files pasted into a text stay when the text loses them, so that the history and undo keep working. `app:prune-attachments` removes those that no current text of their project names any more (the description or a rich text value of an item, the text of a comment) and that are older than `--min-age` days (default 30); `--dry-run` only lists them, each with project, id, file name and size, and sums them up. Pictures that only an older version of a text in the history shows go too, so pick the minimum age with that in mind. Files of the file list of an item are never pruned; they are deleted there. The command also removes folders on the media disk whose media row is gone (a preview made while its picture was being deleted), when all their files are older than the minimum age. A project with a text that cannot be read is skipped (`skipped WEB: unreadable text of …`, also in the log) and nothing of it is removed; the other projects still get their turn. Uploads that no text ever took (a picture pasted into a comment that was never sent) go by themselves: a job of the scheduler removes them every hour once they are older than 24 hours. Deleting an item removes the files of the item and of its comments, deleting a comment its files, deleting a project all files of the project. A picture that another text of the project still shows (copied from one text into another) stays: it then belongs to that text.
+`app:search-sync` is needed after a change of the index settings in `config/scout.php`. `app:search-import` builds the indexes from scratch: on the first start, after `migrate:fresh`, and as the repair when the search missed changes (for example after Meilisearch was down for hours). During the import the search keeps answering from the old indexes. More under [Search](/en/search#operation).
+
+Pictures and files pasted into a text stay when the text loses them, so that the history and undo keep working. `app:prune-attachments` removes those that no current text of their project names any more (the description or a rich text value of an item, a comment, a wiki page or one of its versions, a template) and that are older than `--min-age` days (default 30); `--dry-run` only lists them, each with project, id, file name and size, and sums them up. Pictures that only an older version of a text in the history shows go too, so pick the minimum age with that in mind; the versions of a wiki page count as texts and keep theirs. Files of the file list of an item are never pruned; they are deleted there. The command also removes folders on the media disk whose media row is gone (a preview made while its picture was being deleted), when all their files are older than the minimum age. A project with a text that cannot be read is skipped (`skipped WEB: unreadable text of …`, also in the log) and nothing of it is removed; the other projects still get their turn. Uploads that no text ever took (a picture pasted into a comment that was never sent) go by themselves: a job of the scheduler removes them every hour once they are older than 24 hours. Deleting an item removes the files of the item and of its comments, deleting a comment, a wiki page or a template its files, deleting a project all files of the project. A picture that another text of the project still shows (copied from one text into another) stays: it then belongs to that text.
+
+## Unsaved changes
+
+A screen with a form that can lose what someone typed renders one `LeaveGuard` (`resources/js/features/settings/frame/LeaveGuard.tsx`) with its `dirty` state. While it is dirty, a visit inside the app stops at “Discard changes?”, so do the browser's Back and Forward, and closing or reloading the tab gets the browser's own question. A move that is meant (to the new identifier of a project that was just saved) sets `bypass` first.
+
+Keep it to one guard per screen. Two guards that are dirty at once both hold the visit: their dialogs stack, and the person is asked twice. A screen with two forms passes `dirty` to one guard at a time; on **Security**, the guard of the password stays silent while the recovery codes are shown. Text that outlives its screen (a comment that was not sent, the description of an item, a wiki page) does not use a guard: it stays in `resources/js/lib/drafts.ts`, and a `beforeunload` of that module asks as long as something is unsent.
 
 ## Docker image
 
@@ -145,9 +197,22 @@ WERKBUCH_IMAGE=werkbuch:local scripts/compose-smoke.sh
 
 ## Documentation
 
-These docs live in `docs/` (VitePress) in English (`docs/en/`) and German (`docs/de/`). Every page exists in both languages under the same file name and with the same headings; `tests/Unit/DocsTest.php` checks that. The specs and plans in `docs/superpowers/` are not part of the site.
+These docs live in `docs/` (VitePress) in English (`docs/en/`) and German (`docs/de/`). Every page exists in both languages under the same file name and with the same headings, in the same order in the sidebar. No page names a phase of the build. `tests/Unit/DocsTest.php` checks that. The specs and plans in `docs/superpowers/` are not part of the site. Every push to `main` that changes the docs publishes them at https://werkbuch.dev (`.github/workflows/docs.yml`, GitHub Pages); while Pages is off for the repository, the workflow only builds them and says so in a notice. The CI job `docs` builds every pull request below `/werkbuch/`, so a copy under a sub-path keeps working (`DOCS_BASE`).
 
 ```bash
 ddev exec pnpm --dir docs dev       # https://werkbuch.ddev.site:5174/en/
 ddev exec pnpm --dir docs build     # the site in docs/.vitepress/dist
 ```
+
+### Screenshots
+
+The screenshots of these docs lie in `docs/public/screenshots/en/` and `docs/public/screenshots/de/` (1440 × 900, light; a few also as `<name>-dark.png`). Playwright takes them from the demo data, the English ones from the English demo with the English interface, the German ones from the German demo, signed in as Mara each time. When the interface changes visibly, take them again and commit them in the same pull request.
+
+```bash
+ddev exec pnpm build                 # a normal build, no coverage build
+pnpm --dir e2e docs:screenshots      # seeds, takes every shot, sets the database back, compresses the images
+```
+
+The run uses the development database: it sets it up afresh with `DemoSeeder`, takes the German shots, does the same with `DemoSeederEn` for the English ones and ends with `migrate:fresh --seed --seeder=E2eSeeder`. Whatever you had in the database is gone afterwards. For the length of the run the scheduler daemon of DDEV stands still: it stops before the first seed and starts again after the e2e data, also when a shot fails (a run you cut short leaves it to `ddev restart`). Running, it would act on the demo at a full hour, with the reminder at 08:00, the prune of webhook deliveries and read notifications (the demo is from October 2026, older than their 30 and 90 days) or a template at its time. So the times of the demo stay fixed and match the clock of the browser. Neither the CI nor `pnpm --dir e2e test` runs these projects (`DOCS_SCREENSHOTS`).
+
+The demo lives in October 2026, so the browser's clock stands still at 28 October 2026, 09:30 in Berlin: "overdue", "yesterday" and "2 hours ago" read the same on every run. The server keeps its own clock, so what it computes from now is answered for that day in the spec, such as the next runs of the weekly maintenance. `e2e/optimize-screenshots.sh` compresses the images losslessly with oxipng in Docker; every image stays below 400 KB, and `DocsTest` checks that both languages have the same images (the API reference only in English) and that a page shows only images of its own language that exist. The API reference shows `https://werkbuch.example.com/api/v1` as its server, never the address of DDEV; no shot may name `ddev.site`. Look at every image before you commit it: the language of the interface and of the data, the clock, nothing half loaded. The dark images differ from run to run by a few pixels of anti-aliasing.

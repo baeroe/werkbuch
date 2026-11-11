@@ -65,7 +65,7 @@ $operations = [
     'PUT /work-items/{item}/type' => 200, 'POST /work-items/{item}/archive' => 200, 'POST /work-items/{item}/restore' => 200,
     'GET /work-items/{item}/subscribers' => 200, 'PUT /work-items/{item}/subscription' => 200, 'DELETE /work-items/{item}/subscription' => 200,
     'GET /work-items/{item}/relations' => 200, 'POST /work-items/{item}/relations' => 201, 'DELETE /relations/{relation}' => 204,
-    'GET /work-items/{item}/history' => 200,
+    'GET /work-items/{item}/history' => 200, 'POST /projects/{project}/redistribute-ranks' => 200,
 ];
 
 it('documents the success status the server answers for every item operation', function () use ($operations, $tags) {
@@ -124,6 +124,14 @@ it('describes a work item, its free values and what a lean one leaves out', func
         ->and($properties['priority']['enum'])->toBe(array_column(Priority::cases(), 'value'))
         ->and($properties['due_date']['format'])->toBe('date')
         ->and($properties['updated_at']['format'])->toBe('date-time');
+
+    // both stamps are NOT NULL (A440): the document promises a client no null that never comes; the others may be empty
+    expect($item['required'])->toContain('created_at', 'updated_at', 'started_at', 'closed_at', 'archived_at')
+        ->and($properties['created_at'])->toBe(['type' => 'string', 'format' => 'date-time'])
+        ->and($properties['updated_at'])->toBe(['type' => 'string', 'format' => 'date-time'])
+        ->and($properties['started_at']['type'])->toBe(['string', 'null'])
+        ->and($properties['closed_at']['type'])->toBe(['string', 'null'])
+        ->and($properties['archived_at']['type'])->toBe(['string', 'null']);
 
     // what `include` embeds is the resource of each, never a loose array
     expect($properties['children']['items']['$ref'])->toBe('#/components/schemas/WorkItemResource')
@@ -247,7 +255,9 @@ it('documents the keys the server reads and closes only the bodies that refuse o
         ->and($patch['minProperties'])->toBe(1)
         ->and(array_keys($shorthand['properties']))->toBe(Shorthand::KEYS)
         ->and($body('POST', '/work-items/query')['properties']['filter']['anyOf'][0]['$ref'])->toBe('#/components/schemas/Filter')
-        ->and($body('POST', '/work-items/counts')['properties']['filters']['additionalProperties']['$ref'])->toBe('#/components/schemas/Filter');
+        ->and($body('POST', '/work-items/counts')['properties']['filters']['additionalProperties']['$ref'])->toBe('#/components/schemas/Filter')
+        ->and($body('POST', '/work-items/counts')['properties']['filters']['description'])
+        ->toContain('at most '.CountWorkItems::MAX_CONDITIONS_TOTAL.' conditions over all of them');
 });
 
 it('says on create which fields mean "not given" with null', function () use ($body) {

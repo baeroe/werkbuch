@@ -2,6 +2,7 @@ import { Dialog as BaseDialog } from '@base-ui/react/dialog';
 import { Link, usePage } from '@inertiajs/react';
 import { Inbox, Menu, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { isPlainClick } from '@/components/items/ItemLink';
 import { IconButton } from '@/components/ui/IconButton';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
@@ -11,23 +12,22 @@ import { InboxBadge, useInboxName } from './InboxBadge';
 import { openSearch } from './SearchButton';
 import { SidebarContent } from './Sidebar';
 
-/** Mounted while the drawer is open: it is modal, so the page's shortcuts pause (all but mod+k, escape, mod+enter). */
-function DrawerScope() {
-  useDialogScope();
-  return null;
-}
-
 /** Below md: menu (drawer with the sidebar), wordmark, the search (the one way into the palette on a phone) and the inbox. */
 export function MobileBar() {
   const [open, setOpen] = useState(false);
   const { url } = usePage();
+  const path = url.split(/[?#]/)[0];
 
-  // a chosen link closes the drawer
-  useEffect(() => setOpen(false), [url]);
+  // a new page closes the drawer, a new query does not: the lists write their state into it (a canonical address, a
+  // parameter taken out) while the drawer may be open
+  useEffect(() => setOpen(false), [path]);
   // so does the palette (its search button sits in the drawer, mod+k works in it): one modal dialog at a time, and a
   // command that leads nowhere (theme, help) does not leave the drawer behind the closed palette
   const paletteOpen = useUiStore((state) => state.paletteOpen);
   const inbox = useInboxName();
+  // the drawer is modal: while it is open the page's shortcuts pause (all but mod+k, escape, mod+enter), not while it
+  // slides out
+  useDialogScope(open);
   useEffect(() => {
     if (paletteOpen) setOpen(false);
   }, [paletteOpen]);
@@ -43,8 +43,15 @@ export function MobileBar() {
             className="tracing fixed top-2 bottom-2 left-2 z-50 flex w-[min(18rem,calc(100vw-1rem))] flex-col rounded-card p-2 outline-none transition-transform duration-160 data-ending-style:-translate-x-[110%] data-starting-style:-translate-x-[110%]"
           >
             <BaseDialog.Title className="sr-only">{t('shell.mobile.navigation')}</BaseDialog.Title>
-            <DrawerScope />
-            <nav aria-label={t('shell.sidebar.label')} className="flex min-h-0 flex-1 flex-col gap-4">
+            {/* a chosen link closes it too, also one to the page it is on or to the same page with another query; one
+                opened in a new tab or window (⌘, Strg, ⇧, middle button) leaves this page where it is (20b-M6) */}
+            <nav
+              aria-label={t('shell.sidebar.label')}
+              className="flex min-h-0 flex-1 flex-col gap-4"
+              onClick={(event) => {
+                if (isPlainClick(event) && event.target instanceof Element && event.target.closest('a[href]')) setOpen(false);
+              }}
+            >
               <SidebarContent headerAction={<BaseDialog.Close render={<IconButton icon={X} label={t('shell.mobile.close_navigation')} tooltip={false} />} />} />
             </nav>
           </BaseDialog.Popup>

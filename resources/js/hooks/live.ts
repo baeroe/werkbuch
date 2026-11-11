@@ -26,6 +26,9 @@ const GONE_MAX = 200;
 /** The wiki of a project: the trees, the pages, their versions. */
 const WIKI: readonly QueryKey[] = [qk.pages.all, qk.pageVersions.all];
 
+/** The wiki pages that name an item (`qk.pages.item(id)`), all of them. */
+const ITEM_PAGES: QueryKey = [...qk.pages.all, 'item'];
+
 /** The templates with their runs and the automations of a project (the preview of a schedule is no live data). */
 const AUTOMATION: readonly QueryKey[] = [qk.templates.all, qk.templateRuns.all, qk.automations.all];
 
@@ -54,9 +57,9 @@ function heldKeys(event: LiveEvent): readonly QueryKey[] {
 /**
  * The caches a message makes stale. Items and their history on `work_item.*` (also watching, on the person's own
  * channel), comments and the history on `comment.*`, projects and members on `project.*` (on `project.updated` the
- * items too: their keys carry the identifier), the templates and their runs on `template.*` (a failed run is
- * `template.run_failed`; on `template.deleted` the items too: their `template_id` goes, T14-M3), the automations on
- * `automation.*`, the templates and their runs on a `work_item.created` a run made (it names its template, T14-I1:
+ * items too: their keys carry the identifier; on `project.ranks_redistributed` only the items, A448), the templates
+ * and their runs on `template.*` (a failed run is `template.run_failed`; on `template.deleted` the items too: their
+ * `template_id` goes, T14-M3), the automations on `automation.*`, the templates and their runs on a `work_item.created` a run made (it names its template, T14-I1:
  * the log, the count and the next run change; an item made by hand leaves them alone), the wiki on `page.*` (on `page.updated` and `page.moved` the references
  * too: a reference shows the title of its page, K15; on `page.deleted` as well: a reference to a deleted page loads and
  * finds it missing, T18-M5), the projects on a new org role (K14: the channels follow the list; the
@@ -76,6 +79,8 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (event.type === 'user.role_changed') return [qk.projects.all];
   // a run ends in a new item that names its template: its log, its count and its next run change
   if (event.type === 'work_item.created' && event.template_id !== null) return [qk.workItems.all, qk.activity.all, qk.templates.all, qk.templateRuns.all];
+  // a renamed or deleted item: the references that show it (a closed parent chip, `#` in a text) read it again (14b2-M1a)
+  if ((event.type === 'work_item.updated' || event.type === 'work_item.deleted') && event.item_id !== null) return [qk.workItems.all, qk.activity.all, qk.references.item(event.item_id)];
   if (group === 'work_item') return [qk.workItems.all, qk.activity.all];
   if (event.type === 'template.deleted') return [qk.templates.all, qk.templateRuns.all, qk.workItems.all];
   if (group === 'template') return [qk.templates.all, qk.templateRuns.all];
@@ -83,6 +88,10 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (group === 'comment') return [qk.comments.all, qk.activity.all];
   // a new identifier changes the keys of the items: the lists of the project load again (T14-M6)
   if (event.type === 'project.updated') return [qk.projects.all, qk.members.all, qk.workItems.all];
+  // new short ranks for the items of a project (A448): the lists load them again, the project itself is unchanged
+  if (event.type === 'project.ranks_redistributed') return [qk.workItems.all];
+  // a page of the deleted project may name an item of another one: the wiki pages of an item load again (no 404: the server leaves them out)
+  if (event.type === 'project.deleted') return [qk.projects.all, qk.members.all, ITEM_PAGES];
   if (group === 'project') return [qk.projects.all, qk.members.all];
   if (event.type === 'page.updated' || event.type === 'page.moved' || event.type === 'page.deleted') return [...WIKI, qk.references.all];
   if (group === 'page') return WIKI;
@@ -192,7 +201,10 @@ class LiveRefresh {
     for (const query of new Set([...stale, ...waiting])) this.load(query);
   }
 
-  /** A query of the cache finished a fetch: load it again when a message came during that fetch. */
+  /**
+   * A query of the cache got the answer of a fetch (never a `setQueryData`): load it again when a message came during
+   * that fetch. A fetch that was cancelled waits in `afterFetch` until `settle`.
+   */
   fetched(query: Query): void {
     if (!this.afterFetch.has(query.queryHash) || query.state.fetchStatus === 'fetching' || this.pending()) return;
     this.load(query);
@@ -315,8 +327,12 @@ export function useLiveSync(): void {
 
     const stopMutations = queryClient.getMutationCache().subscribe(settle);
     const stopUndo = subscribeUndoPending(settle);
+    // only an answer of a fetch ends it: `setQueryData` (`success` with `manual`) after a cancelled reload is the screen
+    // changing what it shows (an item hidden for an undo window, T7-I1); what waited for that fetch loads on `settle`
     const stopQueries = queryClient.getQueryCache().subscribe((event) => {
-      if (event.type === 'updated' && (event.action.type === 'success' || event.action.type === 'error')) refresh.fetched(event.query);
+      if (event.type !== 'updated') return;
+      const { action } = event;
+      if (action.type === 'error' || (action.type === 'success' && action.manual !== true)) refresh.fetched(event.query);
     });
     const stopLive = subscribeLive((event) => {
       if (event.event_id !== null) {

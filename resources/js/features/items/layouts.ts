@@ -14,6 +14,9 @@
  *   workflows, P14). `display`: the display as applied (fields, sort, sub-items). `total`: every match of the list.
  *   `project`: the project of a project list. `createDefaults`: what a new item of the list gets (`openCreate`; Meine
  *   Items: assigned to me), for the quick add of a board.
+ * - `filtered` / `onResetFilter()`: the list is empty because of its filter, and the way back to all of it (as
+ *   `ListEmpty`); `filterChanged` and `view` choose its words as `ListEmpty` does. Only the timeline uses them, the
+ *   screen shows `ListEmpty` for the other layouts.
  * - `selection` / `onSelect(ids)`: the selected ids. `onSelectAll()` (⌘A) selects every item of the list, also those of
  *   pages not loaded yet; pass it on to `useSelection`.
  * - `cursorId` / `onCursor(id)`: the item under the keyboard cursor; the item commands of the list act on it. Report
@@ -28,12 +31,12 @@
  * - Registers no item commands of its own; keeps chips and pickers out of the tab order.
  */
 
-import { lazy, type ComponentType } from 'react';
+import { createElement, lazy, type ComponentType } from 'react';
 import type { ApiError } from '@/api/client';
-import type { TranslationKey } from '@/lib/i18n';
+import { t, type TranslationKey } from '@/lib/i18n';
 import type { ShortcutId } from '@/lib/shortcuts/catalog';
 import type { CreateDefaults } from '@/store/ui';
-import type { Display, GroupBy, GroupCount, ListedItem, Project } from '@/types';
+import type { Display, GroupBy, GroupCount, ListedItem, Project, View } from '@/types';
 import { ListLayout } from './list/ListLayout';
 
 /** One group of a list as the layout shows it. */
@@ -69,6 +72,14 @@ export interface LayoutProps {
   total: number;
   project?: Project;
   createDefaults?: CreateDefaults;
+  /** The filter of the list hides items (it differs from its base, or a view has conditions of its own). */
+  filtered?: boolean;
+  /** The filter differs from its base: an empty view says its own conditions match nothing only while it does not. */
+  filterChanged?: boolean;
+  /** The view of a view's list: an empty one names it (19b-M2). */
+  view?: View;
+  /** Back to the filter of the base (or none). */
+  onResetFilter?(): void;
   selection: string[];
   onSelect(ids: string[]): void;
   /** ⌘A: every item of the list, also those not loaded yet (the screen loads them first). */
@@ -79,10 +90,44 @@ export interface LayoutProps {
   onCursor(id: string | null): void;
 }
 
-/** The board, the table and the timeline come as chunks of their own, with their first use (in a `Suspense`). */
-const BoardLayout = lazy(() => import('./board/BoardLayout').then((module) => ({ default: module.BoardLayout })));
-const TableLayout = lazy(() => import('./table/TableLayout').then((module) => ({ default: module.TableLayout })));
-const TimelineLayout = lazy(() => import('./timeline/TimelineLayout').then((module) => ({ default: module.TimelineLayout })));
+/** A chunk of a layout that did not load: the one error `LayoutBoundary` takes on (T18-M5). */
+export class LayoutChunkError extends Error {
+  /** Lets the next render of the layout ask for its chunk again. */
+  readonly retry: () => void;
+
+  constructor(cause: unknown, retry: () => void) {
+    super(t('items.screen.layout_failed'), { cause });
+    this.name = 'LayoutChunkError';
+    this.retry = retry;
+  }
+}
+
+/**
+ * A layout that comes as a chunk of its own, with its first use (in a `Suspense`). A lazy component keeps a failed
+ * import for good: "Erneut versuchen" of `LayoutBoundary` gives the layout a new one (`retry` of the error), so its next
+ * render asks for the chunk again. Not before: React renders once more after an error by itself, and that render must
+ * fail again rather than ask the network a second time unasked.
+ */
+export function lateLayout(load: () => Promise<ComponentType<LayoutProps>>): ComponentType<LayoutProps> {
+  const make = () =>
+    lazy(() =>
+      load().then(
+        (component) => ({ default: component }),
+        (reason: unknown) => {
+          throw new LayoutChunkError(reason, () => (current = make()));
+        },
+      ),
+    );
+  let current = make();
+  return function LateLayout(props: LayoutProps) {
+    return createElement(current, props);
+  };
+}
+
+/** The board, the table and the timeline come as chunks of their own. */
+const BoardLayout = lateLayout(() => import('./board/BoardLayout').then((module) => module.BoardLayout));
+const TableLayout = lateLayout(() => import('./table/TableLayout').then((module) => module.TableLayout));
+const TimelineLayout = lateLayout(() => import('./timeline/TimelineLayout').then((module) => module.TimelineLayout));
 
 /** The layout of each `Display['layout']`. */
 export const layouts: Record<Display['layout'], ComponentType<LayoutProps>> = {

@@ -151,7 +151,15 @@ describe('changedFields', () => {
   it('speaks the language of the page', () => {
     initI18n({ locale: 'en', translations: en });
 
-    expect(changedFields(['title', 'due_date', 'values.customer'], propertyLabel)).toBe('Title, Due date and Kunde');
+    expect(changedFields(['title', 'due_date', 'values.customer'], propertyLabel)).toBe('title, due date and Kunde');
+  });
+
+  it('names every field in lower case mid-sentence in English, as "changed :fields" reads', () => {
+    initI18n({ locale: 'en', translations: en });
+
+    expect(changedFields(['priority', 'label_ids', 'start_date', 'assignee_id'], propertyLabel)).toBe('priority, labels, start date and assignee');
+    expect(changedFields(['description', 'parent_id', 'type_id', 'resolution_id'], propertyLabel)).toBe('description, parent, type and resolution');
+    expect(changedFields(['relation', 'attachment'], propertyLabel)).toBe('relations and files');
   });
 });
 

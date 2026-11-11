@@ -7,7 +7,10 @@ use App\Models\Page;
 use App\Models\PageVersion;
 use App\Models\Project;
 use App\Models\User;
+use App\Models\WorkItem;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /*
  * Deleting a page with its whole subtree (Task 6, A310, K1): every page below it and their versions go with it, under
@@ -34,10 +37,12 @@ $world = function (): array {
 
 $delete = fn (User $user, Page $page): int => DeletePage::run(actor($user), $page);
 
-it('deletes a page with its whole subtree and their versions, and answers how many', function () use ($world, $delete) {
+it('deletes a page with its whole subtree, their versions and item references, and answers how many', function () use ($world, $delete) {
     $w = $world();
+    $item = WorkItem::factory()->for($w['web'])->create();
     foreach (['start', 'steps', 'team'] as $key) {
         PageVersion::factory()->create(['page_id' => $w[$key]->id]);
+        DB::table('page_item_references')->insert(['id' => strtolower((string) Str::ulid()), 'page_id' => $w[$key]->id, 'work_item_id' => $item->id]);
     }
     $touched = $w['web']->updated_at?->toJSON();
     Carbon::setTestNow(now()->addHour());
@@ -47,6 +52,9 @@ it('deletes a page with its whole subtree and their versions, and answers how ma
     expect($deleted)->toBe(4)
         ->and(Page::query()->pluck('title')->all())->toBe(['Team'])
         ->and(PageVersion::query()->pluck('page_id')->all())->toBe([$w['team']->id])
+        // the items they referenced stay, only the rows of the pages go (cascade, A456)
+        ->and(DB::table('page_item_references')->pluck('page_id')->all())->toBe([$w['team']->id])
+        ->and($item->fresh())->not->toBeNull()
         // a deletion in the wiki is no change of the project
         ->and($w['web']->fresh()?->updated_at?->toJSON())->toBe($touched);
 });

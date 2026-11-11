@@ -1,7 +1,7 @@
-import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
+import { hashKey, QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Page } from '@/api/client';
 import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
@@ -30,6 +30,12 @@ import {
   useWorkItemGroups,
   useWorkItems,
 } from './workItems';
+
+// a spy on the query hashes the hooks compute: the cache of TanStack hashes with its own copy and is not counted
+vi.mock('@tanstack/react-query', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tanstack/react-query')>();
+  return { ...actual, hashKey: vi.fn(actual.hashKey) };
+});
 
 let queryClient: QueryClient;
 let api: MockApi | undefined;
@@ -495,13 +501,13 @@ describe('pages of a list', () => {
   it('loads on to the end with all, and shows the list again with every page it had', async () => {
     const items = ranked('abcde');
     api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });
-    const first = renderHook(() => useInfiniteWorkItems({ q: 'alle' }, { all: true }), { wrapper });
+    const first = renderHook(() => useInfiniteWorkItems({ project_id: 'alle' }, { all: true }), { wrapper });
 
     await waitFor(() => expect(titles(first.result.current.data)).toEqual(['a', 'b', 'c', 'd', 'e']));
     first.unmount();
 
     // Back: straight from the cache, without loading page by page again
-    const again = renderHook(() => useInfiniteWorkItems({ q: 'alle' }), { wrapper });
+    const again = renderHook(() => useInfiniteWorkItems({ project_id: 'alle' }), { wrapper });
     expect(titles(again.result.current.data)).toEqual(['a', 'b', 'c', 'd', 'e']);
   });
 
@@ -552,10 +558,36 @@ describe('pages of a list', () => {
     expect(bodies().slice(before)).toEqual([{}, { cursor: 'a1' }, { cursor: 'a3' }]);
   });
 
+  it('hashes no list again when a query of the cache is invalidated (T9-M3)', async () => {
+    let items = ranked('abcdef');
+    api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });
+    const { result } = renderHook(() => ({ one: useInfiniteWorkItems({ project_id: 'eins' }, { all: true }), two: useInfiniteWorkItems({ project_id: 'zwei' }, { all: true }) }), {
+      wrapper,
+    });
+    await waitFor(() => expect(titles(result.current.one.data)).toHaveLength(6));
+    await waitFor(() => expect(titles(result.current.two.data)).toHaveLength(6));
+    // 50 other queries of the cache, as a live update invalidates them
+    for (let n = 0; n < 50; n++) queryClient.setQueryData(['andere', n], n);
+
+    // the spy sees the hashes the hooks compute: a render of the lists computes one per list
+    expect(vi.mocked(hashKey)).toHaveBeenCalled();
+    vi.mocked(hashKey).mockClear();
+    for (let n = 0; n < 50; n++) await act(() => queryClient.invalidateQueries({ queryKey: ['andere', n] }));
+
+    // both lists of three pages heard every invalidation: they compare the hash they have, they compute none
+    expect(vi.mocked(hashKey)).not.toHaveBeenCalled();
+    // and a list whose first page is invalidated still notices: it rebuilds along the new cursors, never the old (a2, a4)
+    items = items.map((item) => (item.id === 'wi_e' ? { ...item, rank: 'a0' } : item));
+    const before = bodies().length;
+    await act(() => queryClient.invalidateQueries({ queryKey: qk.workItems.list({ project_id: 'eins' }) }));
+    await waitFor(() => expect(titles(result.current.one.data)).toEqual(['e', 'a', 'b', 'c', 'd', 'f']));
+    expect(bodies().slice(before)).toEqual([{ shorthand: { project: 'eins' } }, { shorthand: { project: 'eins' }, cursor: 'a1' }, { shorthand: { project: 'eins' }, cursor: 'a3' }]);
+  });
+
   it('rebuilds a list that comes back after a change while it was away, along the new cursors', async () => {
     let items = ranked('abcdef');
     api = mockApi({ 'POST /api/v1/work-items/query': keysetServer(() => items) });
-    const first = renderHook(() => useInfiniteWorkItems({ q: 'zurück' }), { wrapper });
+    const first = renderHook(() => useInfiniteWorkItems({ project_id: 'zurück' }), { wrapper });
     await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(2));
     act(() => first.result.current.loadMore());
     await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(4));
@@ -566,13 +598,13 @@ describe('pages of a list', () => {
     await act(() => queryClient.invalidateQueries({ queryKey: qk.workItems.all }));
     const before = bodies().length;
 
-    const again = renderHook(() => useInfiniteWorkItems({ q: 'zurück' }), { wrapper });
+    const again = renderHook(() => useInfiniteWorkItems({ project_id: 'zurück' }), { wrapper });
     // Back finds its place at once, then the new chain replaces it
     expect(titles(again.result.current.data)).toEqual(['a', 'b', 'c', 'd']);
     await waitFor(() => expect(titles(again.result.current.data)).toEqual(['e', 'a', 'b', 'c']));
     expect(again.result.current.hasMore).toBe(true);
     // the old cursor of the second page (after b) is never asked for again
-    expect(bodies().slice(before)).toEqual([{ shorthand: { q: 'zurück' } }, { shorthand: { q: 'zurück' }, cursor: 'a1' }]);
+    expect(bodies().slice(before)).toEqual([{ shorthand: { project: 'zurück' } }, { shorthand: { project: 'zurück' }, cursor: 'a1' }]);
   });
 
   it('rebuilds once more when a change comes while a rebuild is on its way', async () => {
@@ -624,7 +656,7 @@ describe('pages of a list', () => {
       }
       return inner(input, init);
     };
-    const first = renderHook(() => useInfiniteWorkItems({ q: 'weiter' }), { wrapper });
+    const first = renderHook(() => useInfiniteWorkItems({ project_id: 'weiter' }), { wrapper });
     await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(2));
     act(() => first.result.current.loadMore());
     await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(4));
@@ -637,7 +669,7 @@ describe('pages of a list', () => {
     const before = bodies().length;
     // the screen goes and comes back while the rebuild waits for its second page
     first.unmount();
-    const again = renderHook(() => useInfiniteWorkItems({ q: 'weiter' }), { wrapper });
+    const again = renderHook(() => useInfiniteWorkItems({ project_id: 'weiter' }), { wrapper });
 
     // the list keeps its place (the new first page over the old pages), then takes the chain the rebuild follows
     expect(titles(again.result.current.data)).toEqual(['e', 'a', 'c', 'd', 'f']);
@@ -647,8 +679,8 @@ describe('pages of a list', () => {
     // one chain: its second page once, then on from there; no old cursor (a2, a4) is sent again
     expect(held).toBe(1);
     expect(bodies().slice(before)).toEqual([
-      { shorthand: { q: 'weiter' }, cursor: 'a1' },
-      { shorthand: { q: 'weiter' }, cursor: 'a3' },
+      { shorthand: { project: 'weiter' }, cursor: 'a1' },
+      { shorthand: { project: 'weiter' }, cursor: 'a3' },
     ]);
   });
 
@@ -662,7 +694,7 @@ describe('pages of a list', () => {
       if (typeof init?.body === 'string' && (JSON.parse(init.body) as { cursor?: string }).cursor === 'a1') await gate;
       return inner(input, init);
     };
-    const first = renderHook(() => useInfiniteWorkItems({ q: 'weg' }), { wrapper });
+    const first = renderHook(() => useInfiniteWorkItems({ project_id: 'weg' }), { wrapper });
     await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(2));
     act(() => first.result.current.loadMore());
     await waitFor(() => expect(titles(first.result.current.data)).toHaveLength(4));
@@ -674,11 +706,11 @@ describe('pages of a list', () => {
     act(() => queryClient.clear());
     release();
     const before = bodies().length;
-    const again = renderHook(() => useInfiniteWorkItems({ q: 'weg' }), { wrapper });
+    const again = renderHook(() => useInfiniteWorkItems({ project_id: 'weg' }), { wrapper });
 
     await waitFor(() => expect(titles(again.result.current.data)).toEqual(['e', 'a']));
     // the new list asks its first page only; the page the old round still had on its way leaves no trace in the cache
-    await waitFor(() => expect(bodies().slice(before).filter((body) => (body as { cursor?: string }).cursor !== 'a1')).toEqual([{ shorthand: { q: 'weg' } }]));
+    await waitFor(() => expect(bodies().slice(before).filter((body) => (body as { cursor?: string }).cursor !== 'a1')).toEqual([{ shorthand: { project: 'weg' } }]));
     await waitFor(() => expect(queryClient.getQueryCache().findAll({ queryKey: qk.workItems.all }).map((query) => query.queryKey)).toHaveLength(1));
   });
 

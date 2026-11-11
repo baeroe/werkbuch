@@ -106,7 +106,6 @@ function PaletteBody({ inputRef }: { inputRef: RefObject<HTMLInputElement | null
   const projects = useProjects({ include_archived: true });
   const people = usePermissions().can('org.manage');
   const listId = useId();
-  useDialogScope();
 
   const terms = searchTerms(query);
   const states = new Map<string, State>((workflows.data?.items ?? []).flatMap((workflow) => workflow.states.map((state) => [state.id, state] as const)));
@@ -337,6 +336,8 @@ export function CommandPalette() {
   const open = useUiStore((state) => state.paletteOpen);
   const commandId = useUiStore((state) => state.paletteCommandId);
   const inputRef = useRef<HTMLInputElement>(null);
+  // while it is open the page's shortcuts pause; while it animates out they work again (⌘Z after a command)
+  useDialogScope(open);
   return (
     <BaseDialog.Root open={open} onOpenChange={(next) => useUiStore.getState().setPaletteOpen(next)}>
       <BaseDialog.Portal>

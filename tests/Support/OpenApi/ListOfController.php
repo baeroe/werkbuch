@@ -27,6 +27,12 @@ final class ListOfController
         return ApiList::respond(ListLabels::run(Actor::fromRequest($request), $request->query()), LabelResource::class);
     }
 
+    #[ListOf(ListOfAction::class, 'flaggedSpec')]
+    public function flagged(Request $request): JsonResponse
+    {
+        return ApiList::respond(ListLabels::run(Actor::fromRequest($request), $request->query()), LabelResource::class);
+    }
+
     // a class without rules of a list: only the page
     #[ListOf(ListOfController::class)]
     public function plain(Request $request): JsonResponse

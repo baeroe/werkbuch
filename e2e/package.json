@@ -5,9 +5,11 @@
   "packageManager": "pnpm@12.8.1",
   "scripts": {
     "test": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "docs:screenshots": "DOCS_SCREENSHOTS=1 E2E_COVERAGE=0 playwright test && ./optimize-screenshots.sh"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@playwright/test": "1.64.0",
     "@types/node": "^24.19.2",
     "typescript": "^7.0.2"

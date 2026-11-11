@@ -62,12 +62,8 @@ let paused = false;
 const emit = () => listeners.forEach((listener) => listener());
 
 function startTimer(id: number) {
-  const timer = timers.get(id);
-  // defensive: every caller has just set the timer of this id and its handle is empty (cleared on pause)
-  /* istanbul ignore next -- unreachable guards: callers set the timer first and a paused or new timer has no handle */
-  if (!timer) return;
-  /* istanbul ignore next -- the same unreachable guard as above */
-  if (timer.handle) clearTimeout(timer.handle);
+  // every caller has just set this timer (a new one or one whose handle was cleared on pause): it exists, has no handle
+  const timer = timers.get(id)!;
   timer.started = Date.now();
   timer.handle = setTimeout(() => dismissToast(id), timer.remaining);
 }

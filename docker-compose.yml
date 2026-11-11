@@ -91,7 +91,7 @@ services:
 
   queue:
     <<: *werkbuch-service
-    command: php artisan queue:work --queue=default,live,notifications,bulk --sleep=1 --tries=3 --max-time=3600 --memory=384
+    command: php artisan queue:work --queue=mail,default,live,notifications,bulk --sleep=1 --tries=3 --max-time=3600 --memory=384
     environment: *werkbuch-environment
     volumes:
       - werkbuch-data:/var/www/html/storage/app
@@ -166,8 +166,8 @@ services:
   mariadb:
     image: mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
     restart: unless-stopped
-    # like DDEV, large enough for the bulk insert of the webhook deliveries (QueueDeliveries: one row per webhook,
-    # a body of up to 1 MiB each), a multiple of the 16 MiB default
+    # room above the largest statements of the app (the webhook deliveries of one event go in chunks of at most 8 MiB,
+    # QueueDeliveries::INSERT_MAX_BYTES), four times the 16 MiB default; the CI sets the same
     command: ["--max-allowed-packet=64M"]
     environment:
       MARIADB_DATABASE: werkbuch

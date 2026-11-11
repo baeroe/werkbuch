@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, createE2eProject, createItem, PEOPLE, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { api, arrowTo, createE2eProject, createItem, pasteFile, PEOPLE, pngBytes, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // Writing comments, signed in as the e2e person (Erik Ende, English). Each test works in a project of its own
 // (`E2E …`, removed in `finally`); its items come over the API.
@@ -100,10 +100,12 @@ test('edits and deletes a comment with undo (mod+z)', async ({ page }) => {
     const card = page.getByRole('article', { name: tr('en', 'items.comments.card', { name: PEOPLE.e2e.name }) });
     await expect(card).toContainText('First version.');
 
-    // edit: the editor takes the text, mod+enter saves, the focus goes back to the actions
+    // edit from the menu of its actions: the editor takes the text, mod+enter saves, the focus goes back to the actions
     const actions = card.getByRole('button', { name: tr('en', 'items.comments.actions', { name: PEOPLE.e2e.name }) });
-    await actions.click();
-    await page.getByRole('menuitem', { name: tr('en', 'items.comments.edit') }).click();
+    await tabTo(page, actions, { max: 120 });
+    await page.keyboard.press('Enter');
+    await arrowTo(page, page.getByRole('menuitem', { name: tr('en', 'items.comments.edit') }));
+    await page.keyboard.press('Enter');
     const editor = card.getByRole('textbox', { name: tr('en', 'items.comments.edit_label') });
     await expect(editor).toBeFocused();
     await page.keyboard.type(' Updated.');
@@ -116,9 +118,10 @@ test('edits and deletes a comment with undo (mod+z)', async ({ page }) => {
     await expect(actions).toBeFocused();
     expect(await storedComments(page, item.id)).toEqual(['First version. Updated.']);
 
-    // delete with the keyboard: the card goes at once, mod+z brings it back, nothing went out
+    // delete: the card goes at once, mod+z brings it back, nothing went out
     await page.keyboard.press('Enter');
-    await page.getByRole('menuitem', { name: tr('en', 'items.comments.delete') }).click();
+    await arrowTo(page, page.getByRole('menuitem', { name: tr('en', 'items.comments.delete') }));
+    await page.keyboard.press('Enter');
     await expect(card).toBeHidden();
     // the last card: the focus moves on to the composer
     await expect(page.getByRole('button', { name: tr('en', 'items.comments.write') })).toBeFocused();
@@ -128,11 +131,11 @@ test('edits and deletes a comment with undo (mod+z)', async ({ page }) => {
     expect(await storedComments(page, item.id)).toEqual(['First version. Updated.']);
 
     // deleted for good once the toast has run out
-    await actions.click();
-    await page.getByRole('menuitem', { name: tr('en', 'items.comments.delete') }).click();
+    await tabTo(page, actions, { max: 120 });
+    await page.keyboard.press('Enter');
+    await arrowTo(page, page.getByRole('menuitem', { name: tr('en', 'items.comments.delete') }));
+    await page.keyboard.press('Enter');
     await expect(card).toBeHidden();
-    // on the phone the pointer rests where the toasts come up, and a hovered toast waits: away with it
-    await page.mouse.move(0, 0);
     await expect.poll(() => storedComments(page, item.id), { timeout: 15_000 }).toEqual([]);
     await expect(card).toBeHidden();
   } finally {
@@ -140,7 +143,7 @@ test('edits and deletes a comment with undo (mod+z)', async ({ page }) => {
   }
 });
 
-test('reacts with an emoji from the picker', async ({ page }) => {
+test('reacts with an emoji from the picker and takes it back', async ({ page }) => {
   const { id, identifier } = await createE2eProject(page, name('react'), { types: ['Task'] });
   try {
     const item = await createItem(page, { project_id: id, title: 'E2E Reaktion' });
@@ -150,7 +153,9 @@ test('reacts with an emoji from the picker', async ({ page }) => {
     await expect(card).toContainText('Ready for review.');
 
     // the picker: search by name, Enter takes the first match
-    await card.getByRole('button', { name: tr('en', 'items.comments.react') }).click();
+    const react = card.getByRole('button', { name: tr('en', 'items.comments.react') });
+    await tabTo(page, react, { max: 120 });
+    await page.keyboard.press('Enter');
     const search = page.getByRole('searchbox', { name: tr('en', 'ui.emoji_picker.search_label') });
     await expect(search).toBeFocused();
     await page.keyboard.type('party');
@@ -160,11 +165,37 @@ test('reacts with an emoji from the picker', async ({ page }) => {
     await expect.poll(async () => (await commentsOf(page, item.id))[0]?.reactions.map((reaction) => reaction.emoji)).toEqual(['🎉']);
 
     // pressed again with the space bar: taken back, the focus goes on to "Add reaction"
-    await party.focus();
+    await tabTo(page, party, { max: 10, backwards: true });
     await page.keyboard.press(' ');
     await expect(party).toBeHidden();
-    await expect(card.getByRole('button', { name: tr('en', 'items.comments.react') })).toBeFocused();
+    await expect(react).toBeFocused();
     await expect.poll(async () => (await commentsOf(page, item.id))[0]?.reactions).toEqual([]);
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('pastes an image into a comment and sends it with mod+enter', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('image'), { types: ['Task'] });
+  try {
+    const item = await createItem(page, { project_id: id, title: 'E2E Screenshot anhängen' });
+    await page.goto(`/items/${item.key}`);
+    await expect(page.getByRole('button', { name: tr('en', 'items.comments.write') })).toBeVisible();
+
+    await page.keyboard.press('m');
+    const editor = page.getByRole('textbox', { name: tr('en', 'editor.label.comment') });
+    await expect(editor).toBeFocused();
+    await page.keyboard.type('So sieht es aus:');
+    await pasteFile(editor, { name: 'fehler.png', type: 'image/png', bytes: pngBytes(48, 32) });
+    await expect(editor.getByRole('img', { name: 'fehler.png' })).toBeVisible();
+    // sent once the upload is done (the send waits for it)
+    await expect(page.getByRole('progressbar')).toHaveCount(0);
+    await pressMod(page, 'Enter');
+
+    await expect(page.getByRole('status').filter({ hasText: tr('en', 'items.comments.sent') })).toBeVisible();
+    const card = page.getByRole('article', { name: tr('en', 'items.comments.card', { name: PEOPLE.e2e.name }) });
+    await expect(card.getByRole('img', { name: 'fehler.png' })).toBeVisible();
+    expect(await storedComments(page, item.id)).toEqual([expect.stringMatching(/^So sieht es aus:\s*!\[fehler\.png\]\(attachment:[0-9a-z]{26}\)\s*$/)]);
   } finally {
     await removeE2eProject(page, identifier);
   }

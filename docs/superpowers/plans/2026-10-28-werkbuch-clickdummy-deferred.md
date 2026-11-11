@@ -1,5 +1,7 @@
 # Klickdummy: zurückgestellte Befunde
 
+> **Stand 2026-11-08:** Der Klickdummy bleibt eingefroren (A446); diese Liste gilt nur, soweit die App die Punkte hat. Die Triage gegen den Code vom 2026-11-07 (Phase 15, Preflight K20) hat alles Gültige den Tasks 14b, 19a–21c und 21i–21m der Phase 15 zugeordnet; sie sind erledigt (Belege in den Phasenplänen und Rulings). Was nicht gegen die App gilt oder dort schon erledigt war, steht im Phasenplan 15 unter „Vormerkungen → Tasks“ bzw. P4. Der Rest bleibt nach v0.1.0 (A447), darunter die Screenshots im README des Klickdummys. Die „DONE“/„CAN WAIT“-Marken unten sind der Stand vom 2026-10-29 und werden nicht mehr gepflegt.
+
 Rohliste für 13b (Aufräumen) und 13c (Feinschliff) nach der Korrekturrunde, siehe R32 in `2026-10-28-werkbuch-clickdummy-rulings.md`.
 
 - Die Zeilen stammen wörtlich aus dem Ledger der Umsetzung und sind deshalb Englisch. Datei- und Zeilenangaben beziehen sich auf den Stand ihres Tasks.

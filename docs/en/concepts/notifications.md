@@ -44,6 +44,8 @@ The inbox (`/inbox`, <kbd>G</kbd> <kbd>I</kbd>) groups the notifications by item
 
 An excerpt always comes from the current text: an edited comment shows its new wording, a deleted one none. A reference to an item you do not see reads as hidden. When the item of a notification is no longer there, its card says "No longer available".
 
+![The inbox with three unread notifications, grouped by work item](/screenshots/en/inbox.png)
+
 ## Mail
 
 - **Collected.** Notifications about one item are collected for `NOTIFICATION_MAIL_DELAY` minutes (5 by default) and then go out as one mail per person and item, the oldest first. Its subject is `[WEB-47] Title of the item`, the footer links to the notification settings. Failed runs of a template are collected per template instead: the subject names the project and the template, the button leads to the template. A webhook switched off has a mail of its own (subject `Webhook “…” switched off`), whose button leads to its deliveries; in the inbox, the row leads there too.
@@ -67,7 +69,7 @@ Read notifications are deleted after 90 days; unread ones stay. Collected mails 
 
 ## Live updates
 
-Lists, boards, tables and timelines, the item page and the preview (fields, comments, reactions, history), the projects you see already and their members, the wiki (tree and pages), the templates of a project with their logs, the automations, and the inbox with its badge follow changes by others live. A message only says what changed (ids and the kind of change, never a title, a text or a value); the browser then loads the new state through the API, which checks your access. Changes to catalogs, views, accounts and favorites show the next time a page loads, and so does a project that is new or turns public while you are no member of it. When your org role changes, the page takes your new rights at once. An item page or a preview of an item that was deleted says so.
+Lists, boards, tables and timelines, the item page and the preview (fields, comments, reactions, history), the projects you see and their members, the wiki (tree and pages), the templates of a project with their logs, the automations, and the inbox with its badge follow changes by others live. A message only says what changed (ids and the kind of change, never a title, a text or a value); the browser then loads the new state through the API, which checks your access. A project that is new or turns public reaches everyone who may see it now, members or not (a private one its members and the org admins). Changes to catalogs, views, accounts and favorites show the next time a page loads. When your org role changes, the page takes your new rights at once. An item page or a preview of an item that was deleted says so.
 
 - **Your own changes** are not applied twice: the tab that made a change does not get it back, your other tabs do.
 - **Losing access cuts the connection.** When you are removed from a project, a project turns private, your org role goes from admin to member or your account is deactivated, werkbuch closes your live connections. The browser connects again and asks for every channel anew; a project you no longer see is refused, and its lists and pages reload and show what you may still see.

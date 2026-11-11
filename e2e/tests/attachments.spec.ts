@@ -3,8 +3,9 @@ import { expect, test } from '../fixtures';
 import { api, createE2eProject, createItem, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // The file list of an item on its page, signed in as the e2e person in English: files chosen with "Upload file" (the
-// browser's file choice, which jsdom does not have) and downloaded from their link, removing with undo and for good.
-// Each test works in a project of its own (`E2E …`, removed in `finally`); its item and files are made by the test.
+// browser's file choice, which jsdom does not have) and downloaded from their link with Enter, removing with undo and
+// for good. Each test works in a project of its own (`E2E …`, removed in `finally`); its item and files are made by the
+// test.
 
 const name = (what: string) => `E2E ${what} ${variant()} ${runId()}`;
 
@@ -64,11 +65,12 @@ test('uploads a file to the list and downloads it', async ({ page }) => {
     await expect(section.getByRole('progressbar')).toHaveCount(0);
     expect((await storedFiles(page, item.id)).sort()).toEqual(['angebot.txt', 'skizze.png']);
 
-    // the link downloads the file under its name, also on a reload
+    // the link downloads the file under its name, also on a reload: Tab to it and Enter
     await page.reload();
     await expect(link).toBeVisible();
+    await tabTo(page, link, { max: 120 });
     const download = page.waitForEvent('download');
-    await link.click();
+    await page.keyboard.press('Enter');
     const file = await download;
     expect(file.suggestedFilename()).toBe('angebot.txt');
     const stream = await file.createReadStream();

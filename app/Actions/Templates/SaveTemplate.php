@@ -14,7 +14,7 @@ use App\Support\AttachmentLinks;
 use App\Support\CatalogInput;
 use App\Support\CatalogLock;
 use App\Support\ItemLock;
-use App\Support\MemberInput;
+use App\Support\ProjectLock;
 use App\Support\TemplateInput;
 use App\Support\TemplateSchedule;
 use DateTimeImmutable;
@@ -66,7 +66,7 @@ final class SaveTemplate
 
         $saved = DB::transaction(function () use ($actor, $project, $input, $template, $refused, $texts): Template {
             $organization = CatalogLock::share();
-            $locked = MemberInput::lock($project);
+            $locked = ProjectLock::lock($project);
             ItemLock::refuseArchivedProject($locked);
             $current = $template === null ? null : (Template::query()->lockForUpdate()->find($template->id) ?? throw Problem::notFound());
 

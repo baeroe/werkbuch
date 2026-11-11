@@ -53,8 +53,8 @@ use Laravel\Scout\Searchable;
  * @property Carbon|null $started_at
  * @property Carbon|null $closed_at
  * @property Carbon|null $archived_at
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property Carbon $created_at NOT NULL (A440)
+ * @property Carbon $updated_at NOT NULL (A440)
  * @property-read string $key
  * @property-read int $children_total only with `withComputed()`
  * @property-read int $children_done only with `withComputed()`
@@ -127,7 +127,8 @@ final class WorkItem extends Model
     public static function loadForResource(EloquentCollection|self $items, User $reader, bool $lean = false): void
     {
         $items = $items instanceof self ? $items->newCollection([$items]) : $items;
-        $items->load(['project', 'parent.project', 'labels:labels.id', 'values.property']);
+        $items->load(['project', 'parent.project', 'values.property']);
+        self::loadLabels($items);
         $ids = $items->modelKeys();
 
         $computed = self::query()->select('id')->withComputed()->whereKey($ids)->get()->keyBy('id');
@@ -147,6 +148,30 @@ final class WorkItem extends Model
         if (! $lean) {
             $names = self::richNames($items, $reader);
             $items->each(fn (self $item) => $item->rich_names = $names);
+        }
+    }
+
+    /**
+     * `labels` of the items, in catalog order, from `work_item_labels` alone through its index (work_item_id, label_id)
+     * (Phase 15, Task 10b): with a join of `labels` MariaDB could begin, depending on its statistics, with the few
+     * labels and walk the index of `label_id` through every link of the organisation (126 ms per page under 50 000
+     * items). A link always names a label (foreign key with cascade), and the resource reads only their ids.
+     *
+     * @param  EloquentCollection<int, self>  $items
+     */
+    private static function loadLabels(EloquentCollection $items): void
+    {
+        if ($items->isEmpty()) {
+            return;
+        }
+
+        $label = new Label;
+        $byItem = [];
+        foreach (WorkItemLabel::query()->whereIn('work_item_id', $items->modelKeys())->orderBy('label_id')->toBase()->get(['work_item_id', 'label_id']) as $link) {
+            $byItem[$link->work_item_id][] = $label->newFromBuilder(['id' => $link->label_id]);
+        }
+        foreach ($items as $item) {
+            $item->setRelation('labels', $label->newCollection($byItem[$item->id] ?? []));
         }
     }
 
@@ -283,13 +308,15 @@ final class WorkItem extends Model
             'assignee_id' => $this->assignee_id,
             'label_ids' => array_values($this->labels->map(fn (Label $label) => $label->id)->all()),
             'archived' => $this->archived_at !== null,
-            'updated_at' => (int) $this->updated_at?->getTimestamp(),
+            'updated_at' => $this->updated_at->getTimestamp(),
         ];
     }
 
     /**
      * What toSearchableArray() reads, loaded with the query of a rebuild (makeAllSearchableQuery()). Items of a project
-     * being deleted stay out: a reindex after removeProject() would bring their documents back for good (K11).
+     * being deleted stay out: a reindex after removeProject() would bring their documents back for good (K11). The
+     * labels come from `work_item_labels` alone after the query, as loadForResource() reads them (Phase 15, Task 11b):
+     * a join of `labels` leaves the plan to the statistics (Task 10b).
      *
      * @param  Builder<self>  $query
      * @return Builder<self>
@@ -297,12 +324,17 @@ final class WorkItem extends Model
     protected function makeAllSearchableUsing(Builder $query): Builder
     {
         return $query->with([
-            'project:id,identifier', 'labels:labels.id', 'state:id,category',
+            'project:id,identifier', 'state:id,category',
             // no comment gives the document more than it can take: the database cuts it (T12-M1)
             'comments' => fn (HasMany $comments) => $comments->select(['id', 'work_item_id'])
                 ->selectRaw('left(body_text, ?) as body_text', [SearchIndexer::COMMENTS_MAX]),
         ])
-            ->whereIn('work_items.project_id', Project::query()->whereNull('deleting_at')->select('id'));
+            ->whereIn('work_items.project_id', Project::query()->whereNull('deleting_at')->select('id'))
+            ->afterQuery(function (mixed $items): void {
+                if ($items instanceof EloquentCollection) {
+                    self::loadLabels($items);
+                }
+            });
     }
 
     /**

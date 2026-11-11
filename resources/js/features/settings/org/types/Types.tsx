@@ -25,7 +25,7 @@ import { ReadOnlyNotice } from '../../frame/access';
 import { Badge, Loaded, Panel, Row, Rows, RowsSkeleton, SectionHeader } from '../../frame/parts';
 import { useDialogRound } from '../../frame/useDialogRound';
 import { useRemoval } from '../../frame/useRemoval';
-import { UsageCount, useGroupUsage } from '../../catalog/usage';
+import { UsageCount, UsageStatus, useGroupUsage } from '../../catalog/usage';
 import type { SectionProps } from '../sections';
 import { TypeDialog } from './TypeDialog';
 
@@ -113,6 +113,8 @@ export default function Types({ readOnlyReason }: SectionProps) {
           }
           return (
             <Panel>
+              {/* one status for the counts of the whole list (T23-M8) */}
+              <UsageStatus usage={usage} />
               <Rows label={t('settings.org.section.types')}>
                 {shown.map((type) => (
                   <Row key={type.id} className="items-start">

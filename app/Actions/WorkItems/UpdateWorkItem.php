@@ -3,7 +3,6 @@
 namespace App\Actions\WorkItems;
 
 use App\Access\Authorize;
-use App\Enums\AccountType;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
@@ -15,8 +14,10 @@ use App\Models\WorkItemSubscriber;
 use App\RichText\Document;
 use App\Support\Actor;
 use App\Support\AttachmentLinks;
+use App\Support\BotIds;
 use App\Support\ItemInput;
 use App\Support\ItemLock;
+use App\Support\ItemReferences;
 use App\Support\ItemValues;
 use App\Support\Mentions;
 use Illuminate\Support\Facades\DB;
@@ -128,6 +129,7 @@ final class UpdateWorkItem
         }
         AttachmentLinks::link($locked, $locked->project, $actor->user, $texts);
         $mentionedBefore = $texts === [] ? [] : Mentions::ofItem($locked);
+        $referencedBefore = $texts === [] ? [] : ItemReferences::ofItem($locked);
 
         $actor = $reason === null ? $actor : $actor->withReason($reason);
         $changes = [];
@@ -205,6 +207,7 @@ final class UpdateWorkItem
             EventRecorder::record(EventType::WorkItemUpdated, $actor, $locked, $locked->project, $changes, Mentions::meta($mentioned));
         }
         self::announceBots($actor, $locked, $mentioned);
+        ItemReferences::queue($actor, $locked, ItemReferences::anew($locked, $referencedBefore, $texts));
         if ($assignee) {
             self::watch($locked, $locked->assignee_id);
             EventRecorder::record(EventType::WorkItemAssigned, $actor, $locked, $locked->project, ['assignee_id' => ['old' => $previous, 'new' => $locked->assignee_id]]);
@@ -239,7 +242,7 @@ final class UpdateWorkItem
      * `bot.assigned` when the assignee of the item is a bot and not the actor itself (A371, K9; a bot that takes an item
      * on its own needs no call to hear of it): subject the item, `meta.bot_id` the bot. After `work_item.assigned` of
      * a change (apply) and after `work_item.created` of an item made for a bot (CreateWorkItem::insert: a request, a
-     * template, a schedule).
+     * template, a schedule). Whether the assignee is a bot answers BotIds (a bulk change preloads its assignees).
      */
     public static function announceAssignedBot(Actor $actor, WorkItem $item): void
     {
@@ -247,7 +250,7 @@ final class UpdateWorkItem
         if ($assignee === null || $assignee === $actor->user->id) {
             return;
         }
-        if (User::query()->whereKey($assignee)->where('type', AccountType::Bot)->exists()) {
+        if (app(BotIds::class)->isBot($assignee)) {
             EventRecorder::record(EventType::BotAssigned, $actor, $item, $item->project, null, ['bot_id' => $assignee]);
         }
     }

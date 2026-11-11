@@ -4,6 +4,8 @@ A work item is one piece of work in a project: a task, a bug, an epic, or whatev
 
 Anyone who sees a project reads its items. Members and admins of the project create and change them; viewers only read. Only project admins delete items. Who sees a project, and who has which role, is described under [roles and permissions](/en/concepts/permissions).
 
+![The page of the work item WEB-47: description, fields, relations, wiki pages and activity](/screenshots/en/item.png)
+
 ## Fields
 
 | Field | Notes |
@@ -43,7 +45,7 @@ Moving an item into a Completed or Canceled state closes it and sets its resolut
 
 ## Parent and children
 
-Items of an epic type can have child items; epics have no parent item themselves, so there are two levels. The parent is an epic of the same project. An epic shows the progress of its children: the closed ones (Completed or Canceled) out of all. **Child item** in the children section of an epic creates one with the epic as its parent.
+Items of an epic type can have child items; epics have no parent item themselves, so there are two levels. The parent is an epic of the same project. An epic shows the progress of its children: the closed ones (Completed or Canceled) out of all. **Child item** in the children section of an epic creates one with the epic as its parent. An epic with more than 100 children shows the first 100 and **Load more child items** brings the next ones.
 
 ## Relations
 
@@ -52,6 +54,10 @@ A relation links two items with a [relation type](/en/concepts/types-and-propert
 An item at the other end that you may not see appears as **hidden item**, without key or title. Removing a relation takes the right to change one of its ends.
 
 Only "blocks" has a consequence: as long as an open item blocks another open one, the blocked item shows a hint. werkbuch does not stop anyone from starting it. The hint also counts a blocker you may not see, without naming it. All other relation types are labels only.
+
+## Wiki pages
+
+If wiki pages refer to an item with a `#` reference, the item shows them in the section **Wiki pages**, between the relations and the files: each page as a link into its wiki. The section appears only when there is at least one such page you may see. It reads the current text of the pages, so it follows edits, moves and deletions in the wiki. See [wiki](/en/concepts/wiki#references-and-search).
 
 ## Comments
 
@@ -103,7 +109,7 @@ Reading needs a token with `read`, changing one with `write`. Items are addresse
 |---|---|
 | `GET /api/v1/work-items` | Items you see: `view`, a short form such as `filter[project]`, `filter[assignee]=me`, `filter[q]` (a key or part of the title), `sort`, `show_sub_items`, `include_archived`, `lean`, `cursor`, `per_page`. Filters, groups and counts are described under [views](/en/concepts/views#rest). |
 | `POST /api/v1/work-items` | `201` with the new item. |
-| `GET /api/v1/work-items/{item}` | The item; `?include=children,relations,type,workflow,attachments` embeds those. |
+| `GET /api/v1/work-items/{item}` | The item; `?include=children,relations,type,workflow,attachments` embeds those (`children`: the first 100 by rank, archived ones included; `children_progress.total` counts all, the list `?filter[parent]=WEB-30&include_archived=1` has the rest). |
 | `PATCH /api/v1/work-items/{item}` | `200` with the item. |
 | `POST /api/v1/work-items/{item}/transition` | `200`; `to_state_id`, `resolution_id`. |
 | `PUT /api/v1/work-items/{item}/type` | `200`; `type_id`, `values`. |
@@ -115,6 +121,8 @@ Reading needs a token with `read`, changing one with `write`. Items are addresse
 | `GET /api/v1/work-items/{item}/subscribers` | Who watches the item. |
 | `PUT`, `DELETE /api/v1/work-items/{item}/subscription` | Start or stop watching; `200` with the item. |
 | `GET /api/v1/work-items/{item}/history` | The history, oldest first. |
+| `GET /api/v1/work-items/{item}/pages` | The [wiki pages](#wiki-pages) that refer to the item and that you see, by title. |
+| `POST /api/v1/projects/{project}/redistribute-ranks` | `200` with `{"redistributed": n}`; see [Order items by hand](#order-items-by-hand). |
 | `GET`, `POST /api/v1/work-items/{item}/comments` | The comments, oldest first; `201` with the new one. Comments, reactions and files are described under [rich text](/en/concepts/rich-text#rest). |
 
 An item the account of the token does not see is a `404`, like one that does not exist. An unknown filter or `include` is a `422`, never silently ignored. Messages (`detail`, field errors) come in the language of the account, else in the organization's default language.
@@ -223,6 +231,21 @@ In the demo workflow "Agentur-Freigabe", Todo may not go straight to Done:
 ```
 
 For a closed state, `resolution_id` chooses the resolution; without it, the item keeps the one it had in that category, or gets the default. A state outside the workflow of the project is a `422` at `state_id`.
+
+### Order items by hand
+
+The sort "Manual" follows the rank of each item (`rank`): a short text, compared byte by byte, the ULID decides between equal ones. Moving an item by hand sends a rank between its neighbours (`PATCH` with `rank`, up to 128 characters). When there is no room left between two neighbours, the items of the project get new short ranks in their order:
+
+```bash
+curl -X POST https://werkbuch.example.com/api/v1/projects/WEB/redistribute-ranks \
+  -H "Authorization: Bearer <token>"
+```
+
+```json
+{ "redistributed": 57 }
+```
+
+`redistributed` counts the items whose rank changed. Every item of the project keeps its place, archived ones included; none gets a new `updated_at`, and the history of an item does not show it. A list of several projects sorted by hand may mix their items differently afterwards. Members and admins of the project may do it (`item.edit`, the ability `write`), in an archived project nobody (`409 project_archived`). Changes of items of the project wait until the new ranks are saved.
 
 ### Change several items
 

@@ -104,6 +104,31 @@ test('creates a template with the keyboard and runs it now', async ({ page }) =>
   }
 });
 
+test('switches a schedule on in the editor and saves it', async ({ page }) => {
+  const project = await createE2eProject(page, projectName('template schedule on'), { types: ['Task'] });
+  try {
+    const template = await createE2eTemplate(page, project.id, { name: 'Standup notes', title: 'Standup {date}' });
+    await page.goto(`/projects/${project.identifier}/templates/${template.id}`);
+    const schedule = page.getByRole('region', { name: tr('en', 'templates.editor.schedule') });
+    await expect(schedule).toContainText(tr('en', 'schedule.editor.none'));
+
+    // the switch with the space bar: a weekly plan from today, with its next runs
+    const on = schedule.getByRole('switch', { name: tr('en', 'schedule.editor.switch') });
+    await tabTo(page, on, { max: 120 });
+    await page.keyboard.press(' ');
+    await expect(on).toBeChecked();
+    await expect(schedule.getByRole('list', { name: tr('en', 'schedule.next.title') }).locator('time')).toHaveCount(5);
+
+    await pressMod(page, 'Enter');
+    await expect(page.getByText(tr('en', 'templates.editor.saved', { name: 'Standup notes' }), { exact: true })).toBeVisible();
+    const saved = ((await (await api(page, 'GET', `/api/v1/templates/${template.id}`)).json()) as { data: { schedule: Record<string, unknown> | null; next_run_at: string | null } }).data;
+    expect(saved.schedule).toMatchObject({ frequency: 'weekly', interval: 1, time: '09:00', paused: false });
+    expect(saved.next_run_at).not.toBeNull();
+  } finally {
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
 test('shows the next five runs of a monthly schedule on the first Monday', async ({ page }) => {
   const project = await createE2eProject(page, projectName('template schedule'), { types: ['Task'] });
   try {

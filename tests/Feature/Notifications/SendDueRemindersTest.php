@@ -2,6 +2,7 @@
 
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
+use App\Actions\Notifications\NotifyRecipients;
 use App\Actions\Notifications\PruneNotifications;
 use App\Actions\Notifications\SaveNotificationPreferences;
 use App\Actions\Notifications\SendDueReminders;
@@ -25,6 +26,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 
 /*
  * The reminders "due" and "overdue" (Task 8, spec 4.14, A275): every hour the job reminds the people for whom it is
@@ -455,4 +457,31 @@ it('reminds every hour from its job on the queue notifications, for the hour it 
         ->and($task->expiresAt)->toBe(60)
         ->and($job->queue)->toBe('notifications')
         ->and($remindersOf($w['mara']))->toHaveCount(1);
+});
+
+it('writes thousands of reminders of a zone in blocks below the limit of placeholders', function () use ($world, $due, $remind, $collectionOf) {
+    $w = $world();
+    // 5 101 items due for Mara: one insert of all reminders would bind 13 values each, more than the 65 535
+    // placeholders MariaDB takes in one statement
+    $first = (array) DB::table('work_items')->where('id', $due($w['web'], $w['mara'], '2026-11-03')->id)->first();
+    foreach (array_chunk(range(2, 5101), 1000) as $chunk) {
+        DB::table('work_items')->insert(array_map(fn (int $n) => [...$first, 'id' => Str::lower((string) Str::ulid()), 'number' => $n, 'title' => "Item {$n}"], $chunk));
+    }
+    $this->travelTo(CarbonImmutable::parse('2026-11-03 07:00', 'UTC'));
+    $placeholders = 0;
+    $inserts = 0;
+    DB::listen(function ($query) use (&$placeholders, &$inserts): void {
+        $placeholders = max($placeholders, count($query->bindings));
+        $inserts += str_starts_with($query->sql, 'insert ignore into `notifications`') ? 1 : 0;
+    });
+
+    expect($remind())->toBe(5101)
+        ->and($placeholders)->toBeLessThanOrEqual(65535)
+        ->and($inserts)->toBe((int) ceil(5101 / NotifyRecipients::BLOCK));
+    // all of them in the one mail of her day
+    $mail = $collectionOf($w['mara'], '2026-11-03');
+    expect(Notification::query()->where('user_id', $w['mara']->id)->where('mail_id', $mail->id)->count())->toBe(5101);
+
+    // the job again in the hour writes nothing
+    expect($remind())->toBe(0);
 });

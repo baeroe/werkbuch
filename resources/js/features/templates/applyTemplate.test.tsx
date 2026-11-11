@@ -130,7 +130,7 @@ describe('"Vorlage anwenden …"', () => {
     await chooseCommand(user);
 
     expect(screen.queryByRole('listbox', { name: 'Vorlage anwenden …' })).toBeNull();
-    expect(currentToasts().at(-1)).toMatchObject({ title: 'Keine Vorlage anwendbar', description: 'Items anlegen darfst du in keinem Projekt.', tone: 'error' });
+    expect(currentToasts().at(-1)).toMatchObject({ title: 'Keine Vorlage anwendbar', description: 'Items anlegen darfst du in keinem Projekt. Tritt einem Projekt bei oder bitte eine Projekt-Admin um die Rolle Member.', tone: 'error' });
     expect(templateCalls()).toEqual([]);
   });
 

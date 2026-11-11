@@ -16,7 +16,7 @@ const utc = (iso: string) => new Date(`${iso}T00:00:00Z`);
 const formats = new Map<string, Intl.DateTimeFormat>();
 
 /** One formatter per language and style, built on first use. */
-function dayFormat(style: 'day' | 'short' | 'weekday'): Intl.DateTimeFormat {
+function dayFormat(style: 'day' | 'short' | 'weekday' | 'long'): Intl.DateTimeFormat {
   const locale = intlLocale();
   const key = `${locale}:${style}`;
   let format = formats.get(key);
@@ -26,7 +26,9 @@ function dayFormat(style: 'day' | 'short' | 'weekday'): Intl.DateTimeFormat {
         ? { day: '2-digit', month: '2-digit', year: 'numeric' }
         : style === 'short'
           ? { day: '2-digit', month: '2-digit' }
-          : { weekday: 'short', day: '2-digit', month: '2-digit' };
+          : style === 'long'
+            ? { dateStyle: 'long' }
+            : { weekday: 'short', day: '2-digit', month: '2-digit' };
     format = new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' });
     formats.set(key, format);
   }
@@ -38,6 +40,9 @@ export const formatDay = (iso: string): string => dayFormat('day').format(utc(is
 
 /** 31.10. (cards and rows, where the year is the current one or obvious) */
 export const formatShortDay = (iso: string): string => dayFormat('short').format(utc(iso));
+
+/** 31. Oktober 2026 (spoken in full: the name of a chip that shows only 31.10.) */
+export const formatLongDay = (iso: string): string => dayFormat('long').format(utc(iso));
 
 /** Fr., 30.10. */
 export const formatWeekdayDay = (iso: string): string => dayFormat('weekday').format(utc(iso));

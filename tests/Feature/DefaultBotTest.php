@@ -11,6 +11,9 @@ use App\Events\EventType;
 use App\Models\Event;
 use App\Models\Organization;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 it('has exactly one default bot after the migrations, an org admin without email and password', function () {
     $bot = User::query()->where('is_default_bot', true)->sole();
@@ -36,6 +39,21 @@ it('creates no second default bot', function () {
     expect(EnsureDefaultBot::run()->is($bot))->toBeTrue()
         ->and(User::query()->where('is_default_bot', true)->count())->toBe(1)
         ->and(Event::query()->where('type', EventType::BotCreated)->count())->toBe(1);
+});
+
+it('refuses a second default bot in the database, and takes any number of other bots', function () {
+    $row = fn (string $handle, bool $default) => [
+        'id' => (string) Str::ulid(), 'type' => AccountType::Bot->value, 'name' => 'Zweiter', 'handle' => $handle,
+        'is_default_bot' => $default, 'created_at' => now(), 'updated_at' => now(),
+    ];
+
+    // the guard is null for every other account, and a unique index takes any number of nulls
+    DB::table('users')->insert($row('helfer-1', false));
+    DB::table('users')->insert($row('helfer-2', false));
+
+    expect(fn () => DB::table('users')->insert($row('automation-2', true)))->toThrow(UniqueConstraintViolationException::class)
+        ->and(User::query()->where('is_default_bot', true)->sole()->is(User::defaultBot()))->toBeTrue()
+        ->and(User::query()->whereIn('handle', ['helfer-1', 'helfer-2'])->count())->toBe(2);
 });
 
 it('takes the next free handle when a person holds automation, in the language of the organization', function () {

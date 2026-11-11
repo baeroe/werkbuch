@@ -6,7 +6,7 @@
 
 import { keepPreviousData, useQueries } from '@tanstack/react-query';
 import { countWorkItems } from '@/api/workItems';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { Skeleton, useLate } from '@/components/ui/Skeleton';
 import { qk } from '@/hooks/keys';
 import { useWorkItemGroups } from '@/hooks/workItems';
 import { t, tn } from '@/lib/i18n';
@@ -69,15 +69,30 @@ export function usePropertyUsage(properties: readonly Property[] | undefined): U
   return { counts, pending, failed };
 }
 
-/** "3 items", a skeleton while loading, "Count not loaded" when it failed. */
+/**
+ * "3 items", a skeleton while loading, "Count not loaded" when it failed. The skeleton is a picture only (aria-hidden):
+ * that the counts load says `UsageStatus` once for the list (T23-M8), not a status per row.
+ */
 export function UsageCount({ usage, id }: { usage: Usage; id: string }) {
   if (usage.pending)
     return (
-      <span role="status" className="inline-block w-14 align-middle">
-        <span className="sr-only">{t('common.loading')}</span>
+      <span className="inline-block w-14 align-middle">
         <Skeleton className="h-3.5 w-full" />
       </span>
     );
   if (usage.counts === undefined) return <span>{t('catalog.usage_failed')}</span>;
   return <span>{tn('catalog.usage', usage.counts[id] ?? 0)}</span>;
+}
+
+/**
+ * The one status of a list's counts: there from the start, so what it says is announced, and it says "Counts loading"
+ * only once the skeletons of the rows show (after their delay, M3).
+ */
+export function UsageStatus({ usage }: { usage: Usage }) {
+  const late = useLate(undefined, usage.pending);
+  return (
+    <span role="status" className="sr-only">
+      {usage.pending && late ? t('catalog.usage_loading') : ''}
+    </span>
+  );
 }

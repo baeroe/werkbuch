@@ -7,13 +7,15 @@
  * `r`, "Relation" or "Relation hinzufügen …" in the item's menu open the dialog: the kind of relation in both
  * directions, then the item, found through the search (`GET /api/v1/search?types=items`, P16) by key, title or
  * description in every project the reader sees; a typed key, also with a former identifier and of an archived item,
- * leads the hits (`key_match`). Nothing is asked before something is typed. A refusal of the server stands at its field
+ * leads the hits (`key_match`). Nothing is asked before something is typed; the hits of an earlier text stay greyed out
+ * and cannot be chosen until the new text is answered. A refusal of the server stands at its field
  * (`target_id`: duplicate, self, unknown; `type_id`), any other one on top of the form.
  */
 
 import { EyeOff, Plus, X } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react';
 import { ApiError } from '@/api/client';
+import type { SearchOptions } from '@/api/search';
 import { useEditReason } from '@/components/fields/itemData';
 import { Picker, type PickerOption } from '@/components/fields/Picker';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
@@ -23,8 +25,10 @@ import { describedBy, Field } from '@/components/ui/Field';
 import { FormDialog } from '@/components/ui/FormDialog';
 import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Select';
+import { useAsked } from '@/editor/suggestions';
 import { toast } from '@/components/ui/toast';
 import { useRelationTypes } from '@/hooks/catalog';
+import { qk } from '@/hooks/keys';
 import { useSettle } from '@/hooks/mutation';
 import { useAddRelation, useRemoveRelation } from '@/hooks/relations';
 import { useSearch } from '@/hooks/search';
@@ -42,7 +46,7 @@ import { LinkedItem, Section, useDetail } from './shared';
 export const SEARCH_PAUSE_MS = 200;
 
 /** Hits the search shows at once; typing narrows them. */
-const SEARCH_LIMIT = 20;
+const SEARCH_OPTIONS: SearchOptions = { types: ['items'], limit: 20 };
 
 /** What a relation says from the side of the item that shows it. */
 export function relationLabel(type: RelationType | undefined, direction: RelationEntry['direction']): string {
@@ -83,12 +87,16 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
   const [target, setTarget] = useState<ListedItem | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [search, setSearch] = useState('');
   const { reason } = usePermissions();
+  // asked once typing paused, or at once when the answer to the text is in the cache already (like `@` and `#`)
+  const search = useAsked(query.trim(), (q) => qk.search.list({ q, ...SEARCH_OPTIONS }), SEARCH_PAUSE_MS);
   // asked only while the dialog is open and something is typed; the hits of the last search stay while the next one is
   // on its way (the list does not blink)
-  const found = useSearch(search, { types: ['items'], limit: SEARCH_LIMIT }, { enabled: open });
+  const found = useSearch(search, SEARCH_OPTIONS, { enabled: open });
   const typed = query.trim() !== '';
+  // the hits belong to an earlier text while the pause runs or the answer to the new one is on its way: they stay, so the
+  // list does not blink, but none of them can be chosen (Enter takes nothing, like `stale` in the editor's menus)
+  const stale = typed && (search !== query.trim() || found.isPlaceholderData);
   const [errors, setErrorState] = useState<Errors>({});
   const [refused, setRefused] = useState(0);
   /** Errors of a submit: shown at their fields, and the focus goes to the first of them. */
@@ -104,11 +112,6 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => setSearch(query.trim()), SEARCH_PAUSE_MS);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  useEffect(() => {
     if (refused > 0) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-relation-form] [aria-invalid="true"]`)?.focus());
   }, [refused]);
 
@@ -120,10 +123,10 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
   const options: PickerOption[] = candidates.map((entry) => {
     const type = types?.find((candidate) => candidate.id === entry.type_id);
     const why = denied(entry);
-    return { value: entry.id, label: entry.title, hint: why ? `${entry.key} · ${why}` : entry.key, icon: type ? <TypeGlyph type={type} /> : undefined, disabled: why !== null };
+    return { value: entry.id, label: entry.title, hint: why ? `${entry.key} · ${why}` : entry.key, icon: type ? <TypeGlyph type={type} /> : undefined, disabled: stale || why !== null };
   });
   const label = kinds.find((entry) => entry.value === chosenKind)?.label ?? '';
-  const hint = typed && found.isError ? undefined : t('items.detail.relations.dialog.item_hint');
+  const hint = typed && found.isError ? undefined : t(stale ? 'items.detail.relations.dialog.searching' : 'items.detail.relations.dialog.item_hint');
 
   function submit() {
     if (!chosenKind) return setErrors({ kind: t('items.detail.relations.dialog.kind_required') });
@@ -193,15 +196,20 @@ function RelationDialog({ item, open, onOpenChange, finalFocus }: RelationDialog
               setErrors({});
             }}
             placeholder={t('items.detail.relations.dialog.search')}
-            emptyText={t(typed ? 'items.detail.relations.dialog.no_match' : 'items.detail.relations.dialog.type_to_search')}
+            emptyText={t(stale ? 'items.detail.relations.dialog.searching' : typed ? 'items.detail.relations.dialog.no_match' : 'items.detail.relations.dialog.type_to_search')}
             load={{ isLoading: typed && found.data === undefined && !found.isError, error: typed ? found.error : null, retry: () => void found.refetch(), retrying: found.isFetching }}
-            describedBy={describedBy(itemFieldId, { hint, error: errors.target })}
+            describedBy={describedBy(itemFieldId, { hint: stale ? undefined : hint, error: errors.target })}
             invalid={Boolean(errors.target)}
             open={pickerOpen}
             onOpenChange={setPickerOpen}
             onQueryChange={setQuery}
           />
         </Field>
+        {/* a screen reader hears "Sucht …" here once, when the hits turn stale (20b-M4): the visible hint says it too, but the
+            field is not described by it meanwhile, so it is not said twice (B23-M4) */}
+        <span data-relation-status="" role="status" aria-live="polite" className="sr-only">
+          {stale && !found.isError ? t('items.detail.relations.dialog.searching') : ''}
+        </span>
         {target && label && (
           <p className="text-ui text-pretty text-muted">
             <ItemKey value={item.key} className="text-ink" /> {label} <ItemKey value={target.key} className="text-ink" />

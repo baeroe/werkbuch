@@ -29,12 +29,12 @@ web_extra_exposed_ports:
   - { name: reverb, container_port: 6001, http_port: 6002, https_port: 6001 }
 # each daemon waits until composer install and .env exist, so a fresh clone starts cleanly
 # three queue workers: `queue:listen` boots PHP for every job and takes the queues strictly in their order, and every
-# event makes jobs for `default`, `live` and `notifications`; search and media in one worker after those starved
-# (search results and previews came minutes late), so they have a worker of their own; so do the webhooks, for a
-# receiver that hangs holds its worker up to 17 s per attempt (T16-M5)
+# event makes jobs for `default`, `live` and `notifications` (the sign-in mails have the queue `mail` ahead of them);
+# search and media in one worker after those starved (search results and previews came minutes late), so they have a
+# worker of their own; so do the webhooks, for a receiver that hangs holds its worker up to 17 s per attempt (T16-M5)
 web_extra_daemons:
   - name: queue
-    command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan queue:listen --queue=default,live,notifications,bulk --sleep=1 --tries=3'
+    command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan queue:listen --queue=mail,default,live,notifications,bulk --sleep=1 --tries=3'
     directory: /var/www/html
   - name: queue-index
     command: bash -c 'until [ -f vendor/autoload.php ] && [ -f .env ]; do sleep 5; done; exec php artisan queue:listen --queue=search,media --sleep=1 --tries=3'
@@ -52,4 +52,7 @@ hooks:
   post-start:
     # separate database for Pest (phpunit.xml forces DB_DATABASE=testing)
     - exec: bash -c 'C=$(command -v mariadb || command -v mysql); $C -uroot -proot -e "CREATE DATABASE IF NOT EXISTS testing; GRANT ALL ON testing.* TO '"'"'db'"'"'@'"'"'%'"'"';"'
+      service: db
+    # separate database for the load suite (phpunit.load.xml forces DB_DATABASE=load); `load` is a reserved word
+    - exec: bash -c 'C=$(command -v mariadb || command -v mysql); $C -uroot -proot -e "CREATE DATABASE IF NOT EXISTS \`load\`; GRANT ALL ON \`load\`.* TO '"'"'db'"'"'@'"'"'%'"'"';"'
       service: db

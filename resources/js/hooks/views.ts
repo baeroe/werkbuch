@@ -16,12 +16,12 @@ export function useView(id: string | null | undefined, options: HookOptions = {}
 
 /** Creates a view (no `id`) or replaces one; answers the saved view. The sidebar names it, so favorites follow. */
 export function useSaveView() {
-  return useApiMutation(saveView, [qk.views.all, qk.favorites.all]);
+  return useApiMutation(saveView, [qk.views.all, qk.favorites.all, qk.search.all]);
 }
 
 /** Deletes a view; the server takes it out of every sidebar. Variable: the view id. */
 export function useDeleteView() {
-  return useApiMutation(deleteView, [qk.views.all, qk.favorites.all]);
+  return useApiMutation(deleteView, [qk.views.all, qk.favorites.all, qk.search.all]);
 }
 
 /** The favorites of the signed-in person: views and projects, in the order of the sidebar. */

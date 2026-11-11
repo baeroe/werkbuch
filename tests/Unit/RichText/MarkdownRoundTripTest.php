@@ -117,6 +117,24 @@ it('comes back the same from its Markdown', function (array $json) use ($read) {
     )],
 ]);
 
+it('comes back the same from its Markdown with the text before', function (array $json) {
+    // Markdown has a header row and no header column; the text before brings back both (A455)
+    $text = Document::fromJson($json);
+
+    expect(Document::fromMarkdown($text->toMarkdown(), new MarkdownContext(before: $text))->toJson())->toBe($json);
+})->with([
+    'a header row and a header column' => [F::doc(F::table(
+        [F::cell('tableHeader', 'Browser'), F::cell('tableHeader', 'Mails')],
+        [F::cell('tableHeader', 'Safari'), F::cell('tableCell', '2')],
+        [F::cell('tableHeader', 'Chrome'), F::cell('tableCell', '1')],
+    ))],
+    'no header row' => [F::doc(F::p('Werte:'), F::table(
+        [F::cell('tableCell', 'Safari'), F::cell('tableCell', '2')],
+        [F::cell('tableCell', 'Chrome'), F::cell('tableCell', '1')],
+    ))],
+    'every node' => [F::everyNode()],
+]);
+
 it('reads its own Markdown back to the same JSON', function () use ($read) {
     // marks as the editor orders them, and one text node for each run of the same marks
     $marked = fn (string $text, array ...$marks) => ['type' => 'text', 'marks' => $marks, 'text' => $text];

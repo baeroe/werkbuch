@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { allEntries, api, arrowTo, channelHeld, createE2eProject, createItem, isPhone, openProfileMenu, PEOPLE, removeE2eProject, runId, signedInContext, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, arrowTo, channelHeld, createE2eProject, createItem, INBOX_NAMED, inboxName, isPhone, openProfileMenu, PEOPLE, removeE2eProject, runId, signedInContext, tabTo, tr, variant } from '../helpers';
 
 // signed in as the e2e person (playwright.config.ts), in English. Never sign out for real here: that ends the shared
 // session of every later test.
@@ -235,9 +235,9 @@ test('counts a new notification up live', async ({ page, browser }) => {
     await held;
     await other.page.evaluate(() => ((window as Window & { __badge?: boolean }).__badge = true));
     // the inbox link that shows: in the sidebar, on the phone in the top bar
-    const link = other.page.getByRole('link', { name: /^Inbox(, \d+ unread)?$/ }).filter({ visible: true });
+    const link = other.page.getByRole('link', { name: INBOX_NAMED }).filter({ visible: true });
     const before = (await unread()).meta.total;
-    await expect(link).toHaveAccessibleName(tr('en', 'shell.nav.inbox_unread', { count: before }));
+    await expect(link).toHaveAccessibleName(inboxName(before));
     await expect(link.locator('[data-inbox-badge]')).toHaveText(before > 99 ? '99+' : String(before));
 
     // a comment on the watched item: the badge counts up without a reload
@@ -246,7 +246,7 @@ test('counts a new notification up live', async ({ page, browser }) => {
     await expect.poll(() => has(item.id, 'comment'), { timeout: 20_000 }).toBe(true);
     const after = (await unread()).meta.total;
     expect(after).toBeGreaterThan(before);
-    await expect(link).toHaveAccessibleName(tr('en', 'shell.nav.inbox_unread', { count: after }), { timeout: 20_000 });
+    await expect(link).toHaveAccessibleName(inboxName(after), { timeout: 20_000 });
     await expect(link.locator('[data-inbox-badge]')).toHaveText(after > 99 ? '99+' : String(after));
     expect(await other.page.evaluate(() => (window as Window & { __badge?: boolean }).__badge)).toBe(true);
   } finally {

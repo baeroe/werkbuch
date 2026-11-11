@@ -150,6 +150,20 @@ describe('a project the cached list lacks', () => {
     expect(projectCalls()).toBe(2);
     expect(first.result.current.project).toBeUndefined();
   });
+
+  it('asks again for a project that was in the list and left it', async () => {
+    await cachedList();
+    projects = [web, fresh];
+    const { result } = renderHook(() => useItemWorkflow(item('p_new')), { wrapper });
+    await waitFor(() => expect(result.current.project?.id).toBe('p_new'));
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    expect(projectCalls()).toBe(2);
+
+    projects = [web];
+    await act(() => queryClient.invalidateQueries({ queryKey: qk.projects.all }));
+
+    await waitFor(() => expect(projectCalls()).toBe(4));
+  });
 });
 
 describe('reading', () => {
@@ -328,6 +342,7 @@ const PROBES: Record<string, QueryKey> = {
   workItems: qk.workItems.all,
   activity: qk.activity.all,
   stateUsage: qk.stateUsage.all,
+  search: qk.search.all,
 };
 const ALL = Object.keys(PROBES);
 
@@ -338,25 +353,25 @@ describe('mutations', () => {
   it.each<[string, AnyMutation, unknown, string, MockRoute, string[]]>([
     ['useUpdateOrganization', useUpdateOrganization, { name: 'Feldwerk GmbH' }, 'PATCH /api/v1/organization', () => ({ body: { data: organization } }), ['organization']],
     ['useInviteUser', useInviteUser, { email: 'rita@example.com', org_role: 'member' }, 'POST /api/v1/invitations', () => ({ status: 201, body: { link: 'x', invitation: {} } }), ['invitations']],
-    ['useUpdateUserRole', useUpdateUserRole, { user_id: 'u_ida', org_role: 'admin' }, 'PUT /api/v1/users/u_ida/role', () => ({ body: { data: ida } }), ['users']],
-    ['useDeactivateUser', useDeactivateUser, 'u_ida', 'POST /api/v1/users/u_ida/deactivate', () => ({ body: { data: ida } }), ['users', 'tokens', 'workItems']],
-    ['useReactivateUser', useReactivateUser, 'u_ida', 'POST /api/v1/users/u_ida/reactivate', () => ({ body: { data: ida } }), ['users']],
-    ['useCreateBot', useCreateBot, { name: 'Kira', handle: 'kira' }, 'POST /api/v1/bots', () => ({ status: 201, body: { data: ida } }), ['users']],
-    ['useUpdateUser', useUpdateUser, { user_id: 'u_ida', patch: { name: 'Ida B.' } }, 'PATCH /api/v1/users/u_ida', () => ({ body: { data: ida } }), ['users']],
+    ['useUpdateUserRole', useUpdateUserRole, { user_id: 'u_ida', org_role: 'admin' }, 'PUT /api/v1/users/u_ida/role', () => ({ body: { data: ida } }), ['users', 'search']],
+    ['useDeactivateUser', useDeactivateUser, 'u_ida', 'POST /api/v1/users/u_ida/deactivate', () => ({ body: { data: ida } }), ['users', 'tokens', 'workItems', 'search']],
+    ['useReactivateUser', useReactivateUser, 'u_ida', 'POST /api/v1/users/u_ida/reactivate', () => ({ body: { data: ida } }), ['users', 'search']],
+    ['useCreateBot', useCreateBot, { name: 'Kira', handle: 'kira' }, 'POST /api/v1/bots', () => ({ status: 201, body: { data: ida } }), ['users', 'search']],
+    ['useUpdateUser', useUpdateUser, { user_id: 'u_ida', patch: { name: 'Ida B.' } }, 'PATCH /api/v1/users/u_ida', () => ({ body: { data: ida } }), ['users', 'search']],
     ['useCreateToken', useCreateToken, { user_id: 'u_mara', name: 'CI', abilities: ['read'] }, 'POST /api/v1/tokens', () => ({ status: 201, body: { token, plain_text: 'x' } }), ['tokens']],
     ['useRevokeToken', useRevokeToken, 'tok_1', 'DELETE /api/v1/tokens/tok_1', () => ({}), ['tokens']],
-    ['useCreateProject', useCreateProject, { name: 'Website', identifier: 'WEB' }, 'POST /api/v1/projects', () => ({ status: 201, body: { data: web } }), ['projects', 'members', 'favorites']],
+    ['useCreateProject', useCreateProject, { name: 'Website', identifier: 'WEB' }, 'POST /api/v1/projects', () => ({ status: 201, body: { data: web } }), ['projects', 'members', 'favorites', 'search']],
     ['useUpdateProject', useUpdateProject, { id: 'p1', patch: { identifier: 'SITE' } }, 'PATCH /api/v1/projects/p1', () => ({ body: { data: web } }), ALL],
     ['useArchiveProject', useArchiveProject, { id: 'p1', archived: false }, 'POST /api/v1/projects/p1/restore', () => ({ body: { data: web } }), ALL],
     ['useDeleteProject', useDeleteProject, 'p1', 'DELETE /api/v1/projects/p1', () => ({ status: 202 }), ALL],
-    ['useJoinProject', useJoinProject, 'p1', 'POST /api/v1/projects/p1/join', () => ({ status: 201, body: { data: member } }), ['projects', 'members', 'favorites']],
-    ['useAddMember', useAddMember, { project_id: 'p1', user_id: 'u_ida', role: 'member' }, 'POST /api/v1/projects/p1/members', () => ({ status: 201, body: { data: member } }), ['projects', 'members']],
-    ['useUpdateMemberRole', useUpdateMemberRole, { project_id: 'p1', user_id: 'u_ida', role: 'admin' }, 'PATCH /api/v1/projects/p1/members/u_ida', () => ({ body: { data: member } }), ['projects', 'members']],
-    ['useRemoveMember', useRemoveMember, { project_id: 'p1', user_id: 'u_ida' }, 'DELETE /api/v1/projects/p1/members/u_ida', () => ({}), ['projects', 'members']],
+    ['useJoinProject', useJoinProject, 'p1', 'POST /api/v1/projects/p1/join', () => ({ status: 201, body: { data: member } }), ['projects', 'members', 'favorites', 'search']],
+    ['useAddMember', useAddMember, { project_id: 'p1', user_id: 'u_ida', role: 'member' }, 'POST /api/v1/projects/p1/members', () => ({ status: 201, body: { data: member } }), ['projects', 'members', 'search']],
+    ['useUpdateMemberRole', useUpdateMemberRole, { project_id: 'p1', user_id: 'u_ida', role: 'admin' }, 'PATCH /api/v1/projects/p1/members/u_ida', () => ({ body: { data: member } }), ['projects', 'members', 'search']],
+    ['useRemoveMember', useRemoveMember, { project_id: 'p1', user_id: 'u_ida' }, 'DELETE /api/v1/projects/p1/members/u_ida', () => ({}), ['projects', 'members', 'search']],
     ['useSaveWorkflow', useSaveWorkflow, { workflow: { ...agency, id: undefined }, options: { state_mapping: { app_review: 'app_progress' } } }, 'POST /api/v1/workflows', () => ({ status: 201, body: { data: agency } }), ALL],
     ['useDeleteWorkflow', useDeleteWorkflow, 'wf_agency', 'DELETE /api/v1/workflows/wf_agency', () => ({}), ['workflows']],
     ['useAssignWorkflow', useAssignWorkflow, { project_id: 'p1', workflow_id: 'wf_agency', mapping: { std_todo: 'app_todo' } }, 'PUT /api/v1/projects/p1/workflow', () => ({ body: { data: web } }), ALL],
-    ['useSaveWorkItemType', useSaveWorkItemType, types[1], 'PUT /api/v1/work-item-types/t_bug', () => ({ body: { data: types[1] } }), ['workItemTypes']],
+    ['useSaveWorkItemType', useSaveWorkItemType, types[1], 'PUT /api/v1/work-item-types/t_bug', () => ({ body: { data: types[1] } }), ['workItemTypes', 'workItems']],
     ['useDeleteWorkItemType', useDeleteWorkItemType, 't_wish', 'DELETE /api/v1/work-item-types/t_wish', () => ({ body: { outcome: 'deleted' } }), ['projects', 'workItemTypes']],
     ['useSaveProperty', useSaveProperty, properties[1], 'PUT /api/v1/properties/pr_effort', () => ({ body: { data: properties[1] } }), ['properties']],
     ['useDeleteProperty', useDeleteProperty, 'pr_effort', 'DELETE /api/v1/properties/pr_effort', () => ({ body: { affected_items: 0 } }), ['workItemTypes', 'properties', 'workItems']],
@@ -437,12 +452,12 @@ describe('mutations', () => {
 
     seed();
     await act(() => result.current.mutateAsync({ user_id: 'u_ida', org_role: 'admin' }));
-    expect(stale()).toEqual(['users']);
+    expect(stale()).toEqual(['users', 'search']);
     expect(router.reload).not.toHaveBeenCalled();
 
     seed();
     await act(() => result.current.mutateAsync({ user_id: 'u_mara', org_role: 'member' }));
-    expect(stale()).toEqual(['users', 'projects']);
+    expect(stale()).toEqual(['users', 'projects', 'search']);
     expect(router.reload).toHaveBeenCalledTimes(1);
   });
 
@@ -694,20 +709,20 @@ describe('comments', () => {
       'PATCH /api/v1/comments/c_new': () => ({ body: { data: { ...added, edited_at: '2026-10-28T10:00:00.000Z' } } }),
       'DELETE /api/v1/comments/c_new': () => ({ status: 204 }),
     });
-    const stale = [COMMENTS, qk.activity.list({ item: 'wi_web_47', pages: 'all' }), qk.workItems.detail('wi_web_47')];
+    const stale = [COMMENTS, qk.activity.list({ item: 'wi_web_47', pages: 'all' }), qk.workItems.detail('wi_web_47'), qk.search.list({ q: 'x' })];
     const seed = () => stale.forEach((key) => queryClient.setQueryData(key, { items: [] }));
     const isStale = () => stale.map((key) => queryClient.getQueryState(key)?.isInvalidated);
     const { result } = renderHook(() => ({ add: useAddComment(), edit: useEditComment(), remove: useDeleteComment() }), { wrapper });
 
     seed();
     expect(await act(() => result.current.add.mutateAsync({ work_item_id: 'wi_web_47', body: added.body_json }))).toEqual(added);
-    expect(isStale()).toEqual([true, true, true]);
+    expect(isStale()).toEqual([true, true, true, true]);
     seed();
     await act(() => result.current.edit.mutateAsync({ id: 'c_new', body: added.body_json }));
-    expect(isStale()).toEqual([true, true, true]);
+    expect(isStale()).toEqual([true, true, true, true]);
     seed();
     await act(() => result.current.remove.mutateAsync('c_new'));
-    expect(isStale()).toEqual([true, true, true]);
+    expect(isStale()).toEqual([true, true, true, true]);
     expect(api.calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
       'POST /api/v1/work-items/wi_web_47/comments',
       'PATCH /api/v1/comments/c_new',

@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, createE2eProject, createItem, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, createE2eProject, createItem, isPhone, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // The board of a project with the agency workflow (Agentur-Freigabe: Backlog → Todo → In Progress → Review →
 // Kundenfreigabe → Done), signed in as the e2e person (playwright.config.ts), in English. Each test works in a project
@@ -45,6 +45,28 @@ test('moves a card with shift+arrow to the next allowed column', async ({ page }
     // the server has it
     await page.reload();
     await expect(card(page, 'In Progress', key)).toBeVisible();
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('moves the cursor to the column before and after with ← and →', async ({ page }) => {
+  await page.goto('/my-items');
+  const { identifier, keys } = await boardProject(page, 'columns', ['Password reset']);
+  const [login, password] = keys as [string, string];
+  try {
+    const workflow = (await allEntries(page, 'workflows')).find((entry) => entry.name === 'Agentur-Freigabe') as { states: { id: string; name: string }[] };
+    const response = await api(page, 'POST', `/api/v1/work-items/${password}/transition`, { to_state_id: workflow.states.find((state) => state.name === 'In Progress')!.id });
+    expect(response.status(), await response.text()).toBe(200);
+    await openBoard(page, identifier, login);
+    // → goes past the empty columns to the next card, ← back; nothing moves
+    await page.keyboard.press('ArrowRight');
+    await expect(card(page, 'In Progress', password)).toBeFocused();
+    await page.keyboard.press('ArrowLeft');
+    await expect(card(page, 'Todo', login)).toBeFocused();
+    await page.reload();
+    await expect(card(page, 'Todo', login)).toBeVisible();
+    await expect(card(page, 'In Progress', password)).toBeVisible();
   } finally {
     await removeE2eProject(page, identifier);
   }
@@ -101,6 +123,45 @@ test('changes the place of a card in its column with alt+arrow and keeps the foc
     );
     await page.reload();
     await expect(order().first()).toHaveAccessibleName(new RegExp(`^${second} `));
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('moves a card where the ranks ran out', async ({ page }) => {
+  await page.goto('/my-items');
+  const { identifier, keys } = await boardProject(page, 'ranks', ['Password reset', 'Profile page']);
+  const [login, password, profile] = keys as [string, string, string];
+  // Login form and Password reset leave no room between them: a rank between the two would be longer than 128 characters
+  for (const [key, rank] of [
+    [login, 'a0'],
+    [password, `a0${'0'.repeat(125)}1`],
+    [profile, 'a1'],
+  ] as const) {
+    const response = await api(page, 'PATCH', `/api/v1/work-items/${key}`, { rank });
+    expect(response.status(), await response.text()).toBe(200);
+  }
+  const order = () => column(page, 'Todo').getByRole('article');
+  try {
+    await openBoard(page, identifier, login);
+    await expect(order()).toHaveCount(3);
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await expect(card(page, 'Todo', profile)).toBeFocused();
+
+    // the server makes room first, then the card takes its place between Login form and Password reset
+    await page.keyboard.press('Alt+ArrowUp');
+    await expect(page.getByRole('status', { name: tr('en', 'items.board.announcements') })).toHaveText(
+      tr('en', 'items.board.moved.place', { key: profile, place: 2, count: 3, column: 'Todo' }),
+    );
+    await expect(order().nth(1)).toHaveAccessibleName(new RegExp(`^${profile} `));
+    await expect(card(page, 'Todo', profile)).toBeFocused();
+    await expect(page.getByText(tr('en', 'items.board.not_moved', { key: profile }))).toHaveCount(0);
+
+    await page.reload();
+    await expect(order().nth(0)).toHaveAccessibleName(new RegExp(`^${login} `));
+    await expect(order().nth(1)).toHaveAccessibleName(new RegExp(`^${profile} `));
+    await expect(order().nth(2)).toHaveAccessibleName(new RegExp(`^${password} `));
   } finally {
     await removeE2eProject(page, identifier);
   }
@@ -201,4 +262,46 @@ test('creates an item with the quick add of a column', async ({ page }) => {
   } finally {
     await removeE2eProject(page, identifier);
   }
+});
+
+test.describe('the wheel over a column', () => {
+  /** A project with the standard workflow (six columns, wider than the screen) and 14 items in Backlog. */
+  async function wideBoard(page: Page, what: string) {
+    const project = await createE2eProject(page, name(what));
+    for (let i = 1; i <= 14; i++) await createItem(page, { project_id: project.id, title: `Wheel item ${i}` });
+    await page.goto(`/projects/${project.identifier}?layout=board`);
+    const board = page.getByRole('group', { name: tr('en', 'items.board.label') });
+    await expect(column(page, 'Backlog').getByRole('article').first()).toBeVisible();
+    expect(await board.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+    const list = column(page, 'Backlog').locator('[data-board-list]');
+    const box = (await list.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    return { identifier: project.identifier, board, list };
+  }
+
+  test('scrolls the board sideways with the wheel over a column', async ({ page }) => {
+    test.skip(isPhone(page), 'a phone is swiped, there is no wheel');
+    await page.goto('/my-items');
+    const { identifier, board } = await wideBoard(page, 'wheel x');
+    try {
+      await page.mouse.wheel(300, 0);
+      await expect.poll(() => board.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    } finally {
+      await removeE2eProject(page, identifier);
+    }
+  });
+
+  test('keeps the vertical wheel in the column', async ({ page }) => {
+    test.skip(isPhone(page), 'a phone is swiped, there is no wheel');
+    await page.goto('/my-items');
+    const { identifier, board, list } = await wideBoard(page, 'wheel y');
+    try {
+      const before = await board.evaluate((el) => el.scrollLeft);
+      await page.mouse.wheel(0, 300);
+      await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+      expect(await board.evaluate((el) => el.scrollLeft)).toBe(before);
+    } finally {
+      await removeE2eProject(page, identifier);
+    }
+  });
 });

@@ -6,15 +6,18 @@
  *   people write them, http(s) only, a required value stays). Rich text only as plain paragraphs (spec "Änderungen vom
  *   2026-10-29", R17): a richer one shows read-only there, to be edited on the item.
  * A property the item's type does not have shows a dash. Every save is optimistic (`useUpdateWorkItem`); a refusal of
- * the server marks the cell with its words (the toast names it too), and the editor shows them at its field.
+ * the server marks the cell with its words (the toast names it too), and the editor shows them at its field. The table
+ * keeps those words per row (`useRefusals`), so a row that scrolls away and back still has them (T20-M5).
  */
 
+import { useQueryClient } from '@tanstack/react-query';
 import { Check, CircleAlert } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError } from '@/api/client';
 import { personOption } from '@/components/fields/AssigneePicker';
-import { DatePopover, DayValue } from '@/components/fields/DateField';
-import { formatDay, formatPropertyValue } from '@/components/fields/format';
+import { DatePopover, DayValue, dayText } from '@/components/fields/DateField';
+import { cachedItems } from '@/components/fields/commands/context';
+import { formatPropertyValue } from '@/components/fields/format';
 import { useEditReason, useProjectPeople, useToday, useUserMap } from '@/components/fields/itemData';
 import { Picker, ReadOnlyTrigger, triggerClass, type PickerOption } from '@/components/fields/Picker';
 import { idsOf, sameValue } from '@/components/fields/property/parse';
@@ -22,13 +25,15 @@ import { PropertyValueInput } from '@/components/fields/property/PropertyValueIn
 import { Avatar, UnassignedAvatar } from '@/components/ui/Avatar';
 import { ToneDot } from '@/components/ui/Chip';
 import { cx } from '@/components/ui/cx';
+import { Kbd } from '@/components/ui/Kbd';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
 import { useSettle } from '@/hooks/mutation';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
-import { t } from '@/lib/i18n';
-import { useDialogScope } from '@/lib/shortcuts/useShortcut';
+import { t, tx } from '@/lib/i18n';
+import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import type { ListedItem, Property, PropertyValue } from '@/types';
+import { typePropertyOf } from '../columns';
 import type { EditProps } from './CoreCells';
 import { NotApplicable } from './NotApplicable';
 
@@ -39,27 +44,80 @@ interface Saving {
   refusal: string | null;
 }
 
-function useSave(item: ListedItem, property: Property): Saving {
+/** The words of the server's refusal at a cell, kept by the table, and the way to follow a save of the cell. */
+export interface CellRefusal {
+  refusal: string | null;
+  /** A save goes out: earlier words go, the words of this one stay once the server refuses it. */
+  track: (call: Promise<unknown>) => void;
+}
+
+/** The words of a refusal and the `updated_at` of the item when the refusal came. */
+interface Held {
+  message: string;
+  stamp: string;
+}
+
+/**
+ * The refusals of the property cells of a table, by `<rowKey>:<property key>`: they live with the table, not with a
+ * cell, so a row that scrolls away (the virtualizer unmounts it) still shows them when it comes back (T20-M5). Only the
+ * newest save of a cell has its say (20a-M1: of two at once, a refused earlier one never marks a later one that went
+ * through), and its words stay only while the item is as it stood when they came (20a-M2: a change from elsewhere,
+ * live, the preview or another row of the item, makes them old).
+ */
+export function useRefusals(): (row: string, property: Property, item: ListedItem) => CellRefusal {
+  const [words, setWords] = useState<ReadonlyMap<string, Held>>(() => new Map());
+  /** The newest save of each cell. */
+  const latest = useRef(new Map<string, object>());
+  const queryClient = useQueryClient();
   const settle = useSettle();
+  const put = useCallback((key: string, held: Held | null) => {
+    setWords((current) => {
+      if (held === null && !current.has(key)) return current;
+      const next = new Map(current);
+      if (held === null) next.delete(key);
+      else next.set(key, held);
+      return next;
+    });
+  }, []);
+  return (row, property, item) => {
+    const key = `${row}:${property.key}`;
+    const held = words.get(key);
+    return {
+      refusal: held && held.stamp === item.updated_at ? held.message : null,
+      track: (call) => {
+        const token = {};
+        latest.current.set(key, token);
+        put(key, null);
+        settle(call, {
+          onError: (failure) => {
+            if (latest.current.get(key) !== token) return;
+            const message = failure instanceof ApiError ? failure.errors?.[`values.${property.key}`]?.[0] : undefined;
+            if (!message) return;
+            // the words belong to the item as it stands in the cache when they come, not as the save found it (an
+            // earlier save of the cell may have gone through meanwhile, B1 review M1); read there, not in the render,
+            // which may be one React drops or one of a row that scrolled away before live changed the item (B23-M2)
+            const stamp = cachedItems(queryClient)(item.id)?.updated_at ?? item.updated_at;
+            put(key, { message, stamp });
+          },
+        });
+      },
+    };
+  };
+}
+
+function useSave(item: ListedItem, property: Property, { refusal, track }: CellRefusal): Saving {
   const update = useUpdateWorkItem();
-  const [refusal, setRefusal] = useState<string | null>(null);
   return {
     pending: update.isPending,
     refusal,
     save: (next) => {
       if (sameValue(next, item.values[property.key])) return;
-      setRefusal(null);
-      settle(update.mutateAsync({ id: item.id, patch: { values: { [property.key]: next } } }), {
-        onError: (failure) => {
-          const message = failure instanceof ApiError ? failure.errors?.[`values.${property.key}`]?.[0] : undefined;
-          if (message) setRefusal(message);
-        },
-      });
+      track(update.mutateAsync({ id: item.id, patch: { values: { [property.key]: next } } }));
     },
   };
 }
 
-type PropertyCellProps = EditProps & { item: ListedItem; property: Property };
+type PropertyCellProps = EditProps & { item: ListedItem; property: Property; refusal: CellRefusal };
 type CellOf = PropertyCellProps & { saving: Saving; reason: string | null };
 
 /** Names in a cell: the first one, then "+N". */
@@ -153,7 +211,7 @@ function DateCell({ item, property, editing, onEditingChange, saving, reason }: 
       value={day}
       onChoose={(next) => saving.save(next)}
       display={day ? <DayValue value={day} today={today} overdue={false} short empty="" /> : <span className="text-muted">—</span>}
-      displayText={day ? formatDay(day) : t('items.fields.property.no_date')}
+      displayText={day ? dayText({ value: day, today, overdue: false, short: true, empty: '' }) : t('items.fields.property.no_date')}
       disabledReason={reason}
       pending={saving.pending}
       tabIndex={-1}
@@ -212,15 +270,24 @@ function BooleanCell({ item, property, editing, onEditingChange, saving, reason 
   );
 }
 
-/** Mounted while the editor of a cell is open: the page's shortcuts wait, as they do behind a dialog. */
-function PausePageShortcuts() {
-  useDialogScope();
-  return null;
-}
-
-/** Text, number, link and plain rich text: a small editor in a popover, saved on Enter (or when the focus leaves). */
+/**
+ * Text, number, link and plain rich text: a small editor in a popover, saved on Enter (or when the focus leaves). A text
+ * it cannot read keeps the popover open on a click beside it, with its error, as Enter does (T20-M10); Escape takes the
+ * typing back first, then closes.
+ */
 function TypedCell({ item, property, editing, onEditingChange, saving, reason, required }: CellOf & { required: boolean }) {
   const users = useUserMap();
+  /** The error of the typed text while it cannot be read. */
+  const unreadable = useRef<string | null>(null);
+  /** That error, shown since a click beside the editor was refused. */
+  const [held, setHeld] = useState<string | null>(null);
+  const field = useRef<HTMLDivElement>(null);
+  // a closed editor forgets its text: the next one starts readable
+  useEffect(() => {
+    if (editing) return;
+    unreadable.current = null;
+    setHeld(null);
+  }, [editing]);
   const value = item.values[property.key];
   const text = formatPropertyValue(property, value, (id) => users.get(id)?.name ?? t('items.fields.property.unknown_person'));
   const numeric = property.field_type === 'number';
@@ -235,7 +302,19 @@ function TypedCell({ item, property, editing, onEditingChange, saving, reason, r
     );
   }
   return (
-    <Popover open={editing} onOpenChange={onEditingChange}>
+    <Popover
+      open={editing}
+      onOpenChange={(open, details) => {
+        if (!open && unreadable.current !== null) {
+          details.cancel();
+          setHeld(unreadable.current);
+          // the focus stays in the field, as after Enter
+          requestAnimationFrame(() => field.current?.querySelector<HTMLElement>('input, textarea')?.focus());
+          return;
+        }
+        onEditingChange(open);
+      }}
+    >
       <PopoverTrigger
         render={
           <button
@@ -250,9 +329,9 @@ function TypedCell({ item, property, editing, onEditingChange, saving, reason, r
       >
         {shown}
       </PopoverTrigger>
-      <PopoverContent title={property.label} className="w-[min(20rem,calc(100vw-2rem))] p-3">
-        <PausePageShortcuts />
-        <div className="mt-2">
+      {/* while the editor of a cell is open the page's shortcuts wait, as they do behind a dialog */}
+      <PopoverContent title={property.label} className="w-[min(20rem,calc(100vw-2rem))] p-3" pauseShortcuts>
+        <div ref={field} className="mt-2">
           <PropertyValueInput
             property={property}
             value={value}
@@ -261,11 +340,19 @@ function TypedCell({ item, property, editing, onEditingChange, saving, reason, r
               saving.save(next);
               onEditingChange(false);
             }}
+            onUnreadable={(message) => {
+              unreadable.current = message;
+              setHeld((shown) => (shown === null || message === null ? null : message));
+            }}
             projectId={item.project_id}
             required={required}
-            error={saving.refusal}
+            error={held ?? saving.refusal}
             hideLabel
-            hint={t(property.field_type === 'rich_text' ? 'items.table.edit_hint_rich' : 'items.table.edit_hint')}
+            hint={
+              property.field_type === 'rich_text'
+                ? tx('items.table.edit_hint_rich', { keys: <Kbd keys={SHORTCUTS['dialog.submit'].keys} /> })
+                : tx('items.table.edit_hint', { keys: <Kbd keys="enter" /> })
+            }
           />
         </div>
       </PopoverContent>
@@ -277,9 +364,9 @@ function TypedCell({ item, property, editing, onEditingChange, saving, reason, r
 export function PropertyCell(props: PropertyCellProps) {
   const { item, property } = props;
   const types = useWorkItemTypes().data?.items;
-  const saving = useSave(item, property);
+  const saving = useSave(item, property, props.refusal);
   const reason = useEditReason(item);
-  const assignment = types?.find((type) => type.id === item.type_id)?.properties.find((entry) => entry.property_id === property.id);
+  const assignment = typePropertyOf(types, item, property);
   if (!assignment) return <NotApplicable />;
   const cell = { ...props, saving, reason };
   let editor: ReactNode;

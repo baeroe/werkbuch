@@ -10,7 +10,7 @@ export function useWorkItemTypes() {
 }
 
 export function useSaveWorkItemType() {
-  return useApiMutation(saveWorkItemType, [qk.workItemTypes.all]);
+  return useApiMutation(saveWorkItemType, [qk.workItemTypes.all, qk.workItems.all]);
 }
 
 /**

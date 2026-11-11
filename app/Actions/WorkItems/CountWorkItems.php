@@ -17,8 +17,9 @@ use stdClass;
 /**
  * The number of items of named filters in one call (`POST /work-items/counts`, a read, P15, P18): `filters` is an
  * object of 1–MAX_FILTERS filters by name (NAME_PATTERN, `0` too), each read by FilterSchema::parse (errors below
- * `filters.<name>.`), and `include_archived` holds for all. Every number comes from ItemQuery, so it only counts items
- * the account sees: a filter on a hidden project counts 0, never 404.
+ * `filters.<name>.`), with at most MAX_CONDITIONS_TOTAL conditions together, and `include_archived` holds for all.
+ * Every number comes from ItemQuery, so it only counts items the account sees: a filter on a hidden project counts 0,
+ * never 404.
  */
 final class CountWorkItems
 {
@@ -28,6 +29,9 @@ final class CountWorkItems
     public const KEYS = ['filters', 'include_archived'];
 
     public const MAX_FILTERS = 50;
+
+    /** The conditions of all filters of one call together: every condition is a clause of every count it is in. */
+    public const MAX_CONDITIONS_TOTAL = 500;
 
     public const NAME_PATTERN = '/^[a-z0-9_.:-]{1,64}\z/i';
 
@@ -57,7 +61,8 @@ final class CountWorkItems
     }
 
     /**
-     * The filters by name; an object of 1–MAX_FILTERS entries, every name of NAME_PATTERN. An object of JSON comes as
+     * The filters by name; an object of 1–MAX_FILTERS entries, every name of NAME_PATTERN, at most
+     * MAX_CONDITIONS_TOTAL conditions over all of them (`field.filters.too_many`). An object of JSON comes as
      * `stdClass` (the controller keeps it one), so `{"0": …}` is an object; an array is one only when it is no list
      * (`[f]` names no filter). Every wrong name is named.
      *
@@ -94,6 +99,8 @@ final class CountWorkItems
             $errors['filters'] = count($wrong) === 1
                 ? __('field.filters.name', ['name' => $wrong[0]])
                 : __('field.filters.names', ['names' => implode(', ', $wrong)]);
+        } elseif (array_sum(array_map(fn (Filter $filter) => count($filter->conditions), $parsed)) > self::MAX_CONDITIONS_TOTAL) {
+            $errors['filters'] = __('field.filters.too_many', ['max' => self::MAX_CONDITIONS_TOTAL]);
         }
 
         return $parsed;

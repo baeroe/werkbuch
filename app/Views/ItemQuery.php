@@ -49,9 +49,12 @@ final class ItemQuery
             if (! $filter->mentions(CoreField::Archived->value)) {
                 $query->whereNull($query->qualifyColumn('archived_at'));
             }
-            $named = $filter->namedProjects();
-            $query->whereIn($query->qualifyColumn('project_id'), Project::query()->select('projects.id')
-                ->where(fn (Builder $open) => $open->whereNull('projects.archived_at')->orWhereIn('projects.id', $named)));
+            // `not in` an uncorrelated subquery, never `in`: MariaDB flattens `in` into a semi-join, and under 50 000
+            // items its two join orders cost the same, starting from the projects read every item's row (Task 10c);
+            // `not in` equals the old `in` only because projects.id is NOT NULL: a null in the subquery would make
+            // every `not in` unknown and empty every list
+            $query->whereNotIn($query->qualifyColumn('project_id'), Project::query()->select('projects.id')
+                ->whereNotNull('projects.archived_at')->whereNotIn('projects.id', $filter->namedProjects()));
         }
 
         FilterQuery::apply($query, $filter, $actor->user);

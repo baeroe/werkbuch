@@ -48,6 +48,7 @@ final class ListProjects
             sorts: ['name' => 'projects.name', 'identifier' => 'projects.identifier', 'created_at' => 'projects.id'],
             default: ['name'],
             includes: ['members'],
+            flags: ['include_archived' => 'Archived projects too (`1`); without it only the active ones.'],
         );
     }
 

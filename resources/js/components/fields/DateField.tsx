@@ -18,11 +18,10 @@ import { useSettle } from '@/hooks/mutation';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
-import { useDialogScope } from '@/lib/shortcuts/useShortcut';
 import type { ListedItem } from '@/types';
-import { formatDay, formatShortDay, relativeDay } from './format';
+import { formatDay, formatLongDay, formatShortDay, relativeDay } from './format';
 import { useEditReason, useItemWorkflow, useToday } from './itemData';
-import { PendingMark, ReadOnlyTrigger, triggerClass, withTooltip, type PickerExtras } from './Picker';
+import { PendingMark, ReadOnlyTrigger, triggerClass, useFocusSwap, withTooltip, type PickerExtras } from './Picker';
 
 type DatePopoverProps = PickerExtras & {
   /** The field: "Due-Date"; the trigger is named "<label>: <displayText>". */
@@ -39,15 +38,6 @@ type DatePopoverProps = PickerExtras & {
   invalid?: boolean;
   className?: string;
 };
-
-/**
- * Mounted while the calendar is open: its days hold the focus like a dialog does, so the page's shortcuts (p, s,
- * mod+backspace of the item) wait instead of acting on the item behind it.
- */
-function PausePageShortcuts() {
-  useDialogScope();
-  return null;
-}
 
 /** A date trigger with its calendar; DateField and date properties use it. */
 export function DatePopover({
@@ -92,9 +82,15 @@ export function DatePopover({
     </>
   );
 
+  // the rights may arrive after the first render (or go): the focus stays on the trigger, also from an open calendar;
+  // a calendar open when they go is closed, so it stays closed when they come back
+  const { swap, popup } = useFocusSwap(Boolean(disabledReason), () => {
+    if (shown) show(false);
+  });
+
   if (disabledReason) {
     return (
-      <ReadOnlyTrigger look={look} className={className} name={name} reason={disabledReason} tabIndex={tabIndex} id={id}>
+      <ReadOnlyTrigger look={look} className={className} name={name} reason={disabledReason} tabIndex={tabIndex} id={id} swap={swap}>
         {content}
       </ReadOnlyTrigger>
     );
@@ -114,6 +110,7 @@ export function DatePopover({
               aria-invalid={invalid || undefined}
               aria-keyshortcuts={shortcut ? ariaKeyshortcuts(shortcut) : undefined}
               tabIndex={tabIndex}
+              {...swap}
               className={cx('group', triggerClass(look, { invalid, className }))}
             />
           }
@@ -123,9 +120,12 @@ export function DatePopover({
         shortcut ? t('items.fields.date.set', { label }) : null,
         shortcut,
       )}
-      {/* the focus starts on the chosen day (or today), so the arrows work at once */}
+      {/* the focus starts on the chosen day (or today), so the arrows work at once; its days hold the focus like a
+          dialog does, so while it is open the page's shortcuts (p, s, mod+backspace of the item) wait */}
       <PopoverContent
         keepSide={keepSide}
+        {...popup}
+        pauseShortcuts
         className="w-auto p-3"
         initialFocus={() => {
           if (startsOpen.current) {
@@ -135,7 +135,6 @@ export function DatePopover({
           return days.current?.querySelector<HTMLElement>('[data-day][tabindex="0"]') ?? true;
         }}
       >
-        <PausePageShortcuts />
         <div ref={days}>
           <Calendar
             value={value}
@@ -163,8 +162,23 @@ export function DatePopover({
   );
 }
 
+type DayShown = { value: string | null; today: string; overdue: boolean; short?: boolean; empty: string };
+
+/**
+ * The words DayValue shows, for the name of its trigger (`displayText`): a control's visible text stands in its name
+ * (WCAG 2.5.3), so a field reads "Due date: 31/10/2026, in 3 days". A chip shows the day without its year: its name
+ * adds the whole day in brackets, "Due date: 31/10 (31 October 2026), overdue" (axe leaves out what is in brackets
+ * when it compares the visible text with the name).
+ */
+export function dayText({ value, today, overdue, short = false, empty }: DayShown): string {
+  if (!value) return empty;
+  const day = short ? t('items.fields.date.short_text', { day: formatShortDay(value), full: formatLongDay(value) }) : formatDay(value);
+  if (overdue) return t('items.fields.date.overdue_text', { day });
+  return short ? day : t('items.fields.date.relative_text', { day, relative: relativeDay(value, today) });
+}
+
 /** A day as the trigger shows it: long with the distance to today, or short in a chip. Overdue in the danger colour. */
-export function DayValue({ value, today, overdue, short = false, empty }: { value: string | null; today: string; overdue: boolean; short?: boolean; empty: string }) {
+export function DayValue({ value, today, overdue, short = false, empty }: DayShown) {
   const Icon = overdue ? CalendarX2 : CalendarDays;
   if (!value) {
     return (
@@ -178,6 +192,9 @@ export function DayValue({ value, today, overdue, short = false, empty }: { valu
     <>
       <Icon className={cx('shrink-0', short ? 'size-3.5' : 'size-4', overdue ? 'text-danger' : 'text-muted')} aria-hidden="true" />
       <span className={cx('tabular-nums', overdue && 'font-medium text-danger')}>{short ? formatShortDay(value) : formatDay(value)}</span>
+      {/* a space between the words, which the flex gap does not draw: read as text, the day and the word stay two
+          words (axe joins the text of elements as it stands, "31.10.2026überfällig") */}
+      {(overdue || !short) && ' '}
       {/* overdue is never colour alone: the word stands beside the day, in chips and cards too */}
       {overdue ? (
         <span className="truncate font-medium text-danger">{t('items.fields.date.overdue')}</span>
@@ -217,6 +234,7 @@ export function DateField({ item, field, look = 'field', shortcut, ...extras }: 
   const overdue = useOverdue(item) && field === 'due_date';
   const label = t(FIELDS[field].label);
   const value = item[field];
+  const shown: DayShown = { value, today, overdue, short: look !== 'field' && look !== 'form', empty: t(FIELDS[field].empty) };
 
   function choose(next: string | null): string | null {
     if (next === value) return null;
@@ -247,8 +265,8 @@ export function DateField({ item, field, look = 'field', shortcut, ...extras }: 
         label={label}
         value={value}
         onChoose={choose}
-        display={<DayValue value={value} today={today} overdue={overdue} short={look !== 'field' && look !== 'form'} empty={t(FIELDS[field].empty)} />}
-        displayText={value ? (overdue ? t('items.fields.date.overdue_text', { day: formatDay(value) }) : formatDay(value)) : t('items.fields.date.unset')}
+        display={<DayValue {...shown} />}
+        displayText={dayText(shown)}
         describedBy={refusal ? errorId : undefined}
         invalid={refusal !== null}
         disabledReason={reason}

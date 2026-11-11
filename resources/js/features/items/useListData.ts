@@ -31,7 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ApiError } from '@/api/client';
 import type { ListWorkItemsArgs } from '@/api/workItems';
 import { placeItems } from '@/domain/grouping';
-import type { ItemsPreset, ViewState } from '@/domain/viewState';
+import type { ViewState } from '@/domain/viewState';
 import { useLabels } from '@/hooks/catalog';
 import { useProjects } from '@/hooks/projects';
 import { useProperties } from '@/hooks/properties';
@@ -39,7 +39,7 @@ import { useAllUsers } from '@/hooks/users';
 import { ALL_GROUP, ListGoneError, useGroupedWorkItems, useWorkItemGroups, type InfiniteWorkItems } from '@/hooks/workItems';
 import { useWorkflows } from '@/hooks/workflows';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
-import type { Condition, GroupBy, GroupCount, ListedItem, Project, StateCategory } from '@/types';
+import type { Condition, GroupBy, GroupCount, ListedItem, StateCategory } from '@/types';
 import { groupLabel, type GroupCatalogs } from './display/groupLabels';
 import { listSort, MANUAL_SORT } from './display/options';
 import { fieldDef, isComplete, PROPERTY_PREFIX } from './filter/fieldOps';
@@ -56,6 +56,8 @@ export interface ListData {
   status: 'pending' | 'error' | 'success';
   error: ApiError | null;
   retry(): void;
+  /** A retry of the list that failed is on its way: the error stays until its answer is there (T14-M4). */
+  retrying: boolean;
   /**
    * Every item of the list (⌘A); rejects with `ListGoneError` while a new state is loading (what shows is the old one)
    * and when the list changed or unmounted meanwhile.
@@ -67,7 +69,7 @@ export interface ListData {
   current: boolean;
 }
 
-type Shown = Omit<ListData, 'retry' | 'loadAll' | 'current'>;
+type Shown = Omit<ListData, 'retry' | 'retrying' | 'loadAll' | 'current'>;
 
 const EMPTY: Shown = { groups: [], groupBy: 'none', fellBack: false, total: 0, status: 'pending', error: null, items: [] };
 
@@ -76,7 +78,7 @@ const EPICS: Condition = { field: 'epic', op: 'is', value: true };
 /** The timeline reads in the order of time. */
 const BY_START = { field: 'start_date', direction: 'asc' } as const;
 
-export function useListData(state: ViewState, scope: Condition[], _options: { preset: ItemsPreset; project?: Project }): ListData {
+export function useListData(state: ViewState, scope: Condition[]): ListData {
   const { display } = state;
   const timeline = display.layout === 'timeline';
   const chosen: GroupBy = timeline ? 'project' : display.group_by;
@@ -229,11 +231,22 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
   const failure = (grouped && !answer.data ? answer.error : null) ?? (!grouped && !all?.data ? all?.error : null) ?? catalogs.find((query) => query.isError && !query.data)?.error ?? null;
 
   const last = useRef<{ shown: Shown; key: string } | null>(null);
+  // a query without data that fetches again forgets its error (TanStack): while a failed list fetches again, its error
+  // stays, saying that the retry runs, instead of a moment of nothing and then the skeleton (T14-M4)
+  const failed = useRef<{ error: ApiError; key: string } | null>(null);
+  const fetching = Boolean(answer.isFetching || all?.isFetching || catalogs.some((query) => query.isFetching));
   let shown: Shown;
-  if (failure) shown = { ...EMPTY, status: 'error', error: failure as ApiError };
-  else if (settled) {
+  let retrying = false;
+  if (failure) {
+    shown = { ...EMPTY, status: 'error', error: failure as ApiError };
+    failed.current = { error: failure as ApiError, key: argsKey };
+  } else if (settled) {
     shown = fresh;
     last.current = { shown, key: argsKey };
+    failed.current = null;
+  } else if (failed.current?.key === argsKey && fetching) {
+    shown = { ...EMPTY, status: 'error', error: failed.current.error };
+    retrying = true;
   } else shown = last.current?.shown ?? EMPTY;
   const current = !failure && settled;
 
@@ -274,5 +287,5 @@ export function useListData(state: ViewState, scope: Condition[], _options: { pr
     return loaded.flat().filter((item) => !seen.has(item.id) && seen.add(item.id));
   }, [argsKey, served, pages, current]);
 
-  return { ...shown, current, retry, loadAll };
+  return { ...shown, current, retry, retrying, loadAll };
 }

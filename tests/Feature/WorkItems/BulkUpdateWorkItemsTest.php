@@ -1,7 +1,10 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
+use App\Access\Visibility;
 use App\Actions\WorkItems\BulkUpdateWorkItems;
+use App\Actions\WorkItems\UpdateWorkItem;
 use App\Domain\WorkItems\Priority;
 use App\Events\EventType;
 use App\Models\Event;
@@ -12,6 +15,7 @@ use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use Database\Seeders\Demo\CatalogSeeder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /** WEB (the default workflow, free) with Mara as its admin and lead. */
@@ -359,4 +363,60 @@ it('sets the start date of many items and refuses one whose due date lies before
         ->and($early->fresh()?->start_date)->toBeNull()
         ->and(eventsOf(EventType::WorkItemUpdated, $free)->sole()->changes)->toBe(['start_date' => ['old' => null, 'new' => '2026-11-20']])
         ->and(eventsOf(EventType::WorkItemUpdated, $early))->toBeEmpty();
+});
+
+/**
+ * Runs the call with the query log on and answers the SQL it sent and how many of those asked which accounts are bots
+ * (the users table read by its `type`, T10-M8).
+ *
+ * @return array{0: list<string>, 1: int}
+ */
+$counted = function (callable $call): array {
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $call();
+    DB::disableQueryLog();
+    $sql = array_column(DB::getQueryLog(), 'query');
+
+    return [$sql, count(array_filter($sql, fn (string $query) => preg_match('/from `users`.*`type`/', $query) === 1))];
+};
+
+it('asks for the bots of a bulk change once', function () use ($web, $bulk, $counted) {
+    [$project, $mara] = $web();
+    $kira = User::factory()->bot($mara)->create(['handle' => 'kira']);
+    app(RoleAssignments::class)->setProjectRole($kira, $project, ProjectRole::Member);
+    $items = WorkItem::factory()->for($project)->count(103)->create();
+    $keys = $items->pluck('key')->all();
+    $run = function (array $keys) use ($bulk, $mara, $kira, $counted): array {
+        app()->forgetScopedInstances();
+        Visibility::forget();
+
+        return $counted(fn () => $bulk($mara, $keys, ['assignee_id' => $kira->id]));
+    };
+
+    [$one, $botsOfOne] = $run([$keys[0]]);
+    [$two, $botsOfTwo] = $run(array_slice($keys, 1, 2));
+    [$hundred, $botsOfHundred] = $run(array_slice($keys, 3, 100));
+
+    // the same queries for every further item, and none of them asks whether the assignee is a bot
+    expect([$botsOfOne, $botsOfTwo, $botsOfHundred])->toBe([1, 1, 1])
+        ->and(count($hundred) - count($one))->toBe(99 * (count($two) - count($one)))
+        ->and(eventsOf(EventType::BotAssigned))->toHaveCount(103)
+        ->and(eventsOf(EventType::BotAssigned)->pluck('meta.bot_id')->unique()->all())->toBe([$kira->id]);
+});
+
+it('asks for a single assignee as before', function () use ($web, $counted) {
+    [$project, $mara] = $web();
+    $kira = User::factory()->bot($mara)->create(['handle' => 'kira']);
+    $lene = memberOf($project, ProjectRole::Member, ['name' => 'Lene']);
+    app(RoleAssignments::class)->setProjectRole($kira, $project, ProjectRole::Member);
+    [$first, $second] = WorkItem::factory()->for($project)->count(2)->create();
+    app()->forgetScopedInstances();
+
+    [, $toBot] = $counted(fn () => UpdateWorkItem::run(actor($mara), $first, ['assignee_id' => $kira->id]));
+    [, $toPerson] = $counted(fn () => UpdateWorkItem::run(actor($mara), $second, ['assignee_id' => $lene->id]));
+
+    expect([$toBot, $toPerson])->toBe([1, 1])
+        ->and(eventsOf(EventType::BotAssigned, $first)->sole()->meta['bot_id'] ?? null)->toBe($kira->id)
+        ->and(eventsOf(EventType::BotAssigned, $second))->toBeEmpty();
 });

@@ -24,9 +24,10 @@ use App\Support\Actor;
 use App\Support\AttachmentLinks;
 use App\Support\CatalogLock;
 use App\Support\ItemInput;
+use App\Support\ItemReferences;
 use App\Support\ItemValues;
-use App\Support\MemberInput;
 use App\Support\Mentions;
+use App\Support\ProjectLock;
 use App\Support\TemplateAttachments;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\DB;
@@ -145,7 +146,7 @@ final class CreateWorkItem
 
         return DB::transaction(function () use ($actor, $project, $input, $refused, $texts, $prepared, $meta): WorkItem {
             CatalogLock::share();
-            $project = MemberInput::lock($project);
+            $project = ProjectLock::lock($project);
 
             if ($project->archived_at !== null) {
                 throw Problem::conflict('project_archived', [], __('problem.detail.project_archived'));
@@ -218,6 +219,7 @@ final class CreateWorkItem
             EventRecorder::record(EventType::WorkItemCreated, $actor, $item, $project, ['title' => ['old' => null, 'new' => $item->title]], [...Mentions::meta($mentioned), ...$noted, ...$meta]);
             UpdateWorkItem::announceBots($actor, $item, $mentioned);
             UpdateWorkItem::announceAssignedBot($actor, $item);
+            ItemReferences::queue($actor, $item, ItemReferences::anew($item, [], $texts));
 
             // another state is a move from the initial one, after the creation: the history shows both (P32)
             if ($target->id !== $initial->id) {

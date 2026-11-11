@@ -35,6 +35,11 @@ it('keeps the required job named tests', function () {
     expect($workflow['jobs']['tests'])->not->toHaveKey('name');
 });
 
+it('gives the required job an hour', function () {
+    // it took 32–38 min in phase 15 (Pest about 24, Vitest about 4); at 45 a slow runner would end it like a red test (A464)
+    expect(RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['tests']['timeout-minutes'])->toBe(60);
+});
+
 it('builds both platforms on every pull request without pushing', function () {
     $text = RepoFiles::text('.github/workflows/tests.yml');
     $workflow = RepoFiles::yaml('.github/workflows/tests.yml');
@@ -135,7 +140,7 @@ it('pushes only in steps or jobs that run for version tags', function () use ($w
 });
 
 it('passes expressions to scripts through the environment', function () {
-    foreach (['.github/workflows/docker.yml', '.github/workflows/dockerhub.yml'] as $file) {
+    foreach (['.github/workflows/docker.yml', '.github/workflows/dockerhub.yml', '.github/workflows/docs.yml'] as $file) {
         $runs = 0;
 
         foreach (RepoFiles::yaml($file)['jobs'] as $name => $job) {
@@ -229,4 +234,254 @@ it('syncs the description only while the repository exists', function () use ($s
     expect(strlen($sync['with']['short-description']))->toBeLessThanOrEqual(100);
     expect($workflow['jobs']['sync']['if'])->toContain("github.event.workflow_run.event == 'push'")
         ->and($workflow['jobs']['sync']['if'])->toContain("(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')");
+});
+
+/** @return list<string> the Playwright projects of e2e/playwright.config.ts, `setup` left out, in their order */
+$playwrightProjects = function (): array {
+    preg_match_all("/\\['([\\w-]+)',\\s*\\w+,\\s*'(?:light|dark)'\\]/", RepoFiles::text('e2e/playwright.config.ts'), $matches);
+    expect($matches[1])->toHaveCount(4, 'e2e/playwright.config.ts names other than four projects');
+
+    return $matches[1];
+};
+
+/** @return array<string, mixed> the first step of a job whose `uses` starts with `$action` and whose `with` holds all of `$with` */
+$stepUsing = function (array $job, string $action, array $with = []): array {
+    foreach ($job['steps'] as $step) {
+        if (str_starts_with((string) ($step['uses'] ?? ''), $action.'@') && array_intersect_assoc($with, $step['with'] ?? []) === $with) {
+            return $step;
+        }
+    }
+
+    throw new RuntimeException("no step uses {$action} with ".json_encode($with));
+};
+
+/** @return list<string> the scripts of the `run:` steps of a job */
+$runs = fn (array $job): array => array_values(array_map(fn (array $step): string => (string) $step['run'], array_filter($job['steps'], fn (array $step): bool => isset($step['run']))));
+
+it('runs the e2e suite once per Playwright project', function () use ($playwrightProjects, $stepUsing, $runs) {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+    $e2e = $jobs['e2e'];
+
+    expect($e2e['strategy']['matrix']['project'])->toBe($playwrightProjects())
+        ->and($e2e['strategy']['fail-fast'])->toBeFalse()
+        ->and($e2e['timeout-minutes'])->toBeLessThanOrEqual(60)
+        ->and($e2e['needs'])->toBe('e2e-build')
+        ->and($e2e['env']['E2E_PROJECT'])->toBe('${{ matrix.project }}');
+
+    // the build of the job e2e-build, never one of its own
+    expect($stepUsing($e2e, 'actions/download-artifact', ['name' => 'e2e-build'])['with']['path'])->toBe('public/build');
+
+    $tests = collect($e2e['steps'])->first(fn (array $step): bool => str_contains((string) ($step['run'] ?? ''), 'pnpm --dir e2e test'));
+    expect($tests['run'])->toBe('pnpm --dir e2e test --project=setup --project="$E2E_PROJECT"')
+        ->and($tests['env']['E2E_MERGE'])->toBe('0')
+        ->and($tests['id'])->toBe('tests');
+
+    // a database, a search, a mailbox, a Reverb and workers of its own per project
+    expect(array_keys($e2e['services']))->toEqualCanonicalizing(['mariadb', 'mailpit', 'meilisearch']);
+    expect(implode("\n", $runs($e2e)))->toContain('php artisan queue:work --queue=webhooks');
+
+    // Reverb listens on the port the app sends to and the browser connects to (e2e/ci.env)
+    $reverb = collect($runs($e2e))->first(fn (string $run): bool => str_contains($run, 'php artisan reverb:start'));
+    expect(preg_match('/reverb:start --host=127\.0\.0\.1 --port=(\d+) /', (string) $reverb, $port))->toBe(1, 'the step that starts Reverb');
+    expect($reverb)->toContain("http://127.0.0.1:{$port[1]}/up");
+    foreach (['REVERB_PORT', 'REVERB_SERVER_PORT', 'REVERB_PUBLIC_PORT'] as $name) {
+        expect(RepoFiles::text('e2e/ci.env'))->toContain("\n{$name}={$port[1]}\n");
+    }
+});
+
+it('uploads one remapped coverage file per project', function () use ($stepUsing) {
+    $e2e = RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['e2e'];
+
+    $remap = collect($e2e['steps'])->first(fn (array $step): bool => str_contains((string) ($step['run'] ?? ''), '--remap-only'));
+    expect($remap['run'])->toBe('node scripts/coverage-merge.mjs --remap-only --out "coverage/e2e-$E2E_PROJECT.json"')
+        ->and($remap['if'])->toBe("!cancelled() && steps.tests.outcome != 'skipped'");
+
+    $upload = $stepUsing($e2e, 'actions/upload-artifact', ['name' => 'e2e-coverage-${{ matrix.project }}']);
+    // the one mapped file, never the raw files of coverage/e2e (hundreds of MB per project)
+    expect($upload['with']['path'])->toBe('coverage/e2e-${{ matrix.project }}.json')
+        ->and($upload['with']['if-no-files-found'])->toBe('error')
+        ->and($upload['if'])->toBe($remap['if']);
+
+    expect($stepUsing($e2e, 'actions/upload-artifact', ['name' => 'e2e-results-${{ matrix.project }}'])['if'])->toBe('failure()');
+});
+
+it('merges the coverage of every project by name with the gate', function () use ($playwrightProjects, $stepUsing, $runs) {
+    $merge = RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['e2e-coverage'];
+
+    // needs.e2e-build is only readable for a job that needs it
+    expect($merge['needs'])->toEqualCanonicalizing(['e2e-build', 'e2e'])
+        ->and($merge['if'])->toBe("!cancelled() && needs.e2e-build.result == 'success'");
+
+    expect($stepUsing($merge, 'actions/download-artifact', ['name' => 'unit-coverage'])['with']['path'])->toBe('coverage/unit');
+    expect($stepUsing($merge, 'actions/download-artifact', ['pattern' => 'e2e-coverage-*'])['with'])
+        ->toMatchArray(['path' => 'coverage/e2e', 'merge-multiple' => false]);
+
+    expect($runs($merge))->toContain('pnpm coverage:merge --expect-shards='.implode(',', $playwrightProjects()));
+
+    $report = $stepUsing($merge, 'actions/upload-artifact', ['name' => 'frontend-coverage']);
+    expect($report['with']['path'])->toBe('coverage/merged')
+        ->and($report['if'])->toBe('!cancelled()');
+
+    // the coverage can reach 100 % while tests failed: the last step fails with the projects
+    $last = end($merge['steps']);
+    expect($last['if'])->toBe("!cancelled() && needs.e2e.result != 'success'")
+        ->and($last['run'])->toContain('exit 1');
+});
+
+it('builds the coverage build once', function () use ($stepUsing, $runs) {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+    $build = $jobs['e2e-build'];
+
+    expect($runs($build))->toContain('pnpm build:coverage')
+        ->and($runs($build))->toContain('pnpm test:coverage');
+
+    expect($stepUsing($build, 'actions/upload-artifact', ['name' => 'e2e-build'])['with'])
+        ->toMatchArray(['path' => 'public/build', 'retention-days' => 3, 'if-no-files-found' => 'error']);
+    expect($stepUsing($build, 'actions/upload-artifact', ['name' => 'unit-coverage'])['with'])
+        ->toMatchArray(['path' => 'coverage/unit/coverage-final.json', 'retention-days' => 3, 'if-no-files-found' => 'error']);
+
+    foreach ($jobs as $name => $job) {
+        if ($name !== 'e2e-build') {
+            expect(str_contains(implode("\n", $runs($job)), 'build:coverage'))->toBeFalse("{$name} builds the coverage build again");
+        }
+    }
+
+    // the gate of the required job keeps its Vitest run (K7)
+    expect($runs($jobs['tests']))->toContain('pnpm test:coverage');
+});
+
+it('names the e2e jobs for what they do and none of them like the required check', function () {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+
+    expect($jobs['e2e-build']['name'])->toBe('e2e build (coverage build, Vitest)')
+        ->and($jobs['e2e']['name'])->toBe('e2e (${{ matrix.project }})')
+        ->and($jobs['e2e-coverage']['name'])->toBe('e2e coverage (merge, 100 % lines)');
+
+    foreach ($jobs as $id => $job) {
+        if ($id !== 'tests') {
+            expect($job['name'] ?? $id)->not->toBe('tests', "{$id} shows up as the required check tests");
+        }
+    }
+});
+
+it('runs the load suite outside the required job', function () use ($stepUsing, $runs) {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+    $load = $jobs['load'];
+
+    // Pest directly: `php artisan test` puts --configuration=phpunit.xml in front and ends with exit code 1 (K10)
+    expect($runs($load))->toContain('vendor/bin/pest --configuration=phpunit.load.xml')
+        ->and($load['timeout-minutes'])->toBe(40)
+        ->and($load)->not->toHaveKey('needs')
+        ->and($load['name'] ?? 'load')->not->toBe('tests');
+
+    // a database `load` and a real Meilisearch of its own
+    expect(array_keys($load['services']))->toEqualCanonicalizing(['mariadb', 'meilisearch'])
+        ->and($load['services']['mariadb']['env']['MARIADB_DATABASE'])->toBe('load')
+        ->and($load['services']['mariadb']['image'])->toBe($jobs['tests']['services']['mariadb']['image'])
+        ->and($load['services']['meilisearch']['image'])->toBe($jobs['tests']['services']['meilisearch']['image']);
+
+    // the buffer pool of DDEV's MariaDB (1 GiB), set before the suite seeds and measures
+    $names = array_map(fn (array $step) => $step['name'] ?? null, $load['steps']);
+    $pool = array_search('MariaDB buffer pool', $names, true);
+    expect($pool)->toBeInt('no step sets the buffer pool')
+        ->and($load['steps'][$pool]['run'])->toContain('SET GLOBAL innodb_buffer_pool_size = 1073741824')
+        ->and($pool)->toBeLessThan(array_search('Load suite', $names, true));
+
+    // the table of the measurements, also when a row fails
+    $upload = $stepUsing($load, 'actions/upload-artifact', ['name' => 'load-budget']);
+    expect($upload['with']['path'])->toBe('storage/logs/load-budget.md')
+        ->and($upload['if'])->toBe('always()');
+
+    // the required job never runs the load suite
+    expect(str_contains(implode("\n", $runs($jobs['tests'])), 'phpunit.load.xml'))->toBeFalse('the job tests runs the load suite');
+});
+
+it('gives the MariaDB of every job that runs the app the max_allowed_packet of the stack', function () {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+    $compose = RepoFiles::yaml('docker-compose.yml')['services']['mariadb']['command'];
+    expect($compose)->toBe(['--max-allowed-packet=64M']);
+
+    // the step before the first connection of the app: the suite, the load suite, the migration of the e2e database
+    foreach (['tests' => 'Pest with coverage', 'load' => 'Load suite', 'e2e' => 'Migrate'] as $id => $first) {
+        $names = array_map(fn (array $step) => $step['name'] ?? null, $jobs[$id]['steps']);
+        $packet = array_search('MariaDB packet', $names, true);
+        expect($packet)->toBeInt("{$id} sets no max_allowed_packet")
+            ->and($jobs[$id]['steps'][$packet]['run'])->toContain('SET GLOBAL max_allowed_packet = '.(64 * 1_048_576))
+            ->and($jobs[$id]['steps'][$packet]['run'])->toContain('exit($size === '.(64 * 1_048_576).' ? 0 : 1)')
+            ->and($packet)->toBeLessThan(array_search($first, $names, true), "{$id} sets the packet after {$first}");
+    }
+});
+
+it('deploys the docs only from main', function () {
+    $workflow = RepoFiles::yaml('.github/workflows/docs.yml');
+
+    expect(array_keys($workflow['on']))->toEqualCanonicalizing(['push', 'workflow_dispatch'])
+        ->and($workflow['on']['push']['branches'])->toBe(['main'])
+        // the compose files are embedded in the setup, the lockfile holds VitePress; plans and notes under docs/ are not
+        // published (a negated pattern only takes out what a pattern before it took in)
+        ->and($workflow['on']['push']['paths'])->toBe(['docs/**', '!docs/superpowers/**', '!docs/history/**', 'docker-compose.yml', 'docker-compose.standalone.yml', 'pnpm-lock.yaml', '.github/workflows/docs.yml'])
+        ->and($workflow['permissions'])->toBe(['contents' => 'read'])
+        ->and($workflow['concurrency'])->toBe(['group' => 'pages', 'cancel-in-progress' => false]);
+
+    // started by hand on another branch it builds, but never deploys
+    expect($workflow['jobs']['deploy']['if'])->toContain("github.ref == 'refs/heads/main'");
+});
+
+it('pins the pages actions', function () use ($stepUsing) {
+    $jobs = RepoFiles::yaml('.github/workflows/docs.yml')['jobs'];
+    $text = RepoFiles::text('.github/workflows/docs.yml');
+
+    expect($stepUsing($jobs['build'], 'actions/upload-pages-artifact')['with']['path'])->toBe('docs/.vitepress/dist')
+        ->and($stepUsing($jobs['deploy'], 'actions/deploy-pages'))->toHaveKey('id')
+        ->and($text)->toMatch('/uses: actions\/upload-pages-artifact@[0-9a-f]{40} # v\d+\.\d+\.\d+\n/')
+        ->and($text)->toMatch('/uses: actions\/deploy-pages@[0-9a-f]{40} # v\d+\.\d+\.\d+\n/');
+});
+
+it('skips the deploy with a notice while Pages is off', function () use ($runs) {
+    $jobs = RepoFiles::yaml('.github/workflows/docs.yml')['jobs'];
+
+    // the job asks GitHub whether Pages is on, with the token of the run and only the right to read Pages
+    expect($jobs['pages']['permissions'])->toBe(['pages' => 'read'])
+        ->and($jobs['pages']['outputs']['enabled'])->toBe('${{ steps.pages.outputs.enabled }}');
+    $check = collect($jobs['pages']['steps'])->firstWhere('id', 'pages');
+    expect($check['env'])->toMatchArray(['GH_TOKEN' => '${{ github.token }}', 'REPOSITORY' => '${{ github.repository }}'])
+        ->and($check['run'])->toContain('gh api --include "repos/$REPOSITORY/pages"')
+        ->toContain('200)')
+        // only a site that deploys from GitHub Actions takes the deployment; one from a branch gets a notice
+        ->toContain('build_type=$(gh api "repos/$REPOSITORY/pages" --jq .build_type)')
+        ->toContain('if [ "$build_type" = workflow ]; then'."\n".'      echo "enabled=true"')
+        ->toContain('::notice title=GitHub Pages::Pages deploys from a branch')
+        ->toContain('404)')
+        ->toContain('echo "enabled=false"')
+        ->toContain('::notice title=GitHub Pages::Pages is not enabled for this repository')
+        ->toContain('exit 1');
+
+    expect($jobs['deploy']['needs'])->toBe(['pages', 'build'])
+        ->and($jobs['deploy']['if'])->toContain("needs.pages.outputs.enabled == 'true'")
+        ->and($jobs['deploy']['permissions'])->toBe(['pages' => 'write', 'id-token' => 'write'])
+        ->and($jobs['deploy']['environment']['name'])->toBe('github-pages');
+
+    // the build runs either way: a broken page on main shows as a red run
+    expect($jobs['build'])->not->toHaveKey('if')
+        ->and($jobs['build'])->not->toHaveKey('needs')
+        ->and(implode("\n", $runs($jobs['build'])))->toContain('pnpm --dir docs build');
+});
+
+it('publishes the docs at werkbuch.dev from the root', function () use ($runs) {
+    $text = RepoFiles::text('.github/workflows/docs.yml');
+    $build = RepoFiles::yaml('.github/workflows/docs.yml')['jobs']['build'];
+    $env = collect($build['steps'])->first(fn (array $step): bool => str_contains((string) ($step['run'] ?? ''), 'pnpm --dir docs build'))['env'];
+
+    expect($env)->toBe(['DOCS_BASE' => '/', 'DOCS_URL' => 'https://werkbuch.dev'])
+        ->and($text)->not->toContain('vars.')
+        ->and($build['steps'][0]['with']['fetch-depth'])->toBe(0);
+
+    // the build checks what makes the domain and the search engines work
+    $checks = implode("\n", $runs($build));
+    expect($checks)->toContain('grep -qx werkbuch.dev docs/.vitepress/dist/CNAME')
+        ->toContain('test -f docs/.vitepress/dist/sitemap.xml');
+
+    // the CI job still builds below a sub-path, so a copy there keeps working
+    $ci = RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['docs'];
+    expect(collect($ci['steps'])->first(fn (array $step): bool => ($step['run'] ?? '') === 'pnpm --dir docs build')['env']['DOCS_BASE'])->toBe('/werkbuch/');
 });

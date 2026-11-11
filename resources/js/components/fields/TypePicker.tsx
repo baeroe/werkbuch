@@ -94,7 +94,8 @@ export function TypeChangeDialog({ item, target, open, onOpenChange, finalFocus,
   const detail = detailQuery.data;
   if (!target) return null;
   const current = detail?.item ?? item;
-  const children = detail ? detail.children.length > 0 : hasChildren;
+  // how many children there are says `children_progress`, never the list: the detail embeds only the first 100 (A449)
+  const children = detail ? detail.item.children_progress !== null : hasChildren;
   const refusal = refusalText(current, children ?? false, target);
   // an item that fails to load ends the wait: the form goes on, and a refusal of the server names its reason
   const waiting = refusal === null && children === undefined && !canHaveChildren(target) && !detailQuery.isError;
@@ -281,8 +282,10 @@ export function TypePicker({ item, look = 'field', shortcut, ...extras }: TypePi
   const { project, isLoading, error, retry, retrying } = useItemWorkflow(item);
   const change = useChangeWorkItemType();
   const reason = useEditReason(item);
-  // whether the item has children: an epic with children keeps its type (the dialog says why)
-  const children = useWorkItem(item.id).data?.children;
+  // whether the item has children: an epic with children keeps its type (the dialog says why); its progress counts them
+  // all, archived ones too (the embedded list ends after 100, A449), the loaded item's once it is there, the listed
+  // item's before
+  const hasChildren = (useWorkItem(item.id).data?.item ?? item).children_progress !== null;
   const trigger = useRef<HTMLButtonElement>(null);
   // the target stays while the dialog fades out
   const [target, setTarget] = useState<WorkItemType | null>(null);
@@ -298,7 +301,7 @@ export function TypePicker({ item, look = 'field', shortcut, ...extras }: TypePi
   function choose(typeId: string) {
     const next = offered.find((type) => type.id === typeId)!;
     const { lost, missing } = typeChangeOf(item, next, properties.data!.items, all);
-    if (lost.length > 0 || missing.length > 0 || refusalText(item, (children?.length ?? 0) > 0, next)) {
+    if (lost.length > 0 || missing.length > 0 || refusalText(item, hasChildren, next)) {
       asks.current = true;
       setTarget(next);
       setDialogOpen(true);
@@ -351,7 +354,7 @@ export function TypePicker({ item, look = 'field', shortcut, ...extras }: TypePi
           if (open) asks.current = false;
         }}
       />
-      <TypeChangeDialog item={item} target={target} open={dialogOpen} onOpenChange={setDialogOpen} finalFocus={trigger} />
+      <TypeChangeDialog item={item} target={target} open={dialogOpen} onOpenChange={setDialogOpen} finalFocus={trigger} hasChildren={hasChildren} />
     </>
   );
 }

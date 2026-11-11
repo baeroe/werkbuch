@@ -1,13 +1,13 @@
 /*
  * The states of an item list besides its rows: the skeleton while it loads (in the shape of its layout, 13c: rows of
- * the list, columns of the board, rows of the table, bars of the timeline), shown only after a moment so an answer
- * within 300 ms shows without a flash; the empty list (no items at all, or none that match the filter); and the list
- * that could not be loaded, with "Erneut versuchen".
+ * the list, columns of the board, rows of the table, bars of the timeline), shown only after a moment (`SkeletonGroup`)
+ * so an answer within 300 ms shows without a flash; the empty list (no items at all, or none that match the filter);
+ * and the list that could not be loaded, with "Erneut versuchen".
  */
 
 import { Link } from '@inertiajs/react';
 import { FunnelX, List, SquareKanban, SquarePen } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { Component, type ReactNode } from 'react';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -18,6 +18,7 @@ import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import type { Display, Project, View } from '@/types';
+import { LayoutChunkError } from './layouts';
 import { MyItemsEmpty } from './MyItemsEmpty';
 
 const WIDTHS = ['w-2/5', 'w-1/3', 'w-1/2', 'w-1/4', 'w-2/5', 'w-1/3', 'w-1/2', 'w-1/4'];
@@ -100,24 +101,24 @@ function TimelineShape() {
 
 const SHAPES: Record<Display['layout'], () => ReactNode> = { list: () => <ListShape />, board: BoardShape, table: TableShape, timeline: TimelineShape };
 
-/** The list in outline, in the shape of its layout. */
-export function ListSkeleton({ layout }: { layout: Display['layout'] }) {
+/**
+ * The list in outline, in the shape of its layout (only after a moment, as every skeleton). `loadingLayout`: it stands
+ * for a layout that is still loading (its chunk, or the timeline waiting for its epics by project) and marks itself with
+ * `data-layout-skeleton`; only that outline is what the focus rescue of the screen waits for, not the one of the data.
+ */
+export function ListSkeleton({ layout, loadingLayout = false }: { layout: Display['layout']; loadingLayout?: boolean }) {
   const Shape = SHAPES[layout];
   return (
     <SkeletonGroup label={t('items.screen.loading')}>
-      <Shape />
+      {loadingLayout ? (
+        <div data-layout-skeleton="">
+          <Shape />
+        </div>
+      ) : (
+        <Shape />
+      )}
     </SkeletonGroup>
   );
-}
-
-/** The skeleton, but only after a moment: an answer within 300 ms shows without a flash of it. */
-export function DelayedSkeleton({ layout }: { layout: Display['layout'] }) {
-  const [late, setLate] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setLate(true), 300);
-    return () => clearTimeout(timer);
-  }, []);
-  return late ? <ListSkeleton layout={layout} /> : <div className="h-40" aria-busy="true" />;
 }
 
 /** The whole screen in outline, while the project or view it belongs to loads. */
@@ -206,4 +207,44 @@ export function ListError({ error, onRetry, retrying }: { error: Error | null; o
       retrying={retrying}
     />
   );
+}
+
+/** A layout's chunk did not load: the items are there, its code is not (19b-M1); "Erneut versuchen" asks again. */
+function LayoutError({ onRetry }: { onRetry(): void }) {
+  return (
+    <ErrorState
+      title={t('items.screen.layout_failed_title')}
+      description={t('items.screen.layout_failed_description')}
+      onRetry={onRetry}
+    />
+  );
+}
+
+/**
+ * Stands in for a layout whose chunk did not load (board, table, timeline): an error of its own with "Erneut versuchen",
+ * which renders the layout anew and so asks for the chunk again (`lateLayout`). Any other error of a layout is none of
+ * its business: it goes on to the error boundary of the page.
+ */
+export class LayoutBoundary extends Component<{ children: ReactNode }, { error: unknown }> {
+  state: { error: unknown } = { error: null };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { error };
+  }
+
+  componentDidCatch(error: unknown) {
+    if (error instanceof LayoutChunkError) console.error(error);
+  }
+
+  render() {
+    const { error } = this.state;
+    if (error === null) return this.props.children;
+    // thrown again from here, it reaches the next boundary up
+    if (!(error instanceof LayoutChunkError)) throw error;
+    const retry = () => {
+      error.retry();
+      this.setState({ error: null });
+    };
+    return <LayoutError onRetry={retry} />;
+  }
 }
