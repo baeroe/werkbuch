@@ -16,7 +16,7 @@ concurrency:
 jobs:
   # required check: the name must stay `tests`
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
 
     services:
@@ -135,7 +135,7 @@ jobs:
   # artifact `load-budget`.
   load:
     name: load (50 000 items)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
 
     services:
@@ -237,7 +237,7 @@ jobs:
   # Vitest and the four projects and holds the 100 % lines (only the sum reaches them, no project on its own).
   e2e-build:
     name: e2e build (coverage build, Vitest)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
@@ -280,7 +280,7 @@ jobs:
   e2e:
     name: e2e (${{ matrix.project }})
     needs: e2e-build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # one project takes about a quarter of the suite (about 23 minutes of tests in CI, Phase 15)
     timeout-minutes: 60
     strategy:
@@ -471,7 +471,7 @@ jobs:
     # needs.e2e-build is only readable for a job that needs it
     needs: [e2e-build, e2e]
     if: "!cancelled() && needs.e2e-build.result == 'success'"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:
@@ -521,7 +521,7 @@ jobs:
   # the VitePress site in en and de; the config uses `lastUpdated`, so the whole history is checked out. Not a
   # required check.
   docs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -549,7 +549,7 @@ jobs:
 
   # the clickdummy: domain tests, typecheck, review build and the Playwright flows. Not a required check.
   clickdummy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
