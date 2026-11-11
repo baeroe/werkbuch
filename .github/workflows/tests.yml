@@ -416,7 +416,9 @@ jobs:
         run: |
           pnpm --dir e2e install --frozen-lockfile
           pnpm --dir e2e typecheck
-          pnpm --dir e2e exec playwright install --with-deps chromium
+          # the runner images bring the libraries of Chrome: when apt cannot reach the Ubuntu mirrors (2026-11-11), the
+          # browser alone is enough
+          pnpm --dir e2e exec playwright install --with-deps chromium || pnpm --dir e2e exec playwright install chromium
 
       # E2E_MERGE=0: the coverage stays in coverage/e2e/<project>/ (one project never reaches the gate on its own)
       - name: Tests
@@ -574,7 +576,8 @@ jobs:
         run: pnpm --filter werkbuch-clickdummy build
 
       - name: Install Chromium
-        run: pnpm --filter werkbuch-clickdummy exec playwright install --with-deps chromium
+        # like the e2e jobs: without apt the browser alone
+        run: pnpm --filter werkbuch-clickdummy exec playwright install --with-deps chromium || pnpm --filter werkbuch-clickdummy exec playwright install chromium
 
       - name: Flows and review build
         run: pnpm --filter werkbuch-clickdummy e2e
