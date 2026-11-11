@@ -66,6 +66,8 @@ And the same page in the dark.
 
 ![The page of the work item WEB-47 in the dark theme](/screenshots/en/item-dark.png)
 
+<SelfHost />
+
 ## Status
 
 The build is done. Before v0.1.0 everything gets one more round of testing by hand, so there is no release yet. Until then you build the image yourself. How to do that and how to run werkbuch on a server is covered by [Setup](/en/setup), [Reverse proxy](/en/reverse-proxy), [Operations](/en/operations), [Upgrading](/en/upgrading) and [Backup](/en/backup), working on the code by the [development page](/en/development). How everything works is under [Concepts](/en/concepts/permissions).
