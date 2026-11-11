@@ -10,6 +10,20 @@ $workflowFiles = function (): array {
     return array_map(fn (string $file): string => '.github/workflows/'.basename($file), $files);
 };
 
+it('runs every job on a pinned runner image', function () use ($workflowFiles) {
+    // ubuntu-latest moved to 26.04 on 2026-11-11, where apt could not reach security.ubuntu.com and Playwright's
+    // install-deps failed: a new image is a change of its own, made in a PR that names it
+    foreach ($workflowFiles() as $file) {
+        $text = RepoFiles::text($file);
+
+        expect($text)->not->toContain('-latest', "{$file} runs a job on a moving runner image");
+        preg_match_all('/^\s*runs-on:\s*(.+?)\s*$/m', $text, $m);
+        foreach ($m[1] as $runner) {
+            expect($runner)->toMatch('/^(ubuntu-\d\d\.\d\d(-arm)?|\$\{\{ matrix\.runner \}\})$/', "{$file} runs on {$runner}");
+        }
+    }
+});
+
 it('pins every action by commit', function () use ($workflowFiles) {
     $seen = 0;
 
