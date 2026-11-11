@@ -35,7 +35,7 @@ const name = (what: string) => `E2E accept ${what} ${variant()} ${runId()}`;
 const LIVE = { timeout: 20_000 };
 
 // several contexts and the way through the queues: more than the default 30 s may pass
-test.describe.configure({ timeout: 90_000 });
+test.describe.configure({ timeout: 240_000 });
 
 type Inbox = (typeof PEOPLE.inbox)[string];
 

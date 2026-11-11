@@ -11,7 +11,7 @@ import { allEntries, api, createE2eProject, createE2eTemplate, createItem, isPho
 const name = (what: string) => `E2E inbox ${what} ${variant()} ${runId()}`;
 
 // a second context and the way through the queue: more than the default 30 s may pass
-test.describe.configure({ timeout: 60_000 });
+test.describe.configure({ timeout: 150_000 });
 
 interface StoredNotification {
   id: string;

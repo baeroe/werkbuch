@@ -792,9 +792,10 @@ export type StoredNotification = {
 
 /**
  * Asks `GET /api/v1/notifications` of the signed-in person of `page` every 250 ms until one of the newest 100 matches
- * `found` (notifications follow the queue `notifications`) and returns it; fails with the last answer.
+ * `found` (notifications follow the queue `notifications`, which locally waits behind `default` and `live`: 90 s like the
+ * acceptance specs) and returns it; fails with the last answer.
  */
-export async function waitForNotification(page: Page, found: (notification: StoredNotification) => boolean, timeout = 20_000): Promise<StoredNotification> {
+export async function waitForNotification(page: Page, found: (notification: StoredNotification) => boolean, timeout = 90_000): Promise<StoredNotification> {
   const until = Date.now() + timeout;
   let last: StoredNotification[] | string = 'no answer';
   for (;;) {

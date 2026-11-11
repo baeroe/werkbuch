@@ -10,12 +10,15 @@ import { startReceiver, type ReceivedRequest } from '../webhookReceiver';
 // through the queue: the specs wait on the receiver and the log, never on a fixed pause (K18).
 
 const WEBHOOK = 30_000;
+// what goes through the queue (consume, deliver, notify) waits as long as the acceptance specs: locally `webhooks` comes after
+// `items` and `inbox`, a delivery took up to 50 s (K18)
+const QUEUED = 90_000;
 // the name createE2eWebhook() gives a webhook called `what`
 const name = (what: string) => `E2E ${variant()} ${runId()} ${what}`;
 const label = (key: string, params: Record<string, string | number> = {}) => tr('en', key, params);
 
 // the ddev calls and the queue take their time
-test.describe.configure({ timeout: 120_000 });
+test.describe.configure({ timeout: 240_000 });
 
 /** Whether the signature of a request is the one the secret makes (spec 6.3: HMAC-SHA256 over "timestamp.body"). */
 function signedWith(request: ReceivedRequest, secret: string): boolean {
@@ -143,7 +146,7 @@ test('renews the secret without losing the form', async ({ page }) => {
     await expect(dialog).toHaveCount(0);
 
     await createItem(page, { project_id: project.id, title: 'E2E webhook Geheimnis' });
-    await expect.poll(() => receiver.requests.length, { timeout: WEBHOOK }).toBe(1);
+    await expect.poll(() => receiver.requests.length, { timeout: QUEUED }).toBe(1);
     expect(receiver.requests[0]!.headers['x-werkbuch-event']).toBe('work_item.created');
     expect(signedWith(receiver.requests[0]!, second)).toBe(true);
     expect(signedWith(receiver.requests[0]!, first)).toBe(false);
@@ -167,7 +170,7 @@ test('shows a switched-off webhook in the inbox and turns it on again', async ({
     expect(set).toBe('set');
     await createItem(page, { project_id: project.id, title: 'E2E webhook Ausfall' });
 
-    const notification = await waitForNotification(page, (entry) => entry.event === 'webhook_disabled' && entry.data.webhook_id === hook.id, WEBHOOK);
+    const notification = await waitForNotification(page, (entry) => entry.event === 'webhook_disabled' && entry.data.webhook_id === hook.id, QUEUED);
     expect(notification.read_at).toBeNull();
     expect(receiver.requests.length).toBeGreaterThan(0);
 
