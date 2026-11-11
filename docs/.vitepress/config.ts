@@ -9,14 +9,16 @@ const site = process.env.DOCS_URL?.replace(/\/$/, '');
 const description = 'Open, self-hosted project management: work items with your own types, properties and workflows, wikis, views and automations.';
 
 // every page exists in docs/en and docs/de under the same path (tests/Unit/DocsTest.php)
-const groups: { title: string; pages: string[] }[] = [
+const groups: { title: string; pages: string[]; collapsed?: boolean }[] = [
     { title: 'selfhosting', pages: ['setup', 'reverse-proxy', 'operations', 'upgrading', 'backup'] },
     { title: 'guide', pages: ['development', 'keyboard'] },
     { title: 'concepts', pages: ['concepts/permissions', 'concepts/projects', 'concepts/workflows', 'concepts/types-and-properties', 'concepts/work-items', 'concepts/rich-text', 'concepts/wiki', 'concepts/views', 'concepts/templates', 'concepts/automations', 'concepts/notifications', 'search', 'bots', 'api', 'mcp', 'webhooks'] },
+    // the footer only shows on pages without a sidebar: the legal pages stay one click away everywhere
+    { title: 'legal', pages: ['imprint', 'privacy'], collapsed: true },
 ];
 
 const sidebar = (prefix: string, t: Record<string, string>): DefaultTheme.SidebarItem[] =>
-    groups.map((g) => ({ text: t[g.title], items: g.pages.map((p) => ({ text: t[p], link: `${prefix}/${p}` })) }));
+    groups.map((g) => ({ text: t[g.title], collapsed: g.collapsed, items: g.pages.map((p) => ({ text: t[p], link: `${prefix}/${p}` })) }));
 
 const en: Record<string, string> = {
     selfhosting: 'Self-hosting',
@@ -45,6 +47,9 @@ const en: Record<string, string> = {
     api: 'REST API',
     mcp: 'MCP',
     webhooks: 'Webhooks',
+    legal: 'Legal',
+    imprint: 'Imprint',
+    privacy: 'Privacy policy',
 };
 
 const de: Record<string, string> = {
@@ -74,6 +79,9 @@ const de: Record<string, string> = {
     api: 'REST-API',
     mcp: 'MCP',
     webhooks: 'Webhooks',
+    legal: 'Rechtliches',
+    imprint: 'Impressum',
+    privacy: 'Datenschutz',
 };
 
 export default defineConfig({
@@ -95,9 +103,9 @@ export default defineConfig({
         ['meta', { property: 'og:description', content: description }],
     ],
     vite: {
-        // agents get the English docs only
+        // agents get the English docs only, without the legal pages
         // the plugin puts the base after the domain itself: the origin only
-        plugins: [llmstxt({ workDir: 'en', ...(site ? { domain: new URL(site).origin } : {}) })],
+        plugins: [llmstxt({ workDir: 'en', ignoreFiles: ['imprint.md', 'privacy.md'], ...(site ? { domain: new URL(site).origin } : {}) })],
         // dev server behind DDEV (https://werkbuch.ddev.site:5174): Vite only answers known hosts
         server: { allowedHosts: ['.ddev.site'] },
     },
@@ -113,7 +121,8 @@ export default defineConfig({
                 nav: [{ text: 'Guide', link: '/en/development' }, { text: 'Releases', link: 'https://github.com/baeroe/werkbuch/releases' }],
                 sidebar: sidebar('/en', en),
                 editLink: { pattern: 'https://github.com/baeroe/werkbuch/edit/main/docs/:path', text: 'Edit this page' },
-                footer: { message: 'Released under the MIT License.', copyright: '© 2026 Rafael Haußmann' },
+                // raw HTML: VitePress does not add the base to these links
+                footer: { message: `Released under the MIT License. <a href="${base}en/imprint">Imprint</a> · <a href="${base}en/privacy">Privacy policy</a>`, copyright: '© 2026 Rafael Haußmann' },
             },
         },
         de: {
@@ -125,7 +134,7 @@ export default defineConfig({
                 nav: [{ text: 'Anleitung', link: '/de/development' }, { text: 'Releases', link: 'https://github.com/baeroe/werkbuch/releases' }],
                 sidebar: sidebar('/de', de),
                 editLink: { pattern: 'https://github.com/baeroe/werkbuch/edit/main/docs/:path', text: 'Seite bearbeiten' },
-                footer: { message: 'Veröffentlicht unter der MIT-Lizenz.', copyright: '© 2026 Rafael Haußmann' },
+                footer: { message: `Veröffentlicht unter der MIT-Lizenz. <a href="${base}de/imprint">Impressum</a> · <a href="${base}de/privacy">Datenschutz</a>`, copyright: '© 2026 Rafael Haußmann' },
                 outline: { label: 'Auf dieser Seite' },
                 docFooter: { prev: 'Zurück', next: 'Weiter' },
                 lastUpdated: { text: 'Zuletzt aktualisiert' },
