@@ -44,7 +44,8 @@ it('deletes a page with its whole subtree, their versions and item references, a
         PageVersion::factory()->create(['page_id' => $w[$key]->id]);
         DB::table('page_item_references')->insert(['id' => strtolower((string) Str::ulid()), 'page_id' => $w[$key]->id, 'work_item_id' => $item->id]);
     }
-    $touched = $w['web']->updated_at?->toJSON();
+    // read from the row: building the world (members, the item's number) may touch the project a second later
+    $touched = $w['web']->fresh()?->updated_at?->toJSON();
     Carbon::setTestNow(now()->addHour());
 
     $deleted = $delete($w['jonas'], $w['start']);
