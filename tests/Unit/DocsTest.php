@@ -366,6 +366,13 @@ $markdownLinks = fn (string $text): array => preg_match_all('/(?<!!)\[([^\]]*)\]
     ? array_map(fn (array $match): array => [$match[1], $match[2]], $m)
     : [];
 
+it('answers the root of the site with a page that leads to English', function () {
+    // without it GitHub Pages answers / with the 404 page (status 404), whose script then redirects
+    expect(RepoFiles::text('docs/public/index.html'))
+        ->toContain('<meta http-equiv="refresh" content="0; url=en/" />')
+        ->toContain('<link rel="canonical" href="https://werkbuch.dev/en/" />');
+});
+
 it('keeps the custom domain werkbuch.dev', function () {
     // GitHub ignores the file when Actions deploy the site; it records the domain the Pages settings name
     expect(RepoFiles::text('docs/public/CNAME'))->toBe("werkbuch.dev\n");
