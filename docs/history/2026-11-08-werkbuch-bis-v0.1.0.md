@@ -105,14 +105,17 @@ Größe der Phasen-PRs (Zeilen hinzugefügt, Commits): #5 43 427/30, #11 32 677/
 
   Lokal (DDEV): Seeden rund 23 s (Zeilen) plus 33 s (Suchindex), Datenbank rund 580 MB, Neuaufbau der Suche mit Tausch 9–10 s bei 30 MB.
 
-## Offen (Phase 15 läuft)
+## Offen
 
-- axe über alle Seiten und Zustände (A441, Tasks 15a, 15b, 16), Tastatur-Lücken (13 Abläufe in `GAPS`, Task 18), Screenshots beider Sprachen (A443, Tasks 22e, 22f), Landingpage, README und `docs.yml` für `https://werkbuch.dev` (A444, Task 23): warten auf Rafaels OK für die Entwicklungsdatenbank.
-- Meilisearch v1.56.1 (Task 25, frühestens 2026-11-16), `serversideup/php` v5.1.x (Task 25b, ab 2026-11-18/19).
-- Final-Review der ganzen Phase, voller G3 lokal, finale Fix-Welle (Minors der Reviews, die rote Nacht im Job `load`, `max_sort_length` der natürlichen Sortierung, nullable Stempel im OpenAPI-Dokument).
-- Für Rafael: Titel „Erwähnte“ oder „Verwiesene Items verknüpfen“, zwei Inbox-Zeilen je Speichern bei `link_references`, Bestätigung der Spec-Änderungen vom 2026-11-07/08.
-- Nach der Phase: DNS und Pages-Einstellung für `werkbuch.dev`, manuelle Tests nach `docs/superpowers/plans/2026-10-30-werkbuch-manual-tests.md`, Secrets für Docker Hub, Release-Commit und Tag `v0.1.0` nur nach Freigabe.
+- Meilisearch v1.56.1 (Task 25, frühestens 2026-11-16), `serversideup/php` v5.1.x (Task 25b, ab 2026-11-18/19), danach der volle G3.
+- Für Rafael: DNS für `werkbuch.dev` umstellen, danach „Enforce HTTPS“ der Pages einschalten; manuelle Tests nach `docs/superpowers/plans/2026-10-30-werkbuch-manual-tests.md` samt Bestätigung der Spec-Änderungen vom 2026-11-07/08; Secrets für Docker Hub.
+- Release: `config/werkbuch.php` auf `0.1.0`, den Hinweis „Before the first release“ in `setup.md` und den Status der README entfernen (`DocsTest` anpassen), dann der Tag `v0.1.0`, nur nach Freigabe.
 
-## Nachtrag
+## Nachtrag (2026-11-11)
 
-(Wird am Ende von Phase 15 ergänzt: Final-Review, voller G3, Merge von PR #32, letzte CI-Zahlen.)
+- Rafael hat am 2026-11-09 entschieden: die Entwicklungsdatenbank darf neu geseedet werden, Pages wird schon eingeschaltet (DNS folgt), zwei Inbox-Zeilen je Speichern bei `link_references` sind in Ordnung, der Name bleibt „Erwähnte Items verknüpfen“ (A452).
+- Danach erledigt: axe über alle Seiten (Tasks 15a, 15b, 16; als Ausnahme bleiben nur die Fokuswächter von Base UI im Menü des Items), Tastatur-Manifest ohne Lücken (Task 18, vier neue Abläufe), Screenshots beider Sprachen (Tasks 22e–22g, 16 Bilder je Sprache), Landingpage, README und `docs.yml` (Task 23), GitHub Pages eingeschaltet.
+- Die Final-Welle hat 88 Befunde behoben und 12 begründet ausgelassen (Gruppen A1, A2, B1–B4, C1–C3, D). Rot im Job `load` war ein Uhrfenster im Test: die Nacht rechnete den Stichtag je Projekt neu, der Test zählte vorher; behoben mit `freezeTime`. Die CI auf 8d742975 war in allen 12 Jobs grün.
+- Ein Commit des Tasks 27 lief über den Standard-Index und nahm einen Commit von B1 zurück. Wiederhergestellt; seitdem committen Agents nur über einen eigenen `GIT_INDEX_FILE`.
+- Das zweite Final-Review der ganzen Phase fand keinen Critical. Das Important betraf nur Statusangaben in CLAUDE.md, Spec, Rulings und Master-Plan, die noch „offen“ sagten; sie sind nachgezogen. Die Minors sind ebenfalls erledigt: Die Wartezeiten der e2e auf die Queue stehen auf 90 s, A453 nennt die Vorlagenläufe, und die API-Beschreibung verlinkt `https://werkbuch.dev/en/api`.
+- Der volle G3 lief lokal vor dem zweiten Review mit Exitcode 0 und 100 % Abdeckung im Merge.

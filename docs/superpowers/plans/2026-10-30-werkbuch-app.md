@@ -380,4 +380,4 @@ Diese Namen und Formen gelten für alle Phasen. Ein Phasenplan darf sie erweiter
 - [x] Phase 12: REST vollständig und OpenAPI (PR #26)
 - [x] Phase 13: MCP (PR #28)
 - [x] Phase 14: Docker und Release (PR #30)
-- [ ] Phase 15: Feinschliff (läuft, PR #32; Stand oben unter „Phase 15“)
+- [ ] Phase 15: Feinschliff (PR #32; offen nur die Pins der Images, Tasks 25 und 25b, danach manuelle Tests)
