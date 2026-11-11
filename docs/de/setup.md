@@ -2,17 +2,6 @@
 
 werkbuch läuft als Docker-Compose-Stack aus acht Diensten. Sechs davon kommen aus einem Image, `baeroe/werkbuch` (für `linux/amd64` und `linux/arm64`): der Web-Dienst, Reverb für die Live-Updates, drei Queue-Worker und der Scheduler. Die anderen beiden sind MariaDB 11.4 und Meilisearch 1.56. Alles ist über einen Port erreichbar; HTTPS kommt von einem Reverse Proxy davor (siehe [Reverse Proxy](/de/reverse-proxy)).
 
-::: warning Vor dem ersten Release
-Das Image `baeroe/werkbuch` mit seinen Tags (`latest`, `0.1.0`) und die Dateien unter `raw.githubusercontent.com/baeroe/werkbuch/main` gibt es erst mit dem ersten Release, ebenso der Digest, den `docker buildx imagetools inspect` unter [Versionen](#versionen) zeigt. Bis dahin das Image aus einem Klon des Repositorys bauen:
-
-```bash
-git clone https://github.com/baeroe/werkbuch.git && cd werkbuch
-docker buildx build --load -t werkbuch:local .
-```
-
-Dann `docker-compose.yml` und `.env.docker.example` aus dem Klon nehmen statt sie herunterzuladen und `WERKBUCH_IMAGE=werkbuch:local` in der `.env` setzen (in der Standalone-Datei: `image: werkbuch:local`).
-:::
-
 ## Voraussetzungen
 
 - Docker Engine mit Compose v2.20 oder neuer: Die Dienste starten in der Reihenfolge ihrer Healthchecks (`depends_on` mit `condition: service_healthy`).

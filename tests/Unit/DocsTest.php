@@ -232,11 +232,12 @@ it('explains every variable of .env.docker.example in the table of the setup', f
     }
 });
 
-it('says until the first release how to build the image', function () {
+it('sends the reader of the setup to the published image, not to a build of their own', function () {
+    // since v0.1.0 the image is on Docker Hub: building it from a clone is a topic of the development page only
     foreach (['en', 'de'] as $l) {
-        $intro = (string) strstr(RepoFiles::text("docs/{$l}/setup.md"), "\n## ", true);
+        $setup = RepoFiles::text("docs/{$l}/setup.md");
 
-        expect($intro)->toContain('docker buildx build --load -t werkbuch:local .')->toContain('WERKBUCH_IMAGE=werkbuch:local');
+        expect($setup)->not->toContain('werkbuch:local')->and($setup)->toContain('baeroe/werkbuch');
     }
 });
 
