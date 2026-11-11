@@ -48,7 +48,7 @@ afterEach(function () {
 
 it('has the documented defaults', function () {
     // phpunit.xml forces the values: no setEnv, no refresh
-    expect(config('werkbuch.version'))->toBe('0.1.0-dev')
+    expect(config('werkbuch.version'))->toBe('0.1.0')
         ->and(config('werkbuch.attachments_max_mb'))->toBe(25)
         ->and(config('werkbuch.notification_mail_delay'))->toBe(5)
         ->and(config('werkbuch.webhooks_allow_private'))->toBeFalse()

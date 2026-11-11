@@ -70,4 +70,4 @@ Und dieselbe Seite im Dunkeln.
 
 ## Stand
 
-Gebaut ist alles. Vor v0.1.0 wird noch einmal von Hand getestet, darum gibt es noch kein Release. Bis dahin baust du das Image selbst. Wie das geht und wie werkbuch auf einem Server läuft, steht unter [Einrichtung](/de/setup), [Reverse Proxy](/de/reverse-proxy), [Betrieb](/de/operations), [Aktualisieren](/de/upgrading) und [Sicherung](/de/backup), die Arbeit am Code auf der [Entwicklungsseite](/de/development). Wie alles funktioniert, steht unter [Konzepte](/de/concepts/permissions).
+v0.1.0 ist das erste Release: Das Image `baeroe/werkbuch` liegt auf Docker Hub für `linux/amd64` und `linux/arm64`, was sich geändert hat, steht unter [Releases](https://github.com/baeroe/werkbuch/releases). Wie werkbuch auf einem Server läuft, steht unter [Einrichtung](/de/setup), [Reverse Proxy](/de/reverse-proxy), [Betrieb](/de/operations), [Aktualisieren](/de/upgrading) und [Sicherung](/de/backup), die Arbeit am Code auf der [Entwicklungsseite](/de/development). Wie alles funktioniert, steht unter [Konzepte](/de/concepts/permissions).

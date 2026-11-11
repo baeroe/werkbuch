@@ -70,4 +70,4 @@ And the same page in the dark.
 
 ## Status
 
-The build is done. Before v0.1.0 everything gets one more round of testing by hand, so there is no release yet. Until then you build the image yourself. How to do that and how to run werkbuch on a server is covered by [Setup](/en/setup), [Reverse proxy](/en/reverse-proxy), [Operations](/en/operations), [Upgrading](/en/upgrading) and [Backup](/en/backup), working on the code by the [development page](/en/development). How everything works is under [Concepts](/en/concepts/permissions).
+v0.1.0 is the first release: the image `baeroe/werkbuch` is on Docker Hub for `linux/amd64` and `linux/arm64`, what changed is under [Releases](https://github.com/baeroe/werkbuch/releases). How to run werkbuch on a server is covered by [Setup](/en/setup), [Reverse proxy](/en/reverse-proxy), [Operations](/en/operations), [Upgrading](/en/upgrading) and [Backup](/en/backup), working on the code by the [development page](/en/development). How everything works is under [Concepts](/en/concepts/permissions).

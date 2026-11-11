@@ -2,7 +2,7 @@
 
 Project management you host yourself: work items with your own types, fields and workflows, a wiki per project, team-wide views across projects, recurring work from templates and switchable automations. Made for the keyboard, and open to scripts and AI agents through a REST API, an MCP server and webhooks. The docs are at https://werkbuch.dev.
 
-> **Status:** the build is done. Before v0.1.0 everything gets one more round of testing by hand, so there is no release yet. Until then you build the image yourself, as described under Self-hosting. The concept is in [`docs/superpowers/specs/2026-10-28-werkbuch-design.md`](docs/superpowers/specs/2026-10-28-werkbuch-design.md) (German), a clickable prototype with demo data in [`prototypes/clickdummy/`](prototypes/clickdummy/) (German UI).
+> **Status:** v0.1.0 is the first release, the image is `baeroe/werkbuch` on Docker Hub. The concept is in [`docs/superpowers/specs/2026-10-28-werkbuch-design.md`](docs/superpowers/specs/2026-10-28-werkbuch-design.md) (German), a clickable prototype with demo data in [`prototypes/clickdummy/`](prototypes/clickdummy/) (German UI).
 
 ## Screenshots
 
@@ -25,7 +25,6 @@ docker compose up -d
 
 Put a reverse proxy with HTTPS in front, set `APP_URL` to its address and sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD`. For Dockge or Portainer there is [`docker-compose.standalone.yml`](docker-compose.standalone.yml), one file without `.env`.
 
-Until the first release, the image and the files on `main` are not published yet: build the image from a clone with `docker buildx build --load -t werkbuch:local .` and set `WERKBUCH_IMAGE=werkbuch:local` in `.env`.
 
 - [Setup](https://werkbuch.dev/en/setup) and [Reverse proxy](https://werkbuch.dev/en/reverse-proxy)
 - [Operations](https://werkbuch.dev/en/operations), [Upgrading](https://werkbuch.dev/en/upgrading) and [Backup](https://werkbuch.dev/en/backup)
