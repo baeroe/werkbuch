@@ -236,7 +236,6 @@
   border: 1px solid var(--border);
   padding: 0.375rem 0.5rem;
   vertical-align: top;
-  min-width: 4rem;
 }
 /* header cells of the header row and of the header column alike */
 .rt th {

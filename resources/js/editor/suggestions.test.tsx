@@ -161,7 +161,7 @@ describe('the entries of the / menu', () => {
 
   it('offers what the level knows', () => {
     expect(ids('comment', '', { projectId: null })).toEqual(['list', 'ordered', 'code', 'quote']);
-    expect(ids('description', '', { projectId: null })).toEqual(['heading1', 'heading2', 'heading3', 'list', 'ordered', 'tasks', 'code', 'quote']);
+    expect(ids('description', '', { projectId: null })).toEqual(['heading1', 'heading2', 'heading3', 'list', 'ordered', 'tasks', 'code', 'quote', 'table']);
     expect(ids('page', '', { projectId: null })).toEqual(['heading1', 'heading2', 'heading3', 'list', 'ordered', 'tasks', 'code', 'quote', 'table', 'rule']);
   });
 

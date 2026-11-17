@@ -1,8 +1,8 @@
 /*
  * The `/` menu (spec 4.16): typed at the start of a line or after a space (not in code, not right after a mark or an
  * atom, `slashAllowed`), it lists the blocks the editor's level knows (presets.ts); typing narrows the list, Enter
- * turns the line into the block. Each entry shows its Markdown shortcut, which works while typing as well. Tables only
- * on `page` (`slashTable`), the rule only on `page`; inside a table a group "Tabelle" edits its rows, columns and
+ * turns the line into the block. Each entry shows its Markdown shortcut, which works while typing as well. Tables where
+ * the level sets `slashTable` (`description`, `page`; WEBU-8), the rule only on `page`; inside a table a group "Tabelle" edits its rows, columns and
  * headers (tables.tsx); "Bild oder Datei" opens the file choice (Task 17) and is there only with a project and a way
  * to upload.
  */

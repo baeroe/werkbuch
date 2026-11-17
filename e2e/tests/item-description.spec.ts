@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, api, createE2eProject, createItem, PEOPLE, pressMod, removeE2eProject, runId, signedInContext, tabTo, tr, variant, type Locale } from '../helpers';
+import { allEntries, api, arrowTo, createE2eProject, createItem, isPhone, PEOPLE, pressMod, removeE2eProject, runId, signedInContext, tabTo, tr, variant, type Locale } from '../helpers';
 
 // The description of an item on its page, with the keyboard only. The e2e person (Erik Ende, English) and Mara
 // Lindqvist (org admin, German, a browser context of her own) edit the same description: the second save meets the
@@ -111,6 +111,53 @@ test('writes a heading and a checklist with Markdown shortcuts', async ({ page }
     await pressMod(page, 'Enter');
     await expect(status).toHaveText(tr('en', 'items.detail.description.saved'));
     expect(await storedDescription(page, item.id)).toBe('## Ablauf\n\n- [ ] Formular absenden');
+  } finally {
+    await page.goto('/my-items');
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('makes a table in a description over /, adds a column from alt+F10 and scrolls it sideways when narrow', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('table'), { types: ['Task'] });
+  try {
+    const item = await createItem(page, { project_id: id, title: 'E2E Tabelle im Item' });
+    const { editor, status } = await editDescription(page, 'en', item.key, 'E2E Tabelle im Item');
+
+    // the / menu offers the table in a description too (WEBU-8)
+    await page.keyboard.type('/');
+    const menu = page.getByRole('listbox', { name: tr('en', 'editor.slash.label') });
+    await expect(menu.getByRole('option', { name: new RegExp(`^${tr('en', 'editor.slash.table')}`) })).toBeVisible();
+    await page.keyboard.type(tr('en', 'editor.slash.table'));
+    await page.keyboard.press('Enter');
+    await expect(editor.locator('table')).toBeVisible();
+    await page.keyboard.type('Browser');
+
+    // three columns more from the menu of the table: wider than a phone, so it scrolls in its frame
+    for (let column = 0; column < 3; column++) {
+      await page.keyboard.press('Alt+F10');
+      const tableMenu = page.getByRole('menu');
+      await expect(tableMenu).toBeVisible();
+      await arrowTo(page, tableMenu.getByRole('menuitem', { name: tr('en', 'editor.table.column_after') }));
+      await page.keyboard.press('Enter');
+      await expect(tableMenu).toBeHidden();
+      await expect(editor).toBeFocused();
+      await expect(editor.locator('table tr').first().locator('th, td')).toHaveCount(4 + column);
+    }
+    // with the cursor in the wide table: its menu stays in the window, and the page no wider than it
+    await expect(page.getByRole('button', { name: tr('en', 'editor.table.menu') })).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await pressMod(page, 'Enter');
+    await expect(status).toHaveText(tr('en', 'items.detail.description.saved'));
+
+    await page.reload();
+    const table = page.getByRole('region', { name: tr('en', 'items.detail.description.title') }).locator('table');
+    await expect(table.locator('tr').first().locator('th, td')).toHaveCount(6);
+    await expect(table).toContainText('Browser');
+    // never wider than the page: the frame of the table scrolls instead
+    const frame = page.getByRole('region', { name: tr('en', 'items.detail.description.title') }).locator('.tableWrapper');
+    const { scroll, client } = await frame.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
+    if (isPhone(page)) expect(scroll).toBeGreaterThan(client);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   } finally {
     await page.goto('/my-items');
     await removeE2eProject(page, identifier);
