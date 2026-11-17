@@ -70,9 +70,10 @@ php artisan config:clear --no-interaction
 
 if [ "$role" = web ]; then
     # 5. wait for the database (first start: MariaDB initialises; external databases may be slow)
+    # a number of seconds; more than eight digits would break `[ -ge ]` and wait for ever
     timeout=${DB_WAIT_TIMEOUT:-60}
     case $timeout in
-        '' | *[!0-9]*)
+        '' | *[!0-9]* | ?????????*)
             log "DB_WAIT_TIMEOUT is no number of seconds ($timeout): waiting 60s" >&2
             timeout=60
             ;;
@@ -120,7 +121,7 @@ if [ "$role" = web ]; then
     # shellcheck disable=SC2016 # PHP code
     small=$(php -r '
         $max = (int) (getenv("ATTACHMENTS_MAX_MB") ?: 25) * 1048576;
-        echo implode(" and ", array_filter(["post_max_size", "upload_max_filesize"], fn ($name) => $max > ini_parse_quantity(ini_get($name))));
+        echo implode(" and ", array_filter(["post_max_size", "upload_max_filesize"], fn ($name) => ($limit = ini_parse_quantity(ini_get($name))) > 0 && $max > $limit));
     ') || small=''
     if [ -n "$small" ]; then
         log "ATTACHMENTS_MAX_MB is larger than $small of PHP: larger uploads end in 413 before werkbuch sees them" >&2

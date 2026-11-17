@@ -26,7 +26,7 @@ On start the new version migrates the database, sends the settings of the search
   docker compose restart werkbuch
   ```
 
-  The start of `werkbuch` finds the index empty and imports everything; until then the search is empty. `up -d` alone does not start a `werkbuch` that is still running (going back to the older Meilisearch, for example), hence the `restart`. Going back to the older Meilisearch afterwards only works with the same steps.
+  The start of `werkbuch` finds the index empty and imports everything; until then the search is empty. `up -d` alone does not start a `werkbuch` that is still running (going back to the older Meilisearch, for example), hence the `restart`. Once upgraded, an older Meilisearch no longer reads the database; going back only works with the same steps.
 - **Going back:** migrations are not rolled back. Restore the backup and pin the old version.
 
 All versions and their changes: https://github.com/baeroe/werkbuch/releases

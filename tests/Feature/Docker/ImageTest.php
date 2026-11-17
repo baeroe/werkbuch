@@ -262,7 +262,7 @@ it('keeps the code read-only for PHP, only storage and bootstrap/cache writable'
     expect($steps)->toBe(collect($steps)->sort()->values()->all());
     expect($commands[array_key_last($commands)])->toBe('chown -R www-data:www-data storage bootstrap/cache');
     // our server config belongs to root: www-data could otherwise swap security.conf or add a location
-    expect($commands)->toContain('chown root:root /etc/nginx/server-opts.d')
+    expect($commands)->toContain('chown -R root:root /etc/nginx/server-opts.d')
         ->and($commands)->toContain('chmod 755 /etc/nginx/server-opts.d');
 
     foreach ([$steps[2], $steps[3]] as $step) {
@@ -718,6 +718,7 @@ it('warns when post_max_size or upload_max_filesize of PHP is below ATTACHMENTS_
     'post_max_size too small' => [['FAKE_POST_MAX' => '20M'], 'post_max_size'],
     'upload_max_filesize too small' => [['ATTACHMENTS_MAX_MB' => '31', 'FAKE_POST_MAX' => '40M'], 'upload_max_filesize'],
     'both too small' => [['ATTACHMENTS_MAX_MB' => '100'], 'post_max_size and upload_max_filesize'],
+    'no limit (0)' => [['ATTACHMENTS_MAX_MB' => '100', 'FAKE_POST_MAX' => '0', 'FAKE_UPLOAD_MAX' => '200M'], null],
 ]);
 
 it('waits the default 60 seconds for the database when DB_WAIT_TIMEOUT is no number, and says it', function (string $timeout) use ($entrypoint) {
@@ -726,7 +727,7 @@ it('waits the default 60 seconds for the database when DB_WAIT_TIMEOUT is no num
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
         ->and($process->getErrorOutput())->toContain("werkbuch: DB_WAIT_TIMEOUT is no number of seconds ({$timeout}): waiting 60s")
         ->and($process->getOutput())->toEndWith("werkbuch: ready\n");
-})->with(['text' => 'soon', 'negative' => '-5', 'with unit' => '60s']);
+})->with(['text' => 'soon', 'negative' => '-5', 'with unit' => '60s', 'too large for the shell' => '99999999999999999999']);
 
 it('takes a number of seconds in DB_WAIT_TIMEOUT without a word', function () use ($entrypoint) {
     $process = $entrypoint(['DB_WAIT_TIMEOUT' => '120']);

@@ -26,7 +26,7 @@ Beim Start migriert die neue Version die Datenbank, schickt die Einstellungen de
   docker compose restart werkbuch
   ```
 
-  Der Start von `werkbuch` findet den Index leer und importiert alles; bis dahin ist die Suche leer. `up -d` allein startet ein `werkbuch` nicht neu, das noch läuft (etwa beim Weg zurück zum älteren Meilisearch), darum das `restart`. Zurück zum älteren Meilisearch geht es danach nur mit denselben Schritten.
+  Der Start von `werkbuch` findet den Index leer und importiert alles; bis dahin ist die Suche leer. `up -d` allein startet ein `werkbuch` nicht neu, das noch läuft (etwa beim Weg zurück zum älteren Meilisearch), darum das `restart`. Nach dem Heben liest ein älteres Meilisearch die Datenbank nicht mehr; zurück geht es nur mit denselben Schritten.
 - **Zurück:** Migrationen werden nicht zurückgerollt. Die Sicherung wiederherstellen und die alte Version festlegen.
 
 Alle Versionen und ihre Änderungen: https://github.com/baeroe/werkbuch/releases

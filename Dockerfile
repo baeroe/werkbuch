@@ -84,8 +84,8 @@ COPY --from=assets /app/public/build ./public/build
 # compiled PHP lives there. The base gives /var/www to www-data: whoever writes there could swap the code folder (A429).
 # What COPY puts into a folder the base created keeps its owner www-data, so every code folder is chowned. The debug
 # files of the base (read by PHP and FPM at start) and the folder server-opts.d (our server config) belong to root as
-# well: www-data can add no file there. Our files in it are root's (COPY); performance.conf of the base, which we keep,
-# stays www-data's like the rest of /etc/nginx, where the base writes its templates at start.
+# well, performance.conf of the base in it too (the base never writes it at start): www-data can neither add nor change
+# a server include. The rest of /etc/nginx stays writable, the base writes its templates there at start.
 # package:discover boots the app; the channels resolve the broadcaster, and Reverb's keys exist only at start (3b).
 RUN mkdir -p storage/app/private storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && BROADCAST_CONNECTION=null composer dump-autoload --no-dev --optimize --no-interaction \
@@ -94,7 +94,7 @@ RUN mkdir -p storage/app/private storage/app/public storage/framework/cache/data
     && chmod -R a+rX,go-w artisan LICENSE app bootstrap config database docs lang public resources routes vendor \
     && chown root:root "$PHP_INI_DIR/conf.d/zzz-serversideup-docker-php-debug.ini" /usr/local/etc/php-fpm.d/zzz-docker-php-serversideup-fpm-debug.conf /usr/local/etc/php-fpm.conf \
     && chmod 644 "$PHP_INI_DIR/conf.d/zzz-serversideup-docker-php-debug.ini" /usr/local/etc/php-fpm.d/zzz-docker-php-serversideup-fpm-debug.conf /usr/local/etc/php-fpm.conf \
-    && chown root:root /etc/nginx/server-opts.d && chmod 755 /etc/nginx/server-opts.d \
+    && chown -R root:root /etc/nginx/server-opts.d && chmod 755 /etc/nginx/server-opts.d && chmod 644 /etc/nginx/server-opts.d/performance.conf \
     && chown -R www-data:www-data storage bootstrap/cache
 
 USER www-data
