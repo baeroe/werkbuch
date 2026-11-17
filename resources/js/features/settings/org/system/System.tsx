@@ -118,6 +118,15 @@ function Instance({ status }: { status: SystemStatus }) {
             </Badge>
           )}
         </Fact>
+        <Fact label={t('settings.system.pdf.label')} notes={[status.pdf === 'down' ? t('settings.system.pdf.down_note') : status.pdf === 'off' ? t('settings.system.pdf.off_note') : null]}>
+          {status.pdf === 'ok' && <Ok>{t('settings.system.pdf.ok')}</Ok>}
+          {status.pdf === 'down' && <Down>{t('settings.system.pdf.down')}</Down>}
+          {status.pdf === 'off' && (
+            <Badge tone="quiet" icon={CircleMinus}>
+              {t('settings.system.pdf.off')}
+            </Badge>
+          )}
+        </Fact>
       </Facts>
     </Panel>
   );

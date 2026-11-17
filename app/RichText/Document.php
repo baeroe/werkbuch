@@ -162,6 +162,32 @@ final class Document
     }
 
     /**
+     * The HTML of a printed page (a wiki page as PDF, WEBU-4): mentions, references and files as in a mail
+     * (toMailHtml: the current names for the reader, hidden references without key or title), but an image whose
+     * attachment `$images` names (ID → `data:` URL) stays a picture with that URL as its source; any other image is the
+     * line `richtext.image` with its name, linked to its file. The data URLs come from the caller, never from the text.
+     *
+     * @param  array<string, string>  $images
+     */
+    public function toPrintHtml(RichTextNames $names, string $appUrl, array $images): string
+    {
+        $base = rtrim($appUrl, '/');
+        $print = self::mapped($this->json, function (array $node) use ($names, $base, $images) {
+            $id = $node['type'] === 'image' ? (string) $node['attrs']['attachmentId'] : null;
+
+            return $id !== null && isset($images[$id]) ? $node : self::forMail($node, $names, $base);
+        });
+        $html = (new self(self::node($print, 'doc', 0)))->toHtml();
+
+        // the renderer writes an image without source (AttachmentImage); the source goes in here, by its ULID
+        return (string) preg_replace_callback(
+            '/<img data-attachment-id="([0-9a-z]{26})"/',
+            fn (array $match) => '<img src="'.htmlspecialchars($images[$match[1]] ?? '', ENT_QUOTES).'" data-attachment-id="'.$match[1].'"',
+            $html,
+        );
+    }
+
+    /**
      * The people the text mentions, without repeats, in the order of the text.
      *
      * @return list<string>

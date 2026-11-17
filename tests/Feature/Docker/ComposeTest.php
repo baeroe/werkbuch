@@ -30,7 +30,7 @@ $appServices = ['werkbuch', 'reverb', 'queue', 'queue-index', 'queue-webhooks', 
 it('runs the services of spec 8.1 with the workers split like DDEV', function () use ($compose, $appServices) {
     $services = $compose()['services'];
 
-    expect(array_keys($services))->toEqualCanonicalizing([...$appServices, 'mariadb', 'meilisearch']);
+    expect(array_keys($services))->toEqualCanonicalizing([...$appServices, 'mariadb', 'meilisearch', 'gotenberg']);
 
     foreach ($appServices as $name) {
         expect($services[$name]['image'])->toBe('${WERKBUCH_IMAGE:-baeroe/werkbuch:latest}');
@@ -100,7 +100,8 @@ it('mounts the data volume where the app writes, read-only for Reverb', function
 it('starts the workers, the scheduler and Reverb only after werkbuch is healthy, werkbuch only after MariaDB and Meilisearch', function () use ($compose) {
     $services = $compose()['services'];
 
-    expect($services['werkbuch']['depends_on'])->toBe(['mariadb' => ['condition' => 'service_healthy'], 'meilisearch' => ['condition' => 'service_healthy']]);
+    // Gotenberg only started: a PDF is optional, werkbuch starts without it (WEBU-4)
+    expect($services['werkbuch']['depends_on'])->toBe(['mariadb' => ['condition' => 'service_healthy'], 'meilisearch' => ['condition' => 'service_healthy'], 'gotenberg' => ['condition' => 'service_started']]);
 
     foreach (['reverb', 'queue', 'queue-index', 'queue-webhooks', 'scheduler'] as $name) {
         expect($services[$name]['depends_on'])->toBe(['werkbuch' => ['condition' => 'service_healthy']]);
@@ -427,3 +428,25 @@ it('lets a new Meilisearch upgrade the database of the version before, in DDEV a
     'standalone' => ['docker-compose.standalone.yml', 'meilisearch'],
     'DDEV' => ['.ddev/docker-compose.meilisearch.yaml', 'meilisearch'],
 ]);
+
+it('runs Gotenberg hardened, pinned, only inside the stack, in both files, DDEV and the CI alike (WEBU-4)', function (string $file) {
+    $services = RepoFiles::yaml($file)['services'];
+    $gotenberg = $services['gotenberg'];
+    $ddev = RepoFiles::yaml('.ddev/docker-compose.gotenberg.yaml')['services']['gotenberg'];
+    $command = ['gotenberg', '--chromium-disable-javascript=true', '--chromium-deny-list=^file:(?!//\\/tmp/).*', '--chromium-deny-list=^(?!(file|data):).*',
+        '--chromium-deny-private-ips=true', '--chromium-deny-public-ips=true'];
+    $workflows = RepoFiles::text('.github/workflows/tests.yml');
+
+    expect($gotenberg['image'])->toMatch('/^gotenberg\/gotenberg:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}$/')
+        ->and($gotenberg['image'])->toBe($ddev['image'])
+        ->and($gotenberg['command'])->toBe($command)
+        ->and($ddev['command'])->toBe($command)
+        ->and($gotenberg['networks'])->toBe(['backend'])
+        ->and($gotenberg)->not->toHaveKey('ports')
+        ->and($services['werkbuch']['environment']['GOTENBERG_URL'])->toBe('http://gotenberg:3000')
+        // the CI starts the same image with the same flags (services cannot take a command)
+        ->and(substr_count($workflows, 'docker run -d --name gotenberg -p 3000:3000 '.$gotenberg['image'].' gotenberg'))->toBe(2);
+    foreach (array_slice($command, 1) as $flag) {
+        expect(substr_count($workflows, "'{$flag}'") + substr_count($workflows, " {$flag}\n"))->toBeGreaterThanOrEqual(2, $flag);
+    }
+})->with(['docker-compose.yml', 'docker-compose.standalone.yml']);

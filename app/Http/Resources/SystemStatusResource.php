@@ -21,6 +21,7 @@ use Illuminate\Support\Carbon;
  *     search_tasks: array{enqueued: int, processing: int, failed_last_day: int}|null,
  *     mail_configured: bool,
  *     live: 'ok'|'down'|'off',
+ *     pdf: 'ok'|'down'|'off',
  * } $resource
  */
 final class SystemStatusResource extends JsonResource
@@ -43,6 +44,7 @@ final class SystemStatusResource extends JsonResource
             'search_tasks' => $status['search_tasks'],
             'mail_configured' => $status['mail_configured'],
             'live' => $status['live'],
+            'pdf' => $status['pdf'],
         ];
     }
 }

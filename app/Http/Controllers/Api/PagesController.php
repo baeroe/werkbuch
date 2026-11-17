@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Actions\Pages\CreatePage;
 use App\Actions\Pages\DeletePage;
 use App\Actions\Pages\GetPage;
+use App\Actions\Pages\LinkPagePdf;
 use App\Actions\Pages\ListItemPages;
 use App\Actions\Pages\ListPages;
 use App\Actions\Pages\MovePage;
@@ -73,6 +74,17 @@ final class PagesController extends Controller
     public function show(Request $request, Page $page): PageResource
     {
         return new PageResource(GetPage::run(Actor::fromRequest($request), $page));
+    }
+
+    /**
+     * Where to download a page as PDF.
+     *
+     * `{data: {url, filename, pages}}`: the address of the PDF of the page (with `subpages=1` its subtree, at most 100 pages) and how many pages it holds; nothing is rendered yet. Fetch `url` with the same session or token (`read`); it answers `application/pdf` as a download, 10 a minute per account. Without Gotenberg 503 `pdf_unavailable`.
+     */
+    #[Answer(200, OperationsSchemas::class, 'pagePdf', 'Where the PDF comes from.')]
+    public function pdf(Request $request, Page $page): JsonResponse
+    {
+        return response()->json(['data' => LinkPagePdf::run(Actor::fromRequest($request), $page, $request->only(LinkPagePdf::KEYS))]);
     }
 
     /**

@@ -705,6 +705,7 @@ export function makeSystemStatus(overrides: Partial<SystemStatus> = {}): SystemS
     search_tasks: { enqueued: 0, processing: 0, failed_last_day: 0 },
     mail_configured: true,
     live: 'ok',
+    pdf: 'ok',
     ...overrides,
   };
 }

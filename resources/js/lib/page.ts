@@ -10,6 +10,8 @@ export interface SharedProps {
   translations: Record<string, string>;
   features: {
     mail: boolean;
+    /** Whether wiki pages can be downloaded as PDF at all: a Gotenberg is configured (WEBU-4). */
+    pdf: boolean;
     live: { key: string; host: string; port: number; scheme: 'http' | 'https' } | null;
     attachments_max_mb: number;
     /** Minutes the mails about an item are collected (`NOTIFICATION_MAIL_DELAY`). */

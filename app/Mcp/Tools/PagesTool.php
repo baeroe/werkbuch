@@ -4,6 +4,7 @@ namespace App\Mcp\Tools;
 
 use App\Actions\Pages\GetPage;
 use App\Actions\Pages\GetPageVersion;
+use App\Actions\Pages\LinkPagePdf;
 use App\Actions\Pages\ListItemPages;
 use App\Actions\Pages\ListPages;
 use App\Actions\Pages\ListPageVersions;
@@ -17,6 +18,7 @@ use App\Mcp\Support\ReadTool;
 use App\Mcp\Support\ToolSchema;
 use App\Models\Page;
 use App\Models\PageVersion;
+use App\OpenApi\ContentDocs;
 use App\Support\Actor;
 use App\Support\References;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
@@ -24,7 +26,8 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 /**
  * `pages` (spec 6.2): the wiki of a project as a tree (without text, `{data, meta: {total}}` as REST sends it), one
- * page with its text as Markdown, its versions, and the pages that name a work item (A456). The writes are `manage-pages`.
+ * page with its text as Markdown, its versions, the pages that name a work item (A456) and where to download a page as
+ * PDF (WEBU-4). The writes are `manage-pages`.
  */
 #[IsReadOnly]
 #[IsOpenWorld(false)]
@@ -34,13 +37,15 @@ final class PagesTool extends ReadTool
 
     protected string $title = 'Wiki pages';
 
-    protected string $description = 'Reads the wiki of a project: the tree, one page (text as Markdown), the versions of a page and the pages that name an item.';
+    protected string $description = 'Reads the wiki of a project: the tree, one page (text as Markdown), the versions of a page, the pages that name an item and where to download a page as PDF.';
 
     protected function actions(): array
     {
         $versions = ToolSchema::list(ListPageVersions::spec());
         $named = ToolSchema::list(ListItemPages::spec());
         $page = ['page' => ToolSchema::reference('page')];
+        // the query of the twin as it stands in the document (no page of a list: no `per_page`)
+        $pdf = array_map(fn (array $parameter) => [...$parameter['schema'], 'description' => $parameter['description']], ContentDocs::pdfParameters());
 
         return [
             new McpAction(
@@ -86,6 +91,14 @@ final class PagesTool extends ReadTool
                 parameters: ['item' => ToolSchema::reference('item'), ...$named],
                 required: ['item'],
                 twin: 'GET work-items/{item}/pages',
+            ),
+            new McpAction(
+                name: 'pdf',
+                summary: 'Where to download a page as PDF (with `subpages` its subtree); fetch `url` with the same token.',
+                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::body(['data' => LinkPagePdf::run($actor, self::page($args), $args->query(LinkPagePdf::KEYS))]),
+                parameters: [...$page, ...$pdf],
+                required: ['page'],
+                twin: 'GET pages/{page}/pdf',
             ),
         ];
     }

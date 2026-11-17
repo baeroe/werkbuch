@@ -277,6 +277,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'create an item on the board', file: 'board.spec.ts', test: 'creates an item with the quick add of a column' },
   { flow: 'star a view', file: 'views.spec.ts', test: 'stars a view and opens it from the sidebar' },
   { flow: 'paste an image into a wiki page', file: 'wiki.spec.ts', test: 'pastes an image into a page' },
+  { flow: 'download a wiki page as PDF', file: 'wiki.spec.ts', test: 'downloads a page with its subpages as PDF with the keyboard' },
 ];
 
 /**

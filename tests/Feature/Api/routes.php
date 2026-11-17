@@ -57,6 +57,7 @@ return [
     'list the pages of a project' => ['GET', '/api/v1/projects/{project}/pages', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier]],
     'create a page' => ['POST', '/api/v1/projects/{project}/pages', 'params' => fn (MatrixWorld $w) => ['project' => $w->web->identifier], 'body' => ['title' => 'Matrix']],
     'show a page' => ['GET', '/api/v1/pages/{page}', 'params' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id]],
+    'link the PDF of a page' => ['GET', '/api/v1/pages/{page}/pdf', 'params' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id]],
     'save a page' => ['PATCH', '/api/v1/pages/{page}', 'params' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id], 'body' => ['title' => 'Matrix']],
     'move a page' => ['POST', '/api/v1/pages/{page}/move', 'params' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id], 'body' => ['parent_id' => null, 'before_id' => null]],
     'delete a page' => ['DELETE', '/api/v1/pages/{page}', 'params' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id]],

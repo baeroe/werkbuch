@@ -157,6 +157,7 @@ $refusals = fn (): array => [
     'pages versions' => ['pages', fn ($w, $hide) => ['action' => 'versions', 'page' => $hide($w['opsPage']->id)]],
     'pages version' => ['pages', fn ($w, $hide) => ['action' => 'version', 'page' => $hide($w['opsPage']->id), 'page_version' => $hide($w['opsVersion']->id)]],
     'pages item' => ['pages', fn ($w, $hide) => ['action' => 'item', 'item' => $hide($w['opsItem']->key)]],
+    'pages pdf' => ['pages', fn ($w, $hide) => ['action' => 'pdf', 'page' => $hide($w['opsPage']->id), 'subpages' => 1]],
     'templates get' => ['templates', fn ($w, $hide) => ['action' => 'get', 'template' => $hide($w['opsTemplate']->id)]],
     'templates runs' => ['templates', fn ($w, $hide) => ['action' => 'runs', 'template' => $hide($w['opsTemplate']->id)]],
     'templates draft' => ['templates', fn ($w, $hide) => ['action' => 'draft', 'template' => $hide($w['opsTemplate']->id)]],

@@ -60,9 +60,22 @@ jobs:
       MEILISEARCH_HOST: http://127.0.0.1:7700
       MEILISEARCH_KEY: ci-werkbuch-master-key
       MAILPIT_URL: http://127.0.0.1:8025
+      GOTENBERG_URL: http://127.0.0.1:3000
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # the PDF of wiki pages (WEBU-4): not a service container, services can't take a command, and Gotenberg must run
+      # hardened (no JavaScript, no URLs but its own files and data:): the image and flags of docker-compose.yml and
+      # .ddev/docker-compose.gotenberg.yaml (ComposeTest)
+      - name: Gotenberg
+        run: >-
+          docker run -d --name gotenberg -p 3000:3000 gotenberg/gotenberg:8.37.0@sha256:f29984bd1e226bf1b93ba90af06000afa8b315853e99d27b9aaa41b93f15c769 gotenberg
+          --chromium-disable-javascript=true
+          '--chromium-deny-list=^file:(?!//\/tmp/).*'
+          '--chromium-deny-list=^(?!(file|data):).*'
+          '--chromium-deny-private-ips=true'
+          '--chromium-deny-public-ips=true'
 
       - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
@@ -117,6 +130,9 @@ jobs:
 
       - name: Meilisearch
         run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
+
+      - name: Gotenberg reachable
+        run: curl -fsS --retry 30 --retry-delay 2 --retry-all-errors http://127.0.0.1:3000/health
 
       # max_allowed_packet of the stack (docker-compose.yml, 64 MiB) instead of the image's 16 MiB: the CI measures what
       # runs in production. A service cannot take server options; only new connections read the global value, and the
@@ -325,6 +341,18 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      # the PDF of wiki pages (WEBU-4): not a service container, services can't take a command, and Gotenberg must run
+      # hardened (no JavaScript, no URLs but its own files and data:): the image and flags of docker-compose.yml and
+      # .ddev/docker-compose.gotenberg.yaml (ComposeTest)
+      - name: Gotenberg
+        run: >-
+          docker run -d --name gotenberg -p 3000:3000 gotenberg/gotenberg:8.37.0@sha256:f29984bd1e226bf1b93ba90af06000afa8b315853e99d27b9aaa41b93f15c769 gotenberg
+          --chromium-disable-javascript=true
+          '--chromium-deny-list=^file:(?!//\/tmp/).*'
+          '--chromium-deny-list=^(?!(file|data):).*'
+          '--chromium-deny-private-ips=true'
+          '--chromium-deny-public-ips=true'
+
       - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.4'
@@ -363,6 +391,9 @@ jobs:
 
       - name: Meilisearch
         run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
+
+      - name: Gotenberg reachable
+        run: curl -fsS --retry 30 --retry-delay 2 --retry-all-errors http://127.0.0.1:3000/health
 
       # max_allowed_packet of the stack (docker-compose.yml, 64 MiB) instead of the image's 16 MiB: the CI measures what
       # runs in production. A service cannot take server options; only new connections read the global value, and the

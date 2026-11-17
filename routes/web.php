@@ -4,6 +4,7 @@ use App\Http\Controllers\AttachmentFileController;
 use App\Http\Controllers\ChannelBatchController;
 use App\Http\Controllers\ItemPageController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\PagePdfController;
 use App\Http\Controllers\ProjectItemsPageController;
 use App\Http\Controllers\ProjectSettingsPageController;
 use App\Http\Controllers\TemplatesPageController;
@@ -71,6 +72,8 @@ Route::middleware(['auth:sanctum', SanctumAuthenticateSession::class, EnsureAcco
     ->group(function () {
         Route::get('/attachments/{attachment}', [AttachmentFileController::class, 'show'])->name('attachments.show');
         Route::get('/attachments/{attachment}/preview', [AttachmentFileController::class, 'preview'])->name('attachments.preview');
+        // a wiki page as PDF (WEBU-4): Gotenberg starts a Chromium for each, so a drossel per account
+        Route::get('/pages/{page}/pdf', PagePdfController::class)->middleware('throttle:pdf')->name('pages.pdf');
     });
 
 // Every unknown path of the browser app is the Inertia 404 page for signed-in people (the status stays 404) and the

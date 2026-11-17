@@ -21,6 +21,8 @@ web_environment:
   - API_SESSION_RATE_LIMIT=60000
   # the browser reaches Reverb on its own port, not under APP_URL (LiveAddress)
   - REVERB_PUBLIC_PORT=6001
+  # the PDF of wiki pages (WEBU-4), the service .ddev/docker-compose.gotenberg.yaml
+  - GOTENBERG_URL=http://gotenberg:3000
 # https://werkbuch.ddev.site:<https_port> → container port
 web_extra_exposed_ports:
   - { name: vite, container_port: 5173, http_port: 5172, https_port: 5173 }

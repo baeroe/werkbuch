@@ -21,6 +21,8 @@ x-werkbuch-environment: &werkbuch-environment
   MAIL_PASSWORD: "${MAIL_PASSWORD:-}"
   MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS:-werkbuch@example.com}"
   MAIL_FROM_NAME: "${MAIL_FROM_NAME:-werkbuch}"
+  # the PDF of wiki pages (WEBU-4), the service gotenberg below
+  GOTENBERG_URL: http://gotenberg:3000
   ATTACHMENTS_MAX_MB: "${ATTACHMENTS_MAX_MB:-25}"
   NOTIFICATION_MAIL_DELAY: "${NOTIFICATION_MAIL_DELAY:-5}"
   WEBHOOKS_ALLOW_PRIVATE: "${WEBHOOKS_ALLOW_PRIVATE:-false}"
@@ -64,6 +66,9 @@ services:
         condition: service_healthy
       meilisearch:
         condition: service_healthy
+      # a PDF is optional: werkbuch starts without Gotenberg and says so (503 pdf_unavailable)
+      gotenberg:
+        condition: service_started
 
   reverb:
     <<: *werkbuch-service
@@ -203,6 +208,28 @@ services:
       - backend
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # the PDF of wiki pages (WEBU-4), like openbill: only in the internal network, no port. Chromium runs no JavaScript
+  # and loads nothing but Gotenberg's own working files (file:///tmp/...) and data: URLs (pictures are inlined), no
+  # private and no public address. Pinned like DDEV and the CI (ComposeTest).
+  gotenberg:
+    image: gotenberg/gotenberg:8.37.0@sha256:f29984bd1e226bf1b93ba90af06000afa8b315853e99d27b9aaa41b93f15c769
+    restart: unless-stopped
+    command:
+      - gotenberg
+      - --chromium-disable-javascript=true
+      - --chromium-deny-list=^file:(?!//\/tmp/).*
+      - --chromium-deny-list=^(?!(file|data):).*
+      - --chromium-deny-private-ips=true
+      - --chromium-deny-public-ips=true
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:3000/health"]
       interval: 10s
       timeout: 5s
       retries: 10

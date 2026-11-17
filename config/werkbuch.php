@@ -32,6 +32,13 @@ return [
     // webhooks to private and loopback addresses are refused unless this is on
     'webhooks_allow_private' => (bool) env('WEBHOOKS_ALLOW_PRIVATE', false),
 
+    // Gotenberg renders wiki pages as PDF (WEBU-4); without a URL there is no PDF (503 `pdf_unavailable`). Seconds for
+    // one rendering: a page with its subpages and pictures takes a few
+    'pdf' => [
+        'gotenberg_url' => env('GOTENBERG_URL') ?: null,
+        'timeout' => (int) env('GOTENBERG_TIMEOUT', 60),
+    ],
+
     // classes implementing App\Events\EventConsumer: each receives every domain event once, after the commit, in its own
     // queue (App\Events\Outbox): the search index, the notifications, the live updates and the webhooks (rows only, the
     // HTTP in jobs of their own). Off in tests (Tests\TestCase), where consumers() switches them on.

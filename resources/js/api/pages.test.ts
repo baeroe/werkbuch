@@ -3,7 +3,7 @@ import { textDoc } from '@/lib/richtext';
 import { mockApi, type MockApi } from '@/test/api';
 import { list, makePage, seitenstruktur, webTree } from '@/test/fixtures';
 import type { PageVersion, PageVersionDetail } from '@/types';
-import { createPage, deletePage, getPage, getPageVersion, listPages, listPageVersions, movePage, restorePageVersion, savePage } from './pages';
+import { createPage, deletePage, downloadPagePdf, getPage, getPageVersion, listPages, listPageVersions, movePage, pagePdfLink, restorePageVersion, savePage } from './pages';
 
 let api: MockApi;
 
@@ -119,4 +119,27 @@ describe('pages', () => {
     expect(await restorePageVersion('pg_web_structure', 'pv_structure_2')).toEqual(restored);
     expect(sent()).toEqual(['POST /api/v1/pages/pg_web_structure/versions/pv_structure_2/restore']);
   });
+
+  it('links the PDF of a page, with its subpages on asking (WEBU-4)', async () => {
+    const link = { url: 'https://werkbuch.ddev.site/pages/pg_web_structure/pdf?subpages=1', filename: 'Seitenstruktur.pdf', pages: 2 };
+    api = mockApi({ 'GET /api/v1/pages/pg_web_structure/pdf': () => ({ body: { data: link } }) });
+
+    expect(await pagePdfLink('pg_web_structure', true)).toEqual(link);
+    expect(await pagePdfLink('pg_web_structure', false)).toEqual(link);
+    expect(sent()).toEqual(['GET /api/v1/pages/pg_web_structure/pdf?subpages=1', 'GET /api/v1/pages/pg_web_structure/pdf']);
+  });
+
+  it('says why the file of a PDF was refused', async () => {
+    const link = { url: 'https://werkbuch.ddev.site/pages/pg_web_structure/pdf', filename: 'Seitenstruktur.pdf', pages: 1 };
+    for (const [status, reason] of [
+      [404, 'not_found'],
+      [429, 'too_many_requests'],
+      [503, 'pdf_unavailable'],
+    ] as const) {
+      api.restore();
+      api = mockApi({ 'GET /api/v1/pages/pg_web_structure/pdf': () => ({ body: { data: link } }), 'GET /pages/pg_web_structure/pdf': () => ({ status, body: { message: 'x' } }) });
+      await expect(downloadPagePdf('pg_web_structure', false)).rejects.toMatchObject({ status, reason });
+    }
+  });
 });
+

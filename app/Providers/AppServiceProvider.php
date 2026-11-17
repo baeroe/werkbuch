@@ -26,6 +26,7 @@ use App\Models\Webhook;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemType;
+use App\Pdf\Gotenberg;
 use App\Search\MeilisearchEngine;
 use App\Support\BotIds;
 use App\Support\ReadCommitted;
@@ -63,6 +64,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(CatalogProperties::class, fn () => CatalogProperties::load());
         // which accounts are bots, read once per request and job (a bulk change preloads its assignees)
         $this->app->scoped(BotIds::class);
+        // the PDF of wiki pages (WEBU-4), from the config each time: tests point it elsewhere
+        $this->app->bind(Gotenberg::class, fn () => new Gotenberg(config('werkbuch.pdf.gotenberg_url'), (int) config('werkbuch.pdf.timeout')));
         // the addresses of a webhook's host, asked before every attempt (spec 6.3); RES_OPTIONS only counts before the
         // first lookup of the process, so it is set here (K17)
         DnsResolver::limitWaiting();
@@ -135,6 +138,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('webhook-send', fn (Request $request) => Limit::perMinute(6)->by(RateKey::account($request)));
         // the test mail of the system page: six a minute per account, a mail server is not to be flooded from it (T11-M4)
         RateLimiter::for('test-mail', fn (Request $request) => Limit::perMinute(6)->by(RateKey::account($request)));
+        // a wiki page as PDF: Gotenberg starts a Chromium for each, ten a minute per account (WEBU-4)
+        RateLimiter::for('pdf', fn (Request $request) => Limit::perMinute(10)->by(RateKey::account($request)));
 
         // the index is written by the search consumer only, never when a model is saved (P1)
         WorkItem::disableSearchSyncing();

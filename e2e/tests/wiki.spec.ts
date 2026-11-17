@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { api, arrowTo, createE2ePage, createE2eProject, isPhone, openNavigation, pasteFile, PEOPLE, pngBytes, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
@@ -338,6 +339,44 @@ test('moves a page with Verschieben nach … and deletes a subtree with undo', a
     await expect.poll(async () => (await api(page, 'GET', `/api/v1/pages/${notes.id}`)).status(), { timeout: 15_000 }).toBe(404);
     await expect(row('Technology')).toBeVisible();
     await expect(row('Handbook')).toHaveCount(0);
+  } finally {
+    await removeE2eProject(page, project.identifier);
+  }
+});
+
+test('downloads a page with its subpages as PDF with the keyboard', async ({ page }) => {
+  const project = await createE2eProject(page, projectName('wiki pdf'));
+  const paragraph = (text: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
+  try {
+    const handbook = await createE2ePage(page, project.id, { title: 'Handbook', content_json: paragraph('Read me first.') });
+    await createE2ePage(page, project.id, { title: 'Setup', parent_id: handbook.id, content_json: paragraph('Start the stack.') });
+    await page.goto(`/projects/${project.identifier}/wiki/${handbook.id}`);
+    await expect(page.getByRole('textbox', { name: tr('en', 'editor.label.page') })).toHaveText('Read me first.');
+
+    // the palette: the page with its subpages, a file named after the page
+    await pressMod(page, 'k');
+    const palette = page.getByRole('dialog', { name: tr('en', 'palette.title') });
+    await expect(palette.getByRole('combobox', { name: tr('en', 'palette.input') })).toBeFocused();
+    const command = tr('en', 'wiki.pdf.command_subtree.other', { count: '2' });
+    await page.keyboard.type(command);
+    await expect(palette.getByRole('option', { name: new RegExp(`^${command.replace(/[()]/g, '\\$&')}`) })).toBeVisible();
+    const first = page.waitForEvent('download');
+    await page.keyboard.press('Enter');
+    const download = await first;
+    expect(download.suggestedFilename()).toBe('Handbook.pdf');
+    const bytes = await readFile(await download.path());
+    expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
+    await expect(page.getByText(tr('en', 'wiki.pdf.done', { name: 'Handbook.pdf' }))).toBeVisible();
+
+    // the menu of the head row: the page alone
+    const button = page.getByRole('button', { name: tr('en', 'wiki.pdf.open'), exact: true });
+    await tabTo(page, button);
+    await page.keyboard.press('Enter');
+    const alone = page.getByRole('menuitem', { name: tr('en', 'wiki.pdf.page') });
+    await arrowTo(page, alone, 'ArrowDown');
+    const second = page.waitForEvent('download');
+    await page.keyboard.press('Enter');
+    expect((await second).suggestedFilename()).toBe('Handbook.pdf');
   } finally {
     await removeE2eProject(page, project.identifier);
   }

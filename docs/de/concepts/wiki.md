@@ -58,6 +58,20 @@ Eine Version behält Titel, Text, wer sie geschrieben hat und wann; das Emoji ge
 - **Im Item:** Das Item zeigt die Seiten, die auf es verweisen, in einem eigenen Abschnitt **Wiki-Seiten** zwischen Relationen und Dateien, jede als Link auf die Seite mit dem zugehörigen Wiki. Den Abschnitt gibt es nur, wenn mindestens eine Seite auf das Item verweist und du sie sehen darfst; er folgt Änderungen im Wiki. Es zählt nur der aktuelle Text einer Seite, nicht ihre Versionen, und ein Key als einfacher Text ist kein Verweis.
 - **Links:** `/projects/WEB/wiki/<ulid>` öffnet eine Seite. Eine Seite eines anderen Projekts führt ins Wiki dieses Projekts, eine frühere Kennung zur aktuellen; eine Seite, die es nicht gibt (oder die du nicht sehen darfst), zeigt „Diese Seite gibt es nicht“, mit dem Baum.
 
+## PDF
+
+**PDF** im Kopf einer Seite lädt sie als PDF herunter, auch für Viewer. Eine Seite mit Unterseiten bietet **Diese Seite** und **Mit Unterseiten**: die Seite und alles darunter in der Reihenfolge des Baums, mit einem Inhaltsverzeichnis davor. Die Befehlspalette hat dasselbe als **Als PDF herunterladen**.
+
+- Das PDF zeigt, was du siehst: Namen, wie sie jetzt heißen, einen Verweis auf ein Item oder eine Seite, die du nicht siehst, als **verborgen**, Bilder in ihrer Vorschaugröße. Ein Bild eines anderen Projekts und eins über 4 MB steht als Zeile mit seinem Namen.
+- Ein PDF nimmt höchstens 100 Seiten; darüber lehnt der Download mit der Zahl der Seiten ab.
+- Zehn PDFs je Minute und Konto. Ein PDF braucht den Dienst Gotenberg des Stacks (siehe [Betrieb](/de/operations#pdf)); ohne ihn ist **PDF** gesperrt und sagt warum, und REST antwortet `503 pdf_unavailable`.
+- **REST:** `GET /api/v1/pages/<ulid>/pdf` (mit `?subpages=1` der Teilbaum) antwortet `{data: {url, filename, pages}}`; die Datei liegt unter `url` (`GET /pages/<ulid>/pdf`), für die Sitzung und für Tokens mit `read`:
+
+```bash
+url=$(curl -s https://werkbuch.example.com/api/v1/pages/$PAGE/pdf?subpages=1 -H "Authorization: Bearer $TOKEN" | jq -r .data.url)
+curl -s "$url" -H "Authorization: Bearer $TOKEN" -o handbuch.pdf
+```
+
 ## Rechte
 
 Das Wiki folgt den [Rollen des Projekts](/de/concepts/permissions):

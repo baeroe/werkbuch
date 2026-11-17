@@ -25,7 +25,7 @@ import { PageView, type PageViewProps } from './PageView';
 const { visit } = vi.hoisted(() => ({ visit: vi.fn() }));
 
 vi.mock('@inertiajs/react', () => ({
-  usePage: () => ({ props: { auth: { user: mara, permissions: [] }, organization }, url: '/projects/WEB/wiki/pg_web_domain' }),
+  usePage: () => ({ props: { auth: { user: mara, permissions: [] }, organization, features: { pdf: true } }, url: '/projects/WEB/wiki/pg_web_domain' }),
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
     <a href={href} {...rest}>
       {children}

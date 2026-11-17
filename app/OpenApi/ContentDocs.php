@@ -7,6 +7,7 @@ use App\Actions\RichText\ResolveReferences;
 use App\Actions\Search\QuerySearch;
 use App\Domain\Workflow\StateCategory;
 use App\Http\Controllers\Api\CommentsController;
+use App\Http\Controllers\Api\PagesController;
 use App\Http\Controllers\Api\RichTextController;
 use App\Http\Controllers\Api\SearchController;
 use Dedoc\Scramble\Extensions\OperationExtension;
@@ -18,8 +19,8 @@ use Dedoc\Scramble\Support\RouteInfo;
 /**
  * The query strings that no `ListSpec` describes: the search (`GET /search`: `q`, `types`, `limit`, `include_archived`
  * and the filters of items), the people to mention (`GET /mentions`) and the references of a text (`GET /references`),
- * and the `emoji` that `PUT` and `DELETE /comments/{comment}/reactions` also take in the query (the browser sends it
- * there). Each key is one of `QuerySearch::KEYS`, `ListMentionables::KEYS`, `ResolveReferences::KEYS`.
+ * the `emoji` that `PUT` and `DELETE /comments/{comment}/reactions` also take in the query (the browser sends it
+ * there), and `subpages` of the PDF of a page (`GET /pages/{page}/pdf`). Each key is one of `QuerySearch::KEYS`, `ListMentionables::KEYS`, `ResolveReferences::KEYS`.
  */
 final class ContentDocs extends OperationExtension
 {
@@ -34,6 +35,7 @@ final class ContentDocs extends OperationExtension
             RichTextController::class.'@references' => self::references(),
             CommentsController::class.'@react' => [self::parameter('emoji', ['type' => 'string'], 'The emoji, instead of `emoji` in the body.')],
             CommentsController::class.'@unreact' => [self::parameter('emoji', ['type' => 'string'], 'The emoji to take back, instead of `emoji` in the body.')],
+            PagesController::class.'@pdf' => self::parameters(self::pdfParameters()),
             default => [],
         };
 
@@ -54,6 +56,18 @@ final class ContentDocs extends OperationExtension
     private static function mentions(): array
     {
         return self::parameters(self::mentionsParameters());
+    }
+
+    /**
+     * The query of `GET /pages/{page}/pdf` by name (WEBU-4).
+     *
+     * @return array<string, array{schema: array<string, mixed>, description: string, required: bool}>
+     */
+    public static function pdfParameters(): array
+    {
+        return [
+            'subpages' => ['schema' => self::QUERY_FLAG, 'description' => 'The subtree of the page too (`1`), in the order of the tree with a table of contents; at most 100 pages, else 422 at `subpages`.', 'required' => false],
+        ];
     }
 
     /**

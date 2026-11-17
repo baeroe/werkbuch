@@ -4,6 +4,7 @@ namespace App\OpenApi;
 
 use App\Actions\Notifications\MarkNotificationsRead;
 use App\Actions\Notifications\SaveNotificationPreferences;
+use App\Actions\Pages\ExportPagePdf;
 use App\Actions\Pages\MovePage;
 use App\Actions\System\RetryFailedJobs;
 use App\Actions\Templates\PreviewSchedule;
@@ -167,6 +168,20 @@ final class OperationsSchemas
     public static function pageDeleted(): array
     {
         return self::object('The page went with its whole subtree.', ['deleted' => ['type' => 'integer', 'minimum' => 1, 'description' => 'How many pages went (the page and everything below it).']], ['deleted'], false);
+    }
+
+    /**
+     * The answer of `GET /pages/{page}/pdf` (WEBU-4): where the PDF comes from.
+     *
+     * @return array<string, mixed>
+     */
+    public static function pagePdf(): array
+    {
+        return self::object('Where to download the PDF.', ['data' => self::object('The download.', [
+            'url' => ['type' => 'string', 'format' => 'uri', 'description' => 'The PDF (`application/pdf`, a download): fetch it with the same session or token (`read`). 10 a minute per account.'],
+            'filename' => ['type' => 'string', 'description' => 'The name of the file: the title of the page.'],
+            'pages' => ['type' => 'integer', 'minimum' => 1, 'maximum' => ExportPagePdf::MAX_PAGES, 'description' => 'How many wiki pages it holds.'],
+        ], ['url', 'filename', 'pages'], false)], ['data'], false);
     }
 
     // ------------------------------------------------------------------------------------------------------ templates
@@ -591,6 +606,7 @@ final class OperationsSchemas
                 ], ['enqueued', 'processing', 'failed_last_day'], false), ['type' => 'null']], 'description' => '`null` while the search is down.'],
                 'mail_configured' => ['type' => 'boolean'],
                 'live' => ['type' => 'string', 'enum' => ['ok', 'down', 'off'], 'description' => '`off` when no websocket server is configured.'],
+                'pdf' => ['type' => 'string', 'enum' => ['ok', 'down', 'off'], 'description' => 'Gotenberg, which makes the PDFs of wiki pages: `off` without `GOTENBERG_URL`.'],
             ],
             'WebhookResource' => [
                 'events' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'In the normal form: `group.*` for a group with all its events, otherwise the names, in the order of the catalog.'],
