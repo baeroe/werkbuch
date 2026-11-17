@@ -9,19 +9,21 @@ it('keeps every route binding with cached routes', function () {
     $artisan = fn (array $args) => Process::path(base_path())->env(['APP_ROUTES_CACHE' => $cache])->timeout(120)->run(['php', 'artisan', ...$args]);
 
     try {
-        expect($artisan(['route:cache'])->successful())->toBeTrue();
+        $cached = $artisan(['route:cache']);
+        expect($cached->successful())->toBeTrue('route:cache failed: '.$cached->errorOutput().$cached->output());
 
         $bound = collect($names)->map(fn (string $name) => "'{$name}' => Route::getBindingCallback('{$name}') !== null")->implode(', ');
         $run = $artisan(['tinker', '--execute', "echo 'ROUTES:'.json_encode(['cached' => app()->routesAreCached(), 'bound' => [{$bound}], 'search' => Route::getRoutes()->getByName('api.search') !== null]);"]);
         $line = collect(explode("\n", $run->output()))->first(fn (string $l) => str_contains($l, 'ROUTES:'));
         $result = json_decode(Str::after((string) $line, 'ROUTES:'), true);
 
-        expect($result['cached'])->toBeTrue();
+        expect($result)->toBeArray('tinker gave no answer: '.$run->errorOutput().$run->output())
+            ->and($result['cached'])->toBeTrue('the app did not read the routes from the cache '.$cache);
         foreach ($names as $name) {
-            expect($result['bound'][$name])->toBeTrue();
+            expect($result['bound'][$name])->toBeTrue("the binding {{$name}} is lost with cached routes: Route::bind belongs into RouteBindingServiceProvider");
         }
-        expect($result['search'])->toBeTrue();
-        expect(file_exists(base_path('bootstrap/cache/routes-v7.php')))->toBeFalse();
+        expect($result['search'])->toBeTrue('the route api.search is missing from the cached routes')
+            ->and(file_exists(base_path('bootstrap/cache/routes-v7.php')))->toBeFalse('route:cache wrote bootstrap/cache/routes-v7.php instead of APP_ROUTES_CACHE');
     } finally {
         @unlink($cache);
     }
