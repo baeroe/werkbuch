@@ -276,11 +276,11 @@ describe('RichTextEditor', () => {
 
   it('keeps every column of a table at least 6 rem wide, editing and reading, so a wide one scrolls (WEBU-8)', () => {
     const { unmount } = render(<RichTextEditor value={tableDoc} onChange={vi.fn()} preset="description" />);
-    expect(screen.getByRole('textbox', { name: 'Beschreibung' }).querySelector('table')?.style.minWidth).toBe(`${2 * TABLE_CELL_MIN_PX}px`);
+    expect(screen.getByRole('textbox', { name: 'Beschreibung' }).querySelector<HTMLTableElement>('table')?.style.minWidth).toBe(`${2 * TABLE_CELL_MIN_PX}px`);
     unmount();
 
     const { container } = render(<RichTextView value={tableDoc} preset="description" />);
-    expect(container.querySelector('.tableWrapper table')?.style.minWidth).toBe(`${2 * TABLE_CELL_MIN_PX}px`);
+    expect(container.querySelector<HTMLTableElement>('.tableWrapper table')?.style.minWidth).toBe(`${2 * TABLE_CELL_MIN_PX}px`);
   });
 
   it('keeps tables and checklists of a description but not of a comment', () => {
