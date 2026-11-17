@@ -11,7 +11,7 @@
  */
 
 import { expect, type Locator, type Page } from '@playwright/test';
-import { api, login, PEOPLE, pressMod, removeE2eWebhook, runId, tr, variant } from './helpers';
+import { api, createE2eProject, createItem, login, PEOPLE, pngBytes, pressMod, removeE2eProject, removeE2eWebhook, runId, tr, uploadViaApi, variant } from './helpers';
 
 /** What a path needs from the data of the run (A11Y ids, resolved over the API by the spec). */
 export type A11yIds = {
@@ -174,6 +174,31 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
     state: async (page) => {
       await press(page, page.getByRole('button', { name: en('items.detail.more') }));
       await expect(page.getByRole('menu')).toBeVisible();
+    },
+  }),
+  state({
+    name: 'image viewer',
+    page: 'Items/Show',
+    path: () => '/items/WEB-47',
+    // a comment with a picture of its own (WEBU-7), on an item of a project of its own: the demo texts hold none, and
+    // a comment on a demo item would notify its watchers
+    state: async (page) => {
+      const project = await createE2eProject(page, e2eName(), { types: ['Task'] });
+      const item = await createItem(page, { project_id: project.id, title: e2eName() });
+      const picture = await uploadViaApi(page, project.id, { name: 'a11y.png', type: 'image/png', bytes: pngBytes(40, 30) });
+      const comment = await api(page, 'POST', `/api/v1/work-items/${item.id}/comments`, {
+        body_json: { type: 'doc', content: [{ type: 'image', attrs: { attachmentId: picture.id, alt: e2eName() } }] },
+      });
+      expect(comment.status()).toBe(201);
+      await page.goto(`/items/${item.key}`);
+      await press(page, page.getByRole('link', { name: tr('en', 'editor.image.view', { name: e2eName() }) }));
+      await expect(page.getByRole('dialog', { name: e2eName() }).getByRole('img', { name: e2eName() })).toBeVisible();
+    },
+    cleanup: async (page) => {
+      const response = await api(page, 'GET', '/api/v1/projects?per_page=100&include_archived=1');
+      const { data } = (await response.json()) as { data: { identifier: string; name: string }[] };
+      await page.goto('/my-items');
+      for (const project of data.filter((entry) => entry.name === e2eName())) await removeE2eProject(page, project.identifier);
     },
   }),
   state({

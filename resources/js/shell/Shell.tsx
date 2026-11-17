@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, type ReactNode } from 'react';
 import { ItemDialogsHost } from '@/components/fields/ItemDialogs';
+import { ImageViewerHost } from '@/editor/ImageViewer';
 import { cx } from '@/components/ui/cx';
 import { InPageLink } from '@/components/ui/InPageLink';
 import { toast } from '@/components/ui/toast';
@@ -68,6 +69,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <CreateHost />
       <PaletteHost />
       <ItemDialogsHost />
+      <ImageViewerHost />
       <HelpOverlay />
     </>
   );
