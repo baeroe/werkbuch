@@ -646,6 +646,8 @@ describe('properties in the detail', () => {
     const editor = await screen.findByRole('textbox', { name: 'Schritte' });
     const body = editor.closest('[data-properties]');
     expect(body?.getAttribute('data-properties')).toBe('body');
+    // a section of its own name, apart from „Properties“ of the side panel
+    expect(within(screen.getByRole('region', { name: 'Weitere Angaben' })).getByRole('textbox', { name: 'Schritte' })).toBe(editor);
     // the side panel keeps the others, without the steps
     const side = within(screen.getByRole('complementary', { name: 'Felder' }));
     expect(await side.findByText('Umgebung')).toBeTruthy();
@@ -653,6 +655,26 @@ describe('properties in the detail', () => {
     // below the description in the reading order
     const description = screen.getByRole('region', { name: 'Beschreibung' });
     expect(description.compareDocumentPosition(body!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('edits a dropdown placed below the description, and hides a „no“ from a reader there (WEBU-6, A89)', async () => {
+    const billable: Property = { id: 'pr_billable', key: 'billable', label: 'Abrechenbar', field_type: 'boolean', help: '', placement: 'body', default_value: null, settings: {}, options: [] };
+    propertyList = [...properties.map((property) => (property.key === 'environment' ? { ...property, placement: 'body' as const } : property)), billable];
+    typeList = types.map((type) => (type.id === 't_bug' ? { ...type, properties: [...type.properties, { property_id: 'pr_billable', required: false, position: 3 }] } : type));
+    items = items.map((entry) => (entry.id === web47.id ? { ...web47, values: { ...web47.values, billable: false } } : entry));
+
+    const first = renderWith(<ItemPage itemKey="WEB-47" />);
+    const more = await screen.findByRole('region', { name: 'Weitere Angaben' });
+    expect(await within(more).findByRole('combobox', { name: /^Umgebung/ })).toBeTruthy();
+    expect(within(more).getByText('Abrechenbar')).toBeTruthy();
+    expect(within(screen.getByRole('complementary', { name: 'Felder' })).queryByText('Umgebung')).toBeNull();
+    first.unmount();
+
+    // a reader: the environment has a value, the „no“ reads as none
+    renderWith(<ItemPage itemKey="WEB-47" />, { role: 'viewer' });
+    const read = await screen.findByRole('region', { name: 'Weitere Angaben' });
+    expect(await within(read).findByText('Umgebung')).toBeTruthy();
+    expect(within(read).queryByText('Abrechenbar')).toBeNull();
   });
 
   it('shows a reader a property in the body only with a value, and no empty section (WEBU-6)', async () => {

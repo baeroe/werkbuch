@@ -32,7 +32,7 @@ A property is a field that types add to their items, beyond the core fields ever
 
 ### Where a property shows
 
-**Shown** in the dialog of a property decides where it stands on an item, for every type that has it: **In the side panel**, with status, assignee and the other fields, or **Below the description**, across the whole width, before the child items and relations. A new rich text property starts below the description, every other one in the side panel. Below the description, a person who may not change the item sees a property only when it has a value. Over REST the field is `placement` (`sidebar` or `body`); left out, it takes the place a new property of its field type gets.
+**Placement** in the dialog of a property decides where it stands on an item, for every type that has it: **In the side panel**, with status, assignee and the other fields, or **Below the description**, across the whole width under **More details**, before the child items and relations. A new rich text property starts below the description, every other one in the side panel. Below the description, a person who may not change the item sees a property only when it has a value (a yes/no set to no reads as none). Over REST the field is `placement` (`sidebar` or `body`); left out, it takes the place a new property of its field type gets.
 
 ### Keys
 

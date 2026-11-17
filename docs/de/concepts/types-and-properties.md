@@ -32,7 +32,7 @@ Eine Property ist ein Feld, das Typen ihren Items über die Kernfelder hinaus ge
 
 ### Wo eine Property steht
 
-**Anzeige** im Dialog einer Property entscheidet, wo sie an einem Item steht, für jeden Typ, der sie hat: **In der Seitenleiste** bei Status, Assignee und den anderen Feldern, oder **Unter der Beschreibung** über die ganze Breite, vor den Kind-Items und Relationen. Eine neue Rich-Text-Property beginnt unter der Beschreibung, jede andere in der Seitenleiste. Unter der Beschreibung sieht, wer das Item nicht ändern darf, eine Property nur mit Wert. Über REST heißt das Feld `placement` (`sidebar` oder `body`); fehlt es, nimmt es den Platz, den eine neue Property seines Feldtyps bekommt.
+**Anzeige** im Dialog einer Property entscheidet, wo sie an einem Item steht, für jeden Typ, der sie hat: **In der Seitenleiste** bei Status, Assignee und den anderen Feldern, oder **Unter der Beschreibung** über die ganze Breite unter **Weitere Angaben**, vor den Kind-Items und Relationen. Eine neue Rich-Text-Property beginnt unter der Beschreibung, jede andere in der Seitenleiste. Unter der Beschreibung sieht, wer das Item nicht ändern darf, eine Property nur mit Wert (ein Ja/Nein auf Nein gilt als keiner). Über REST heißt das Feld `placement` (`sidebar` oder `body`); fehlt es, nimmt es den Platz, den eine neue Property seines Feldtyps bekommt.
 
 ### Schlüssel
 

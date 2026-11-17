@@ -7,6 +7,7 @@ use App\Domain\Automations\AutomationKey;
 use App\Domain\Catalog\Tone;
 use App\Domain\Catalog\TypeIcon;
 use App\Domain\Properties\FieldType;
+use App\Domain\Properties\Placement;
 use App\Domain\Workflow\StateCategory;
 use App\Domain\Workflow\StateIcon;
 use App\Enums\ProjectVisibility;
@@ -385,7 +386,7 @@ final class CatalogSchemas
                 'label' => ['type' => 'string', 'minLength' => 1, 'maxLength' => PropertyInput::LABEL_MAX],
                 'field_type' => ['type' => 'string', 'enum' => array_column(FieldType::cases(), 'value')],
                 'help' => ['type' => ['string', 'null'], 'maxLength' => CatalogInput::HELP_MAX],
-                'placement' => ['type' => ['string', 'null'], 'enum' => ['sidebar', 'body', null], 'description' => 'Where it shows on an item: `sidebar` (the panel of fields) or `body` (below the description). Left out or `null`: `body` for rich text, else `sidebar`.'],
+                'placement' => ['type' => ['string', 'null'], 'enum' => [...array_column(Placement::cases(), 'value'), null], 'description' => 'Where it shows on an item: `sidebar` (the panel of fields) or `body` (below the description). Left out or `null`: `body` for rich text, else `sidebar`.'],
                 'default_value' => self::defaultValue(),
                 'settings' => [...self::propertySettings(), 'type' => ['object', 'array', 'null'], 'maxItems' => 0],
                 'options' => [

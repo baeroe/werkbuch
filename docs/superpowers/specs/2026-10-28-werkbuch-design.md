@@ -4,6 +4,7 @@ Stand: 2026-11-08 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 20
 
 > **Änderungen vom 2026-11-17 (nach v0.1.0, WEBU-4):** Auf Rafaels Ticket hat Claude Folgendes entschieden; es erweitert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A468, A469):
 > - **Wiki-Seiten als PDF** (4.15): jede Person, die eine Seite liest, lädt sie als PDF herunter, auf Wunsch mit allen Unterseiten in der Reihenfolge des Baums und einem Inhaltsverzeichnis (höchstens 100 Seiten). Das PDF zeigt den Text für den Leser (verborgene Verweise verborgen, Bilder eingebettet, nur des eigenen Projekts) und macht ein neunter Dienst des Stacks, Gotenberg, gehärtet im internen Netz (A468). REST antwortet einen Link, die Datei liegt auf einer Web-Route wie Anhänge (A469); ohne Gotenberg 503 `pdf_unavailable`, und der Knopf sagt warum.
+
 > **Änderungen vom 2026-11-17 (nach v0.1.0, WEBU-6):** Auf Rafaels Wunsch erweitert; **wartet auf Rafaels Bestätigung** (A470):
 > - **Platz einer Property** (4.7): jede Property steht entweder in der Seitenleiste des Items oder unter der Beschreibung, für alle Typen gleich; neue Rich-Text-Properties stehen unter der Beschreibung, alle anderen in der Seitenleiste.
 

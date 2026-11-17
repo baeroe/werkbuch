@@ -19,7 +19,7 @@ import { useEditReason, useUserMap } from '@/components/fields/itemData';
 import { LabelsPicker } from '@/components/fields/LabelsPicker';
 import { ParentPicker } from '@/components/fields/ParentPicker';
 import { PriorityPicker } from '@/components/fields/PriorityPicker';
-import { isEmptyValue } from '@/components/fields/property/parse';
+import { isEmptyValue, readsEmpty } from '@/components/fields/property/parse';
 import { PropertyField } from '@/components/fields/property/PropertyField';
 import { StatePicker } from '@/components/fields/StatePicker';
 import { TypePicker } from '@/components/fields/TypePicker';
@@ -35,6 +35,7 @@ import { useResolutions } from '@/hooks/catalog';
 import { useProperties } from '@/hooks/properties';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
+import { usePermissions } from '@/lib/permissions';
 import type { Property, PropertyPlacement, RichText, WorkItem, WorkItemDetail } from '@/types';
 import { Section, useInstantDay } from './shared';
 
@@ -182,15 +183,18 @@ function RichTextProperty({ item, property, required }: { item: WorkItem; proper
 
 /**
  * The properties of the item's type that show at `placement` (WEBU-6): in the side panel (`sidebar`, with the loading
- * and the error of the catalog) or below the description (`body`, only once the catalog is there; a reader sees only
- * those with a value there, who may change the item every one). Nothing to show: no section.
+ * and the error of the catalog) or below the description (`body`, „Weitere Angaben“, only once the catalog and the
+ * rights are there; a reader sees only those that read as a value there (A89: a „no“ reads as none), who may change
+ * the item every one). Nothing to show: no section.
  */
 export function Properties({ detail, placement }: { detail: WorkItemDetail; placement: PropertyPlacement }) {
   const properties = useProperties();
   const reason = useEditReason(detail.item);
+  const rights = usePermissions();
   const { item, type } = detail;
   if (type.properties.length === 0) return null;
-  if (placement === 'body' && !properties.data) return null;
+  // below the description only once it is clear what shows: no empty ones that come and go while the rights load
+  if (placement === 'body' && (!properties.data || rights.loading)) return null;
 
   if (properties.isError && !properties.data) {
     return (
@@ -211,11 +215,11 @@ export function Properties({ detail, placement }: { detail: WorkItemDetail; plac
       const property = properties.data?.items.find((candidate) => candidate.id === entry.property_id);
       return property ? [{ property, required: entry.required }] : [];
     })
-    .filter(({ property }) => property.placement === placement && (placement === 'sidebar' || reason === null || !isEmptyValue(item.values[property.key] ?? null)));
+    .filter(({ property }) => property.placement === placement && (placement === 'sidebar' || reason === null || !readsEmpty(property, item.values[property.key] ?? null)));
   if (properties.data && fields.length === 0) return null;
 
   return (
-    <Section title={t('items.detail.fields.properties')}>
+    <Section title={placement === 'body' ? t('items.detail.fields.properties_body') : t('items.detail.fields.properties')}>
       {!properties.data ? (
         <SkeletonGroup label={t('items.detail.fields.properties_loading')} className="mt-2 flex flex-col gap-3">
           <Skeleton className="h-8 w-full rounded-ctl" />

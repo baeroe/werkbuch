@@ -917,6 +917,7 @@
     "items.detail.fields.parent": "Eltern",
     "items.detail.fields.priority": "Priorität",
     "items.detail.fields.properties": "Properties",
+    "items.detail.fields.properties_body": "Weitere Angaben",
     "items.detail.fields.properties_failed": "Die Properties ließen sich nicht laden: :message",
     "items.detail.fields.properties_loading": "Properties werden geladen …",
     "items.detail.fields.resolution": "Resolution",

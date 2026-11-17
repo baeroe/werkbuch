@@ -114,7 +114,8 @@ class CatalogSeeder extends Seeder
                 'label' => DemoTexts::get("catalog.property.{$key}.label"),
                 'field_type' => $fieldType,
                 'help' => DemoTexts::get("catalog.property.{$key}.help"),
-                // where a new property of its type goes (WEBU-6): the steps of WEB-47 below the description
+                // where a new property of its type goes (WEBU-6): the steps of WEB-47 below the description; like label and
+                // help, a new run sets it again
                 'placement' => Placement::forType($fieldType),
                 'settings' => $settings,
                 'default_value' => $default,
