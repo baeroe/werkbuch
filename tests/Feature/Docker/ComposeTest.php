@@ -2,6 +2,7 @@
 
 use App\Actions\Auth\EnsureAdmin;
 use App\Support\TrustedRequests;
+use Symfony\Component\Process\Process;
 use Tests\Support\RepoFiles;
 
 /*
@@ -323,7 +324,7 @@ it('runs the standalone stack like docker-compose.yml', function () use ($compos
         ->and($file['services']['mariadb']['environment']['MARIADB_ROOT_HOST'])->toBe('localhost')
         ->and($file['services']['mariadb']['environment']['MARIADB_DATABASE'])->toBe('werkbuch');
 
-    foreach (['mariadb' => ['MARIADB_USER', 'MARIADB_AUTO_UPGRADE'], 'meilisearch' => ['MEILI_ENV', 'MEILI_NO_ANALYTICS']] as $name => $keys) {
+    foreach (['mariadb' => ['MARIADB_USER', 'MARIADB_AUTO_UPGRADE'], 'meilisearch' => ['MEILI_ENV', 'MEILI_NO_ANALYTICS', 'MEILI_UPGRADE_DB']] as $name => $keys) {
         foreach ($keys as $key) {
             expect(array_key_exists($key, $file['services'][$name]['environment']))->toBeTrue("{$name} sets no {$key}");
             expect((string) $file['services'][$name]['environment'][$key])
@@ -374,3 +375,55 @@ it('refuses the placeholder in MariaDB and Meilisearch of the standalone file be
         ->and($meili['entrypoint'][2])->toContain('exec tini -- /bin/sh -c /bin/meilisearch')
         ->and($meili)->not->toHaveKey('command');
 });
+
+it('pins one Meilisearch, v1.56.1 by digest, in DDEV, every CI job and both compose files', function () use ($compose) {
+    $pinned = 'getmeili/meilisearch:v1.56.1@sha256:b7ba431bf6f9b26cc86132798f3640964147a699cf23f026b74c6c05dbb1d60d';
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+
+    expect(RepoFiles::yaml('.ddev/docker-compose.meilisearch.yaml')['services']['meilisearch']['image'])->toBe($pinned)
+        ->and($compose()['services']['meilisearch']['image'])->toBe($pinned)
+        ->and(RepoFiles::yaml('docker-compose.standalone.yml')['services']['meilisearch']['image'])->toBe($pinned);
+
+    foreach (['tests', 'e2e', 'load'] as $job) {
+        expect($jobs[$job]['services']['meilisearch']['image'])->toBe($pinned, "the CI job {$job} runs another Meilisearch");
+    }
+});
+
+it('sends the health check of werkbuch the host of APP_URL without its port, an IPv6 host in brackets', function (string $file, string $url, string $host) {
+    $test = RepoFiles::yaml($file)['services']['werkbuch']['healthcheck']['test'];
+    expect(array_slice($test, 0, 3))->toBe(['CMD', 'sh', '-c']);
+
+    // Compose turns $$ into $; a fake curl prints the Host header it was given
+    $dir = sys_get_temp_dir().'/werkbuch-health-'.bin2hex(random_bytes(6));
+    mkdir($dir);
+    file_put_contents($dir.'/curl', "#!/bin/sh\nwhile [ \$# -gt 0 ]; do [ \"\$1\" = -H ] && echo \"\$2\"; shift; done\n");
+    chmod($dir.'/curl', 0755);
+
+    try {
+        $process = new Process(['sh', '-c', str_replace('$$', '$', $test[3])], null, [
+            'PATH' => $dir.':'.getenv('PATH'),
+            'APP_URL' => $url,
+        ]);
+        $process->run();
+    } finally {
+        @unlink($dir.'/curl');
+        @rmdir($dir);
+    }
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toBe("Host: {$host}\n");
+})->with(['docker-compose.yml', 'docker-compose.standalone.yml'])->with([
+    'name' => ['https://pm.example.com', 'pm.example.com'],
+    'name with port and path' => ['http://localhost:7740/werkbuch', 'localhost'],
+    'IPv4 with port' => ['http://192.0.2.7:7740', '192.0.2.7'],
+    'IPv6 with port' => ['http://[::1]:7740', '[::1]'],
+    'IPv6 without port' => ['https://[2001:db8::5]/', '[2001:db8::5]'],
+]);
+
+it('lets a new Meilisearch upgrade the database of the version before, in DDEV and both compose files', function (string $file, string $service) {
+    expect(RepoFiles::yaml($file)['services'][$service]['environment']['MEILI_UPGRADE_DB'] ?? null)->toBe('true');
+})->with([
+    'compose' => ['docker-compose.yml', 'meilisearch'],
+    'standalone' => ['docker-compose.standalone.yml', 'meilisearch'],
+    'DDEV' => ['.ddev/docker-compose.meilisearch.yaml', 'meilisearch'],
+]);

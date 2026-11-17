@@ -48,3 +48,19 @@ it('falls back to https and 443 without any URL', function () {
 it('writes the host of APP_URL in lower case', function () {
     expect(LiveAddress::from('https://PM.Example.COM', null, null, null)['host'])->toBe('pm.example.com');
 });
+
+it('keeps an IPv6 host of APP_URL in brackets, as pusher-js puts it into the URL', function (string $url, string $host, int $port) {
+    expect(LiveAddress::from($url, null, null, null))->toBe(['host' => $host, 'port' => $port, 'scheme' => 'http']);
+})->with([
+    'loopback with port' => ['http://[::1]:7740', '[::1]', 7740],
+    'upper case' => ['http://[FE80::1]/werkbuch', '[fe80::1]', 80],
+]);
+
+it('puts a bare IPv6 address of REVERB_PUBLIC_HOST into brackets', function (string $given, string $host) {
+    expect(LiveAddress::from('https://pm.example.com', $given, null, null)['host'])->toBe($host);
+})->with([
+    'bare' => ['::1', '[::1]'],
+    'bare, upper case' => ['2001:DB8::5', '[2001:db8::5]'],
+    'in brackets already' => ['[::1]', '[::1]'],
+    'IPv4' => ['192.0.2.7', '192.0.2.7'],
+]);

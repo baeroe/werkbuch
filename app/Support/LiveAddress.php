@@ -5,6 +5,9 @@ namespace App\Support;
 /**
  * Where the browser opens the WebSocket of the live updates: the address of APP_URL unless the environment names
  * another one (DDEV and the CI reach Reverb on a port of its own). An empty text counts as not set.
+ *
+ * An IPv6 host is always in brackets (`[::1]`), as it stands in a URL: pusher-js builds the address of the socket as
+ * `ws://<host>:<port>`, a bare `::1` would make a URL nobody can open (A466).
  */
 final class LiveAddress
 {
@@ -25,12 +28,18 @@ final class LiveAddress
         };
 
         $host = is_string($host) && $host !== ''
-            ? $host
+            ? self::bracketed($host)
             : (isset($url['host']) && $url['host'] !== '' ? strtolower($url['host']) : null);
 
         $number = filter_var($port, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]);
         $port = $number !== false ? $number : (isset($url['port']) && $url['port'] > 0 ? $url['port'] : ($scheme === 'https' ? 443 : 80));
 
         return ['host' => $host, 'port' => $port, 'scheme' => $scheme];
+    }
+
+    /** A bare IPv6 address in brackets, every other host as it came. */
+    private static function bracketed(string $host): string
+    {
+        return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false ? '['.strtolower($host).']' : $host;
     }
 }

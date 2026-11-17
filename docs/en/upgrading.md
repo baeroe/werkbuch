@@ -17,7 +17,7 @@ On start the new version migrates the database, sends the settings of the search
   `curl -fsSLO https://raw.githubusercontent.com/baeroe/werkbuch/main/docker-compose.yml`
   With the standalone compose file, paste the new [docker-compose.standalone.yml](https://github.com/baeroe/werkbuch/blob/main/docker-compose.standalone.yml) and copy your values from the block at the top into it.
 - **MariaDB:** patch versions upgrade themselves on start (`MARIADB_AUTO_UPGRADE`). A new major version only comes with a note here.
-- **Meilisearch:** a new version of Meilisearch does not always read the index an older one wrote; it then stops with an error about the version of its database (`docker compose logs meilisearch`), and `werkbuch` does not start. The index comes from the database, so delete it and let werkbuch build it again:
+- **Meilisearch:** a new version of Meilisearch upgrades the database of the version before when it starts (`MEILI_UPGRADE_DB` in both compose files); the search keeps its index. Only if it cannot, it stops with an error about the version of its database (`docker compose logs meilisearch`), and `werkbuch` does not start. The index comes from the database, so delete it and let werkbuch build it again:
 
   ```bash
   docker compose rm -sf meilisearch
@@ -26,7 +26,7 @@ On start the new version migrates the database, sends the settings of the search
   docker compose restart werkbuch
   ```
 
-  The start of `werkbuch` finds the index empty and imports everything; until then the search is empty. `up -d` alone does not start a `werkbuch` that is still running (going back to the older Meilisearch, for example), hence the `restart`. Going back to the older Meilisearch afterwards only works with the same steps.
+  The start of `werkbuch` finds the index empty and imports everything; until then the search is empty. `up -d` alone does not start a `werkbuch` that is still running (going back to the older Meilisearch, for example), hence the `restart`. Once upgraded, an older Meilisearch no longer reads the database; going back only works with the same steps.
 - **Going back:** migrations are not rolled back. Restore the backup and pin the old version.
 
 All versions and their changes: https://github.com/baeroe/werkbuch/releases
