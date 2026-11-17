@@ -1,6 +1,6 @@
 # Setup with Docker Compose
 
-werkbuch runs as a Docker Compose stack of eight services. Six of them come from one image, `baeroe/werkbuch` (for `linux/amd64` and `linux/arm64`): the web service, Reverb for the live updates, three queue workers and the scheduler. The other two are MariaDB 11.4 and Meilisearch 1.56. Everything is reachable over one port; HTTPS comes from a reverse proxy in front of it (see [Reverse proxy](/en/reverse-proxy)).
+werkbuch runs as a Docker Compose stack of nine services. Six of them come from one image, `baeroe/werkbuch` (for `linux/amd64` and `linux/arm64`): the web service, Reverb for the live updates, three queue workers and the scheduler. The other three are MariaDB 11.4, Meilisearch 1.56 and Gotenberg 8, which turns wiki pages into PDFs. Everything is reachable over one port; HTTPS comes from a reverse proxy in front of it (see [Reverse proxy](/en/reverse-proxy)).
 
 ## Requirements
 

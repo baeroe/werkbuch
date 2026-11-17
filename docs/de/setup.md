@@ -1,6 +1,6 @@
 # Einrichtung mit Docker Compose
 
-werkbuch läuft als Docker-Compose-Stack aus acht Diensten. Sechs davon kommen aus einem Image, `baeroe/werkbuch` (für `linux/amd64` und `linux/arm64`): der Web-Dienst, Reverb für die Live-Updates, drei Queue-Worker und der Scheduler. Die anderen beiden sind MariaDB 11.4 und Meilisearch 1.56. Alles ist über einen Port erreichbar; HTTPS kommt von einem Reverse Proxy davor (siehe [Reverse Proxy](/de/reverse-proxy)).
+werkbuch läuft als Docker-Compose-Stack aus neun Diensten. Sechs davon kommen aus einem Image, `baeroe/werkbuch` (für `linux/amd64` und `linux/arm64`): der Web-Dienst, Reverb für die Live-Updates, drei Queue-Worker und der Scheduler. Die anderen drei sind MariaDB 11.4, Meilisearch 1.56 und Gotenberg 8, das Wiki-Seiten zu PDFs macht. Alles ist über einen Port erreichbar; HTTPS kommt von einem Reverse Proxy davor (siehe [Reverse Proxy](/de/reverse-proxy)).
 
 ## Voraussetzungen
 

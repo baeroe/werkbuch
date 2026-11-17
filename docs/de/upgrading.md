@@ -35,6 +35,16 @@ Alle Versionen und ihre Änderungen: https://github.com/baeroe/werkbuch/releases
 
 <!-- nur absolute Links: jeder Abschnitt der englischen Fassung wird zu den Notizen seines GitHub-Releases -->
 
+### 0.2.0
+
+- **Die Compose-Datei hat sich geändert:** Der neue Dienst `gotenberg` ([Gotenberg](https://gotenberg.dev) 8.37) macht Wiki-Seiten zu PDFs. `docker-compose.yml` neu herunterladen (oder die neue Standalone-Datei einfügen und die eigenen Werte übernehmen), dann wie unter [Aktualisieren](https://werkbuch.dev/de/upgrading) beschrieben aktualisieren. Ohne den Dienst läuft werkbuch wie bisher, nur der Knopf **PDF** bleibt gesperrt. Siehe [Betrieb](https://werkbuch.dev/de/operations#pdf).
+- **Wiki:** eine Seite, auch mit ihren Unterseiten, als PDF herunterladen. Der Baum startet eingeklappt und merkt sich je Person und Projekt, was aufgeklappt war.
+- **Projekte:** Wiki und Vorlagen eines Projekts sind ohne Stern erreichbar: Reiter über Items, Wiki und Vorlagen, Links auf jeder Projektkarte und **Wiki öffnen …** und **Vorlagen öffnen …** in der Befehlspalette.
+- **Properties:** Jede Property steht entweder rechts in der Seitenleiste oder unter der Beschreibung eines Items, einstellbar je Property. Rich-Text-Properties, auch die vorhandenen, stehen standardmäßig unter der Beschreibung.
+- **Editor:** In Beschreibungen gibt es Tabellen im `/`-Menü; eine breite Tabelle scrollt in ihrem Rahmen. Bilder in einem Text öffnen sich per Klick (im Editor mit Enter) groß, mit **Originalgröße**, **Original öffnen**, **Herunterladen** und `←`/`→` durch die Bilder desselben Texts; ein ausgewähltes Bild hat das Menü **Bild** (`alt+F10`).
+- **Suche:** Meilisearch 1.56.1. Es hebt die Datenbank der Version davor selbst (`MEILI_UPGRADE_DB` in beiden Compose-Dateien).
+- Image `baeroe/werkbuch:0.2.0` für `linux/amd64` und `linux/arm64`.
+
 ### 0.1.0
 
 - Erstes Release: Projekte mit Mitgliedern, Work Items mit eigenen Typen, Properties und Workflows, Liste, Board, Tabelle und Timeline, gespeicherte Views, ein Wiki je Projekt, Vorlagen mit Zeitplänen, Automatisierungen, Benachrichtigungen mit Mail und Live-Updates, Suche, eine REST-API mit ihrer OpenAPI-Referenz, ein MCP-Server für KI-Agenten und signierte Webhooks, auf Englisch und Deutsch.

@@ -35,6 +35,16 @@ All versions and their changes: https://github.com/baeroe/werkbuch/releases
 
 <!-- absolute links only: each section becomes the notes of its GitHub release -->
 
+### 0.2.0
+
+- **The compose file changed:** a new service `gotenberg` ([Gotenberg](https://gotenberg.dev) 8.37) turns wiki pages into PDFs. Download `docker-compose.yml` again (or paste the new standalone file and copy your values into it), then update as described in [Upgrading](https://werkbuch.dev/en/upgrading). Without the service werkbuch runs as before, only the PDF button stays disabled. See [Operations](https://werkbuch.dev/en/operations#pdf).
+- **Wiki:** download a page, or a page with its subpages, as PDF. The tree starts folded and remembers what you opened, per person and project.
+- **Projects:** the wiki and the templates of a project are reachable without a star: tabs above the items, wiki and templates, links on every project card, and **Open wiki …** and **Open templates …** in the command palette.
+- **Properties:** every property shows either in the side panel or below the description of an item, set per property in its settings. Rich text properties, the existing ones too, go below the description by default.
+- **Editor:** descriptions take tables from the `/` menu; a wide table scrolls inside its frame. Images in a text open large on a click (or Enter in an editor), with **Actual size**, **Open original**, **Download** and `←`/`→` through the images of the same text; a selected image has an **Image** menu (`alt+F10`).
+- **Search:** Meilisearch 1.56.1. It upgrades the database of the version before by itself (`MEILI_UPGRADE_DB` in both compose files).
+- Image `baeroe/werkbuch:0.2.0` for `linux/amd64` and `linux/arm64`.
+
 ### 0.1.0
 
 - First release: projects with members, work items with your own types, properties and workflows, list, board, table and timeline, saved views, a wiki per project, templates with schedules, automations, notifications with mail and live updates, search, a REST API with its OpenAPI reference, an MCP server for AI agents and signed webhooks, in English and German.
