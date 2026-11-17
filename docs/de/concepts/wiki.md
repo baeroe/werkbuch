@@ -8,7 +8,7 @@ Das Wiki eines Projekts liegt unter `/projects/WEB/wiki`. Hin kommst du über **
 
 ## Der Baum
 
-Der Baum nennt jede Seite des Projekts: auf breiten Bildschirmen links neben der Seite, auf kleineren auf der Übersicht des Wikis.
+Der Baum nennt jede Seite des Projekts: auf breiten Bildschirmen links neben der Seite, auf kleineren auf der Übersicht des Wikis. Er startet eingeklappt: Nur die oberste Ebene ist zu sehen, und die Seiten über der offenen Seite klappen mit ihr auf. Was du auf- oder zuklappst, bleibt so, wenn du eine andere Seite öffnest, zurück und vor gehst, zu den Items und zurück wechselst oder neu lädst; werkbuch merkt es sich im Browser, je Person und Projekt.
 
 - **Anlegen:** **Neue Seite** im Kopf des Wikis (auch in der Befehlspalette) legt eine Seite am Ende der obersten Ebene an und öffnet sie mit markiertem Titel „Neue Seite“, bereit zum Überschreiben. **Unterseite anlegen** unter **Weitere Aktionen** einer Seite legt eine darunter an.
 - **Tasten:** Der Baum ist ein Halt für <kbd>Tab</kbd>. <kbd>↑</kbd> und <kbd>↓</kbd> wandern zwischen den Seiten, <kbd>→</kbd> klappt die Unterseiten auf oder geht zur ersten, <kbd>←</kbd> klappt sie zu oder geht zur Eltern-Seite, <kbd>Pos1</kbd> und <kbd>Ende</kbd> springen zur ersten und letzten Seite, <kbd>↵</kbd> öffnet die Seite. Alle Tasten stehen auf der Seite [Tastatur](/de/keyboard).

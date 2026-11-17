@@ -4,7 +4,8 @@
  *   `data-screen-heading`) and offers "Neue Seite" for whoever may edit the wiki (`wiki.edit`, else the reason; while
  *   the rights load it waits with that reason). The palette has the same as `wiki.create`.
  * - The tree (`PageTree`) stands on the left from lg on, as the navigation "Seiten des Wikis"; below lg only the
- *   overview shows it, an open page shows alone. The ancestors of the open page are never folded away.
+ *   overview shows it, an open page shows alone. It starts folded and keeps what the person opened, per person and
+ *   project, across pages, visits and reloads (`expanded.ts`, WEBU-5); the ancestors of the open page always open.
  * - Without a page: the overview (`WikiHome`). With one: the page (`PageView`) with the pages above it as its path.
  * - A new page is called "Neue Seite" (at the top level, or below the open page: "Unterseite anlegen"); after the toast
  *   the wiki opens it with `?focus=title`. The wiki reads that once when the page opens, takes it out of the address
@@ -38,6 +39,7 @@ import { toast } from '@/components/ui/toast';
 import { ProjectSections } from '@/features/projects/ProjectSections';
 import { qk } from '@/hooks/keys';
 import { useCreatePage, useDeletePage, useMovePage, usePages } from '@/hooks/pages';
+import { useCurrentUser } from '@/hooks/users';
 import { useCommand } from '@/lib/commands';
 import { drafts } from '@/lib/drafts';
 import { notifyError } from '@/lib/errors';
@@ -53,6 +55,7 @@ import { subpages } from './format';
 import { MovePageDialog } from './MovePageDialog';
 import { PageTree } from './PageTree';
 import { PageView } from './PageView';
+import { collapsedOf, expandedKey, folded, idsOf, opened, useExpanded } from './expanded';
 import { findPage, movedTree, pathTo, subtreeIds, withoutPages, type Placement } from './tree';
 import { WikiHome } from './WikiHome';
 
@@ -170,20 +173,30 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
     },
   };
 
-  // the open page is never folded away
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  // the tree starts folded and keeps what the person opened, per person and project (WEBU-5); the open page is never
+  // folded away: its ancestors open with it, the rest stays as it was
+  const me = useCurrentUser();
+  const [expanded, setExpanded] = useExpanded(expandedKey(me?.id ?? '', project.id));
+  const collapsed = useMemo(() => collapsedOf(tree, expanded), [tree, expanded]);
   const ancestorIds = (pageId ? pathTo(tree, pageId).slice(0, -1) : []).map((node) => node.id).join(' ');
   useEffect(() => {
     const ids = ancestorIds.split(' ').filter(Boolean);
-    if (ids.length > 0) setCollapsed((state) => (ids.some((id) => state.has(id)) ? without(state, ids) : state));
-  }, [ancestorIds]);
-  const toggle = (id: string, open: boolean) => setCollapsed((state) => (open ? without(state, [id]) : new Set(state).add(id)));
+    if (ids.length > 0) setExpanded((open) => opened(open, ids));
+  }, [ancestorIds, setExpanded]);
+  // a page that is gone (deleted, by anyone) leaves what is remembered; one only hidden for an undo stays
+  const loaded = pages.data?.items;
+  useEffect(() => {
+    if (!loaded) return;
+    const present = idsOf(loaded);
+    setExpanded((open) => folded(open, [...open].filter((id) => !present.has(id))));
+  }, [loaded, setExpanded]);
+  const toggle = (id: string, open: boolean) => setExpanded((state) => (open ? opened(state, [id]) : folded(state, [id])));
 
   async function create(parentId: string | null) {
     try {
       const page = await createPage.mutateAsync({ project_id: project.id, parent_id: parentId, title: t('wiki.new_title') });
       queryClient.setQueryData<WikiPage>(qk.pages.detail(page.id), page);
-      if (parentId) setCollapsed((state) => without(state, [parentId]));
+      if (parentId) setExpanded((open) => opened(open, [parentId]));
       toast({ title: t('wiki.created.title'), description: t('wiki.created.description'), tone: 'success' });
       router.visit(`${paths.wiki(project.identifier, page.id)}?focus=title`);
     } catch (error) {
@@ -201,7 +214,7 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
     const before = queryClient.getQueryData<ListPage<PageNode>>(listKey);
     if (before) queryClient.setQueryData<ListPage<PageNode>>(listKey, { ...before, items: movedTree(before.items, id, placement.parent_id, placement.before_id) });
     const parent = placement.parent_id ? findPage(tree, placement.parent_id) : undefined;
-    if (parent) setCollapsed((state) => without(state, [parent.id]));
+    if (parent) setExpanded((open) => opened(open, [parent.id]));
     try {
       await movePage.mutateAsync({ id, ...placement });
       toast({
