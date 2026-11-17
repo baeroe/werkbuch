@@ -8,7 +8,7 @@ The wiki of a project lives under `/projects/WEB/wiki`. You reach it through **W
 
 ## The tree
 
-The tree lists every page of the project: on wide screens to the left of the page, on smaller ones on the overview of the wiki.
+The tree lists every page of the project: on wide screens to the left of the page, on smaller ones on the overview of the wiki. It starts folded: only the top level shows, and the pages above the open page unfold with it. What you unfold or fold stays as it is when you open another page, go back and forth, switch to the items and back or reload; werkbuch keeps it in your browser, per person and project.
 
 - **Create:** **New page** in the head of the wiki (also in the command palette) creates a page at the end of the top level and opens it with the title "New page" selected, ready to be typed over. **Add a subpage** in **More actions** of a page creates one below it.
 - **Keys:** the tree is one stop for <kbd>Tab</kbd>. <kbd>↑</kbd> and <kbd>↓</kbd> move between pages, <kbd>→</kbd> unfolds the subpages or goes to the first one, <kbd>←</kbd> folds them away or goes to the parent page, <kbd>Home</kbd> and <kbd>End</kbd> jump to the first and last page, <kbd>↵</kbd> opens the page. All keys are on the [keyboard page](/en/keyboard).

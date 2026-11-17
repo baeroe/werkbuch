@@ -39,8 +39,12 @@ test('opens the wiki from the sidebar and walks the tree with the keyboard', asy
 
     const tree = page.getByRole('tree', { name: tr('en', 'wiki.tree.label') });
     const row = (name: string) => tree.getByRole('treeitem', { name, exact: true });
-    // one tab stop: the first page while none is open
+    // one tab stop: the first page while none is open; the tree starts folded (WEBU-5)
     await tabTo(page, row('Handbook'), { max: 60 });
+    await expect(row('Handbook')).toHaveAttribute('aria-expanded', 'false');
+    await expect(row('Processes')).toHaveCount(0);
+    await page.keyboard.press('ArrowRight');
+    await expect(row('Handbook')).toHaveAttribute('aria-expanded', 'true');
     await expect(row('Processes')).toHaveAttribute('tabindex', '-1');
     await page.keyboard.press('ArrowDown');
     await expect(row('Processes')).toBeFocused();
@@ -61,6 +65,15 @@ test('opens the wiki from the sidebar and walks the tree with the keyboard', asy
     // from lg on the tree stays beside the page and marks it; below that the page shows alone
     if (isPhone(page)) await expect(tree).toBeHidden();
     else await expect(row('Technology')).toHaveAttribute('aria-current', 'page');
+
+    // what was unfolded stays: back on the overview, and after a reload (WEBU-5)
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.identifier}/wiki$`));
+    await expect(row('Handbook')).toHaveAttribute('aria-expanded', 'true');
+    await expect(row('Processes')).toBeVisible();
+    await page.reload();
+    await expect(row('Handbook')).toHaveAttribute('aria-expanded', 'true');
+    await expect(row('Processes')).toBeVisible();
   } finally {
     await removeE2eProject(page, project.identifier);
   }

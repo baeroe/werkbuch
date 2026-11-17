@@ -11,10 +11,12 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { listCommands } from '@/lib/commands';
+import { drafts } from '@/lib/drafts';
 import { clearLiveGone, markLiveGone } from '@/lib/liveGone';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, list, makePage, mara, organization, project, theo, webTree } from '@/test/fixtures';
 import type { PageNode, Project } from '@/types';
+import { expandedKey, readExpanded, writeExpanded } from './expanded';
 import { WikiScreen, type WikiScreenProps } from './WikiScreen';
 
 /* --------------------------------------------------------------------- fake Inertia */
@@ -93,6 +95,7 @@ function routes(): Record<string, MockRoute> {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
   projects = [web];
   tree = changedTree();
   overrides = {};
@@ -135,12 +138,12 @@ const gets = (path: string) => api.calls.filter((call) => call.method === 'GET' 
 
 describe('the wiki', () => {
   it('shows the tree beside the overview and marks the open page', async () => {
-    const user = userEvent.setup();
     const { go } = renderWiki();
     const nav = await screen.findByRole('navigation', { name: 'Seiten des Wikis' });
     const pages = await pagesTree();
     expect(nav.contains(pages)).toBe(true);
-    expect(within(pages).getAllByRole('treeitem')).toHaveLength(12);
+    // the tree starts folded (WEBU-5): only the top level shows
+    expect(within(pages).getAllByRole('treeitem')).toHaveLength(tree.length);
     expect(screen.getByRole('heading', { level: 1, name: 'Wiki' }).hasAttribute('data-screen-heading')).toBe(true);
     expect(document.title).toBe('Wiki WEB – werkbuch');
     expect(screen.getByRole('link', { name: 'Website-Relaunch' }).getAttribute('href')).toBe('/projects/WEB');
@@ -161,10 +164,9 @@ describe('the wiki', () => {
     expect(within(entries[1]).getByText('Unbekannt, 29.10.2026')).toBeTruthy();
     expect(screen.getByText(/^12 Seiten im Wiki\./)).toBeTruthy();
 
-    // fold Technik away, then open a page below it: the tree unfolds the way to the open page
+    // Technik is folded; open a page below it: the tree unfolds the way to the open page
     const pagesNow = await pagesTree();
-    act(() => within(pagesNow).getByRole('treeitem', { name: 'Technik' }).focus());
-    await user.keyboard('{ArrowLeft}');
+    expect(within(pagesNow).getByRole('treeitem', { name: 'Technik' }).getAttribute('aria-expanded')).toBe('false');
     expect(within(pagesNow).queryByRole('treeitem', { name: 'Domain-Umzug' })).toBeNull();
 
     go('/projects/WEB/wiki/pg_web_domain', { pageId: 'pg_web_domain', pageFound: true });
@@ -377,5 +379,68 @@ describe('the open page', () => {
     expect(screen.queryByRole('textbox', { name: 'Titel der Seite' })).toBeNull();
     // the path of the page: the pages above it in the tree
     expect(within(screen.getByRole('navigation', { name: 'Pfad der Seite' })).getAllByRole('link').map((link) => link.textContent)).toEqual(['🛠️Technik', '🚀Deployment und Hosting']);
+  });
+});
+
+describe('the folds of the tree (WEBU-5)', () => {
+  const key = expandedKey(mara.id, 'p_web');
+  const technik = async () => within(await pagesTree()).getByRole('treeitem', { name: 'Technik' });
+
+  it('keeps what was opened on a new screen and after a reload, and forgets nothing it did not open', async () => {
+    const user = userEvent.setup();
+    const first = renderWiki();
+    const row = await technik();
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    act(() => row.focus());
+    await user.keyboard('{ArrowRight}');
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual(['pg_web_tech']);
+    first.unmount();
+
+    // another page of the wiki draws the screen anew: Technik stays open, Projekt-Handbuch stays folded
+    renderWiki({ pageId: 'pg_web_domain', pageFound: true }).unmount();
+    // a reload: the module store is gone, the storage is not
+    drafts.clear();
+    renderWiki();
+    expect((await technik()).getAttribute('aria-expanded')).toBe('true');
+    expect(within(await pagesTree()).getByRole('treeitem', { name: 'Projekt-Handbuch' }).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('opens the ancestors of the open page and keeps them open on the way back to the overview', async () => {
+    const { go } = renderWiki({ pageId: 'pg_web_domain', pageFound: true });
+    expect(await within(await pagesTree()).findByRole('treeitem', { name: 'Domain-Umzug' })).toBeTruthy();
+    expect(new Set(readExpanded(key))).toEqual(new Set(['pg_web_tech', 'pg_web_hosting']));
+
+    go('/projects/WEB/wiki', { pageId: null, pageFound: false });
+    expect(within(await pagesTree()).getByRole('treeitem', { name: 'Domain-Umzug' })).toBeTruthy();
+  });
+
+  it('drops a page that is gone from what is remembered', async () => {
+    writeExpanded(key, new Set(['pg_web_tech', 'pg_gone']));
+    renderWiki();
+    expect((await technik()).getAttribute('aria-expanded')).toBe('true');
+    await waitFor(() => expect([...readExpanded(key)]).toEqual(['pg_web_tech']));
+  });
+
+  it('works without a storage: folded at the start, open for this visit', async () => {
+    const user = userEvent.setup();
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError');
+    });
+    try {
+      renderWiki();
+      const row = await technik();
+      expect(row.getAttribute('aria-expanded')).toBe('false');
+      act(() => row.focus());
+      await user.keyboard('{ArrowRight}');
+      expect(row.getAttribute('aria-expanded')).toBe('true');
+      expect(set).toHaveBeenCalled();
+    } finally {
+      get.mockRestore();
+      set.mockRestore();
+    }
   });
 });
