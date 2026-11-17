@@ -78,6 +78,7 @@ const FLOWS = [
   'open the system page', // 5.2 System
   'change the theme', // 4.17, 5.2
   'open and close the sidebar', // 5.2 Seitenleiste
+  'open the wiki and the templates of a project without a star', // 5.2 Projekte, WEBU-3
   // the review of 17b: flows of chapters 4 and 5.2 the list above left out
   'edit a comment', // 4.10
   'delete a comment', // 4.10

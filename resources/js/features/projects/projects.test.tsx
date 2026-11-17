@@ -116,6 +116,17 @@ describe('ProjectsScreen', () => {
     expect(within(kunden).getByRole('button', { name: 'Beitreten' })).toBeTruthy();
   });
 
+  it('leads from each card to the wiki and the templates of its project, without a star (WEBU-3)', async () => {
+    renderScreen();
+    await screen.findByRole('list', { name: 'Alle Projekte' });
+
+    const kundenApp = card('Kunden-App');
+    // the name holds what the link shows (WCAG 2.5.3) and says which project it is
+    expect(within(kundenApp).getByRole('link', { name: 'Wiki von Kunden-App' }).getAttribute('href')).toBe('/projects/APP/wiki');
+    expect(within(kundenApp).getByRole('link', { name: 'Vorlagen von Kunden-App' }).getAttribute('href')).toBe('/projects/APP/templates');
+    expect(within(kundenApp).getByRole('link', { name: 'Wiki von Kunden-App' }).textContent).toBe('Wiki');
+  });
+
   it('shows an org admin private projects without a membership, and no "reading along" in public ones', async () => {
     signedIn = mara;
     renderScreen({ 'GET /api/v1/projects': () => ({ body: list([web, app, ops]) }) });

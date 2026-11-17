@@ -11,6 +11,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { ViewIcon } from '@/components/ui/ViewIcon';
 import type { ItemsPreset } from '@/domain/viewState';
 import { FavoriteToggle } from '@/features/favorites/FavoriteToggle';
+import { ProjectSections } from '@/features/projects/ProjectSections';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
@@ -79,6 +80,7 @@ export function ListHeader({ preset, project, view, layout, onLayout }: ListHead
         </div>
       </header>
       {isMyPreset(preset) && <MyTabs preset={preset} />}
+      {project && <ProjectSections project={project} current="items" />}
     </>
   );
 }

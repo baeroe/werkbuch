@@ -175,6 +175,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
 
   // projects and catalogs
   { flow: 'create a project', file: 'projects.spec.ts', test: 'creates a project with the keyboard from the sidebar' },
+  { flow: 'open the wiki and the templates of a project without a star', file: 'projects.spec.ts', test: 'reaches the wiki and the templates of a project without a star, with the keyboard' },
   { flow: 'add a member', file: 'onboarding.spec.ts', test: 'invites a person who joins, gets a project and finds it' },
   { flow: 'create a workflow with a matrix', file: 'workflows.spec.ts', test: 'creates a workflow with a transition matrix' },
   { flow: 'create a type with a required property', file: 'types-properties.spec.ts', test: 'creates a dropdown property and a type that requires it' },

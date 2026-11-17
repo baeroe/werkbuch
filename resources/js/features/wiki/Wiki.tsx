@@ -33,6 +33,7 @@ import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
+import { ProjectSections } from '@/features/projects/ProjectSections';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
 import { qk } from '@/hooks/keys';
@@ -348,12 +349,8 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
           </Link>
           <ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
           {pageId !== null ? (
-            <Link
-              href={paths.wiki(project.identifier)}
-              className="inline-flex min-h-11 shrink-0 items-center font-display text-lg font-bold tracking-title text-ink no-underline hover:underline md:min-h-0"
-            >
-              {t('wiki.title')}
-            </Link>
+            // the way back to the overview is the tab "Wiki" right below (ProjectSections): one link, not two
+            <span className="shrink-0 font-display text-lg font-bold tracking-title text-ink">{t('wiki.title')}</span>
           ) : (
             <h1 data-screen-heading="" tabIndex={-1} className="shrink-0 scroll-mt-20 font-display text-lg font-bold tracking-title text-ink">
               {t('wiki.title')}
@@ -366,6 +363,7 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
           </Button>
         </div>
       </header>
+      <ProjectSections project={project} current="wiki" below={pageId !== null} />
 
       <div className="mt-4 lg:mt-6 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start lg:gap-8 xl:grid-cols-[17rem_minmax(0,1fr)]">
         {treeArea && (

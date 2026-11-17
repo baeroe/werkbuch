@@ -50,4 +50,4 @@ Nur ein Projekt-Admin kann ein Projekt löschen und muss zur Bestätigung die Ke
 
 ## Favoriten
 
-Der Stern neben einem Projekt legt es in die Seitenleiste. Favoriten sind persönlich. Verliert jemand den Zugriff auf ein privates Projekt, verschwindet es sofort aus seiner Seitenleiste und kommt wieder, sobald er den Zugriff zurückbekommt.
+Der Stern neben einem Projekt legt es in die Seitenleiste. Auch ohne Stern führt die Karte eines Projekts zu seinen Items, seinem **Wiki** und seinen **Vorlagen**, und die Reiter unter dem Kopf jedes Bereichs wechseln zwischen den dreien. Favoriten sind persönlich. Verliert jemand den Zugriff auf ein privates Projekt, verschwindet es sofort aus seiner Seitenleiste und kommt wieder, sobald er den Zugriff zurückbekommt.

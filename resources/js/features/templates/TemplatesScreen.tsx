@@ -20,6 +20,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
+import { ProjectSections } from '@/features/projects/ProjectSections';
 import { useProject } from '@/hooks/projects';
 import { useTemplates } from '@/hooks/templates';
 import { t } from '@/lib/i18n';
@@ -89,6 +90,7 @@ function Templates({ project, templateId }: { project: Project; templateId: stri
   useDocumentTitle(t('templates.tab', { identifier: project.identifier }));
 
   const header = (
+    <>
     <header className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
       <div className="flex min-w-0 items-center gap-2">
         <ProjectBadge project={project} />
@@ -100,12 +102,8 @@ function Templates({ project, templateId }: { project: Project; templateId: stri
         </Link>
         <ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
         {templateId !== null ? (
-          <Link
-            href={paths.templates(project.identifier)}
-            className="inline-flex min-h-11 shrink-0 items-center font-display text-lg font-bold tracking-title text-ink no-underline hover:underline md:min-h-0"
-          >
-            {t('templates.title')}
-          </Link>
+          // the way back to the list is the tab "Vorlagen" right below (ProjectSections): one link, not two
+          <span className="shrink-0 font-display text-lg font-bold tracking-title text-ink">{t('templates.title')}</span>
         ) : (
           <h1 ref={heading} data-screen-heading="" tabIndex={-1} className="shrink-0 scroll-mt-20 font-display text-lg font-bold tracking-title text-ink">
             {t('templates.title')}
@@ -113,6 +111,8 @@ function Templates({ project, templateId }: { project: Project; templateId: stri
         )}
       </div>
     </header>
+    <ProjectSections project={project} current="templates" below={templateId !== null} />
+    </>
   );
 
   if (templateId === null) return <TemplateList project={project} header={header} heading={heading} rights={rights} />;

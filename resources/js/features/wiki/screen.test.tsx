@@ -144,6 +144,10 @@ describe('the wiki', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Wiki' }).hasAttribute('data-screen-heading')).toBe(true);
     expect(document.title).toBe('Wiki WEB – werkbuch');
     expect(screen.getByRole('link', { name: 'Website-Relaunch' }).getAttribute('href')).toBe('/projects/WEB');
+    // the parts of the project under the header (WEBU-3): the wiki is the page, a page of it is below
+    const parts = screen.getByRole('navigation', { name: 'Bereiche von Website-Relaunch' });
+    expect(within(parts).getByRole('link', { name: 'Wiki' }).getAttribute('aria-current')).toBe('page');
+    expect(within(parts).getByRole('link', { name: 'Vorlagen' }).getAttribute('href')).toBe('/projects/WEB/templates');
     // the tree is read by the project's ULID, never its identifier: one cache for live updates and deletes
     expect(gets('/api/v1/projects/p_web/pages')).toHaveLength(1);
 

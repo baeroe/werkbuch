@@ -133,7 +133,7 @@ describe('CommandPalette', () => {
     expect(outline()).toEqual([
       ['Projekte', 'Neues Projekt'],
       ['Aktionen', 'Neues Item', 'Vorlage anwenden …', 'Theme wechseln …', 'Seitenleiste einklappen', 'Alle Tastaturkürzel'],
-      ['Navigation', 'Inbox öffnen', 'Meine Items öffnen', 'Alle Views öffnen', 'Alle Projekte öffnen'],
+      ['Navigation', 'Inbox öffnen', 'Meine Items öffnen', 'Alle Views öffnen', 'Alle Projekte öffnen', 'Wiki öffnen …', 'Vorlagen öffnen …'],
     ]);
     // with their shortcuts, and a chevron where a list opens
     const row = (name: RegExp) => within(dialog).getByRole('option', { name });
@@ -200,8 +200,9 @@ describe('CommandPalette', () => {
     expect([...screen.getByRole('option').querySelectorAll('mark')].map((mark) => mark.textContent)).toEqual(['Alle', 'Projekte']);
     await user.keyboard('{Backspace>13/}öffnen');
     expect(active()).toBe('Inbox öffnen');
+    // up from the first row wraps to the last: "Vorlagen öffnen …" of the parts of a project (WEBU-3)
     await user.keyboard('{ArrowUp}');
-    expect(active()).toBe('Alle Projekte öffnen');
+    expect(active()).toBe('Vorlagen öffnen …');
     await user.keyboard('{ArrowDown}{ArrowDown}');
     expect(active()).toBe('Meine Items öffnen');
     expect(input().getAttribute('aria-activedescendant')).toBe(screen.getAllByRole('option')[1]!.id);
