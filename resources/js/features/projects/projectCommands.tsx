@@ -1,8 +1,9 @@
 /*
  * "Wiki öffnen …" and "Vorlagen öffnen …" in the palette (WEBU-3): each opens the list of the projects the person sees,
  * archived ones included (their wiki and templates stay readable), and leads to the part of the chosen one. The names
- * and identifiers of the projects are keywords of the command, so "wiki web" finds it from the root of the palette.
- * Hidden until the projects are loaded; the sidebar reaches only the starred projects, this every one.
+ * of the projects are keywords of the options only, never of the commands: as keywords of a command at the root, a
+ * search for "WEB" would put the command before the hits and take their Enter. Hidden until the projects are loaded;
+ * the sidebar reaches only the starred projects, this every one.
  */
 
 import { router } from '@inertiajs/react';
@@ -51,7 +52,7 @@ function usePartCommand(part: Part, list: Project[], shown: string): void {
       label: t(part.label),
       group: t(NAVIGATION),
       icon: <part.icon />,
-      keywords: [t(part.keywords), ...list.flatMap((project) => [project.name, project.identifier])],
+      keywords: [t(part.keywords)],
       when: () => list.length > 0,
       run: () => {},
       subpage: () => ({

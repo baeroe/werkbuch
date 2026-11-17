@@ -34,7 +34,7 @@ export function ProjectSections({ project, current, below = false }: ProjectSect
             <Link
               href={part.href(project.identifier)}
               aria-current={part.section === current ? (below ? 'true' : 'page') : undefined}
-              className="-mb-px inline-flex h-11 items-center border-b-2 border-transparent px-2.5 text-ui font-medium whitespace-nowrap text-muted transition-colors duration-120 [--focus-offset:-2px] hover:text-ink [&[aria-current]]:border-accent [&[aria-current]]:text-ink md:h-9"
+              className="-mb-px inline-flex h-11 items-center border-b-2 border-transparent px-2.5 text-ui font-medium whitespace-nowrap text-muted transition-colors duration-120 [--focus-offset:-2px] hover:text-ink [&[aria-current]]:border-accent [&[aria-current]]:text-ink md:h-9 pointer-coarse:h-11"
             >
               {t(part.label)}
             </Link>

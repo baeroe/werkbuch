@@ -99,9 +99,9 @@ function OpenCount({ id, open }: { id: string; open: OpenCounts }) {
   return <>{tn('projects.open_count', open.counts.get(id) ?? 0)}</>;
 }
 
-/** A link to a part of the project at the foot of its card: 44 px high on touch, a chip with a mouse. */
+/** A link to a part of the project at the foot of its card: 44 px high on touch (also on a tablet), a chip with a mouse. */
 const CARD_PART =
-  'inline-flex min-h-11 items-center gap-1.5 rounded-chip px-2 text-ui font-medium text-muted no-underline transition-colors duration-120 hover:bg-hover hover:text-ink md:min-h-8';
+  'inline-flex min-h-11 items-center gap-1.5 rounded-chip px-2 text-ui font-medium text-muted no-underline transition-colors duration-120 hover:bg-hover hover:text-ink md:min-h-8 pointer-coarse:min-h-11';
 
 function ProjectCard({ project, lead, me, open }: { project: Project; lead: User | undefined; me: User | undefined; open: OpenCounts }) {
   const flashing = useUiStore((state) => state.flashIds.includes(project.id));

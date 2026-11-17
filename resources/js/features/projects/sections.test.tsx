@@ -88,8 +88,8 @@ describe('useProjectPartCommands', () => {
     const wiki = command('projects.open_wiki');
     expect(wiki.label).toBe('Wiki öffnen …');
     expect(wiki.group).toBe('Navigation');
-    // "wiki web" finds it from the root of the palette
-    expect(wiki.keywords).toEqual(expect.arrayContaining(['Website-Relaunch', 'WEB', 'Kunden-App', 'APP']));
+    // the projects are no keywords of the command: a search for "WEB" keeps its hits first
+    expect(wiki.keywords).toEqual(['wiki seiten projekt']);
 
     const options = wiki.subpage!().options;
     expect(options.map((option) => [option.label, option.hint])).toEqual([

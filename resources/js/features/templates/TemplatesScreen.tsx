@@ -91,27 +91,27 @@ function Templates({ project, templateId }: { project: Project; templateId: stri
 
   const header = (
     <>
-    <header className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <ProjectBadge project={project} />
-        <Link
-          href={paths.project(project.identifier)}
-          className="inline-flex min-h-11 min-w-0 items-center text-ui font-medium text-muted no-underline hover:text-ink hover:underline md:min-h-0"
-        >
-          <span className="truncate">{project.name}</span>
-        </Link>
-        <ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
-        {templateId !== null ? (
-          // the way back to the list is the tab "Vorlagen" right below (ProjectSections): one link, not two
-          <span className="shrink-0 font-display text-lg font-bold tracking-title text-ink">{t('templates.title')}</span>
-        ) : (
-          <h1 ref={heading} data-screen-heading="" tabIndex={-1} className="shrink-0 scroll-mt-20 font-display text-lg font-bold tracking-title text-ink">
-            {t('templates.title')}
-          </h1>
-        )}
-      </div>
-    </header>
-    <ProjectSections project={project} current="templates" below={templateId !== null} />
+      <header className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <ProjectBadge project={project} />
+          <Link
+            href={paths.project(project.identifier)}
+            className="inline-flex min-h-11 min-w-0 items-center text-ui font-medium text-muted no-underline hover:text-ink hover:underline md:min-h-0"
+          >
+            <span className="truncate">{project.name}</span>
+          </Link>
+          <ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
+          {templateId !== null ? (
+            // the way back to the list is the tab "Vorlagen" right below (ProjectSections): one link, not two
+            <span className="shrink-0 font-display text-lg font-bold tracking-title text-ink">{t('templates.title')}</span>
+          ) : (
+            <h1 ref={heading} data-screen-heading="" tabIndex={-1} className="shrink-0 scroll-mt-20 font-display text-lg font-bold tracking-title text-ink">
+              {t('templates.title')}
+            </h1>
+          )}
+        </div>
+      </header>
+      <ProjectSections project={project} current="templates" below={templateId !== null} />
     </>
   );
 

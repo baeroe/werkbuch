@@ -306,6 +306,19 @@ describe('search', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('keeps the hits first for the name of a project: "Wiki öffnen …" does not take its Enter (WEBU-3)', async () => {
+    const user = userEvent.setup();
+    projects = [project('WEB', 'member', { name: 'Kontaktportal' })];
+    searchRoute = answers({ kontakt: { items: [web47] } });
+    renderShell();
+
+    await openPalette();
+    await user.keyboard('kontakt');
+    await screen.findByRole('option', { name: /Kontaktformular sendet doppelt/ });
+    expect(outline()).toEqual([['Items', 'Kontaktformular sendet doppelt']]);
+    expect(active()).toMatch(/^Kontaktformular sendet doppelt/);
+  });
+
   it('jumps to a typed key with Enter before the search answers', async () => {
     const user = userEvent.setup();
     renderShell();

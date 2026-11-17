@@ -173,8 +173,11 @@ describe('the wiki', () => {
     expect(current.tabIndex).toBe(0);
     expect(within(pagesNow).getByRole('treeitem', { name: 'Technik' }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.queryByRole('list', { name: 'Zuletzt geändert' })).toBeNull();
-    // "Wiki" leads back to the overview; the page shows its title
-    expect(screen.getByRole('link', { name: 'Wiki' }).getAttribute('href')).toBe('/projects/WEB/wiki');
+    // the tab "Wiki" leads back to the overview, the place one is in (aria-current true, not page); the path names it as text
+    const back = screen.getByRole('link', { name: 'Wiki' });
+    expect(back.getAttribute('href')).toBe('/projects/WEB/wiki');
+    expect(back.getAttribute('aria-current')).toBe('true');
+    expect(back.closest('nav')?.getAttribute('aria-label')).toBe('Bereiche von Website-Relaunch');
     expect(((await screen.findByRole('textbox', { name: 'Titel der Seite' })) as HTMLTextAreaElement).value).toBe('Domain-Umzug');
     // below lg an open page shows alone
     expect(nav.className).toContain('max-lg:hidden');

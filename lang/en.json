@@ -69,7 +69,7 @@
     "commands.project_templates.keywords": "templates schedule project",
     "commands.project_templates.label": "Open templates …",
     "commands.project_wiki.keywords": "wiki pages project",
-    "commands.project_wiki.label": "Open a wiki …",
+    "commands.project_wiki.label": "Open wiki …",
     "commands.projects.create": "New project",
     "commands.sidebar.collapse": "Collapse the sidebar",
     "commands.sidebar.expand": "Expand the sidebar",
