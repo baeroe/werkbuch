@@ -114,6 +114,7 @@
     "editor.image.viewer.next": "Next image",
     "editor.image.viewer.open": "Open original",
     "editor.image.viewer.previous": "Previous image",
+    "editor.image.viewer.scroll_region": "Image at actual size, scrollable",
     "editor.image.viewer.untitled": "Image",
     "editor.label.comment": "Comment",
     "editor.label.description": "Description",

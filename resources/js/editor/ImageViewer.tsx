@@ -29,8 +29,8 @@ export function ImageViewerHost() {
   // every picture starts fitted into the window
   const index = viewer?.index;
   useEffect(() => setFull(false), [index]);
-  // back to the picture that opened it; one that went from the page meanwhile (a live update) leaves Base UI's default
-  if (viewer) finalFocus.current = viewer.returnFocus?.isConnected ? viewer.returnFocus : null;
+  // back to the picture that opened it; one that went from the page meanwhile (a live update): the main content
+  if (viewer) finalFocus.current = viewer.returnFocus?.isConnected ? viewer.returnFocus : document.getElementById('main');
 
   // a visit to another page closes it (its picture is gone with the page)
   useEffect(() => router.on('navigate', () => closeImageViewer()), []);
@@ -122,7 +122,7 @@ export function ImageViewerHost() {
               className={cx('flex max-h-[70vh] justify-center rounded-ctl bg-sunken', full ? 'overflow-auto' : 'overflow-hidden')}
               tabIndex={full ? 0 : undefined}
               role={full ? 'region' : undefined}
-              aria-label={full ? t('editor.image.viewer.full_size') : undefined}
+              aria-label={full ? t('editor.image.viewer.scroll_region') : undefined}
             >
               {/* a click switches the size too; the button in the footer does it for the keyboard */}
               <img
