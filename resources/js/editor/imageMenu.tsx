@@ -97,6 +97,11 @@ export function ImageMenu({ editor, frame }: { editor: Editor; frame: RefObject<
     return () => dom.removeEventListener('keydown', listen, { capture: true });
   }, [editor]);
 
+  // the picture lost its selection while the menu was open (a document from outside): the menu closes with it
+  useEffect(() => {
+    if (!image) setOpen(false);
+  }, [image]);
+
   if (!image && !open) return null;
 
   /** Closing gives the focus back to the text, with the picture still selected; not when something else took it. */

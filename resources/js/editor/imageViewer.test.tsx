@@ -162,6 +162,32 @@ describe('the large view', () => {
     expect(viewerNow()).toBeNull();
   });
 
+  it('leaves the keys of anything above it alone, and closes on a visit to another page (palette, review of #47)', async () => {
+    renderHost();
+    act(() =>
+      openImageViewer(
+        [
+          { attachmentId: 'att_1', alt: 'Formular' },
+          { attachmentId: 'att_2', alt: null },
+        ],
+        0,
+      ),
+    );
+    await screen.findByRole('dialog', { name: 'Formular' });
+    // a field of a popup above the viewer (the palette) keeps its keys
+    const field = document.createElement('input');
+    document.body.append(field);
+    fireEvent.keyDown(field, { key: 'ArrowRight' });
+    expect(viewerNow()?.index).toBe(0);
+    field.remove();
+    // the focus nowhere (on the page itself): the viewer's keys
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' });
+    expect(viewerNow()?.index).toBe(1);
+
+    act(() => void document.dispatchEvent(new CustomEvent('inertia:navigate', { detail: { page: { url: '/my-items' } } })));
+    expect(viewerNow()).toBeNull();
+  });
+
   it('shows one picture without counter and buttons, and says when it is gone or loading', async () => {
     renderHost();
     act(() => openImageViewer([{ attachmentId: 'att_gone', alt: 'Weg' }], 0));

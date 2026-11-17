@@ -85,6 +85,7 @@ function ImageView({ node, editor, getPos, updateAttributes }: ReactNodeViewProp
         href={attachment.url}
         target="_blank"
         rel="noopener noreferrer"
+        aria-haspopup="dialog"
         aria-label={t('editor.image.view', { name: alt || attachment.filename })}
         title={t('editor.image.view', { name: alt || attachment.filename })}
         onClick={(event) => {

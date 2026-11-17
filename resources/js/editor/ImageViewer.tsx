@@ -7,6 +7,7 @@
  */
 
 import { ChevronLeft, ChevronRight, Download, ExternalLink, ImageOff, Maximize2, Minimize2 } from 'lucide-react';
+import { router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { attachmentUrl } from '@/api/attachments';
 import { buttonClass } from '@/components/ui/Button';
@@ -28,7 +29,11 @@ export function ImageViewerHost() {
   // every picture starts fitted into the window
   const index = viewer?.index;
   useEffect(() => setFull(false), [index]);
-  if (viewer) finalFocus.current = viewer.returnFocus;
+  // back to the picture that opened it; one that went from the page meanwhile (a live update) leaves Base UI's default
+  if (viewer) finalFocus.current = viewer.returnFocus?.isConnected ? viewer.returnFocus : null;
+
+  // a visit to another page closes it (its picture is gone with the page)
+  useEffect(() => router.on('navigate', () => closeImageViewer()), []);
 
   const count = viewer?.images.length ?? 0;
   const name = image?.alt ?? attachment?.filename ?? t('editor.image.viewer.untitled');
@@ -39,6 +44,11 @@ export function ImageViewerHost() {
     if (!open) return;
     const listen = (event: globalThis.KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      // only keys of the viewer itself, or of nowhere (a button that turned blocked took the focus with it): never
+      // those of a popup above it, such as the palette
+      const target = event.target instanceof Element ? event.target : null;
+      const own = target === null || target === document.body || target.closest('[role="dialog"]')?.querySelector('[data-image-viewer]') != null;
+      if (!own) return;
       // Escape closes from anywhere too: a button at the end of the row that turns blocked takes the focus with it
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -64,8 +74,7 @@ export function ImageViewerHost() {
       description={count > 1 ? t('editor.image.viewer.counter', { index: (viewer?.index ?? 0) + 1, count }) : undefined}
       finalFocus={finalFocus}
       footer={
-        viewer &&
-        attachment && (
+        viewer && (
           <>
             {count > 1 && (
               <span className="mr-auto flex gap-1">
@@ -85,17 +94,22 @@ export function ImageViewerHost() {
                 />
               </span>
             )}
-            <Button variant="ghost" size="sm" icon={full ? Minimize2 : Maximize2} aria-pressed={full} onClick={() => setFull((current) => !current)}>
-              {t('editor.image.viewer.full_size')}
-            </Button>
-            <a href={attachment.url} target="_blank" rel="noopener noreferrer" className={buttonClass({ variant: 'ghost', size: 'sm' }, 'gap-1.5')}>
-              <ExternalLink className="size-3.5" aria-hidden="true" />
-              {t('editor.image.viewer.open')}
-            </a>
-            <a href={attachmentUrl(attachment, { download: true })} download={attachment.filename} className={buttonClass({ variant: 'secondary', size: 'sm' }, 'gap-1.5')}>
-              <Download className="size-3.5" aria-hidden="true" />
-              {t('editor.image.viewer.download')}
-            </a>
+            {/* the file's own actions only once it is there; going through the pictures always */}
+            {attachment && (
+              <>
+                <Button variant="ghost" size="sm" icon={full ? Minimize2 : Maximize2} aria-pressed={full} onClick={() => setFull((current) => !current)}>
+                  {t('editor.image.viewer.full_size')}
+                </Button>
+                <a href={attachment.url} target="_blank" rel="noopener noreferrer" className={buttonClass({ variant: 'ghost', size: 'sm' }, 'gap-1.5')}>
+                  <ExternalLink className="size-3.5" aria-hidden="true" />
+                  {t('editor.image.viewer.open')}
+                </a>
+                <a href={attachmentUrl(attachment, { download: true })} download={attachment.filename} className={buttonClass({ variant: 'secondary', size: 'sm' }, 'gap-1.5')}>
+                  <Download className="size-3.5" aria-hidden="true" />
+                  {t('editor.image.viewer.download')}
+                </a>
+              </>
+            )}
           </>
         )
       }
@@ -103,7 +117,13 @@ export function ImageViewerHost() {
       <div data-image-viewer="">
         {attachment ? (
           <figure className="flex flex-col gap-2">
-            <div className={cx('flex max-h-[70vh] justify-center rounded-ctl bg-sunken', full ? 'overflow-auto' : 'overflow-hidden')}>
+            {/* at actual size the box scrolls: a tab stop, so the keyboard scrolls it (Page Up/Down, Home/End, Space) */}
+            <div
+              className={cx('flex max-h-[70vh] justify-center rounded-ctl bg-sunken', full ? 'overflow-auto' : 'overflow-hidden')}
+              tabIndex={full ? 0 : undefined}
+              role={full ? 'region' : undefined}
+              aria-label={full ? t('editor.image.viewer.full_size') : undefined}
+            >
               {/* a click switches the size too; the button in the footer does it for the keyboard */}
               <img
                 src={attachment.url}
