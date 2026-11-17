@@ -37,6 +37,8 @@ export interface PageViewProps {
   rights: { ready: boolean; denied: string | null };
   /** A page just made: its title takes the focus, selected. */
   focusTitle?: boolean;
+  /** How many pages lie below it (the PDF with its subpages, WEBU-4). */
+  subpages?: number;
   onMove?: () => void;
   onDelete?: () => void;
   onCreateChild?: () => void;

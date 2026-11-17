@@ -461,6 +461,19 @@ export async function run(env, log = (line) => console.log(line)) {
     check(file.headers.get('content-type') === 'image/png', `the attachment comes as ${file.headers.get('content-type')}`);
     ok('attachment file');
 
+    // (q) a wiki page as PDF (WEBU-4): the link over REST, the file from Gotenberg inside the stack
+    const wikiPage = await session.json('POST', `/api/v1/projects/${projectId}/pages`, { json: { title: `Smoke ${probe}`, content: '## Smoke\n\nÄrger mit Umlauten: äöü ß.' } });
+    expectStatus(wikiPage, 201, 'POST /api/v1/projects/{project}/pages');
+    const pdfLink = await session.json('GET', `/api/v1/pages/${wikiPage.data.data.id}/pdf`);
+    expectStatus(pdfLink, 200, 'GET /api/v1/pages/{page}/pdf');
+    const pdfUrl = new URL(pdfLink.data.data.url);
+    check(pdfUrl.origin === base.origin, `the PDF link points at ${pdfUrl.origin}, not ${base.origin}`);
+    const pdf = await session.request('GET', `${pdfUrl.pathname}${pdfUrl.search}`, { headers: { Accept: 'application/pdf' } });
+    expectStatus(pdf, 200, 'GET /pages/{page}/pdf');
+    check(pdf.headers.get('content-type') === 'application/pdf', `the PDF comes as ${pdf.headers.get('content-type')}`);
+    check(pdf.text.startsWith('%PDF-'), `the PDF starts with ${JSON.stringify(pdf.text.slice(0, 20))}`);
+    ok('pdf');
+
     // (n) delete the project again (PurgeProject in the queue)
     expectStatus(await session.request('DELETE', `/api/v1/projects/${projectId}`), 202, 'DELETE /api/v1/projects');
     projectId = null;

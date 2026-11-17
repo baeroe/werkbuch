@@ -331,6 +331,7 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
         ancestors={pathTo(tree, pageId).slice(0, -1)}
         rights={{ ready: !permissions.loading, denied: createReason }}
         focusTitle={focusTitle}
+        subpages={Math.max(0, subtreeIds(tree, pageId).length - 1)}
         onMove={() => setMoving({ open: true, page: findPage(tree, pageId) ?? null })}
         onDelete={() => requestDelete(pageId)}
         onCreateChild={() => void create(pageId)}

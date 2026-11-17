@@ -58,6 +58,20 @@ A version keeps the title, the text, who wrote it and when; the emoji is not par
 - **In the item:** the item shows the pages that refer to it in its own section **Wiki pages**, between the relations and the files, each as a link to the page with the wiki it belongs to. The section is there only if at least one page refers to the item and you can see it; it follows changes in the wiki. Only the current text of a page counts, not its versions, and a key written as plain text is no reference.
 - **Links:** `/projects/WEB/wiki/<ulid>` opens a page. A page of another project leads to the wiki of that project, a former identifier to the current one; a page that does not exist (or that you cannot see) shows "This page does not exist", with the tree.
 
+## PDF
+
+**PDF** in the head row of a page downloads it as a PDF, also for viewers. A page with subpages offers **This page** and **With subpages**: the page and everything below it in the order of the tree, with a table of contents in front. The command palette has the same as **Download as PDF**.
+
+- The PDF shows what you see: names as they are now, a reference to an item or page you cannot see as **hidden**, images in their preview size. An image of another project, and one over 4 MB, stands as a line with its name.
+- One PDF takes at most 100 pages; above that the download is refused with the number of pages.
+- Ten PDFs a minute per account. A PDF needs the service Gotenberg of the stack (see [operations](/en/operations#pdf)); without it **PDF** is disabled and says why, and the REST answer is `503 pdf_unavailable`.
+- **REST:** `GET /api/v1/pages/<ulid>/pdf` (with `?subpages=1` the subtree) answers `{data: {url, filename, pages}}`; the file is at `url` (`GET /pages/<ulid>/pdf`), for the session and for tokens with `read`:
+
+```bash
+url=$(curl -s https://werkbuch.example.com/api/v1/pages/$PAGE/pdf?subpages=1 -H "Authorization: Bearer $TOKEN" | jq -r .data.url)
+curl -s "$url" -H "Authorization: Bearer $TOKEN" -o handbook.pdf
+```
+
 ## Permissions
 
 The wiki follows the [roles of the project](/en/concepts/permissions):

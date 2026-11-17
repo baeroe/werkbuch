@@ -42,7 +42,7 @@ vi.mock('@inertiajs/react', async () => {
   const { useSyncExternalStore } = await import('react');
   return {
     usePage: () => ({
-      props: { auth: { user: mara, permissions: [] }, organization },
+      props: { auth: { user: mara, permissions: [] }, organization, features: { pdf: true } },
       url: useSyncExternalStore(inertia.subscribe, () => inertia.url),
     }),
     Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (

@@ -24,7 +24,7 @@
  *   "Kopieren" and "Verwerfen" (`ParkedDraft`, like A154).
  */
 
-import { Eye, FilePlus2, FolderInput, History, SmilePlus, Trash2, X } from 'lucide-react';
+import { Eye, FileDown, FilePlus2, FolderInput, History, SmilePlus, Trash2, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useUserMap } from '@/components/fields/itemData';
 import { Button } from '@/components/ui/Button';
@@ -37,8 +37,11 @@ import { RichTextView } from '@/editor/RichTextView';
 import { UploadContext, useUploadCounter } from '@/editor/UploadContext';
 import { useInstantDay } from '@/features/item-detail/shared';
 import { useCurrentUser } from '@/hooks/users';
+import { downloadPagePdf } from '@/api/pages';
 import { useCommand } from '@/lib/commands';
-import { t } from '@/lib/i18n';
+import { notifyError } from '@/lib/errors';
+import { useSharedProps } from '@/lib/page';
+import { t, tn } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
@@ -46,14 +49,14 @@ import { useUiStore } from '@/store/ui';
 import type { Page as WikiPage } from '@/types';
 import { ConflictBanner } from './ConflictBanner';
 import { SHEET } from './format';
-import { PageHeader, PageMenu } from './PageHeader';
+import { PageHeader, PageMenu, PdfMenu } from './PageHeader';
 import type { PageViewProps } from './PageView';
 import { ParkedDraft } from './ParkedDraft';
 import { SaveStatus } from './SaveStatus';
 import { MAX_TITLE, usePageSave } from './usePageSave';
 import { VersionsDialog } from './VersionsDialog';
 
-export function PageSheet({ page, projectId, identifier, ancestors, rights, focusTitle = false, onMove, onDelete, onCreateChild }: PageViewProps & { page: WikiPage }) {
+export function PageSheet({ page, projectId, identifier, ancestors, rights, focusTitle = false, subpages = 0, onMove, onDelete, onCreateChild }: PageViewProps & { page: WikiPage }) {
   const canEdit = rights.denied === null;
   const uploads = useUploadCounter();
   const me = useCurrentUser()?.id;
@@ -72,6 +75,8 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
   const ids = useId();
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  // what is typed is saved first, so the PDF shows it (a conflict or an empty title keeps the saved state)
+  const pdf = usePdfDownload(page, subpages, canEdit ? () => flush() : null);
 
   // a page just made: the title takes the focus, ready to be typed over
   useEffect(() => {
@@ -112,6 +117,23 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
       when: () => canEdit && onDelete !== undefined,
     },
     [canEdit, onDelete !== undefined],
+  );
+
+  useCommand(
+    { id: 'wiki.page.pdf', label: t('wiki.pdf.command'), group, icon: <FileDown />, keywords: [t('wiki.pdf.keywords')], run: () => pdf.download(false), when: () => pdf.reason === null },
+    [pdf.reason === null],
+  );
+  useCommand(
+    {
+      id: 'wiki.page.pdf_subtree',
+      label: tn('wiki.pdf.command_subtree', subpages + 1),
+      group,
+      icon: <FileDown />,
+      keywords: [t('wiki.pdf.keywords')],
+      run: () => pdf.download(true),
+      when: () => pdf.reason === null && subpages > 0,
+    },
+    [pdf.reason === null, subpages],
   );
 
   function onTitleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -155,6 +177,7 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
         <Button variant="ghost" size="sm" icon={History} onClick={() => setVersionsOpen(true)}>
           {t('wiki.versions.open')}
         </Button>
+        <PdfMenu subpages={subpages} reason={pdf.reason} pending={pdf.pending} onDownload={pdf.download} />
         {canEdit && onMove && onDelete && onCreateChild && <PageMenu onCreateChild={onCreateChild} onMove={onMove} onDelete={onDelete} />}
       </PageHeader>
       <VersionsDialog page={page} open={versionsOpen} onOpenChange={setVersionsOpen} restoreReason={rights.denied} beforeRestore={beforeRestore} />
@@ -272,4 +295,32 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
       </div>
     </article>
   );
+}
+
+/**
+ * The PDF of the page (WEBU-4): one download at a time (another press while one runs does nothing), the file goes to
+ * the browser as a download, a refusal over `notifyError` (a 5xx or no answer offers to try again). Without Gotenberg
+ * (`features.pdf`) it says why instead.
+ */
+function usePdfDownload(page: WikiPage, subpages: number, saveFirst: (() => Promise<boolean>) | null) {
+  const { features } = useSharedProps();
+  const [pending, setPending] = useState(false);
+  const running = useRef(false);
+  const reason = features.pdf ? null : t('wiki.pdf.unavailable');
+
+  function download(withSubpages: boolean) {
+    if (running.current || reason !== null) return;
+    running.current = true;
+    setPending(true);
+    Promise.resolve(saveFirst?.())
+      .then(() => downloadPagePdf(page.id, withSubpages && subpages > 0))
+      .then((link) => toast({ title: t('wiki.pdf.done', { name: link.filename }), tone: 'success' }))
+      .catch((error: unknown) => notifyError(t('wiki.pdf.failed', { title: page.title }), error, () => download(withSubpages)))
+      .finally(() => {
+        running.current = false;
+        setPending(false);
+      });
+  }
+
+  return { reason, pending, download };
 }

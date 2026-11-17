@@ -122,6 +122,12 @@ Während des Imports antwortet die Suche weiter aus dem alten Index, den der neu
 
 `MAIL_MAILER=log` (der Standard) sendet nichts: Einladungen werden als Links weitergegeben, **Passwort vergessen** ist ausgeblendet, und Benachrichtigungen bleiben in der Inbox. Mit `MAIL_MAILER=smtp` und `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` in der `.env` sendet werkbuch sie; `MAIL_SCHEME=smtps` (oder Port 465) spricht TLS ab dem ersten Byte, sonst wechselt werkbuch zu TLS, wenn der Server es anbietet. Nach `docker compose up -d` eine Testmail von der System-Seite schicken.
 
+## PDF
+
+Wiki-Seiten werden im Dienst `gotenberg` zu PDFs ([Gotenberg](https://gotenberg.dev) mit Chromium), im internen Netz `backend` wie Meilisearch, ohne veröffentlichten Port. werkbuch schickt ihm das HTML der Seiten mit eingebetteten Bildern und bekommt das PDF zurück (`GOTENBERG_URL`, in den Compose-Dateien `http://gotenberg:3000`; `GOTENBERG_TIMEOUT` Sekunden, Standard 30 wie die eigene Grenze von Gotenberg). Chromium läuft gehärtet: kein JavaScript, keine Adresse außer Gotenbergs eigenen Arbeitsdateien und `data:`-URLs, keine private und keine öffentliche IP. Für ein PDF verlässt nichts den Stack.
+
+`werkbuch` startet auch ohne ihn: solange `gotenberg` nicht läuft, antwortet **PDF** mit `503 pdf_unavailable` und die [System-Seite](#system-seite) sagt **Nicht erreichbar**; ohne `GOTENBERG_URL` ist der Knopf gesperrt und die System-Seite sagt **Aus**. Gotenberg braucht beim Rendern rund 300 MB Speicher.
+
 ## System-Seite
 
 Org-Admins finden den Zustand der Instanz unter **Einstellungen → System**: die Version, die wartenden Jobs je Queue mit dem ältesten, die für später geplanten Jobs, ob Meilisearch antwortet, mit seinen offenen und gescheiterten Aufgaben, ob ein Mailserver eingerichtet ist (mit dem Knopf **Testmail an …**), ob Reverb antwortet, und die fehlgeschlagenen Jobs mit **Alle erneut versuchen**. Die Prüfung von Reverb läuft innerhalb des Stacks; ob der Browser durch den Proxy kommt, zeigt nur der Browser (kein Banner **Live-Updates pausiert**).

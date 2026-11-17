@@ -13,6 +13,7 @@ import { currentToasts, resetToasts } from '@/components/ui/toast';
 import { preloadEditor } from '@/editor/RichTextEditor';
 import { drafts, pageDraft } from '@/lib/drafts';
 import { clearLiveGone, markLiveGone } from '@/lib/liveGone';
+import { listCommands } from '@/lib/commands';
 import { useUiStore } from '@/store/ui';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, list, makeAttachment, makePage, mara, organization, pageSummary } from '@/test/fixtures';
@@ -20,8 +21,10 @@ import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
 import type { RichText, Page as WikiPage } from '@/types';
 import { PageView, type PageViewProps } from './PageView';
 
+const shared = vi.hoisted(() => ({ pdf: true }));
+
 vi.mock('@inertiajs/react', () => ({
-  usePage: () => ({ props: { auth: { user: mara, permissions: [] }, organization }, url: '/projects/WEB/wiki/pg_web_domain' }),
+  usePage: () => ({ props: { auth: { user: mara, permissions: [] }, organization, features: { pdf: shared.pdf } }, url: '/projects/WEB/wiki/pg_web_domain' }),
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
     <a href={href} {...rest}>
       {children}
@@ -84,6 +87,7 @@ afterEach(() => {
   drafts.clear();
   clearLiveGone();
   useUiStore.setState({ peekItemId: null });
+  shared.pdf = true;
   act(() => resetToasts());
 });
 
@@ -371,5 +375,133 @@ describe('a wiki page', () => {
     expect(onDelete).not.toHaveBeenCalled();
     expect(saves()).toHaveLength(0);
     expect(currentToasts()).toHaveLength(0);
+  });
+});
+
+describe('the PDF of a page (WEBU-4)', () => {
+  const link = (subpages: boolean) => ({
+    url: `https://werkbuch.ddev.site/pages/pg_web_domain/pdf${subpages ? '?subpages=1' : ''}`,
+    filename: 'Domain-Umzug.pdf',
+    pages: subpages ? 3 : 1,
+  });
+  let clicked: { href: string; download: string }[];
+
+  beforeEach(() => {
+    clicked = [];
+    URL.createObjectURL = vi.fn(() => 'blob:pdf');
+    URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      clicked.push({ href: this.href, download: this.download });
+    });
+    overrides['GET /api/v1/pages/pg_web_domain/pdf'] = (_body, url) => ({ body: { data: link(url.searchParams.get('subpages') === '1') } });
+    overrides['GET /pages/pg_web_domain/pdf'] = () => ({ file: { body: '%PDF-1.7', type: 'application/pdf' } });
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('downloads the page alone with one button when it has no subpages, for a viewer too', async () => {
+    const user = userEvent.setup();
+    renderPage({ rights: { ready: true, denied: 'Als Viewer liest du das Wiki nur.' } });
+    await user.click(await screen.findByRole('button', { name: 'PDF' }));
+
+    await waitFor(() => expect(clicked).toEqual([{ href: 'blob:pdf', download: 'Domain-Umzug.pdf' }]));
+    expect(api.calls.filter((call) => call.url.includes('/pdf')).map((call) => call.url)).toEqual(['/api/v1/pages/pg_web_domain/pdf', '/pages/pg_web_domain/pdf']);
+    expect(currentToasts().map((toast) => toast.title)).toContain('Domain-Umzug.pdf heruntergeladen');
+    // the link to the file is not kept
+    expect(document.querySelector('a[download]')).toBeNull();
+  });
+
+  it('saves what is typed before it asks for the PDF', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const title = await titleField();
+    await user.type(title, ' neu');
+    fireEvent.click(screen.getByRole('button', { name: 'PDF' }));
+
+    await waitFor(() => expect(clicked).toHaveLength(1));
+    const order = api.calls.filter((call) => call.method === 'PATCH' || call.url.includes('/pdf')).map((call) => `${call.method} ${call.url}`);
+    expect(order).toEqual(['PATCH /api/v1/pages/pg_web_domain', 'GET /api/v1/pages/pg_web_domain/pdf', 'GET /pages/pg_web_domain/pdf']);
+    expect(saves()[0]?.title).toBe('Domain-Umzug neu');
+  });
+
+  it('offers the page or the page with its subpages in a menu, and in the palette', async () => {
+    const user = userEvent.setup();
+    renderPage({ subpages: 2 });
+    await user.click(await screen.findByRole('button', { name: 'PDF' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Mit Unterseiten (3 Seiten)' }));
+
+    await waitFor(() => expect(clicked).toHaveLength(1));
+    expect(api.calls.some((call) => call.url === '/api/v1/pages/pg_web_domain/pdf?subpages=1')).toBe(true);
+    expect(listCommands().map((command) => command.label)).toEqual(expect.arrayContaining(['Als PDF herunterladen', 'Als PDF mit Unterseiten herunterladen (3 Seiten)']));
+
+    const run = (id: string) => act(() => listCommands().find((command) => command.id === id)?.run());
+    run('wiki.page.pdf');
+    await waitFor(() => expect(clicked).toHaveLength(2));
+    run('wiki.page.pdf_subtree');
+    await waitFor(() => expect(clicked).toHaveLength(3));
+    // the page alone from the menu
+    await user.click(screen.getByRole('button', { name: 'PDF' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Diese Seite' }));
+    await waitFor(() => expect(clicked).toHaveLength(4));
+    expect(api.calls.filter((call) => call.url.startsWith('/api/v1/pages/pg_web_domain/pdf')).map((call) => call.url)).toEqual([
+      '/api/v1/pages/pg_web_domain/pdf?subpages=1',
+      '/api/v1/pages/pg_web_domain/pdf',
+      '/api/v1/pages/pg_web_domain/pdf?subpages=1',
+      '/api/v1/pages/pg_web_domain/pdf',
+    ]);
+  });
+
+  it('asks once while a download runs', async () => {
+    let release: () => void = () => {};
+    overrides['GET /pages/pg_web_domain/pdf'] = () => ({ file: { body: '%PDF-1.7', type: 'application/pdf' } });
+    const original = globalThis.fetch;
+    globalThis.fetch = (input, init) =>
+      String(input).includes('/pages/pg_web_domain/pdf') && !String(input).includes('/api/') ? new Promise((done) => (release = () => done(original(input, init)))).then((r) => r as Response) : original(input, init);
+    renderPage();
+    const button = await screen.findByRole('button', { name: 'PDF' });
+
+    fireEvent.click(button);
+    await waitFor(() => expect(button.getAttribute('aria-disabled')).toBe('true'));
+    // the button is busy, and the palette asks nothing either
+    fireEvent.click(button);
+    act(() => listCommands().find((command) => command.id === 'wiki.page.pdf')?.run());
+    release();
+    await waitFor(() => expect(clicked).toHaveLength(1));
+    expect(api.calls.filter((call) => call.url === '/api/v1/pages/pg_web_domain/pdf')).toHaveLength(1);
+    globalThis.fetch = original;
+  });
+
+  it('says why without a PDF service, and offers no command', async () => {
+    shared.pdf = false;
+    const user = userEvent.setup();
+    renderPage({ subpages: 2 });
+    const button = await screen.findByRole('button', { name: 'PDF' });
+
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.getAttribute('aria-describedby')).not.toBeNull();
+    expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toContain('kein PDF-Dienst');
+    await user.click(button);
+    expect(listCommands().some((command) => command.id.startsWith('wiki.page.pdf') && command.when?.() !== false)).toBe(false);
+    // a command run all the same asks nothing
+    act(() => listCommands().find((command) => command.id === 'wiki.page.pdf')?.run());
+    expect(api.calls.some((call) => call.url.includes('/pdf'))).toBe(false);
+  });
+
+  it('says a refusal of the link and of the file, and tries again where it may help', async () => {
+    const user = userEvent.setup();
+    overrides['GET /api/v1/pages/pg_web_domain/pdf'] = () => ({ status: 503, body: { status: 503, reason: 'pdf_unavailable', title: 'Service Unavailable' } });
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'PDF' }));
+    await waitFor(() => expect(currentToasts().map((toast) => toast.title)).toContain('PDF von „Domain-Umzug“ nicht erstellt'));
+    const failed = currentToasts().find((toast) => toast.title === 'PDF von „Domain-Umzug“ nicht erstellt');
+    expect(failed?.action).toBeDefined();
+
+    // the link works now, the file is refused: too many in a minute
+    act(() => resetToasts());
+    overrides['GET /api/v1/pages/pg_web_domain/pdf'] = () => ({ body: { data: link(false) } });
+    overrides['GET /pages/pg_web_domain/pdf'] = () => ({ status: 429, body: { message: 'Too Many Attempts.' } });
+    act(() => failed?.action?.onClick());
+    await waitFor(() => expect(currentToasts().map((toast) => toast.description)).toContain('Zu viele Anfragen. Versuch es gleich noch einmal.'));
+    expect(clicked).toEqual([]);
   });
 });

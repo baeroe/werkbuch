@@ -9,7 +9,7 @@
  */
 
 import type { Page as WikiPage, PageNode, PageSummary, PageVersion, PageVersionDetail, RichText } from '@/types';
-import { allPages, type Page } from './client';
+import { allPages, ApiError, type Page } from './client';
 import { del, get, getPage as getList, one, patch, post } from './http';
 
 const projectPages = (project: string) => `/projects/${encodeURIComponent(project)}/pages`;
@@ -100,4 +100,46 @@ export function restorePageVersion(page_id: string, version_id: string): Promise
 /** The pages of the wiki that reference a work item (ULID or key), by title, without text; only those the reader sees. */
 export function listItemPages(item_id: string): Promise<Page<PageSummary>> {
   return allPages((cursor) => getList<PageSummary>(`/work-items/${encodeURIComponent(item_id)}/pages`, { cursor }));
+}
+
+/** Where to download a page as PDF (WEBU-4): `GET /pages/{id}/pdf`, with `subpages` its subtree. */
+export interface PagePdfLink {
+  url: string;
+  filename: string;
+  pages: number;
+}
+
+export function pagePdfLink(page_id: string, subpages: boolean): Promise<PagePdfLink> {
+  return one(get<{ data: PagePdfLink }>(`/pages/${page_id}/pdf`, subpages ? { subpages: 1 } : {}));
+}
+
+/**
+ * Downloads a page as PDF: asks for the link (which says 404, 422 or 503 `pdf_unavailable` as any call does), fetches
+ * the file with the session and hands it to the browser as a download under its name. A refusal of the file itself
+ * (429, 503) is an `ApiError` too; the reason comes from the status, the web route answers no problem document.
+ */
+export async function downloadPagePdf(page_id: string, subpages: boolean): Promise<PagePdfLink> {
+  const link = await pagePdfLink(page_id, subpages);
+  // no answer at all stays the TypeError of fetch, as in every call (notifyError offers to try again)
+  const response = await fetch(link.url, { credentials: 'same-origin', headers: { Accept: 'application/pdf' } });
+  if (!response.ok) {
+    throw new ApiError({ status: response.status, reason: response.status === 429 ? 'too_many_requests' : response.status === 404 ? 'not_found' : 'pdf_unavailable' });
+  }
+  // a redirect (to the sign-in when the session ended between the link and the file, or back after a refusal) brings
+  // HTML: never saved as a PDF
+  if (response.redirected || !(response.headers.get('Content-Type') ?? '').startsWith('application/pdf')) {
+    throw new ApiError({ status: response.status, reason: new URL(response.url, window.location.origin).pathname === '/login' ? 'unauthenticated' : 'http_error' });
+  }
+  const url = URL.createObjectURL(await response.blob());
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = link.filename;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  // the browser has taken the file once the click ran; a moment later the memory goes
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  return link;
 }

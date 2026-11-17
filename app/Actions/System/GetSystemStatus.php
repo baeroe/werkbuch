@@ -4,6 +4,7 @@ namespace App\Actions\System;
 
 use App\Access\Authorize;
 use App\Models\Organization;
+use App\Pdf\Gotenberg;
 use App\Search\PoolsStatus;
 use App\Search\ReportsStatus;
 use App\Support\Actor;
@@ -40,6 +41,8 @@ final class GetSystemStatus
 
     private const LIVE_KEY = 'live';
 
+    private const PDF_KEY = 'pdf';
+
     /**
      * @return array{
      *     version: string,
@@ -52,6 +55,7 @@ final class GetSystemStatus
      *     search_tasks: array{enqueued: int, processing: int, failed_last_day: int}|null,
      *     mail_configured: bool,
      *     live: 'ok'|'down'|'off',
+     *     pdf: 'ok'|'down'|'off',
      * }
      */
     public function handle(Actor $actor): array
@@ -62,7 +66,7 @@ final class GetSystemStatus
         $failed = DB::connection(config('queue.failed.database'))->table(config('queue.failed.table'));
 
         $engine = app(EngineManager::class)->engine();
-        [$search, $live] = $this->ask($engine);
+        [$search, $live, $pdf] = $this->ask($engine);
 
         return [
             'version' => (string) config('werkbuch.version'),
@@ -74,6 +78,7 @@ final class GetSystemStatus
             ...$search,
             'mail_configured' => MailSetup::configured(),
             'live' => $live,
+            'pdf' => $pdf,
         ];
     }
 
@@ -128,18 +133,20 @@ final class GetSystemStatus
      * not for both (K21). An engine that cannot say how it is (the `null` engine) is `down`; one that is not a pool
      * (ReportsStatus alone) answers by itself.
      *
-     * @return array{0: array{search: 'ok'|'down', search_tasks: array{enqueued: int, processing: int, failed_last_day: int}|null}, 1: 'ok'|'down'|'off'}
+     * @return array{0: array{search: 'ok'|'down', search_tasks: array{enqueued: int, processing: int, failed_last_day: int}|null}, 1: 'ok'|'down'|'off', 2: 'ok'|'down'|'off'}
      */
     private function ask(object $engine): array
     {
         $url = $this->liveUrl();
-        $responses = $engine instanceof PoolsStatus || $url !== null ? Http::pool(function (Pool $pool) use ($engine, $url): void {
+        $gotenberg = app(Gotenberg::class);
+        $responses = $engine instanceof PoolsStatus || $url !== null || $gotenberg->configured() ? Http::pool(function (Pool $pool) use ($engine, $url, $gotenberg): void {
             if ($engine instanceof PoolsStatus) {
                 $engine->statusRequests($pool);
             }
             if ($url !== null) {
                 $pool->as(self::LIVE_KEY)->connectTimeout(2)->timeout(2)->get($url);
             }
+            $gotenberg->statusRequest($pool, self::PDF_KEY);
         }) : [];
 
         $search = match (true) {
@@ -149,7 +156,7 @@ final class GetSystemStatus
         };
         $live = $url === null ? 'off' : (($responses[self::LIVE_KEY] ?? null) instanceof Response && $responses[self::LIVE_KEY]->successful() ? 'ok' : 'down');
 
-        return [$search, $live];
+        return [$search, $live, $gotenberg->statusFrom($responses, self::PDF_KEY)];
     }
 
     private function liveUrl(): ?string

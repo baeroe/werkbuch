@@ -4,11 +4,12 @@
  */
 
 import { Link } from '@inertiajs/react';
-import { Ellipsis, FilePlus2, FolderInput, Trash2 } from 'lucide-react';
+import { Ellipsis, FileDown, FilePlus2, FolderInput, Trash2 } from 'lucide-react';
 import { useRef, type ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/Menu';
-import { t } from '@/lib/i18n';
+import { t, tn } from '@/lib/i18n';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
 import { paths } from '@/lib/links';
 import type { PageNode } from '@/types';
@@ -71,6 +72,48 @@ export function PageMenu({ onCreateChild, onMove, onDelete }: PageMenuProps) {
         <MenuSeparator />
         <MenuItem icon={Trash2} danger shortcut={SHORTCUTS['wiki.delete'].keys} onClick={act(onDelete)}>
           {t('wiki.delete.menu')}
+        </MenuItem>
+      </MenuContent>
+    </Menu>
+  );
+}
+
+export interface PdfMenuProps {
+  /** How many pages lie below this one: with any, the menu offers the page with them (WEBU-4). */
+  subpages: number;
+  /** Why no PDF can be made (no Gotenberg configured), null: it can. */
+  reason: string | null;
+  pending: boolean;
+  onDownload: (subpages: boolean) => void;
+}
+
+/**
+ * "PDF": the page as a PDF download, for everyone who reads it. Without subpages a plain button, with them a menu of
+ * "Diese Seite" and "Mit Unterseiten". Without Gotenberg the button says why, focusable as every blocked button.
+ */
+export function PdfMenu({ subpages, reason, pending, onDownload }: PdfMenuProps) {
+  if (subpages === 0 || reason !== null) {
+    return (
+      <Button variant="ghost" size="sm" icon={FileDown} pending={pending} disabledReason={reason} onClick={() => onDownload(false)}>
+        {t('wiki.pdf.open')}
+      </Button>
+    );
+  }
+  return (
+    <Menu>
+      <MenuTrigger
+        render={
+          <Button variant="ghost" size="sm" icon={FileDown} pending={pending}>
+            {t('wiki.pdf.open')}
+          </Button>
+        }
+      />
+      <MenuContent align="end" className="w-64">
+        <MenuItem icon={FileDown} onClick={() => onDownload(false)}>
+          {t('wiki.pdf.page')}
+        </MenuItem>
+        <MenuItem icon={FileDown} onClick={() => onDownload(true)}>
+          {tn('wiki.pdf.subtree', subpages + 1)}
         </MenuItem>
       </MenuContent>
     </Menu>

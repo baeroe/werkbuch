@@ -85,6 +85,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::get('projects/{project}/pages', [PagesController::class, 'index']);
     Route::post('projects/{project}/pages', [PagesController::class, 'store']);
     Route::get('pages/{page}', [PagesController::class, 'show']);
+    Route::get('pages/{page}/pdf', [PagesController::class, 'pdf']);
     Route::patch('pages/{page}', [PagesController::class, 'update']);
     Route::post('pages/{page}/move', [PagesController::class, 'move']);
     Route::delete('pages/{page}', [PagesController::class, 'destroy']);

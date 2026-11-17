@@ -10,6 +10,7 @@ use App\Http\Resources\UserResource;
 use App\Models\Attachment;
 use App\Models\Organization;
 use App\Models\User;
+use App\Pdf\Gotenberg;
 use App\Support\MailSetup;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
@@ -43,6 +44,8 @@ class HandleInertiaRequests extends Middleware
             'organization' => (new OrganizationResource(Organization::current()))->resolve($request),
             'features' => [
                 'mail' => MailSetup::configured(),
+                // whether wiki pages can be downloaded as PDF at all (a Gotenberg is configured, WEBU-4)
+                'pdf' => app(Gotenberg::class)->configured(),
                 // what the browser needs to open the WebSocket (werkbuch.live, not the address the server sends to); null without Reverb (A285) and while its key or host is
                 // missing from the environment (T2-M3: the browser would connect nowhere)
                 'live' => config('broadcasting.default') === 'reverb' && filled(config('broadcasting.connections.reverb.key'))

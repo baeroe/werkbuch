@@ -115,6 +115,7 @@ const FLOWS = [
   'move a card where the ranks ran out', // 4.11, A448
   'open a wiki page of an item', // 4.8, 4.15, A456
   'edit a table in the editor', // 4.16, A454
+  'download a wiki page as PDF', // 4.15, WEBU-4
 ];
 /** A name of `GAPS` with a space is a flow, one without a key of the catalog or the widgets. */
 const isFlow = (name) => /\s/.test(name);

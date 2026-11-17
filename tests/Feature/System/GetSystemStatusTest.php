@@ -33,6 +33,8 @@ $failed = function (string $queue, string $job, string $exception, string $faile
 };
 
 beforeEach(function () {
+    // Gotenberg has tests of its own below; without it the pool asks only what these tests name
+    config(['werkbuch.pdf.gotenberg_url' => null]);
     $this->admin = User::factory()->admin()->create();
     $this->travelTo(now()->parse('2026-11-03 10:00:00', 'UTC'));
 });
@@ -214,6 +216,31 @@ it('says live is down and search is up when only Reverb fails', function () use 
     expect(GetSystemStatus::run(actor($this->admin)))->toMatchArray(['search' => 'ok', 'search_tasks' => ['enqueued' => 0, 'processing' => 0, 'failed_last_day' => 0], 'live' => 'down'])
         // down because Reverb refused the connection, not because nothing asked it
         ->and($reverb->isEmpty())->toBeTrue();
+});
+
+it('says the PDF is off without Gotenberg, and asks its health in the same pool otherwise (WEBU-4)', function () use ($meilisearch) {
+    expect(GetSystemStatus::run(actor($this->admin))['pdf'])->toBe('off');
+
+    $meilisearch();
+    config(['werkbuch.pdf.gotenberg_url' => 'http://gotenberg.test:3000/']);
+    Http::fake([
+        'meili.test/*' => Http::response(['status' => 'available', 'total' => 0]),
+        '127.0.0.1:6001/up' => Http::response('{"health":"OK"}'),
+        'gotenberg.test:3000/health' => Http::sequence()->push(['status' => 'up'])->push(['status' => 'down'], 503),
+    ]);
+
+    expect(GetSystemStatus::run(actor($this->admin)))->toMatchArray(['search' => 'ok', 'live' => 'ok', 'pdf' => 'ok'])
+        ->and(GetSystemStatus::run(actor($this->admin))['pdf'])->toBe('down');
+    // the health, three kinds of tasks, Reverb and Gotenberg, twice
+    Http::assertSentCount(12);
+    Http::assertSent(fn ($request) => $request->url() === 'http://gotenberg.test:3000/health');
+});
+
+it('says the PDF is down when Gotenberg refuses the connection', function () {
+    config(['broadcasting.default' => 'log', 'werkbuch.pdf.gotenberg_url' => 'http://gotenberg.test:3000']);
+    Http::fake(['gotenberg.test:3000/health' => fn ($request) => Http::failedConnection('Connection refused')($request)]);
+
+    expect(GetSystemStatus::run(actor($this->admin))['pdf'])->toBe('down');
 });
 
 it('refuses members and bots with 403', function () {

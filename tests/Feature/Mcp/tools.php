@@ -191,6 +191,7 @@ return [
 
         return ['item' => $item->key, 'per_page' => 5];
     }],
+    'pages:pdf' => ['arguments' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id, 'subpages' => 1]],
     'manage-pages:create' => ['arguments' => fn (MatrixWorld $w) => ['project' => $w->web->identifier, 'input' => ['title' => 'Matrix']]],
     'manage-pages:update' => ['arguments' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id, 'input' => ['title' => 'Matrix']]],
     'manage-pages:move' => ['arguments' => fn (MatrixWorld $w) => ['page' => $w->page('project_admin')->id, 'input' => ['parent_id' => null, 'before_id' => null]]],

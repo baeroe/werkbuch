@@ -122,6 +122,12 @@ During the import the search keeps answering from the old index, which the new o
 
 `MAIL_MAILER=log` (the default) sends nothing: invitations are handed on as links, **Forgot password** is hidden and notifications stay in the inbox. With `MAIL_MAILER=smtp` and `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` in `.env` werkbuch sends them; `MAIL_SCHEME=smtps` (or port 465) speaks TLS from the first byte, otherwise werkbuch switches to TLS when the server offers it. After `docker compose up -d`, send a test mail from the system page.
 
+## PDF
+
+Wiki pages become PDFs in the service `gotenberg` ([Gotenberg](https://gotenberg.dev) with Chromium), in the internal network `backend` like Meilisearch, without a published port. werkbuch sends it the HTML of the pages with the images inlined and gets the PDF back (`GOTENBERG_URL`, `http://gotenberg:3000` in the compose files; `GOTENBERG_TIMEOUT` seconds, 30 by default like Gotenberg's own limit). Chromium runs hardened: no JavaScript, no address but Gotenberg's own working files and `data:` URLs, no private and no public IP. Nothing leaves the stack for a PDF.
+
+`werkbuch` starts without it: while `gotenberg` is down, **PDF** answers `503 pdf_unavailable` and the [system page](#system-page) says **Unreachable**; without `GOTENBERG_URL` the button is disabled and the system page says **Off**. Gotenberg needs about 300 MB of memory while it renders.
+
 ## System page
 
 Org admins find the state of the instance under **Settings → System**: the version, the jobs waiting per queue with the oldest one, the jobs planned for later, whether Meilisearch answers with its open and failed tasks, whether a mail server is set up (with the button **Test mail to …**), whether Reverb answers, and the failed jobs with **Retry all**. The check of Reverb runs inside the stack; whether the browser gets through your proxy shows only in the browser (no **Live updates paused** banner).

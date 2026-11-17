@@ -79,7 +79,7 @@ describe('System', () => {
     const terms = instance.querySelector('dl')!;
     expect(terms.hasAttribute('role')).toBe(false);
     expect(within(instance).getAllByRole('term').every((term) => term.closest('dl') === terms)).toBe(true);
-    expect(within(instance).getAllByRole('term')).toHaveLength(6);
+    expect(within(instance).getAllByRole('term')).toHaveLength(7);
     expect(within(fact(instance, 'Version')).getByRole('definition').textContent).toBe('0.1.0-dev');
     expect(within(fact(instance, 'Version')).getByText('0.1.0-dev').getAttribute('translate')).toBe('no');
 
@@ -148,6 +148,21 @@ describe('System', () => {
     expect(within(live).getByText('Nicht erreichbar')).toBeTruthy();
     expect(within(live).getByText('Reverb antwortet nicht: Listen und Inbox aktualisieren sich erst beim nächsten Laden.')).toBeTruthy();
     expect(within(live).getByText(/„Websockets Support“/)).toBeTruthy();
+  });
+
+  it('says whether the PDF of wiki pages works (WEBU-4)', async () => {
+    for (const [pdf, word, note] of [
+      ['ok', 'Läuft', null],
+      ['down', 'Nicht erreichbar', 'Gotenberg antwortet nicht: Wiki-Seiten lassen sich nicht als PDF herunterladen.'],
+      ['off', 'Aus', 'GOTENBERG_URL ist nicht gesetzt: Wiki-Seiten lassen sich nicht als PDF herunterladen.'],
+    ] as const) {
+      const { unmount } = renderSystem(makeSystemStatus({ pdf }));
+      const fact_ = fact(await screen.findByRole('group', { name: 'Zustand der Instanz' }), 'PDF (Gotenberg)');
+      expect(within(fact_).getByText(word)).toBeTruthy();
+      if (note !== null) expect(within(fact_).getByText(note)).toBeTruthy();
+      else expect(within(fact_).queryByText(/Wiki-Seiten/)).toBeNull();
+      unmount();
+    }
   });
 
   it('lists failed jobs and retries them all', async () => {

@@ -31,6 +31,9 @@ arch('search turns models into documents and writes nothing')
 arch('webhooks build payloads and targets, record nothing and leave the database to actions')
     ->expect('App\Webhooks')->classes()->toBeFinal()
     ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema']);
+arch('the PDF of wiki pages renders and records nothing')
+    ->expect('App\Pdf')->classes()->toBeFinal()
+    ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema']);
 arch('the consumer of notifications hands every event to its action and computes nothing')
     ->expect('App\Notifications\NotificationConsumer')->toBeFinal()
     ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'App\Domain', 'App\Models\Notification']);

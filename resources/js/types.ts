@@ -778,6 +778,8 @@ export interface SystemStatus {
   mail_configured: boolean;
   /** Reverb: `off` when live updates are not set up. */
   live: 'ok' | 'down' | 'off';
+  /** Gotenberg, the PDF of wiki pages (WEBU-4); off without GOTENBERG_URL. */
+  pdf: 'ok' | 'down' | 'off';
 }
 
 /* --------------------------------------------------------------------- API shapes */

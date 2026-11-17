@@ -8,7 +8,7 @@ use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\Support\ScriptedTransport;
 
 /** The shape of `SystemStatus` (phase plan 8 "REST"; the clickdummy's types.ts plus backlog, delays, Meilisearch tasks and live). */
-$shape = ['version', 'queued_jobs', 'delayed_jobs', 'queues', 'failed_jobs', 'failed_jobs_total', 'search', 'search_tasks', 'mail_configured', 'live'];
+$shape = ['version', 'queued_jobs', 'delayed_jobs', 'queues', 'failed_jobs', 'failed_jobs_total', 'search', 'search_tasks', 'mail_configured', 'live', 'pdf'];
 
 it('shows the system to an org admin', function () use ($shape) {
     $this->travelTo(now()->parse('2026-11-03 10:00:00', 'UTC'));

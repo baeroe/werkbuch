@@ -50,8 +50,10 @@ use App\Actions\Organization\GetOrganization;
 use App\Actions\Organization\UpdateOrganization;
 use App\Actions\Pages\CreatePage;
 use App\Actions\Pages\DeletePage;
+use App\Actions\Pages\ExportPagePdf;
 use App\Actions\Pages\GetPage;
 use App\Actions\Pages\GetPageVersion;
+use App\Actions\Pages\LinkPagePdf;
 use App\Actions\Pages\ListItemPages;
 use App\Actions\Pages\ListPages;
 use App\Actions\Pages\ListPageVersions;
@@ -183,9 +185,11 @@ use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
+use App\Pdf\Gotenberg;
 use App\Support\Actor;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
@@ -944,6 +948,23 @@ return [
     'GetPage' => [
         'action' => GetPage::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetPage::run($a, $w->page($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    // the PDF of a page (WEBU-4): whoever sees it, also a viewer; Gotenberg answers a fake PDF
+    'LinkPagePdf' => [
+        'action' => LinkPagePdf::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => LinkPagePdf::run($a, $w->page($column), ['subpages' => true]),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'ExportPagePdf' => [
+        'action' => ExportPagePdf::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            Http::fake(['*'.Gotenberg::ROUTE => Http::response('%PDF-1.7 matrix')]);
+
+            return ExportPagePdf::run($a, $w->page($column), []);
+        },
         'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
         'hidden' => ['outsider_private'],
     ],

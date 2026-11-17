@@ -16,7 +16,8 @@
 
 import { emptySearch } from './fixtures';
 
-export type MockRoute = (body: unknown, url: URL) => { status?: number; body?: unknown };
+/** `file`: a body that is no JSON, sent as it is with its type (a PDF, `application/pdf`). */
+export type MockRoute = (body: unknown, url: URL) => { status?: number; body?: unknown; file?: { body: string; type: string } };
 
 export interface MockCall {
   method: string;
@@ -30,7 +31,10 @@ export interface MockApi {
   restore(): void;
 }
 
-function answer({ status, body }: { status?: number; body?: unknown }): Response {
+function answer({ status, body, file }: { status?: number; body?: unknown; file?: { body: string; type: string } }): Response {
+  if (file !== undefined) {
+    return new Response(file.body, { status: status ?? 200, headers: { 'Content-Type': file.type } });
+  }
   if (body === undefined) {
     return new Response(null, { status: status ?? 204 });
   }
