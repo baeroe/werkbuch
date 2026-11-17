@@ -36,7 +36,7 @@ return [
     // one rendering: a page with its subpages and pictures takes a few
     'pdf' => [
         'gotenberg_url' => env('GOTENBERG_URL') ?: null,
-        'timeout' => (int) env('GOTENBERG_TIMEOUT', 60),
+        'timeout' => (int) env('GOTENBERG_TIMEOUT', 30),
     ],
 
     // classes implementing App\Events\EventConsumer: each receives every domain event once, after the commit, in its own

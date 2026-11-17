@@ -23,7 +23,8 @@ final class PagePdfController extends Controller
 
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => HeaderUtils::makeDisposition('attachment', $name, $ascii === '' ? 'werkbuch.pdf' : $ascii),
+            // a title of emoji alone leaves only the extension in ASCII
+            'Content-Disposition' => HeaderUtils::makeDisposition('attachment', $name, trim($ascii, ' _.') === 'pdf' ? 'werkbuch.pdf' : $ascii),
             'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'private, no-store',
         ]);

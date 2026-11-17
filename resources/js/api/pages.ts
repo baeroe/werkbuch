@@ -125,6 +125,11 @@ export async function downloadPagePdf(page_id: string, subpages: boolean): Promi
   if (!response.ok) {
     throw new ApiError({ status: response.status, reason: response.status === 429 ? 'too_many_requests' : response.status === 404 ? 'not_found' : 'pdf_unavailable' });
   }
+  // a redirect (to the sign-in when the session ended between the link and the file, or back after a refusal) brings
+  // HTML: never saved as a PDF
+  if (response.redirected || !(response.headers.get('Content-Type') ?? '').startsWith('application/pdf')) {
+    throw new ApiError({ status: response.status, reason: new URL(response.url, window.location.origin).pathname === '/login' ? 'unauthenticated' : 'http_error' });
+  }
   const url = URL.createObjectURL(await response.blob());
   const anchor = document.createElement('a');
   anchor.href = url;

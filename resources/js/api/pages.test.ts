@@ -141,5 +141,23 @@ describe('pages', () => {
       await expect(downloadPagePdf('pg_web_structure', false)).rejects.toMatchObject({ status, reason });
     }
   });
+
+  it('never saves what is no PDF: an answer of another type, or a redirect to the sign-in', async () => {
+    const link = { url: 'https://werkbuch.ddev.site/pages/pg_web_structure/pdf', filename: 'Seitenstruktur.pdf', pages: 1 };
+    api = mockApi({ 'GET /api/v1/pages/pg_web_structure/pdf': () => ({ body: { data: link } }), 'GET /pages/pg_web_structure/pdf': () => ({ file: { body: '<html>', type: 'text/html' } }) });
+    await expect(downloadPagePdf('pg_web_structure', false)).rejects.toMatchObject({ status: 200, reason: 'http_error' });
+
+    // fetch followed a redirect to the sign-in page
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      const response = await inner(input, init);
+      if (!String(input).includes('/pages/pg_web_structure/pdf') || String(input).includes('/api/')) return response;
+      Object.defineProperty(response, 'redirected', { value: true });
+      Object.defineProperty(response, 'url', { value: 'https://werkbuch.ddev.site/login' });
+      return response;
+    };
+    await expect(downloadPagePdf('pg_web_structure', false)).rejects.toMatchObject({ reason: 'unauthenticated' });
+    globalThis.fetch = inner;
+  });
 });
 

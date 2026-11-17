@@ -75,7 +75,8 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
   const ids = useId();
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
-  const pdf = usePdfDownload(page, subpages);
+  // what is typed is saved first, so the PDF shows it (a conflict or an empty title keeps the saved state)
+  const pdf = usePdfDownload(page, subpages, canEdit ? () => flush() : null);
 
   // a page just made: the title takes the focus, ready to be typed over
   useEffect(() => {
@@ -301,7 +302,7 @@ export function PageSheet({ page, projectId, identifier, ancestors, rights, focu
  * the browser as a download, a refusal over `notifyError` (a 5xx or no answer offers to try again). Without Gotenberg
  * (`features.pdf`) it says why instead.
  */
-function usePdfDownload(page: WikiPage, subpages: number) {
+function usePdfDownload(page: WikiPage, subpages: number, saveFirst: (() => Promise<boolean>) | null) {
   const { features } = useSharedProps();
   const [pending, setPending] = useState(false);
   const running = useRef(false);
@@ -311,7 +312,8 @@ function usePdfDownload(page: WikiPage, subpages: number) {
     if (running.current || reason !== null) return;
     running.current = true;
     setPending(true);
-    downloadPagePdf(page.id, withSubpages && subpages > 0)
+    Promise.resolve(saveFirst?.())
+      .then(() => downloadPagePdf(page.id, withSubpages && subpages > 0))
       .then((link) => toast({ title: t('wiki.pdf.done', { name: link.filename }), tone: 'success' }))
       .catch((error: unknown) => notifyError(t('wiki.pdf.failed', { title: page.title }), error, () => download(withSubpages)))
       .finally(() => {

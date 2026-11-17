@@ -124,7 +124,7 @@ Während des Imports antwortet die Suche weiter aus dem alten Index, den der neu
 
 ## PDF
 
-Wiki-Seiten werden im Dienst `gotenberg` zu PDFs ([Gotenberg](https://gotenberg.dev) mit Chromium), im internen Netz `backend` wie Meilisearch, ohne veröffentlichten Port. werkbuch schickt ihm das HTML der Seiten mit eingebetteten Bildern und bekommt das PDF zurück (`GOTENBERG_URL`, in den Compose-Dateien `http://gotenberg:3000`; `GOTENBERG_TIMEOUT` Sekunden, Standard 60). Chromium läuft gehärtet: kein JavaScript, keine Adresse außer Gotenbergs eigenen Arbeitsdateien und `data:`-URLs, keine private und keine öffentliche IP. Für ein PDF verlässt nichts den Stack.
+Wiki-Seiten werden im Dienst `gotenberg` zu PDFs ([Gotenberg](https://gotenberg.dev) mit Chromium), im internen Netz `backend` wie Meilisearch, ohne veröffentlichten Port. werkbuch schickt ihm das HTML der Seiten mit eingebetteten Bildern und bekommt das PDF zurück (`GOTENBERG_URL`, in den Compose-Dateien `http://gotenberg:3000`; `GOTENBERG_TIMEOUT` Sekunden, Standard 30 wie die eigene Grenze von Gotenberg). Chromium läuft gehärtet: kein JavaScript, keine Adresse außer Gotenbergs eigenen Arbeitsdateien und `data:`-URLs, keine private und keine öffentliche IP. Für ein PDF verlässt nichts den Stack.
 
 `werkbuch` startet auch ohne ihn: solange `gotenberg` nicht läuft, antwortet **PDF** mit `503 pdf_unavailable` und die [System-Seite](#system-seite) sagt **Nicht erreichbar**; ohne `GOTENBERG_URL` ist der Knopf gesperrt und die System-Seite sagt **Aus**. Gotenberg braucht beim Rendern rund 300 MB Speicher.
 

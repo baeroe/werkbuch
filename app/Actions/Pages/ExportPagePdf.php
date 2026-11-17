@@ -107,7 +107,8 @@ final class ExportPagePdf
     /** The file name: the title of the page, without what a file name cannot carry. */
     public static function filename(Page $page): string
     {
-        $name = trim((string) preg_replace('~[\x00-\x1f\x7f/\\\\:*?"<>|]+~u', ' ', $page->title));
+        // control and format characters too (no right-to-left override turns `fdp.exe` around), as for uploads
+        $name = trim((string) preg_replace('~[\p{Cc}\p{Cf}/\\\\:*?"<>|]+~u', ' ', $page->title));
 
         return ($name === '' ? 'werkbuch' : $name).'.pdf';
     }
@@ -130,8 +131,9 @@ final class ExportPagePdf
         $attachmentIds = $documents->filter()->flatMap(fn (Document $doc) => $doc->attachmentIds())->unique()->values()->all();
         $images = self::images($actor, $project->id, $attachmentIds);
         $zone = Organization::current()->timezone;
+        $parents = $all->map(fn (object $row) => $row->parent_id === null ? null : (string) $row->parent_id)->all();
 
-        $entries = $pages->map(function (Page $page) use ($all, $editors, $documents, $images, $zone, $root) {
+        $entries = $pages->map(function (Page $page) use ($all, $parents, $editors, $documents, $images, $zone, $root) {
             // the titles above the page, from the top of the wiki
             $path = [];
             for ($parent = $all[$page->id]->parent_id ?? null; $parent !== null && isset($all[$parent]); $parent = $all[$parent]->parent_id) {
@@ -144,7 +146,7 @@ final class ExportPagePdf
                 'emoji' => $page->emoji,
                 'title' => $page->title,
                 'path' => $path,
-                'depth' => $page->id === $root->id ? 0 : self::depthBelow($all->map(fn (object $row) => $row->parent_id === null ? null : (string) $row->parent_id)->all(), $page->id, $root->id),
+                'depth' => $page->id === $root->id ? 0 : self::depthBelow($parents, $page->id, $root->id),
                 // in the reader's language, which the request set (and with it Carbon's)
                 'changed' => (string) __('wiki.page.changed', [
                     'name' => $editors[$page->updated_by] ?? __('items.someone'),

@@ -394,7 +394,7 @@ describe('the PDF of a page (WEBU-4)', () => {
       clicked.push({ href: this.href, download: this.download });
     });
     overrides['GET /api/v1/pages/pg_web_domain/pdf'] = (_body, url) => ({ body: { data: link(url.searchParams.get('subpages') === '1') } });
-    overrides['GET /pages/pg_web_domain/pdf'] = () => ({ body: '%PDF-1.7' });
+    overrides['GET /pages/pg_web_domain/pdf'] = () => ({ file: { body: '%PDF-1.7', type: 'application/pdf' } });
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -409,6 +409,19 @@ describe('the PDF of a page (WEBU-4)', () => {
     expect(currentToasts().map((toast) => toast.title)).toContain('Domain-Umzug.pdf heruntergeladen');
     // the link to the file is not kept
     expect(document.querySelector('a[download]')).toBeNull();
+  });
+
+  it('saves what is typed before it asks for the PDF', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const title = await titleField();
+    await user.type(title, ' neu');
+    fireEvent.click(screen.getByRole('button', { name: 'PDF' }));
+
+    await waitFor(() => expect(clicked).toHaveLength(1));
+    const order = api.calls.filter((call) => call.method === 'PATCH' || call.url.includes('/pdf')).map((call) => `${call.method} ${call.url}`);
+    expect(order).toEqual(['PATCH /api/v1/pages/pg_web_domain', 'GET /api/v1/pages/pg_web_domain/pdf', 'GET /pages/pg_web_domain/pdf']);
+    expect(saves()[0]?.title).toBe('Domain-Umzug neu');
   });
 
   it('offers the page or the page with its subpages in a menu, and in the palette', async () => {
@@ -440,7 +453,7 @@ describe('the PDF of a page (WEBU-4)', () => {
 
   it('asks once while a download runs', async () => {
     let release: () => void = () => {};
-    overrides['GET /pages/pg_web_domain/pdf'] = () => ({ body: '%PDF-1.7' });
+    overrides['GET /pages/pg_web_domain/pdf'] = () => ({ file: { body: '%PDF-1.7', type: 'application/pdf' } });
     const original = globalThis.fetch;
     globalThis.fetch = (input, init) =>
       String(input).includes('/pages/pg_web_domain/pdf') && !String(input).includes('/api/') ? new Promise((done) => (release = () => done(original(input, init)))).then((r) => r as Response) : original(input, init);

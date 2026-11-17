@@ -124,7 +124,7 @@ During the import the search keeps answering from the old index, which the new o
 
 ## PDF
 
-Wiki pages become PDFs in the service `gotenberg` ([Gotenberg](https://gotenberg.dev) with Chromium), in the internal network `backend` like Meilisearch, without a published port. werkbuch sends it the HTML of the pages with the images inlined and gets the PDF back (`GOTENBERG_URL`, `http://gotenberg:3000` in the compose files; `GOTENBERG_TIMEOUT` seconds, 60 by default). Chromium runs hardened: no JavaScript, no address but Gotenberg's own working files and `data:` URLs, no private and no public IP. Nothing leaves the stack for a PDF.
+Wiki pages become PDFs in the service `gotenberg` ([Gotenberg](https://gotenberg.dev) with Chromium), in the internal network `backend` like Meilisearch, without a published port. werkbuch sends it the HTML of the pages with the images inlined and gets the PDF back (`GOTENBERG_URL`, `http://gotenberg:3000` in the compose files; `GOTENBERG_TIMEOUT` seconds, 30 by default like Gotenberg's own limit). Chromium runs hardened: no JavaScript, no address but Gotenberg's own working files and `data:` URLs, no private and no public IP. Nothing leaves the stack for a PDF.
 
 `werkbuch` starts without it: while `gotenberg` is down, **PDF** answers `503 pdf_unavailable` and the [system page](#system-page) says **Unreachable**; without `GOTENBERG_URL` the button is disabled and the system page says **Off**. Gotenberg needs about 300 MB of memory while it renders.
 

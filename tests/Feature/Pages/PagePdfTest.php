@@ -225,7 +225,9 @@ it('names the file after the page, without what a file name cannot carry', funct
     $empty = new Page(['title' => '/:*']);
 
     expect(ExportPagePdf::filename($page))->toBe('Plan  A B  neu.pdf')
-        ->and(ExportPagePdf::filename($empty))->toBe('werkbuch.pdf');
+        ->and(ExportPagePdf::filename($empty))->toBe('werkbuch.pdf')
+        // no right-to-left override turns the name around
+        ->and(ExportPagePdf::filename(new Page(['title' => "Rechnung\u{202E}fdp.exe"])))->toBe('Rechnung fdp.exe.pdf');
 });
 
 it('downloads the PDF with the session or a token with read, ten a minute per account', function () use ($world, $gotenberg) {
@@ -274,4 +276,33 @@ it('refuses to render without a URL', function () {
 
     expect(fn () => (new Gotenberg(null, 5))->render('<p>x</p>'))->toThrow(PdfUnavailable::class, 'not configured');
     Http::assertNothingSent();
+});
+
+it('hides a page the reader does not see, and leaves out an upload of someone else that belongs to nothing yet', function () use ($world, $gotenberg, $htmlOf, $png) {
+    $w = $world();
+    $requests = $gotenberg();
+    $secret = Page::factory()->create(['project_id' => $w['ops']->id, 'title' => 'Geheimes Runbook']);
+    $page = Page::factory()->create(['project_id' => $w['web']->id]);
+    // uploaded by Mara, not yet saved into a text: only she sees it
+    $loose = Attachment::factory()->stored($png(), 'image/png', 'lose.png')->create(['project_id' => $w['web']->id, 'uploaded_by' => $w['mara']->id]);
+    $page->forceFill(['content' => F::doc(F::p('Siehe ', F::reference($secret->id, 'page'), '.'), F::image($loose->id, 'Lose'))])->save();
+
+    ExportPagePdf::run(actor($w['lene']), $page, []);
+    $forLene = $htmlOf($requests[0]);
+    ExportPagePdf::run(actor($w['mara']), $page, []);
+    $forMara = $htmlOf($requests[1]);
+
+    expect($forLene)->toContain((string) __('richtext.hidden'), (string) __('richtext.image', ['name' => 'Lose']))
+        ->not->toContain('Geheimes Runbook', $secret->id, 'data:image')
+        ->and($forMara)->toContain('Geheimes Runbook', 'data:image/');
+});
+
+it('gives a title of emoji alone a plain ASCII name beside it', function () use ($world, $gotenberg) {
+    $w = $world();
+    $gotenberg();
+    $page = Page::factory()->create(['project_id' => $w['web']->id, 'title' => '🧭']);
+
+    $response = $this->actingAs($w['mara'])->get("/pages/{$page->id}/pdf");
+
+    expect($response->headers->get('Content-Disposition'))->toBe("attachment; filename=werkbuch.pdf; filename*=utf-8''%F0%9F%A7%AD.pdf");
 });
