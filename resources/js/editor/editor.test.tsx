@@ -12,7 +12,7 @@ import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { ida, list, makePage, mara, pageSummary, person, project, searchResults, types, web47 } from '@/test/fixtures';
 import type { RichText, User } from '@/types';
 import { PRESETS, type EditorPreset } from './presets';
-import { EMPTY_DOC, isEmptyDoc, LateBoundary, LateChunkError, preloadEditor, RichTextEditor } from './RichTextEditor';
+import { EMPTY_DOC, isEmptyDoc, LateBoundary, LateChunkError, preloadEditor, RichTextEditor, TABLE_CELL_MIN_PX } from './RichTextEditor';
 import { RichTextView } from './RichTextView';
 
 // jsdom has no layout: ProseMirror measures the selection to scroll it into view
@@ -272,6 +272,15 @@ describe('RichTextEditor', () => {
     expect(nodesOf(await typeInto('comment', '- Punkt'), 'bulletList')).toHaveLength(1);
     expect(await typeInto('comment', '## Ziel')).toEqual(textDoc('## Ziel'));
     expect(await typeInto('comment', '[[ ] Aufgabe')).toEqual(textDoc('[ ] Aufgabe'));
+  });
+
+  it('keeps every column of a table at least 6 rem wide, editing and reading, so a wide one scrolls (WEBU-8)', () => {
+    const { unmount } = render(<RichTextEditor value={tableDoc} onChange={vi.fn()} preset="description" />);
+    expect(screen.getByRole('textbox', { name: 'Beschreibung' }).querySelector('table')?.style.minWidth).toBe(`${2 * TABLE_CELL_MIN_PX}px`);
+    unmount();
+
+    const { container } = render(<RichTextView value={tableDoc} preset="description" />);
+    expect(container.querySelector('.tableWrapper table')?.style.minWidth).toBe(`${2 * TABLE_CELL_MIN_PX}px`);
   });
 
   it('keeps tables and checklists of a description but not of a comment', () => {

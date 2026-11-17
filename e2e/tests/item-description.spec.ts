@@ -135,14 +135,17 @@ test('makes a table in a description over /, adds a column from alt+F10 and scro
     // three columns more from the menu of the table: wider than a phone, so it scrolls in its frame
     for (let column = 0; column < 3; column++) {
       await page.keyboard.press('Alt+F10');
-      const menu = page.getByRole('menu');
-      await expect(menu).toBeVisible();
-      await arrowTo(page, menu.getByRole('menuitem', { name: tr('en', 'editor.table.column_after') }));
+      const tableMenu = page.getByRole('menu');
+      await expect(tableMenu).toBeVisible();
+      await arrowTo(page, tableMenu.getByRole('menuitem', { name: tr('en', 'editor.table.column_after') }));
       await page.keyboard.press('Enter');
-      await expect(menu).toBeHidden();
+      await expect(tableMenu).toBeHidden();
       await expect(editor).toBeFocused();
       await expect(editor.locator('table tr').first().locator('th, td')).toHaveCount(4 + column);
     }
+    // with the cursor in the wide table: its menu stays in the window, and the page no wider than it
+    await expect(page.getByRole('button', { name: tr('en', 'editor.table.menu') })).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await pressMod(page, 'Enter');
     await expect(status).toHaveText(tr('en', 'items.detail.description.saved'));
 
