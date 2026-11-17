@@ -9,8 +9,8 @@ Es gibt einen Editor in drei Stufen. Jede Stufe zeigt, was an ihren Ort passt:
 | Stufe | Wo | Blöcke |
 |---|---|---|
 | Kommentar | Kommentare | Text, Listen, Zitate, Code, Links, Erwähnungen, Verweise, Bilder und Dateien |
-| Beschreibung | Beschreibungen von Items und [Vorlagen](/de/concepts/templates), Rich-Text-Properties | Dazu Überschriften (drei Ebenen), Checklisten und Tabellen (eine eingefügte Tabelle bleibt; neue Tabellen bietet das `/`-Menü nur auf Seiten) |
-| Seite | [Wiki-Seiten](/de/concepts/wiki) | Dazu Trennlinien und Tabellen im `/`-Menü |
+| Beschreibung | Beschreibungen von Items und [Vorlagen](/de/concepts/templates), Rich-Text-Properties | Dazu Überschriften (drei Ebenen), Checklisten und Tabellen (auch im `/`-Menü) |
+| Seite | [Wiki-Seiten](/de/concepts/wiki) | Dazu Trennlinien |
 
 Ein Text mit Blöcken, die seine Stufe nicht kennt (eine Tabelle in einem Kommentar), zeigt deren Text als Absätze. `mod+enter` speichert bzw. sendet; Beschreibung, Rich-Text-Properties und Wiki-Seiten speichern außerdem nach einer kurzen Pause und beim Verlassen des Felds von selbst.
 
@@ -32,7 +32,7 @@ Ein `/` am Zeilenanfang oder nach einem Leerzeichen öffnet das Blockmenü (dire
 
 ## Tabellen bearbeiten
 
-Steht der Cursor in einer Tabelle, sitzt an ihrer oberen Kante rechts der Knopf **Tabelle**; `alt+F10` öffnet sein Menü auch direkt aus dem Text. Darin fügst du Zeilen darüber oder darunter und Spalten links oder rechts ein, löschst die Zeile oder Spalte des Cursors oder die ganze Tabelle und schaltest **Kopfzeile** und **Kopfspalte** an und aus. Kopfzeile und Kopfspalte bleiben die erste Zeile und die erste Spalte, auch wenn du davor etwas einfügst. Eine Tabelle aus einer Zeile hat keine Kopfspalte. Die letzte Zeile und die letzte Spalte bleiben; lösche dann die Tabelle. Nach jedem Befehl und mit `esc` geht der Fokus an dieselbe Stelle im Text zurück. Dieselben Befehle stehen im `/`-Menü, solange der Cursor in einer Tabelle steht (Gruppe „Tabelle“). Zellen verbinden und einzelne Kopfzellen bietet der Editor nicht an: Markdown trägt beides nicht (siehe [Tabellen](#tabellen) unter Markdown).
+Steht der Cursor in einer Tabelle, sitzt an ihrer oberen Kante rechts der Knopf **Tabelle**; `alt+F10` öffnet sein Menü auch direkt aus dem Text. Darin fügst du Zeilen darüber oder darunter und Spalten links oder rechts ein, löschst die Zeile oder Spalte des Cursors oder die ganze Tabelle und schaltest **Kopfzeile** und **Kopfspalte** an und aus. Kopfzeile und Kopfspalte bleiben die erste Zeile und die erste Spalte, auch wenn du davor etwas einfügst. Eine Tabelle aus einer Zeile hat keine Kopfspalte. Die letzte Zeile und die letzte Spalte bleiben; lösche dann die Tabelle. Nach jedem Befehl und mit `esc` geht der Fokus an dieselbe Stelle im Text zurück. Dieselben Befehle stehen im `/`-Menü, solange der Cursor in einer Tabelle steht (Gruppe „Tabelle“). Eine Spalte ist mindestens 6 rem breit: Eine Tabelle, die breiter als ihr Text ist, scrollt in der Vorschau oder am Handy waagerecht in ihrem Rahmen. Zellen verbinden und einzelne Kopfzellen bietet der Editor nicht an: Markdown trägt beides nicht (siehe [Tabellen](#tabellen) unter Markdown).
 
 ## Erwähnungen
 

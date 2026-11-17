@@ -9,8 +9,8 @@ There is one editor in three levels. Each level shows what fits its place:
 | Level | Where | Blocks |
 |---|---|---|
 | Comment | Comments | Text, lists, quotes, code, links, mentions, references, images and files |
-| Description | Descriptions of items and [templates](/en/concepts/templates), rich text properties | Also headings (three levels), checklists and tables (a table you paste stays; the `/` menu offers new tables on pages only) |
-| Page | [Wiki pages](/en/concepts/wiki) | Also horizontal rules, and tables in the `/` menu |
+| Description | Descriptions of items and [templates](/en/concepts/templates), rich text properties | Also headings (three levels), checklists and tables (in the `/` menu too) |
+| Page | [Wiki pages](/en/concepts/wiki) | Also horizontal rules |
 
 A text that holds blocks its level does not know (a table pasted into a comment) shows their text as paragraphs. `mod+enter` saves or sends; the description, rich text properties and wiki pages also save on their own after a short pause and when you leave the field.
 
@@ -32,7 +32,7 @@ Type `/` at the start of a line or after a space to open the block menu (right a
 
 ## Editing tables
 
-While the cursor is in a table, the **Table** button sits on its top edge at the right; `alt+F10` opens its menu straight from the text. There you insert rows above or below and columns to the left or right, delete the row or column of the cursor or the whole table, and turn the **Header row** and the **Header column** on and off. The header row and the header column stay the first row and the first column, also when you insert something before them. A table of one row has no header column. The last row and the last column stay; delete the table instead. After every command and on `esc` the focus goes back to the same place in the text. The same commands are in the `/` menu while the cursor is in a table (group "Table"). The editor offers neither merged cells nor single header cells: Markdown carries neither (see [Tables](#tables) under Markdown).
+While the cursor is in a table, the **Table** button sits on its top edge at the right; `alt+F10` opens its menu straight from the text. There you insert rows above or below and columns to the left or right, delete the row or column of the cursor or the whole table, and turn the **Header row** and the **Header column** on and off. The header row and the header column stay the first row and the first column, also when you insert something before them. A table of one row has no header column. The last row and the last column stay; delete the table instead. After every command and on `esc` the focus goes back to the same place in the text. The same commands are in the `/` menu while the cursor is in a table (group "Table"). A column is at least 6 rem wide: a table wider than its text, in the preview or on a phone, scrolls sideways in its frame. The editor offers neither merged cells nor single header cells: Markdown carries neither (see [Tables](#tables) under Markdown).
 
 ## Mentions
 

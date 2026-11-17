@@ -278,6 +278,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'star a view', file: 'views.spec.ts', test: 'stars a view and opens it from the sidebar' },
   { flow: 'paste an image into a wiki page', file: 'wiki.spec.ts', test: 'pastes an image into a page' },
   { flow: 'download a wiki page as PDF', file: 'wiki.spec.ts', test: 'downloads a page with its subpages as PDF with the keyboard' },
+  { flow: 'make a table in a description', file: 'item-description.spec.ts', test: 'makes a table in a description over /, adds a column from alt+F10 and scrolls it sideways when narrow', projects: EVERYWHERE },
 ];
 
 /**

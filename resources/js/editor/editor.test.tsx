@@ -611,6 +611,7 @@ describe('the menus of the editor', () => {
       'Checkliste[ ]',
       'Code```',
       'Zitat>',
+      'Tabelle',
     ]);
     // the editor names the list and its active entry; the focus stays in the text
     expect(editor.getAttribute('aria-controls')).toBe(menu.id);
@@ -629,7 +630,7 @@ describe('the menus of the editor', () => {
     expect(lastDoc(onChange)?.content?.[0]).toEqual({ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Ziel' }] });
   });
 
-  it('offers a table in / only on page', async () => {
+  it('offers a table in / where the level knows tables, not in a comment (WEBU-8)', async () => {
     const user = userEvent.setup();
     const offered = async (preset: EditorPreset) => {
       const { unmount } = render(<RichTextEditor value={null} onChange={vi.fn()} preset={preset} />);
@@ -645,7 +646,9 @@ describe('the menus of the editor', () => {
     const page = await offered('page');
     expect(page).toContain('Tabelle');
     expect(page).toContain('Linie---');
-    expect(await offered('description')).not.toContain('Tabelle');
+    const description = await offered('description');
+    expect(description).toContain('Tabelle');
+    expect(description).not.toContain('Linie---');
     // a comment has neither headings nor checklists, so the menu offers none
     expect(await offered('comment')).toEqual(['Liste-', 'Nummerierte Liste1.', 'Code```', 'Zitat>']);
   });

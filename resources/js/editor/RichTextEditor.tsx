@@ -171,7 +171,10 @@ function lateChunk<T>(load: () => Promise<T>): () => Promise<T> {
 }
 
 /** The table support: most texts have no table, and a comment never has one. */
-const loadTables = lateChunk(() => import('@tiptap/extension-table').then(({ TableKit }): AnyExtension => TableKit.configure({ table: { resizable: false } })));
+/** The narrowest a column of a table gets (6 rem): a wider table scrolls in its frame (`.tableWrapper`), WEBU-8. */
+export const TABLE_CELL_MIN_PX = 96;
+
+const loadTables = lateChunk(() => import('@tiptap/extension-table').then(({ TableKit }): AnyExtension => TableKit.configure({ table: { resizable: false, cellMinWidth: TABLE_CELL_MIN_PX } })));
 
 /** Code blocks with highlighting (every level has code blocks). */
 const loadCode = lateChunk(() => import('./codeBlocks').then(({ highlightedCodeBlock }): AnyExtension => highlightedCodeBlock));
