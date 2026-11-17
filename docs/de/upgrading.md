@@ -17,7 +17,7 @@ Beim Start migriert die neue Version die Datenbank, schickt die Einstellungen de
   `curl -fsSLO https://raw.githubusercontent.com/baeroe/werkbuch/main/docker-compose.yml`
   Mit der Standalone-Compose-Datei die neue [docker-compose.standalone.yml](https://github.com/baeroe/werkbuch/blob/main/docker-compose.standalone.yml) einfügen und die eigenen Werte aus dem Block oben übertragen.
 - **MariaDB:** Patch-Versionen aktualisieren sich beim Start selbst (`MARIADB_AUTO_UPGRADE`). Eine neue Hauptversion kommt nur mit einem Hinweis hier.
-- **Meilisearch:** Eine neue Version von Meilisearch liest den Index einer älteren nicht immer; sie stoppt dann mit einem Fehler zur Version ihrer Datenbank (`docker compose logs meilisearch`), und `werkbuch` startet nicht. Der Index kommt aus der Datenbank, also ihn löschen und von werkbuch neu bauen lassen:
+- **Meilisearch:** Eine neue Version von Meilisearch hebt beim Start die Datenbank der Version davor (`MEILI_UPGRADE_DB` in beiden Compose-Dateien); die Suche behält ihren Index. Nur wenn das nicht geht, stoppt sie mit einem Fehler zur Version ihrer Datenbank (`docker compose logs meilisearch`), und `werkbuch` startet nicht. Der Index kommt aus der Datenbank, also ihn löschen und von werkbuch neu bauen lassen:
 
   ```bash
   docker compose rm -sf meilisearch

@@ -49,11 +49,12 @@ services:
     volumes:
       - werkbuch-data:/var/www/html/storage/app
     healthcheck:
-      # the request carries the host of APP_URL (the app answers only to it); nginx does not log this request.
+      # the request carries the host of APP_URL (the app answers only to it), without the port; an IPv6 host keeps
+      # its brackets. nginx does not log this request.
       # start_period is generous: the first start migrates and imports the search before nginx runs, and the workers
       # and the scheduler wait for this check (depends_on: service_healthy) because they do not migrate themselves.
       # Meilisearch must be healthy first: an unreachable index stops the whole start.
-      test: ["CMD", "sh", "-c", "h=$${APP_URL#*://}; h=$${h%%/*}; curl -fsS -o /dev/null -H \"Host: $${h%%:*}\" http://localhost:8080/up"]
+      test: ["CMD", "sh", "-c", "h=$${APP_URL#*://}; h=$${h%%/*}; case $$h in '['*) h=$${h%%]*}];; *) h=$${h%%:*};; esac; curl -fsS -o /dev/null -H \"Host: $$h\" http://localhost:8080/up"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -188,12 +189,14 @@ services:
       start_period: 60s
 
   meilisearch:
-    image: getmeili/meilisearch:v1.56.0@sha256:1f578fa865f8251894b3bf38d6668d6209a3f451f8f65ab953e129d4c1db5ef4
+    image: getmeili/meilisearch:v1.56.1@sha256:b7ba431bf6f9b26cc86132798f3640964147a699cf23f026b74c6c05dbb1d60d
     restart: unless-stopped
     environment:
       MEILI_MASTER_KEY: "${MEILISEARCH_KEY:?MEILISEARCH_KEY missing (see .env.docker.example)}"
       MEILI_ENV: production
       MEILI_NO_ANALYTICS: "true"
+      # a new Meilisearch upgrades the database of the version before at start (A467); if it cannot, upgrading.md
+      MEILI_UPGRADE_DB: "true"
     volumes:
       - meili-data:/meili_data
     networks:
