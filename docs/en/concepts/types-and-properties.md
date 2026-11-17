@@ -30,6 +30,10 @@ A new project gets every active type, with the first one as the default, unless 
 
 A property is a field that types add to their items, beyond the core fields every item has. Properties belong to the organization and are assigned to types under **Settings → Types**. A property has a label (up to 60 characters), a help text (up to 500), a key, a field type and an optional default value.
 
+### Where a property shows
+
+**Shown** in the dialog of a property decides where it stands on an item, for every type that has it: **In the side panel**, with status, assignee and the other fields, or **Below the description**, across the whole width, before the child items and relations. A new rich text property starts below the description, every other one in the side panel. Below the description, a person who may not change the item sees a property only when it has a value. Over REST the field is `placement` (`sidebar` or `body`); left out, it takes the place a new property of its field type gets.
+
 ### Keys
 
 The key names the property in the API, in MCP and in [filters](/en/concepts/views#properties) (`property:<key>`). It is `snake_case`: lowercase letters, digits and `_`, starting with a letter, at most 40 characters. It is unique and **cannot be changed** once the property is saved. It must not be the name of a core field: `id`, `key`, `project`, `type`, `title`, `description`, `state`, `state_category`, `resolution`, `assignee`, `priority`, `label`, `labels`, `start_date`, `due_date`, `parent`, `created_by`, `created_at`, `updated_at`, `started_at`, `closed_at`, `archived`, `archived_at` and `rank` are taken.

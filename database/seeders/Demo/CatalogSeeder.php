@@ -4,6 +4,7 @@ namespace Database\Seeders\Demo;
 
 use App\Domain\Catalog\Tone;
 use App\Domain\Properties\FieldType;
+use App\Domain\Properties\Placement;
 use App\Domain\Workflow\StateCategory;
 use App\Domain\Workflow\StateIcon;
 use App\Models\Label;
@@ -113,6 +114,8 @@ class CatalogSeeder extends Seeder
                 'label' => DemoTexts::get("catalog.property.{$key}.label"),
                 'field_type' => $fieldType,
                 'help' => DemoTexts::get("catalog.property.{$key}.help"),
+                // where a new property of its type goes (WEBU-6): the steps of WEB-47 below the description
+                'placement' => Placement::forType($fieldType),
                 'settings' => $settings,
                 'default_value' => $default,
             ]);

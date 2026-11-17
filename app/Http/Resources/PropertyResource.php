@@ -29,6 +29,8 @@ final class PropertyResource extends JsonResource
             'label' => $property->label,
             'field_type' => $property->field_type->value,
             'help' => $property->help,
+            /** @var 'sidebar'|'body' */
+            'placement' => $property->placement->value,
             'default_value' => $property->default_value,
             'settings' => (object) $property->settings,
             'options' => $property->options->map(fn (PropertyOption $option) => [

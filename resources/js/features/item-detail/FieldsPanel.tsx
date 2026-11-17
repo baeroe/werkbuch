@@ -25,6 +25,7 @@ import { StatePicker } from '@/components/fields/StatePicker';
 import { TypePicker } from '@/components/fields/TypePicker';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { cx } from '@/components/ui/cx';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { canHaveParent } from '@/domain/hierarchy';
 import { isClosedCategory } from '@/domain/workflow';
@@ -34,7 +35,7 @@ import { useResolutions } from '@/hooks/catalog';
 import { useProperties } from '@/hooks/properties';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
-import type { Property, RichText, WorkItem, WorkItemDetail } from '@/types';
+import type { Property, PropertyPlacement, RichText, WorkItem, WorkItemDetail } from '@/types';
 import { Section, useInstantDay } from './shared';
 
 /** How long typing pauses before a rich text property saves. */
@@ -179,10 +180,17 @@ function RichTextProperty({ item, property, required }: { item: WorkItem; proper
   );
 }
 
-function Properties({ detail }: { detail: WorkItemDetail }) {
+/**
+ * The properties of the item's type that show at `placement` (WEBU-6): in the side panel (`sidebar`, with the loading
+ * and the error of the catalog) or below the description (`body`, only once the catalog is there; a reader sees only
+ * those with a value there, who may change the item every one). Nothing to show: no section.
+ */
+export function Properties({ detail, placement }: { detail: WorkItemDetail; placement: PropertyPlacement }) {
   const properties = useProperties();
+  const reason = useEditReason(detail.item);
   const { item, type } = detail;
   if (type.properties.length === 0) return null;
+  if (placement === 'body' && !properties.data) return null;
 
   if (properties.isError && !properties.data) {
     return (
@@ -202,7 +210,9 @@ function Properties({ detail }: { detail: WorkItemDetail }) {
     .flatMap((entry) => {
       const property = properties.data?.items.find((candidate) => candidate.id === entry.property_id);
       return property ? [{ property, required: entry.required }] : [];
-    });
+    })
+    .filter(({ property }) => property.placement === placement && (placement === 'sidebar' || reason === null || !isEmptyValue(item.values[property.key] ?? null)));
+  if (properties.data && fields.length === 0) return null;
 
   return (
     <Section title={t('items.detail.fields.properties')}>
@@ -212,7 +222,10 @@ function Properties({ detail }: { detail: WorkItemDetail }) {
           <Skeleton className="h-8 w-2/3 rounded-ctl" />
         </SkeletonGroup>
       ) : (
-        <dl className="mt-2 grid grid-cols-[5.5rem_minmax(0,1fr)] items-start gap-x-2 gap-y-2 text-ui">
+        <dl
+          data-properties={placement}
+          className={cx('mt-2 grid items-start gap-x-2 gap-y-2 text-ui', placement === 'body' ? 'grid-cols-[9rem_minmax(0,1fr)]' : 'grid-cols-[5.5rem_minmax(0,1fr)]')}
+        >
           {fields.map(({ property, required }) =>
             property.field_type === 'rich_text' ? (
               <RichTextProperty key={property.id} item={item} property={property} required={required} />
@@ -294,7 +307,7 @@ export function FieldsPanel({ detail }: { detail: WorkItemDetail }) {
         )}
         <Stamps item={item} />
       </dl>
-      <Properties detail={detail} />
+      <Properties detail={detail} placement="sidebar" />
     </div>
   );
 }

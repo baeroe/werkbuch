@@ -32,6 +32,7 @@ const extra = (key: string, label: string, field_type: Property['field_type'], s
   label,
   field_type,
   help: '',
+  placement: 'sidebar',
   default_value: null,
   settings,
   options: [],

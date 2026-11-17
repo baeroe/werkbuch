@@ -33,7 +33,7 @@ final class SaveProperty
     use AsAction;
 
     /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
-    public const FIELDS = ['key', 'label', 'field_type', 'help', 'settings', 'options', 'default_value'];
+    public const FIELDS = ['key', 'label', 'field_type', 'help', 'placement', 'settings', 'options', 'default_value'];
 
     /**
      * @param  array<array-key, mixed>  $input  `key`, `label`, `field_type`, `help`, `settings`, `options`, `default_value`
@@ -65,6 +65,7 @@ final class SaveProperty
                 'label' => $valid['label'],
                 'field_type' => $valid['field_type'],
                 'help' => $valid['help'],
+                'placement' => $valid['placement'],
                 'settings' => $valid['settings'],
             ]);
 
@@ -145,13 +146,14 @@ final class SaveProperty
     /**
      * What an event compares: the fields that can change and the options in order.
      *
-     * @return array{label: string, help: string, default_value: mixed, settings: array<string, mixed>, options: list<array{id: string, label: string, color: string, archived: bool}>}
+     * @return array{label: string, help: string, placement: string, default_value: mixed, settings: array<string, mixed>, options: list<array{id: string, label: string, color: string, archived: bool}>}
      */
     private static function snapshot(Property $property): array
     {
         return [
             'label' => $property->label,
             'help' => $property->help,
+            'placement' => $property->placement->value,
             'default_value' => $property->default_value,
             'settings' => $property->settings,
             'options' => array_values($property->options->map(fn (PropertyOption $option) => [

@@ -18,7 +18,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
 /** The shape of `Property` in resources/js/types.ts. */
-const PROPERTY_SHAPE = ['id', 'key', 'label', 'field_type', 'help', 'default_value', 'settings', 'options'];
+const PROPERTY_SHAPE = ['id', 'key', 'label', 'field_type', 'help', 'placement', 'default_value', 'settings', 'options'];
 
 /** A dropdown „Browser“ with the options Chrome (`opt_a`) and Firefox (`opt_b`), single choice, no default. */
 $browser = fn (array $overrides = []): array => [
@@ -146,6 +146,29 @@ it('keeps key and field type once saved, only single may become multiple choice'
         ->and(errorsAt($this->putJson($url, [...$multiple, 'settings' => ['multiple' => false]])->assertUnprocessable(), 'settings.multiple'))
         ->toBe([__('field.settings.multiple_back')])
         ->and(Property::query()->findOrFail($answer['id'])->settings)->toBe(['multiple' => true]);
+});
+
+it('places rich text below the description and anything else in the side panel, unless told otherwise (WEBU-6)', function () use ($browser, $probe) {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $dropdown = $this->postJson('/api/v1/properties', $browser())->assertCreated()->json('data');
+    $text = $this->postJson('/api/v1/properties', [...$probe('rich_text', false, null), 'key' => 'steps_x'])->assertCreated()->json('data');
+    $chosen = $this->postJson('/api/v1/properties', [...$probe('text', false, null), 'key' => 'note_x', 'placement' => 'body'])->assertCreated()->json('data');
+
+    expect([$dropdown['placement'], $text['placement'], $chosen['placement']])->toBe(['sidebar', 'body', 'body']);
+
+    // moved to the side panel: an event names it; sent back, nothing changes
+    $this->putJson("/api/v1/properties/{$text['id']}", [...$text, 'placement' => 'sidebar'])->assertOk()->assertJsonPath('data.placement', 'sidebar');
+    $this->putJson("/api/v1/properties/{$text['id']}", [...$text, 'placement' => 'sidebar'])->assertOk();
+    // left out (A75: a PUT replaces it): where a new one of its type goes
+    $this->putJson("/api/v1/properties/{$text['id']}", Arr::except($text, 'placement'))->assertOk()->assertJsonPath('data.placement', 'body');
+
+    expect(eventsOf(EventType::PropertyUpdated, Property::query()->findOrFail($text['id']))->map(fn ($event) => $event->changes)->all())->toBe([
+        ['placement' => ['old' => 'body', 'new' => 'sidebar']],
+        ['placement' => ['old' => 'sidebar', 'new' => 'body']],
+    ])
+        ->and(errorsAt($this->postJson('/api/v1/properties', $browser(['key' => 'other', 'placement' => 'top']))->assertUnprocessable(), 'placement'))
+        ->toBe([__('field.placement.unknown')]);
 });
 
 it('replaces a property as a whole', function () use ($browser) {

@@ -223,8 +223,8 @@ describe('BlockedHint', () => {
 
 describe('rows and cards', () => {
   const web = project('WEB', 'member');
-  const approved: Property = { id: 'pr_approved', key: 'approved', label: 'Freigegeben', field_type: 'boolean', help: '', default_value: null, settings: {}, options: [] };
-  const reviewers: Property = { id: 'pr_reviewers', key: 'reviewers', label: 'Prüfung', field_type: 'member', help: '', default_value: null, settings: { multiple: true }, options: [] };
+  const approved: Property = { id: 'pr_approved', key: 'approved', label: 'Freigegeben', field_type: 'boolean', help: '', placement: 'sidebar', default_value: null, settings: {}, options: [] };
+  const reviewers: Property = { id: 'pr_reviewers', key: 'reviewers', label: 'Prüfung', field_type: 'member', help: '', placement: 'sidebar', default_value: null, settings: { multiple: true }, options: [] };
   const catalog = [...properties, approved, reviewers];
 
   function renderItems(node: ReactNode) {

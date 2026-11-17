@@ -262,3 +262,64 @@ test('names the items with a value when a property is deleted', async ({ page })
     await cleanUp(page);
   }
 });
+
+test('edits a rich text property below the description and moves it to the side panel', async ({ page }) => {
+  const label = `${prefix()} Acceptance`;
+  const typeName = `${prefix()} Accepted type`;
+  let identifier: string | null = null;
+  try {
+    // rich text goes below the description unless somebody chooses otherwise (WEBU-6)
+    const property = await api(page, 'POST', '/api/v1/properties', { key: keyOf('acceptance'), label, field_type: 'rich_text', help: '', default_value: null, settings: {}, options: [] });
+    expect(property.status(), await property.text()).toBe(201);
+    const { data } = (await property.json()) as { data: { id: string; key: string; placement: string } };
+    expect(data.placement).toBe('body');
+    const created = await api(page, 'POST', '/api/v1/work-item-types', {
+      name: typeName,
+      icon: 'flag',
+      tone: 'sand',
+      description: '',
+      is_epic: false,
+      properties: [{ property_id: data.id, required: false }],
+      archived_at: null,
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const project = await createE2eProject(page, `E2E placement ${variant()} ${runId()}`, { types: ['Task', typeName] });
+    identifier = project.identifier;
+    const type = ((await created.json()) as { data: { id: string } }).data.id;
+    const item = await createItem(page, { project_id: project.id, title: 'E2E Placement item', type_id: type });
+
+    await page.goto(`/items/${item.key}`);
+    const editor = page.getByRole('textbox', { name: label });
+    await expect(editor).toBeVisible();
+    await expect(page.locator('[data-properties="body"]')).toContainText(label);
+    await expect(page.getByRole('complementary', { name: tr('en', 'items.detail.fields.label') })).not.toContainText(label);
+    await tabTo(page, editor, { max: 60 });
+    await page.keyboard.type('Signed off by the client.');
+    await pressMod(page, 'Enter');
+    await expect
+      .poll(async () => JSON.stringify(((await (await api(page, 'GET', `/api/v1/work-items/${item.id}`)).json()) as { data: { values: Record<string, unknown> } }).data.values[data.key] ?? null))
+      .toContain('Signed off by the client.');
+
+    // in the settings, with the keyboard: the side panel
+    await page.goto('/settings/properties');
+    const edit = propertyRow(page, label).getByRole('button', { name: tr('en', 'settings.properties.edit', { label }) });
+    await tabTo(page, edit, { max: 100 });
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog', { name: tr('en', 'settings.properties.edit', { label }) });
+    const placement = dialog.getByRole('combobox', { name: new RegExp(`^${tr('en', 'settings.properties.dialog.placement')}`) });
+    await tabTo(page, placement, { max: 30 });
+    await page.keyboard.press('Enter');
+    await arrowTo(page, page.getByRole('option', { name: tr('en', 'settings.properties.placement.sidebar') }), 'ArrowUp');
+    await page.keyboard.press('Enter');
+    await expect(placement).toContainText(tr('en', 'settings.properties.placement.sidebar'));
+    await pressMod(page, 'Enter');
+    await expect(dialog).toBeHidden();
+
+    await page.goto(`/items/${item.key}`);
+    await expect(page.getByRole('complementary', { name: tr('en', 'items.detail.fields.label') })).toContainText(label);
+    await expect(page.locator('[data-properties="body"]')).toHaveCount(0);
+  } finally {
+    if (identifier) await removeE2eProject(page, identifier);
+    await cleanUp(page);
+  }
+});

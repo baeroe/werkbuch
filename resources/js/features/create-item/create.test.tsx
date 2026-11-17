@@ -57,9 +57,9 @@ const web = project('WEB', 'member', { name: 'Website-Relaunch' });
 const app = project('APP', 'member', { name: 'Kunden-App', workflow_id: 'wf_agency', enabled_type_ids: ['t_task', 't_bug', 't_epic', 't_wish'] });
 const ops = project('OPS', 'viewer', { name: 'Betrieb', visibility: 'private' });
 /** Whether the customer has signed the change off: a yes/no that wishes require. */
-const approved: Property = { id: 'pr_approved', key: 'approved', label: 'Abgenommen', field_type: 'boolean', help: '', default_value: null, settings: {}, options: [] };
-const ticket: Property = { id: 'pr_ticket', key: 'ticket_url', label: 'Ticket', field_type: 'url', help: '', default_value: null, settings: {}, options: [] };
-const notes: Property = { id: 'pr_notes', key: 'notes', label: 'Notizen', field_type: 'rich_text', help: '', default_value: null, settings: {}, options: [] };
+const approved: Property = { id: 'pr_approved', key: 'approved', label: 'Abgenommen', field_type: 'boolean', help: '', placement: 'sidebar', default_value: null, settings: {}, options: [] };
+const ticket: Property = { id: 'pr_ticket', key: 'ticket_url', label: 'Ticket', field_type: 'url', help: '', placement: 'sidebar', default_value: null, settings: {}, options: [] };
+const notes: Property = { id: 'pr_notes', key: 'notes', label: 'Notizen', field_type: 'rich_text', help: '', placement: 'sidebar', default_value: null, settings: {}, options: [] };
 const wishTypes = types.map((type) =>
   type.id === 't_wish'
     ? {

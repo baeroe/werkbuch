@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Domain\Catalog\Tone;
 use App\Domain\Properties\DefaultValue;
 use App\Domain\Properties\FieldType;
+use App\Domain\Properties\Placement;
 use App\Domain\Properties\PropertyKey;
 use App\Models\Property;
 use Closure;
@@ -67,7 +68,7 @@ final class PropertyInput
      * names the keys of options that are not archived.
      *
      * @param  array<array-key, mixed>  $input
-     * @return array{key: string, label: string, field_type: FieldType, help: string, settings: array{multiple?: bool, decimals?: int}, options: list<array{key: string, existing: ?string, label: string, color: Tone, archived: bool}>, default_value: mixed}
+     * @return array{key: string, label: string, field_type: FieldType, help: string, placement: Placement, settings: array{multiple?: bool, decimals?: int}, options: list<array{key: string, existing: ?string, label: string, color: Tone, archived: bool}>, default_value: mixed}
      *
      * @throws ValidationException
      */
@@ -82,6 +83,7 @@ final class PropertyInput
                 : ['bail', 'required', self::same($existing->field_type->value, 'field.field_type.immutable')],
             'label' => ['bail', 'present', 'required', 'string', 'max:'.self::LABEL_MAX],
             'help' => ['nullable', 'string', 'max:'.CatalogInput::HELP_MAX],
+            'placement' => ['nullable', Rule::enum(Placement::class)],
         ], self::messages());
 
         // the settings and options have rules once the field type is known; the fields and the options answer together
@@ -97,7 +99,7 @@ final class PropertyInput
             throw ValidationException::withMessages($errors);
         }
 
-        /** @var array{key: string, label: string, field_type: string, help?: ?string} $valid */
+        /** @var array{key: string, label: string, field_type: string, help?: ?string, placement?: ?string} $valid */
         $valid = $basic->validated();
         $type = FieldType::from($valid['field_type']);
 
@@ -142,6 +144,8 @@ final class PropertyInput
             'label' => $valid['label'],
             'field_type' => $type,
             'help' => $valid['help'] ?? '',
+            // left out or null: where a new one of its field type goes (A75: a PUT replaces the whole property)
+            'placement' => isset($valid['placement']) ? Placement::from($valid['placement']) : Placement::forType($type),
             'settings' => $settings,
             'options' => $options,
             'default_value' => $default->value,
@@ -333,6 +337,7 @@ final class PropertyInput
             'key.string' => __('field.key.format'),
             'key.unique' => __('field.key.taken'),
             'field_type.enum' => __('field.field_type.unknown'),
+            'placement.enum' => __('field.placement.unknown'),
         ];
     }
 }

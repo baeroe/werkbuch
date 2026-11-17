@@ -44,7 +44,7 @@ const callsTo = (method: string, path: string) => api!.calls.filter((call) => ca
 const rowOf = async (name: string) => (await screen.findByRole('heading', { name })).closest('li')!;
 const MEMBER = 'Workflows, Typen, Properties, Labels, Relationstypen und Resolutions verwalten nur Org-Admins.';
 
-const reviewer: Property = { id: 'pr_reviewer', key: 'reviewer', label: 'Reviewer', field_type: 'member', help: '', default_value: null, settings: { multiple: true }, options: [] };
+const reviewer: Property = { id: 'pr_reviewer', key: 'reviewer', label: 'Reviewer', field_type: 'member', help: '', placement: 'sidebar', default_value: null, settings: { multiple: true }, options: [] };
 const all = [...properties, reviewer];
 
 const routes = (props: Property[] = all, overrides: Record<string, MockRoute> = {}): Record<string, MockRoute> => ({
@@ -268,6 +268,7 @@ describe('Properties', () => {
       label: 'Title',
       field_type: 'text',
       help: 'Der Titel.',
+      placement: 'sidebar',
       default_value: null,
       settings: {},
       options: [],
@@ -544,6 +545,29 @@ describe('Properties', () => {
     expect(value().textContent).toBe('Option wählen …');
   });
 
+  it('places rich text below the description until somebody chooses, and keeps that choice (WEBU-6)', async () => {
+    const user = userEvent.setup();
+    renderWith(<Properties readOnlyReason={null} />, routes());
+
+    const dialog = await openCreate(user);
+    await user.type(within(dialog).getByRole('textbox', { name: 'Label' }), 'Abnahme');
+    const placement = () => within(dialog).getByRole('combobox', { name: /^Anzeige/ });
+    expect(placement().textContent).toContain('In der Seitenleiste');
+    await chooseFieldType(user, dialog, 'Rich Text');
+    expect(placement().textContent).toContain('Unter der Beschreibung');
+
+    // chosen by hand: a change of the field type leaves it
+    await user.click(placement());
+    await user.click(await screen.findByRole('option', { name: 'In der Seitenleiste' }));
+    await chooseFieldType(user, dialog, 'Text');
+    await chooseFieldType(user, dialog, 'Rich Text');
+    expect(placement().textContent).toContain('In der Seitenleiste');
+    await user.click(within(dialog).getByRole('button', { name: 'Anlegen' }));
+
+    await waitFor(() => expect(callsTo('POST', '/api/v1/properties')).toHaveLength(1));
+    expect(callsTo('POST', '/api/v1/properties')[0]!.body).toMatchObject({ field_type: 'rich_text', placement: 'sidebar' });
+  });
+
   it('clears the default when the field type changes, and has decimals for a number', async () => {
     const user = userEvent.setup();
     renderWith(<Properties readOnlyReason={null} />, routes());
@@ -622,6 +646,7 @@ describe('default value', () => {
     label: key[0]!.toUpperCase() + key.slice(1),
     field_type,
     help: '',
+    placement: 'sidebar',
     default_value: null,
     settings: {},
     options: [],
@@ -838,7 +863,7 @@ describe('default value', () => {
 /* ---------------------------------------------------------------------- usage */
 
 describe('Properties usage', () => {
-  const flag: Property = { id: 'pr_flag', key: 'billable', label: 'Abrechenbar', field_type: 'boolean', help: '', default_value: null, settings: {}, options: [] };
+  const flag: Property = { id: 'pr_flag', key: 'billable', label: 'Abrechenbar', field_type: 'boolean', help: '', placement: 'sidebar', default_value: null, settings: {}, options: [] };
   const countCalls = () => api!.calls.filter((call) => call.method === 'POST' && call.url === '/api/v1/work-items/counts');
 
   it('names the number of items of each property, a yes/no property by its on value (K10)', async () => {
