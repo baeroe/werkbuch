@@ -2,7 +2,7 @@
 
 Project management you host yourself: work items with your own types, fields and workflows, a wiki per project, team-wide views across projects, recurring work from templates and switchable automations. Made for the keyboard, and open to scripts and AI agents through a REST API, an MCP server and webhooks. The docs are at https://werkbuch.dev.
 
-> **Status:** v0.1.0 is the first release, the image is `baeroe/werkbuch` on Docker Hub. The concept is in [`docs/superpowers/specs/2026-10-28-werkbuch-design.md`](docs/superpowers/specs/2026-10-28-werkbuch-design.md) (German), a clickable prototype with demo data in [`prototypes/clickdummy/`](prototypes/clickdummy/) (German UI).
+> **Status:** v0.2.0 is the current release, the image is `baeroe/werkbuch` on Docker Hub. The concept is in [`docs/superpowers/specs/2026-10-28-werkbuch-design.md`](docs/superpowers/specs/2026-10-28-werkbuch-design.md) (German), a clickable prototype with demo data in [`prototypes/clickdummy/`](prototypes/clickdummy/) (German UI).
 
 ## Screenshots
 
