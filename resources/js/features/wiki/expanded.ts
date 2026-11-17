@@ -11,8 +11,10 @@ import { useCallback, useSyncExternalStore } from 'react';
 import { drafts } from '@/lib/drafts';
 import type { PageNode } from '@/types';
 
+const PREFIX_OF_KEYS = 'werkbuch.wiki.expanded.';
+
 /** The key of a person's open pages in a project's wiki. */
-export const expandedKey = (userId: string, projectId: string) => `werkbuch.wiki.expanded.${userId}.${projectId}`;
+export const expandedKey = (userId: string, projectId: string) => `${PREFIX_OF_KEYS}${userId}.${projectId}`;
 
 const memory = new Map<string, ReadonlySet<string>>();
 const listeners = new Set<() => void>();
@@ -52,7 +54,21 @@ export function writeExpanded(key: string, next: ReadonlySet<string>): void {
   listeners.forEach((listener) => listener());
 }
 
+let watching = false;
+
+/** Another tab changed what is open: read it again, so this tab neither shows nor writes back its old state. */
+function onStorage(event: StorageEvent): void {
+  if (event.key === null) memory.clear();
+  else if (event.key.startsWith(PREFIX_OF_KEYS)) memory.delete(event.key);
+  else return;
+  listeners.forEach((listener) => listener());
+}
+
 function subscribe(listener: () => void): () => void {
+  if (!watching) {
+    window.addEventListener('storage', onStorage);
+    watching = true;
+  }
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -87,7 +103,7 @@ export function collapsedOf(nodes: readonly PageNode[], open: ReadonlySet<string
   return closed;
 }
 
-/** Every page of the tree, to drop open pages that are gone (deleted, or in another project now). */
+/** Every page of the tree, to drop open pages that are gone (deleted); a moved page keeps its id and stays open. */
 export function idsOf(nodes: readonly PageNode[]): Set<string> {
   const ids = new Set<string>();
   const walk = (list: readonly PageNode[]) => list.forEach((node) => (ids.add(node.id), walk(node.children)));

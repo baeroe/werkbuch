@@ -179,7 +179,8 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
   const [expanded, setExpanded] = useExpanded(expandedKey(me?.id ?? '', project.id));
   const collapsed = useMemo(() => collapsedOf(tree, expanded), [tree, expanded]);
   const ancestorIds = (pageId ? pathTo(tree, pageId).slice(0, -1) : []).map((node) => node.id).join(' ');
-  useEffect(() => {
+  // before the first paint: the open page shows in its place at once, with its row as the tab stop
+  useLayoutEffect(() => {
     const ids = ancestorIds.split(' ').filter(Boolean);
     if (ids.length > 0) setExpanded((open) => opened(open, ids));
   }, [ancestorIds, setExpanded]);

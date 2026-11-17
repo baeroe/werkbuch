@@ -3,10 +3,11 @@
  * them is in screen.test.tsx ("the folds of the tree").
  */
 
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { drafts } from '@/lib/drafts';
 import { webTree } from '@/test/fixtures';
-import { collapsedOf, expandedKey, folded, idsOf, opened, readExpanded, writeExpanded } from './expanded';
+import { collapsedOf, expandedKey, folded, idsOf, opened, readExpanded, useExpanded, writeExpanded } from './expanded';
 
 const key = expandedKey('u_mara', 'p_web');
 
@@ -25,10 +26,10 @@ describe('the store', () => {
   });
 
   it('keeps open pages in the storage, and the same ones again change nothing', () => {
-    const listener = vi.spyOn(Storage.prototype, 'setItem');
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
     writeExpanded(key, new Set(['pg_a', 'pg_b']));
     writeExpanded(key, new Set(['pg_b', 'pg_a']));
-    expect(listener).toHaveBeenCalledTimes(1);
+    expect(setItem).toHaveBeenCalledTimes(1);
     expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual(['pg_a', 'pg_b']);
 
     // a reload reads it back
@@ -51,6 +52,25 @@ describe('the store', () => {
     drafts.clear();
     window.localStorage.setItem(key, '["pg_a", 7, null]');
     expect([...readExpanded(key)]).toEqual(['pg_a']);
+  });
+
+  it('follows another tab, which writes the storage, and leaves keys of others alone', () => {
+    const { result } = renderHook(() => useExpanded(key));
+    act(() => writeExpanded(key, new Set(['pg_a'])));
+    expect([...result.current[0]]).toEqual(['pg_a']);
+
+    // another tab opened a page: this one reads it again instead of writing its old state back
+    window.localStorage.setItem(key, JSON.stringify(['pg_a', 'pg_b']));
+    act(() => window.dispatchEvent(new StorageEvent('storage', { key })));
+    expect([...result.current[0]]).toEqual(['pg_a', 'pg_b']);
+
+    // a key of something else changes nothing; a cleared storage folds everything
+    const before = result.current[0];
+    act(() => window.dispatchEvent(new StorageEvent('storage', { key: 'theme' })));
+    expect(result.current[0]).toBe(before);
+    window.localStorage.clear();
+    act(() => window.dispatchEvent(new StorageEvent('storage', { key: null })));
+    expect(result.current[0].size).toBe(0);
   });
 });
 

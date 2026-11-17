@@ -9,7 +9,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render } from '@testing-library/react';
-import { expandedKey, idsOf, writeExpanded } from '@/features/wiki/expanded';
+import { collapsedOf, expandedKey, writeExpanded } from '@/features/wiki/expanded';
 import { movedTree, withoutPages, subtreeIds, findPage } from '@/features/wiki/tree';
 import { WikiScreen, type WikiScreenProps } from '@/features/wiki/WikiScreen';
 import type { PageNode, Project } from '@/types';
@@ -72,7 +72,8 @@ function route(key: string): MockRoute | undefined {
 /** Opens every page of the tree for Mara, as if she had unfolded it (the tree starts folded, WEBU-5). */
 export function openTree(nodes: PageNode[] = webTree): void {
   window.localStorage.clear();
-  writeExpanded(expandedKey(mara.id, 'p_web'), idsOf(nodes));
+  // only pages with subpages: a leaf that a move or a new subpage turns into a parent starts folded, as in the app
+  writeExpanded(expandedKey(mara.id, 'p_web'), collapsedOf(nodes, new Set()));
 }
 
 export function startWikiServer(): MockApi {
