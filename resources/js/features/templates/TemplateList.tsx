@@ -135,10 +135,10 @@ export function TemplateList({ project, header, heading, rights }: TemplateListP
 
   return (
     <div className="max-w-5xl min-w-0">
-      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+      {header}
+      <div className="mt-3 flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0">
-          {header}
-          <p className="mt-1 max-w-[65ch] text-ui text-pretty text-muted">{t('templates.description')}</p>
+          <p className="max-w-[65ch] text-ui text-pretty text-muted">{t('templates.description')}</p>
           {rights.ready && rights.denied !== null && (
             <p className="mt-1 flex items-start gap-1.5 text-sm text-pretty text-muted">
               <Eye className="mt-px size-3.5 shrink-0" aria-hidden="true" />

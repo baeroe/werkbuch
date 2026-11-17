@@ -50,4 +50,4 @@ Only a project admin can delete a project, and has to type the identifier to con
 
 ## Favorites
 
-The star next to a project puts it in the sidebar. Favorites are personal. If someone loses access to a private project, it leaves their sidebar at once, and it comes back when they get access again.
+The star next to a project puts it in the sidebar. Without a star, the card of a project leads to its items, its **Wiki** and its **Templates**, and the tabs below the header of each part switch between the three. Favorites are personal. If someone loses access to a private project, it leaves their sidebar at once, and it comes back when they get access again.

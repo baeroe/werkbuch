@@ -106,6 +106,8 @@ it('keeps the own state when asked', function () use ($world, $save) {
 });
 
 it('keeps nothing for the same writer within the pause', function () use ($world, $save) {
+    // the clock stands: travel() counts from the real clock, and a slow run took a second between the save and the travel
+    $this->freezeSecond();
     $w = $world();
     $first = $save($w['mara'], $w['page'], ['content' => 'Am Morgen', 'keep_current' => false]);
 

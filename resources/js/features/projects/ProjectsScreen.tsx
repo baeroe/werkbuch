@@ -8,7 +8,7 @@
  */
 
 import { Link, router, usePage } from '@inertiajs/react';
-import { Archive, FolderKanban, Globe, Lock, Plus, UserPlus } from 'lucide-react';
+import { Archive, BookOpen, FolderKanban, Globe, LayoutTemplate, Lock, Plus, UserPlus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { Avatar } from '@/components/ui/Avatar';
@@ -99,6 +99,10 @@ function OpenCount({ id, open }: { id: string; open: OpenCounts }) {
   return <>{tn('projects.open_count', open.counts.get(id) ?? 0)}</>;
 }
 
+/** A link to a part of the project at the foot of its card: 44 px high on touch (also on a tablet), a chip with a mouse. */
+const CARD_PART =
+  'inline-flex min-h-11 items-center gap-1.5 rounded-chip px-2 text-ui font-medium text-muted no-underline transition-colors duration-120 hover:bg-hover hover:text-ink md:min-h-8 pointer-coarse:min-h-11';
+
 function ProjectCard({ project, lead, me, open }: { project: Project; lead: User | undefined; me: User | undefined; open: OpenCounts }) {
   const flashing = useUiStore((state) => state.flashIds.includes(project.id));
   const visibility = project.visibility === 'public' ? { label: t('projects.public'), icon: Globe } : { label: t('projects.private'), icon: Lock };
@@ -153,8 +157,19 @@ function ProjectCard({ project, lead, me, open }: { project: Project; lead: User
         </dd>
       </dl>
 
-      <div className="relative z-10 mt-auto flex min-h-8 items-center justify-end pt-4">
-        <Membership project={project} me={me} />
+      <div className="relative z-10 mt-auto flex min-h-8 flex-wrap items-center gap-x-1 gap-y-2 pt-4">
+        {/* the card itself leads to the items; its wiki and its templates without a star in the sidebar (WEBU-3) */}
+        <Link href={paths.wiki(project.identifier)} aria-label={t('projects.card.wiki', { name: project.name })} className={CARD_PART}>
+          <BookOpen className="size-3.5 shrink-0" aria-hidden="true" />
+          {t('projects.sections.wiki')}
+        </Link>
+        <Link href={paths.templates(project.identifier)} aria-label={t('projects.card.templates', { name: project.name })} className={CARD_PART}>
+          <LayoutTemplate className="size-3.5 shrink-0" aria-hidden="true" />
+          {t('projects.sections.templates')}
+        </Link>
+        <div className="ml-auto">
+          <Membership project={project} me={me} />
+        </div>
       </div>
     </li>
   );

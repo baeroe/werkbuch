@@ -628,6 +628,10 @@ describe('the item list screen', () => {
     projects = [project('WEB', 'admin', { name: 'Website-Relaunch', archived_at: '2026-10-20T10:00:00.000Z' })];
     renderScreen();
     expect(await screen.findByText('Archiviert, schreibgeschützt')).toBeTruthy();
+    // the parts of the project under its header (WEBU-3)
+    const parts = screen.getByRole('navigation', { name: 'Bereiche von Website-Relaunch' });
+    expect(within(parts).getByRole('link', { name: 'Items' }).getAttribute('aria-current')).toBe('page');
+    expect(within(parts).getByRole('link', { name: 'Wiki' }).getAttribute('href')).toBe('/projects/WEB/wiki');
     expect(screen.getByText('Das Projekt Website-Relaunch ist archiviert. Seine Items lassen sich lesen, aber nicht ändern.')).toBeTruthy();
     const create = screen.getByRole('button', { name: /^Neues Item/ });
     await waitFor(() => expect(create.getAttribute('aria-disabled')).toBe('true'));

@@ -162,6 +162,10 @@ describe('the list of templates', () => {
     expect(rowOf('Wartung').textContent).toContain('Wöchentlich am Montag um 09:00');
     expect(screen.getByRole('link', { name: 'Monatsbericht' }).getAttribute('href')).toBe('/projects/APP/templates/tpl_app_report');
     expect(document.title).toContain('Vorlagen APP');
+    // the parts of the project under the header (WEBU-3)
+    const parts = screen.getByRole('navigation', { name: 'Bereiche von Feldwerk-App' });
+    expect(within(parts).getByRole('link', { name: 'Vorlagen' }).getAttribute('aria-current')).toBe('page');
+    expect(within(parts).getByRole('link', { name: 'Items' }).getAttribute('href')).toBe('/projects/APP');
   });
 
   it('marks a paused schedule, and one without a schedule runs only by hand', async () => {
@@ -334,7 +338,10 @@ describe('one template', () => {
     renderTemplates({ templateId: 'tpl_app_report' });
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Monatsbericht' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Vorlagen' }).getAttribute('href')).toBe('/projects/APP/templates');
+    // the tab "Vorlagen" leads back to the list, the place one is in (aria-current true); the path names it as text
+    const back = screen.getByRole('link', { name: 'Vorlagen' });
+    expect(back.getAttribute('href')).toBe('/projects/APP/templates');
+    expect(back.getAttribute('aria-current')).toBe('true');
     const log = await screen.findByRole('list', { name: 'Läufe' });
     const entries = within(log).getAllByRole('listitem');
     expect(entries[0].textContent).toContain('Gescheitert: Pflicht-Property Umgebung fehlt');

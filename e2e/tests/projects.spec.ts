@@ -40,6 +40,40 @@ test('creates a project with the keyboard from the sidebar', async ({ page }) =>
   await expect(card(page, name)).toContainText(PEOPLE.e2e.name);
 });
 
+test('reaches the wiki and the templates of a project without a star, with the keyboard', async ({ page }) => {
+  const { name, identifier } = await createProject(page, 'W');
+  await page.goto('/projects');
+
+  // the card leads to the wiki of a project nobody starred
+  const wiki = card(page, name).getByRole('link', { name: tr('en', 'projects.card.wiki', { name }) });
+  await tabTo(page, wiki, { max: 150 });
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/wiki$`));
+  const parts = page.getByRole('navigation', { name: tr('en', 'projects.sections.label', { name }) });
+  await expect(parts.getByRole('link', { name: tr('en', 'projects.sections.wiki') })).toHaveAttribute('aria-current', 'page');
+
+  // the tabs of the project lead back to its items
+  const items = parts.getByRole('link', { name: tr('en', 'projects.sections.items') });
+  await tabTo(page, items, { max: 40 });
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/projects/${identifier}$`));
+  await expect(parts.getByRole('link', { name: tr('en', 'projects.sections.items') })).toHaveAttribute('aria-current', 'page');
+
+  // and the palette to its templates
+  await pressMod(page, 'k');
+  const palette = page.getByRole('dialog', { name: tr('en', 'palette.title') });
+  await expect(palette.getByRole('combobox', { name: tr('en', 'palette.input') })).toBeFocused();
+  await page.keyboard.type(tr('en', 'commands.project_templates.label').replace(' …', ''));
+  await expect(palette.getByRole('option', { name: new RegExp(`^${tr('en', 'commands.project_templates.label')}`) })).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Enter');
+  await expect(palette.getByRole('combobox', { name: tr('en', 'commands.project_templates.label') })).toBeFocused();
+  await page.keyboard.type(identifier);
+  await expect(palette.getByRole('option', { name: new RegExp(`^${name}`) })).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/templates$`));
+  await expect(parts.getByRole('link', { name: tr('en', 'projects.sections.templates') })).toHaveAttribute('aria-current', 'page');
+});
+
 test('stars a project into the sidebar and out again', async ({ page }) => {
   const { name } = await createProject(page, 'S');
   await page.goto('/projects');
@@ -149,7 +183,7 @@ test('joins a public project with one click', async ({ page, browser }) => {
     await lene.keyboard.press('Enter');
     await expect(lene.getByText(tr('de', 'projects.joined', { name }))).toBeVisible();
     // the button goes with the membership; the focus stays on the card
-    await expect(entry.getByRole('link', { name })).toBeFocused();
+    await expect(entry.getByRole('link', { name, exact: true })).toBeFocused();
     await expect(entry).toContainText(`${tr('de', 'projects.your_role')} ${tr('de', 'roles.project.member')}`);
     await expect(entry.getByRole('button', { name: tr('de', 'projects.join') })).toHaveCount(0);
   } finally {
