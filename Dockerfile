@@ -83,8 +83,9 @@ COPY --from=assets /app/public/build ./public/build
 # volume is storage/app; compiled views) and bootstrap/cache (config, routes, events) stay writable, and Laravel's
 # compiled PHP lives there. The base gives /var/www to www-data: whoever writes there could swap the code folder (A429).
 # What COPY puts into a folder the base created keeps its owner www-data, so every code folder is chowned. The debug
-# files of the base (read by PHP and FPM at start) and server-opts.d (our server config) belong to root as well;
-# the rest of /etc/nginx stays writable, the base writes its templates there.
+# files of the base (read by PHP and FPM at start) and the folder server-opts.d (our server config) belong to root as
+# well: www-data can add no file there. Our files in it are root's (COPY); performance.conf of the base, which we keep,
+# stays www-data's like the rest of /etc/nginx, where the base writes its templates at start.
 # package:discover boots the app; the channels resolve the broadcaster, and Reverb's keys exist only at start (3b).
 RUN mkdir -p storage/app/private storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && BROADCAST_CONNECTION=null composer dump-autoload --no-dev --optimize --no-interaction \

@@ -401,7 +401,8 @@ $entrypointDir = function () use ($entrypointDirs): string {
  * Runs docker/entrypoint.d/99-werkbuch.sh in a temporary folder instead of /var/www/html (again in $dir, for a second
  * start), with a fake `php` first on the PATH: it writes its arguments to $dir/php.log (one call per line) and the keys
  * it sees to $dir/keys.log, prints $FAKE_ENSURE_ADMIN for `artisan app:ensure-admin` and ends with
- * $FAKE_ENSURE_ADMIN_EXIT there, else with 0. $role is what serversideup exports as SERVERSIDEUP_DEFAULT_COMMAND
+ * $FAKE_ENSURE_ADMIN_EXIT there, else with 0; the check of the upload limits runs in the real PHP with post_max_size
+ * $FAKE_POST_MAX and upload_max_filesize $FAKE_UPLOAD_MAX (those of the image by default). $role is what serversideup exports as SERVERSIDEUP_DEFAULT_COMMAND
  * (`true` for /init, the web service; null: not set). The keys and passwords of the test process never reach it.
  */
 $entrypoint = function (array $env, ?string $role = 'true', ?string $dir = null) use ($entrypointDir): Process {
@@ -415,6 +416,9 @@ $entrypoint = function (array $env, ?string $role = 'true', ?string $dir = null)
         printf '%s\n' "$*" | tr '\n' ' ' | sed 's/ *$//' >> "$LOG"
         echo >> "$LOG"
         echo "$APP_KEY|$REVERB_APP_KEY|$REVERB_APP_SECRET" >> "$KEYS_LOG"
+        case "$*" in
+            *upload_max_filesize*) exec "$REAL_PHP" -d "post_max_size=$FAKE_POST_MAX" -d "upload_max_filesize=$FAKE_UPLOAD_MAX" "$@" ;;
+        esac
         if [ "$1 $2" = "artisan app:ensure-admin" ]; then
             printf '%s\n' "$FAKE_ENSURE_ADMIN"
             exit "${FAKE_ENSURE_ADMIN_EXIT:-0}"
@@ -433,6 +437,10 @@ $entrypoint = function (array $env, ?string $role = 'true', ?string $dir = null)
         'DB_PASSWORD' => 'db-secret',
         'MEILISEARCH_KEY' => 'meili-secret',
         'SERVERSIDEUP_DEFAULT_COMMAND' => $role ?? false,
+        'REAL_PHP' => PHP_BINARY,
+        'FAKE_POST_MAX' => '32M',
+        'FAKE_UPLOAD_MAX' => '30M',
+        'DB_WAIT_TIMEOUT' => false,
         ...$env,
     ]);
     $process->run();
@@ -692,4 +700,37 @@ it('refuses to start a worker without the keys of the web service', function () 
         ->and($process->getErrorOutput())->toContain('werkbuch: APP_KEY missing in storage/app/.app-key: start the werkbuch service first')
         ->and(is_file($dir.'/php.log'))->toBeFalse('the worker called php without its keys')
         ->and(is_dir($dir.'/storage'))->toBeFalse('the worker made storage/');
+});
+
+it('warns when post_max_size or upload_max_filesize of PHP is below ATTACHMENTS_MAX_MB, and starts', function (array $env, ?string $small) use ($entrypoint) {
+    $process = $entrypoint($env);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toEndWith("werkbuch: ready\n");
+
+    if ($small === null) {
+        expect($process->getErrorOutput())->not->toContain('ATTACHMENTS_MAX_MB');
+    } else {
+        expect($process->getErrorOutput())->toContain("werkbuch: ATTACHMENTS_MAX_MB is larger than {$small} of PHP: larger uploads end in 413");
+    }
+})->with([
+    'the limits of the image' => [[], null],
+    'post_max_size too small' => [['FAKE_POST_MAX' => '20M'], 'post_max_size'],
+    'upload_max_filesize too small' => [['ATTACHMENTS_MAX_MB' => '31', 'FAKE_POST_MAX' => '40M'], 'upload_max_filesize'],
+    'both too small' => [['ATTACHMENTS_MAX_MB' => '100'], 'post_max_size and upload_max_filesize'],
+]);
+
+it('waits the default 60 seconds for the database when DB_WAIT_TIMEOUT is no number, and says it', function (string $timeout) use ($entrypoint) {
+    $process = $entrypoint(['DB_WAIT_TIMEOUT' => $timeout]);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getErrorOutput())->toContain("werkbuch: DB_WAIT_TIMEOUT is no number of seconds ({$timeout}): waiting 60s")
+        ->and($process->getOutput())->toEndWith("werkbuch: ready\n");
+})->with(['text' => 'soon', 'negative' => '-5', 'with unit' => '60s']);
+
+it('takes a number of seconds in DB_WAIT_TIMEOUT without a word', function () use ($entrypoint) {
+    $process = $entrypoint(['DB_WAIT_TIMEOUT' => '120']);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getErrorOutput())->not->toContain('DB_WAIT_TIMEOUT');
 });
