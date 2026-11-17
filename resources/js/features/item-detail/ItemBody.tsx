@@ -7,7 +7,8 @@
  *   and `m` always act; in the preview only while the focus is in its panel or nowhere in particular
  *   (`previewKeysAct`), so the screen beside it keeps the key otherwise. `r` always acts, as in the clickdummy: no
  *   screen beside a preview binds it.
- * - `ItemBody`: the title, the archived and blocked notes, the fields, the description, the children, the relations,
+ * - `ItemBody`: the title, the archived and blocked notes, the fields, the description, the properties placed below it
+ *   (WEBU-6), the children, the relations,
  *   the wiki pages that name the item (only when there are some), the files, the activity (comments and history, with the comment composer at its end). In the preview one column, as in the
  *   moodboard panel; on the page the fields stand in a column on the right from lg on (they stay in view while the
  *   main column scrolls), below lg they follow the title. The reading order is the same everywhere.
@@ -27,7 +28,7 @@ import { Activity } from './activity/Activity';
 import { Attachments } from './Attachments';
 import { Children } from './Children';
 import { Description } from './Description';
-import { FieldsPanel } from './FieldsPanel';
+import { FieldsPanel, Properties } from './FieldsPanel';
 import { ArchivedNote } from './header/ArchivedNote';
 import { ItemTitle } from './header/ItemTitle';
 import { Relations } from './Relations';
@@ -78,6 +79,7 @@ export function ItemBody({ detail, surface }: { detail: WorkItemDetail; surface:
   const main: ReactNode = (
     <>
       <Description detail={detail} />
+      <Properties detail={detail} placement="body" />
       <Children detail={detail} />
       <Relations detail={detail} />
       <WikiPages detail={detail} />

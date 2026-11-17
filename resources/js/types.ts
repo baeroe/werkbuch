@@ -145,6 +145,8 @@ export interface PropertyOption {
 /** The stored value of a property. Dropdown and member values are option or user IDs. */
 export type PropertyValue = string | number | boolean | string[] | RichText | null;
 
+export type PropertyPlacement = 'sidebar' | 'body';
+
 export interface Property {
   id: string;
   /** snake_case, unique and immutable. Item values are keyed by it (`WorkItem.values`). */
@@ -152,6 +154,8 @@ export interface Property {
   label: string;
   field_type: FieldType;
   help: string;
+  /** Where it shows on an item (WEBU-6): the panel of fields or below the description. */
+  placement: PropertyPlacement;
   default_value: PropertyValue;
   settings: { multiple?: boolean; decimals?: number };
   options: PropertyOption[];

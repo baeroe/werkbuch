@@ -31,6 +31,7 @@ const property = (field_type: Property['field_type'], multiple = false): Propert
   label: field_type,
   field_type,
   help: '',
+  placement: 'sidebar',
   default_value: null,
   settings: multiple ? { multiple: true } : {},
   options: [],

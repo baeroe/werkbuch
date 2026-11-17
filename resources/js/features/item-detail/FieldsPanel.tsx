@@ -19,12 +19,13 @@ import { useEditReason, useUserMap } from '@/components/fields/itemData';
 import { LabelsPicker } from '@/components/fields/LabelsPicker';
 import { ParentPicker } from '@/components/fields/ParentPicker';
 import { PriorityPicker } from '@/components/fields/PriorityPicker';
-import { isEmptyValue } from '@/components/fields/property/parse';
+import { isEmptyValue, readsEmpty } from '@/components/fields/property/parse';
 import { PropertyField } from '@/components/fields/property/PropertyField';
 import { StatePicker } from '@/components/fields/StatePicker';
 import { TypePicker } from '@/components/fields/TypePicker';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { cx } from '@/components/ui/cx';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { canHaveParent } from '@/domain/hierarchy';
 import { isClosedCategory } from '@/domain/workflow';
@@ -34,7 +35,8 @@ import { useResolutions } from '@/hooks/catalog';
 import { useProperties } from '@/hooks/properties';
 import { useUpdateWorkItem } from '@/hooks/workItems';
 import { t } from '@/lib/i18n';
-import type { Property, RichText, WorkItem, WorkItemDetail } from '@/types';
+import { usePermissions } from '@/lib/permissions';
+import type { Property, PropertyPlacement, RichText, WorkItem, WorkItemDetail } from '@/types';
 import { Section, useInstantDay } from './shared';
 
 /** How long typing pauses before a rich text property saves. */
@@ -179,10 +181,20 @@ function RichTextProperty({ item, property, required }: { item: WorkItem; proper
   );
 }
 
-function Properties({ detail }: { detail: WorkItemDetail }) {
+/**
+ * The properties of the item's type that show at `placement` (WEBU-6): in the side panel (`sidebar`, with the loading
+ * and the error of the catalog) or below the description (`body`, „Weitere Angaben“, only once the catalog and the
+ * rights are there; a reader sees only those that read as a value there (A89: a „no“ reads as none), who may change
+ * the item every one). Nothing to show: no section.
+ */
+export function Properties({ detail, placement }: { detail: WorkItemDetail; placement: PropertyPlacement }) {
   const properties = useProperties();
+  const reason = useEditReason(detail.item);
+  const rights = usePermissions();
   const { item, type } = detail;
   if (type.properties.length === 0) return null;
+  // below the description only once it is clear what shows: no empty ones that come and go while the rights load
+  if (placement === 'body' && (!properties.data || rights.loading)) return null;
 
   if (properties.isError && !properties.data) {
     return (
@@ -202,17 +214,22 @@ function Properties({ detail }: { detail: WorkItemDetail }) {
     .flatMap((entry) => {
       const property = properties.data?.items.find((candidate) => candidate.id === entry.property_id);
       return property ? [{ property, required: entry.required }] : [];
-    });
+    })
+    .filter(({ property }) => property.placement === placement && (placement === 'sidebar' || reason === null || !readsEmpty(property, item.values[property.key] ?? null)));
+  if (properties.data && fields.length === 0) return null;
 
   return (
-    <Section title={t('items.detail.fields.properties')}>
+    <Section title={placement === 'body' ? t('items.detail.fields.properties_body') : t('items.detail.fields.properties')}>
       {!properties.data ? (
         <SkeletonGroup label={t('items.detail.fields.properties_loading')} className="mt-2 flex flex-col gap-3">
           <Skeleton className="h-8 w-full rounded-ctl" />
           <Skeleton className="h-8 w-2/3 rounded-ctl" />
         </SkeletonGroup>
       ) : (
-        <dl className="mt-2 grid grid-cols-[5.5rem_minmax(0,1fr)] items-start gap-x-2 gap-y-2 text-ui">
+        <dl
+          data-properties={placement}
+          className={cx('mt-2 grid items-start gap-x-2 gap-y-2 text-ui', placement === 'body' ? 'grid-cols-[9rem_minmax(0,1fr)]' : 'grid-cols-[5.5rem_minmax(0,1fr)]')}
+        >
           {fields.map(({ property, required }) =>
             property.field_type === 'rich_text' ? (
               <RichTextProperty key={property.id} item={item} property={property} required={required} />
@@ -294,7 +311,7 @@ export function FieldsPanel({ detail }: { detail: WorkItemDetail }) {
         )}
         <Stamps item={item} />
       </dl>
-      <Properties detail={detail} />
+      <Properties detail={detail} placement="sidebar" />
     </div>
   );
 }

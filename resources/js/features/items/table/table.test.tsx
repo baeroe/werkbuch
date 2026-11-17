@@ -102,6 +102,7 @@ const prop = (id: string, key: string, label: string, field_type: Property['fiel
   label,
   field_type,
   help: '',
+  placement: 'sidebar',
   default_value: null,
   settings: {},
   options: [],

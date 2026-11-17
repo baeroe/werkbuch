@@ -40,6 +40,7 @@ const prop = (key: string, label: string, field_type: Property['field_type'], ch
   label,
   field_type,
   help: '',
+  placement: 'sidebar',
   default_value: null,
   settings: {},
   options: [],

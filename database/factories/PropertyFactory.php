@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Domain\Catalog\Tone;
 use App\Domain\Properties\FieldType;
+use App\Domain\Properties\Placement;
 use App\Models\Property;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -24,6 +25,8 @@ class PropertyFactory extends Factory
             'label' => fake()->unique()->words(2, true),
             'field_type' => FieldType::Text,
             'help' => '',
+            // where a new one of its field type goes (WEBU-6), also after a state with another field type
+            'placement' => fn (array $attributes) => Placement::forType(FieldType::from($attributes['field_type'] instanceof FieldType ? $attributes['field_type']->value : $attributes['field_type'])),
             'default_value' => null,
             'settings' => [],
         ];

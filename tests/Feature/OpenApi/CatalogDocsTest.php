@@ -284,12 +284,12 @@ it('lets a client send every key the document names', function () use ($bodies, 
     $this->putJson("/api/v1/resolutions/{$resolution['id']}", $resolution)->assertOk();
 
     $property = $this->postJson('/api/v1/properties', [
-        'key' => 'sprint_x', 'label' => 'Sprint', 'field_type' => 'dropdown', 'help' => 'The sprint.', 'default_value' => null,
+        'key' => 'sprint_x', 'label' => 'Sprint', 'field_type' => 'dropdown', 'help' => 'The sprint.', 'placement' => 'body', 'default_value' => null,
         'settings' => ['multiple' => false], 'options' => [['label' => 'One', 'color' => 'sky'], ['id' => 'o_two', 'label' => 'Two', 'color' => 'moss', 'archived_at' => null]],
     ])->assertCreated()->json('data');
     $this->putJson("/api/v1/properties/{$property['id']}", $property)->assertOk();
     $this->putJson("/api/v1/properties/{$effort->id}", [
-        'key' => 'effort', 'label' => 'Effort (h)', 'field_type' => 'number', 'help' => '', 'default_value' => 1.5, 'settings' => ['decimals' => 1], 'options' => null,
+        'key' => 'effort', 'label' => 'Effort (h)', 'field_type' => 'number', 'help' => '', 'placement' => null, 'default_value' => 1.5, 'settings' => ['decimals' => 1], 'options' => null,
     ])->assertOk();
 
     $type = $this->postJson('/api/v1/work-item-types', [

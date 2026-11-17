@@ -30,6 +30,10 @@ Ein neues Projekt bekommt alle aktiven Typen, der erste ist der Standard, außer
 
 Eine Property ist ein Feld, das Typen ihren Items über die Kernfelder hinaus geben, die jedes Item hat. Properties gehören der Organisation und werden unter **Einstellungen → Typen** den Typen zugeordnet. Eine Property hat ein Label (bis 60 Zeichen), einen Hilfetext (bis 500), einen Schlüssel, einen Feldtyp und optional einen Standardwert.
 
+### Wo eine Property steht
+
+**Anzeige** im Dialog einer Property entscheidet, wo sie an einem Item steht, für jeden Typ, der sie hat: **In der Seitenleiste** bei Status, Assignee und den anderen Feldern, oder **Unter der Beschreibung** über die ganze Breite unter **Weitere Angaben**, vor den Kind-Items und Relationen. Eine neue Rich-Text-Property beginnt unter der Beschreibung, jede andere in der Seitenleiste. Unter der Beschreibung sieht, wer das Item nicht ändern darf, eine Property nur mit Wert (ein Ja/Nein auf Nein gilt als keiner). Über REST heißt das Feld `placement` (`sidebar` oder `body`); fehlt es, nimmt es den Platz, den eine neue Property seines Feldtyps bekommt.
+
 ### Schlüssel
 
 Der Schlüssel nennt die Property in der API, in MCP und in [Filtern](/de/concepts/views#properties) (`property:<key>`). Er ist `snake_case`: Kleinbuchstaben, Ziffern und `_`, vorn ein Buchstabe, höchstens 40 Zeichen. Er ist eindeutig und **lässt sich nicht ändern**, sobald die Property gespeichert ist. Er darf nicht der Name eines Kernfelds sein: `id`, `key`, `project`, `type`, `title`, `description`, `state`, `state_category`, `resolution`, `assignee`, `priority`, `label`, `labels`, `start_date`, `due_date`, `parent`, `created_by`, `created_at`, `updated_at`, `started_at`, `closed_at`, `archived`, `archived_at` und `rank` sind vergeben.

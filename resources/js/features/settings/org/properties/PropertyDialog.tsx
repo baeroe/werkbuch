@@ -1,6 +1,7 @@
 /*
  * Creating and changing a property (spec 4.7): label, key, field type, help text, the settings of the field type, the
- * options of a dropdown and the default value. The key follows the label until somebody types one. Key and field type
+ * options of a dropdown, where it shows on an item (the side panel or below the description, WEBU-6; a new one follows
+ * its field type until somebody chooses) and the default value. The key follows the label until somebody types one. Key and field type
  * are fixed once the property exists; a dropdown or a choice of people may only go from single to multiple choice. The
  * dialog sends the whole property every time (P24): key, field type, the settings of its field type and every option
  * with its archive stamp. The default value is edited with the editor items use (`PropertyValueInput`), so it reads
@@ -23,7 +24,7 @@ import { toast } from '@/components/ui/toast';
 import { useSaveProperty } from '@/hooks/properties';
 import { useSettle } from '@/hooks/mutation';
 import { t, tn } from '@/lib/i18n';
-import type { FieldType, Property, PropertyValue } from '@/types';
+import type { FieldType, Property, PropertyPlacement, PropertyValue } from '@/types';
 import { FIELD_TYPE_HINTS, FIELD_TYPE_LABELS, FIELD_TYPES } from '../../catalog/choices';
 import { fieldMessage, noticeOf } from '../../frame/form';
 import { FieldGroup, readOnlyField } from '../../frame/parts';
@@ -36,6 +37,9 @@ const decimalsLabel = (count: number) => (count === 0 ? t('settings.properties.d
 
 /** Whether the field type takes several values (a dropdown, a choice of people). */
 const hasMultiple = (type: FieldType) => type === 'dropdown' || type === 'member';
+
+/** Where a new property of the field type shows on an item (WEBU-6): rich text below the description. */
+const placementFor = (type: FieldType): PropertyPlacement => (type === 'rich_text' ? 'body' : 'sidebar');
 
 /** Whether a field of this type can start with a value. */
 const hasDefault = (type: FieldType) => type !== 'member' && type !== 'rich_text';
@@ -57,6 +61,9 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
   const [keyTouched, setKeyTouched] = useState(property !== null);
   const [fieldType, setFieldType] = useState<FieldType>(property?.field_type ?? 'text');
   const [help, setHelp] = useState(property?.help ?? '');
+  const [placement, setPlacement] = useState<PropertyPlacement>(property?.placement ?? 'sidebar');
+  // a new property's place follows its field type until somebody chooses one
+  const [placementTouched, setPlacementTouched] = useState(property !== null);
   const [decimals, setDecimals] = useState(property?.settings.decimals ?? 0);
   const [multiple, setMultiple] = useState(property?.settings.multiple ?? false);
   const [options, setOptions] = useState<DraftOption[]>(() =>
@@ -87,6 +94,7 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
 
   function chooseType(next: FieldType) {
     setFieldType(next);
+    if (!placementTouched) setPlacement(placementFor(next));
     setDefaultValue(null);
     setUnreadable(null);
   }
@@ -125,6 +133,7 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
         label,
         field_type: fieldType,
         help: help.trim(),
+        placement,
         default_value: hasDefault(fieldType) && stillOffered ? defaultValue : null,
         settings,
         options:
@@ -156,7 +165,7 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
       description={t('settings.properties.dialog.description')}
       submitLabel={property ? t('settings.frame.save') : t('settings.catalog.submit_create')}
       pending={save.isPending}
-      notice={noticeOf(save.error, ['label', 'key', 'help', 'settings.decimals', 'options', ...optionPaths, 'default_value'])}
+      notice={noticeOf(save.error, ['label', 'key', 'help', 'placement', 'settings.decimals', 'options', ...optionPaths, 'default_value'])}
       finalFocus={finalFocus}
       onSubmit={submit}
     >
@@ -220,6 +229,21 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
           error={fieldMessage(save.error, 'help')}
           onChange={(event) => setHelp(event.target.value)}
         />
+        <Select
+          label={t('settings.properties.dialog.placement')}
+          hint={t('settings.properties.dialog.placement_hint')}
+          error={fieldMessage(save.error, 'placement')}
+          value={placement}
+          onValueChange={(next) => {
+            if (!next) return;
+            setPlacement(next as PropertyPlacement);
+            setPlacementTouched(true);
+          }}
+          options={[
+            { value: 'sidebar', label: t('settings.properties.placement.sidebar') },
+            { value: 'body', label: t('settings.properties.placement.body') },
+          ]}
+        />
       </div>
 
       {fieldType === 'number' && (
@@ -277,6 +301,7 @@ export function PropertyDialog({ open, onOpenChange, property, finalFocus }: Pro
             label: t('settings.properties.dialog.default'),
             field_type: fieldType,
             help: '',
+            placement,
             default_value: null,
             settings,
             options: active.map((option, position) => ({

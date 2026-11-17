@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Domain\Properties\FieldType;
+use App\Domain\Properties\Placement;
 use Database\Factories\PropertyFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -19,12 +20,13 @@ use Illuminate\Support\Carbon;
  * @property string $label
  * @property FieldType $field_type
  * @property string $help
+ * @property Placement $placement where it shows on an item (WEBU-6)
  * @property mixed $default_value
  * @property array<string, mixed> $settings
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['key', 'label', 'field_type', 'help', 'default_value', 'settings'])]
+#[Fillable(['key', 'label', 'field_type', 'help', 'placement', 'default_value', 'settings'])]
 final class Property extends Model
 {
     /** @use HasFactory<PropertyFactory> */
@@ -45,6 +47,7 @@ final class Property extends Model
     {
         return [
             'field_type' => FieldType::class,
+            'placement' => Placement::class,
             'default_value' => 'json',
             'settings' => 'array',
         ];

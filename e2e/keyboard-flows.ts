@@ -279,6 +279,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'paste an image into a wiki page', file: 'wiki.spec.ts', test: 'pastes an image into a page' },
   { flow: 'download a wiki page as PDF', file: 'wiki.spec.ts', test: 'downloads a page with its subpages as PDF with the keyboard' },
   { flow: 'make a table in a description', file: 'item-description.spec.ts', test: 'makes a table in a description over /, adds a column from alt+F10 and scrolls it sideways when narrow', projects: EVERYWHERE },
+  { flow: 'place a property below the description', file: 'types-properties.spec.ts', test: 'edits a rich text property below the description and moves it to the side panel' },
 ];
 
 /**

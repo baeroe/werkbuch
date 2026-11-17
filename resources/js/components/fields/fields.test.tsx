@@ -693,7 +693,7 @@ describe('askResolution and ItemDialogsHost', () => {
 
 describe('TypePicker and the type change', () => {
   const [task, bug, epic] = types as [WorkItemType, WorkItemType, WorkItemType];
-  const approved: Property = { id: 'pr_approved', key: 'approved', label: 'Freigegeben', field_type: 'boolean', help: '', default_value: null, settings: {}, options: [] };
+  const approved: Property = { id: 'pr_approved', key: 'approved', label: 'Freigegeben', field_type: 'boolean', help: '', placement: 'sidebar', default_value: null, settings: {}, options: [] };
   // a type of the project that needs a yes/no and the environment
   const release: WorkItemType = {
     ...task,

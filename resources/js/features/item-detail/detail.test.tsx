@@ -77,7 +77,7 @@ const member = (user_id: string, role: ProjectMember['role'] = 'member'): Projec
 const members = [member('u_ida', 'admin'), member('u_lene')];
 
 /** The steps of a bug, as rich text: a property this detail edits in the editor. */
-const steps: Property = { id: 'pr_steps', key: 'steps', label: 'Schritte', field_type: 'rich_text', help: '', default_value: null, settings: {}, options: [] };
+const steps: Property = { id: 'pr_steps', key: 'steps', label: 'Schritte', field_type: 'rich_text', help: '', placement: 'sidebar', default_value: null, settings: {}, options: [] };
 const doc = (text: string): RichText => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
 
 let items: WorkItem[] = [];
@@ -615,8 +615,8 @@ describe('ItemPage', () => {
 
 describe('properties in the detail', () => {
   /** A bug with the steps as a rich text property, required or not. */
-  function withSteps(required: boolean, value: RichText | null = doc('Formular öffnen')) {
-    propertyList = [...properties, steps];
+  function withSteps(required: boolean, value: RichText | null = doc('Formular öffnen'), placement: Property['placement'] = 'sidebar') {
+    propertyList = [...properties, { ...steps, placement }];
     typeList = types.map((type) => (type.id === 't_bug' ? { ...type, properties: [...type.properties, { property_id: 'pr_steps', required, position: 3 }] } : type));
     items = items.map((entry) => (entry.id === web47.id ? { ...web47, values: { ...web47.values, ...(value && { steps: value }) } } : entry));
   }
@@ -638,6 +638,57 @@ describe('properties in the detail', () => {
     renderWith(<ItemPeek itemId="wi_web_47" />);
     await screen.findByRole('heading', { level: 2, name: 'Kontaktformular sendet doppelt' });
     expect(screen.queryByRole('region', { name: 'Properties' })).toBeNull();
+  });
+
+  it('shows a property placed in the body below the description, apart from the side panel (WEBU-6)', async () => {
+    withSteps(false, doc('Formular öffnen'), 'body');
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    const editor = await screen.findByRole('textbox', { name: 'Schritte' });
+    const body = editor.closest('[data-properties]');
+    expect(body?.getAttribute('data-properties')).toBe('body');
+    // a section of its own name, apart from „Properties“ of the side panel
+    expect(within(screen.getByRole('region', { name: 'Weitere Angaben' })).getByRole('textbox', { name: 'Schritte' })).toBe(editor);
+    // the side panel keeps the others, without the steps
+    const side = within(screen.getByRole('complementary', { name: 'Felder' }));
+    expect(await side.findByText('Umgebung')).toBeTruthy();
+    expect(side.queryByText('Schritte')).toBeNull();
+    // below the description in the reading order
+    const description = screen.getByRole('region', { name: 'Beschreibung' });
+    expect(description.compareDocumentPosition(body!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('edits a dropdown placed below the description, and hides a „no“ from a reader there (WEBU-6, A89)', async () => {
+    const billable: Property = { id: 'pr_billable', key: 'billable', label: 'Abrechenbar', field_type: 'boolean', help: '', placement: 'body', default_value: null, settings: {}, options: [] };
+    propertyList = [...properties.map((property) => (property.key === 'environment' ? { ...property, placement: 'body' as const } : property)), billable];
+    typeList = types.map((type) => (type.id === 't_bug' ? { ...type, properties: [...type.properties, { property_id: 'pr_billable', required: false, position: 3 }] } : type));
+    items = items.map((entry) => (entry.id === web47.id ? { ...web47, values: { ...web47.values, billable: false } } : entry));
+
+    const first = renderWith(<ItemPage itemKey="WEB-47" />);
+    const more = await screen.findByRole('region', { name: 'Weitere Angaben' });
+    expect(await within(more).findByRole('combobox', { name: /^Umgebung/ })).toBeTruthy();
+    expect(within(more).getByText('Abrechenbar')).toBeTruthy();
+    expect(within(screen.getByRole('complementary', { name: 'Felder' })).queryByText('Umgebung')).toBeNull();
+    first.unmount();
+
+    // a reader: the environment has a value, the „no“ reads as none
+    renderWith(<ItemPage itemKey="WEB-47" />, { role: 'viewer' });
+    const read = await screen.findByRole('region', { name: 'Weitere Angaben' });
+    expect(await within(read).findByText('Umgebung')).toBeTruthy();
+    expect(within(read).queryByText('Abrechenbar')).toBeNull();
+  });
+
+  it('shows a reader a property in the body only with a value, and no empty section (WEBU-6)', async () => {
+    withSteps(false, null, 'body');
+    const first = renderWith(<ItemPeek itemId="wi_web_47" />, { role: 'viewer' });
+    await screen.findByRole('heading', { level: 2, name: 'Kontaktformular sendet doppelt' });
+    await within(await screen.findByRole('region', { name: 'Properties' })).findByText('Umgebung');
+    expect(document.querySelector('[data-properties="body"]')).toBeNull();
+    first.unmount();
+
+    withSteps(false, doc('Formular öffnen'), 'body');
+    renderWith(<ItemPeek itemId="wi_web_47" />, { role: 'viewer' });
+    expect(await screen.findByText('Formular öffnen')).toBeTruthy();
+    expect(document.querySelector('[data-properties="body"]')).not.toBeNull();
   });
 
   it('saves a rich text property after a pause, on mod+enter and when the focus leaves it', async () => {

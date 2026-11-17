@@ -223,6 +223,7 @@ export const properties: Property[] = [
     label: 'Kunde',
     field_type: 'dropdown',
     help: 'Für wen das Item gemacht wird.',
+    placement: 'sidebar',
     default_value: null,
     settings: {},
     options: [
@@ -237,6 +238,7 @@ export const properties: Property[] = [
     label: 'Aufwand (h)',
     field_type: 'number',
     help: 'Geschätzte Stunden, auf eine Nachkommastelle.',
+    placement: 'sidebar',
     default_value: null,
     settings: { decimals: 1 },
     options: [],
@@ -247,6 +249,7 @@ export const properties: Property[] = [
     label: 'Umgebung',
     field_type: 'dropdown',
     help: 'Wo der Fehler aufgetreten ist.',
+    placement: 'sidebar',
     default_value: null,
     settings: {},
     options: [
