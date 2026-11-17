@@ -159,7 +159,10 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   'editor:list_move': { file: 'editor.spec.ts', test: 'inserts a table over /, moves and closes the list with the keyboard and edits the table from alt+F10' },
   'editor:list_close': { file: 'editor.spec.ts', test: 'inserts a table over /, moves and closes the list with the keyboard and edits the table from alt+F10' },
   'editor:table_menu': { file: 'editor.spec.ts', test: 'inserts a table over /, moves and closes the list with the keyboard and edits the table from alt+F10' },
-  'editor:image_alt': { file: 'editor.spec.ts', test: 'edits the alternative text of a pasted image with Enter' },
+  'editor:image_view': { file: 'editor.spec.ts', test: 'shows a pasted image large with Enter and edits its alternative text from its menu' },
+  'editor:image_menu': { file: 'editor.spec.ts', test: 'shows a pasted image large with Enter and edits its alternative text from its menu' },
+  'viewer:browse': { file: 'editor.spec.ts', test: 'shows the images of a comment large and goes through them with the arrows' },
+  'viewer:close': { file: 'editor.spec.ts', test: 'shows the images of a comment large and goes through them with the arrows' },
 };
 
 /**

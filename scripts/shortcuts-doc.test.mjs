@@ -88,6 +88,7 @@ describe('keyboard docs', () => {
       'Group headers (list and table)',
       'Page tree of the wiki',
       'Editors and fields',
+      'Large view of an image',
     ]);
     // one line for the keys of the same action
     expect(page).toContain('| <kbd>J</kbd> / <kbd>↓</kbd> | Next item |');

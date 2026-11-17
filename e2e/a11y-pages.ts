@@ -11,7 +11,7 @@
  */
 
 import { expect, type Locator, type Page } from '@playwright/test';
-import { api, login, PEOPLE, pressMod, removeE2eWebhook, runId, tr, variant } from './helpers';
+import { api, login, PEOPLE, pngBytes, pressMod, removeE2eWebhook, runId, tr, uploadViaApi, variant } from './helpers';
 
 /** What a path needs from the data of the run (A11Y ids, resolved over the API by the spec). */
 export type A11yIds = {
@@ -174,6 +174,32 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
     state: async (page) => {
       await press(page, page.getByRole('button', { name: en('items.detail.more') }));
       await expect(page.getByRole('menu')).toBeVisible();
+    },
+  }),
+  state({
+    name: 'image viewer',
+    page: 'Items/Show',
+    path: () => '/items/WEB-47',
+    // a comment with a picture of its own (WEBU-7): the demo texts hold none
+    state: async (page) => {
+      const project = (await (await api(page, 'GET', '/api/v1/projects/WEB')).json()) as { data: { id: string } };
+      const item = (await (await api(page, 'GET', '/api/v1/work-items/WEB-47')).json()) as { data: { id: string } };
+      const picture = await uploadViaApi(page, project.data.id, { name: 'a11y.png', type: 'image/png', bytes: pngBytes(40, 30) });
+      const comment = await api(page, 'POST', `/api/v1/work-items/${item.data.id}/comments`, {
+        body_json: { type: 'doc', content: [{ type: 'image', attrs: { attachmentId: picture.id, alt: e2eName() } }] },
+      });
+      expect(comment.status()).toBe(201);
+      await page.reload();
+      await press(page, page.getByRole('link', { name: tr('en', 'editor.image.view', { name: e2eName() }) }));
+      await expect(page.getByRole('dialog', { name: e2eName() }).getByRole('img', { name: e2eName() })).toBeVisible();
+    },
+    cleanup: async (page) => {
+      const item = (await (await api(page, 'GET', '/api/v1/work-items/WEB-47')).json()) as { data: { id: string } };
+      const response = await api(page, 'GET', `/api/v1/work-items/${item.data.id}/comments?per_page=100`);
+      const { data } = (await response.json()) as { data: { id: string; body: string | null }[] };
+      for (const comment of data.filter((entry) => entry.body?.includes(e2eName()))) {
+        expect((await api(page, 'DELETE', `/api/v1/comments/${comment.id}`)).status()).toBe(204);
+      }
     },
   }),
   state({

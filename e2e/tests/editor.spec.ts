@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, arrowTo, createE2ePage, createE2eProject, createItem, pasteFile, pngBytes, removeE2eProject, runId, searchToken, tabTo, tr, variant, waitForSearch } from '../helpers';
+import { api, arrowTo, createE2ePage, createE2eProject, createItem, pasteFile, pngBytes, removeE2eProject, runId, searchToken, tabTo, tr, uploadViaApi, variant, waitForSearch } from '../helpers';
 
 // The rich text editor in the description of an item, signed in as the e2e person in English: pictures pasted (and
 // their alternative text), files chosen over `/`, code highlighting, `@` and `#` with the keyboard, and on a wiki page a
@@ -249,7 +249,7 @@ test('inserts a table over /, moves and closes the list with the keyboard and ed
   }
 });
 
-test('edits the alternative text of a pasted image with Enter', async ({ page }) => {
+test('shows a pasted image large with Enter and edits its alternative text from its menu', async ({ page }) => {
   const { id, identifier } = await createE2eProject(page, name('alt'), { types: ['Task'] });
   try {
     const item = await createItem(page, { project_id: id, title: 'E2E Lageplan beschreiben' });
@@ -259,8 +259,21 @@ test('edits the alternative text of a pasted image with Enter', async ({ page })
     await expect(section.getByRole('img', { name: 'lageplan.png' })).toBeVisible();
     await expect(section.getByRole('progressbar')).toHaveCount(0);
 
-    // the arrows select the image as a whole; Enter edits its alternative text, Enter again saves it
+    // the arrows select the image as a whole; Enter shows it large, Escape gives the focus back to the text
     await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    const viewer = page.getByRole('dialog', { name: 'lageplan.png' });
+    await expect(viewer).toBeVisible();
+    await expect(viewer.getByRole('link', { name: tr('en', 'editor.image.viewer.download') })).toHaveAttribute('href', /\?download=1$/);
+    await page.keyboard.press('Escape');
+    await expect(viewer).toBeHidden();
+    await expect(editor).toBeFocused();
+
+    // alt+F10 on the selected image: its menu; the alternative text from there, Enter saves it
+    await page.keyboard.press('Alt+F10');
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await arrowTo(page, menu.getByRole('menuitem', { name: tr('en', 'editor.image.menu_alt') }));
     await page.keyboard.press('Enter');
     const alt = section.getByRole('textbox', { name: tr('en', 'editor.image.alt') });
     await expect(alt).toBeFocused();
@@ -270,6 +283,41 @@ test('edits the alternative text of a pasted image with Enter', async ({ page })
     await expect(alt).toHaveCount(0);
     await expect(section.getByRole('img', { name: 'Lageplan mit Zufahrt' })).toBeVisible();
     await expect.poll(() => storedDescription(page, item.id)).toMatch(/!\[Lageplan mit Zufahrt\]\(attachment:[0-9a-z]{26}\)/);
+  } finally {
+    await page.goto('/my-items');
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('shows the images of a comment large and goes through them with the arrows', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('viewer'), { types: ['Task'] });
+  try {
+    const item = await createItem(page, { project_id: id, title: 'E2E Bilder ansehen' });
+    const first = await uploadViaApi(page, id, { name: 'vorher.png', type: 'image/png', bytes: pngBytes(60, 40) });
+    const second = await uploadViaApi(page, id, { name: 'nachher.png', type: 'image/png', bytes: pngBytes(40, 60) });
+    const image = (attachment: string, alt: string) => ({ type: 'image', attrs: { attachmentId: attachment, alt } });
+    const comment = await api(page, 'POST', `/api/v1/work-items/${item.id}/comments`, {
+      body_json: { type: 'doc', content: [image(first.id, 'Vorher'), { type: 'paragraph', content: [{ type: 'text', text: 'und' }] }, image(second.id, 'Nachher')] },
+    });
+    expect(comment.status(), await comment.text()).toBe(201);
+
+    await page.goto(`/items/${item.key}`);
+    const open = page.getByRole('link', { name: tr('en', 'editor.image.view', { name: 'Vorher' }) });
+    await expect(open.getByRole('img', { name: 'Vorher' })).toBeVisible();
+    await tabTo(page, open, { max: 120 });
+    await page.keyboard.press('Enter');
+
+    const viewer = page.getByRole('dialog');
+    await expect(viewer).toHaveAccessibleName('Vorher');
+    await expect(viewer).toContainText(tr('en', 'editor.image.viewer.counter', { index: 1, count: 2 }));
+    await page.keyboard.press('ArrowRight');
+    await expect(viewer).toHaveAccessibleName('Nachher');
+    await expect(viewer.getByRole('img', { name: 'Nachher' })).toBeVisible();
+    await page.keyboard.press('ArrowLeft');
+    await expect(viewer).toHaveAccessibleName('Vorher');
+    await page.keyboard.press('Escape');
+    await expect(viewer).toBeHidden();
+    await expect(open).toBeFocused();
   } finally {
     await page.goto('/my-items');
     await removeE2eProject(page, identifier);

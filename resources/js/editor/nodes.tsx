@@ -2,9 +2,11 @@
  * Images and files of rich text (spec 4.16). The document keeps only the attachment's id, never a path or the file:
  * - `image`: a block with `attachmentId` and `alt`. It shows the attachment (`useAttachment`): its preview once the
  *   queue made one, else the file itself, as `<img loading="lazy">`. While it loads, and when it cannot be loaded (gone,
- *   not visible, the picture breaks), a box with the alternative text says so. In an editor a double click, or Enter
- *   on the selected image, edits the alternative text (Enter saves, Escape cancels, leaving the field keeps it; empty is
- *   none); while reading, a click opens the original in a new tab.
+ *   not visible, the picture breaks), a box with the alternative text says so. A click while reading, and Enter on the
+ *   selected image in an editor, open the large view of the text's pictures (`imageViewer.ts`, WEBU-7); while reading
+ *   the picture stays a link to the original, so a click with a modifier or the middle button opens it in a new tab.
+ *   In an editor a double click, or „Alt-Text bearbeiten …“ of the image menu (imageMenu.tsx), edits the alternative
+ *   text (Enter saves, Escape cancels, leaving the field keeps it; empty is none).
  * - `attachment`: a file in the text with `attachmentId` and `filename`: a chip with its name and size, a link that
  *   downloads it (`?download=1`).
  *
@@ -22,6 +24,7 @@ import { attachmentUrl } from '@/api/attachments';
 import { formatSize } from '@/components/fields/format';
 import { useAttachment } from '@/hooks/attachments';
 import { t } from '@/lib/i18n';
+import { viewImageAt } from './imageViewer';
 
 const attachmentId = {
   default: null,
@@ -31,9 +34,17 @@ const attachmentId = {
 
 /* ----------------------------------------------------------------------------- image */
 
-/** Asks the view of the image at a position to edit its alternative text (Enter on the selected image). */
+/** A click without a modifier and with the main button: one that opens the large view (any other opens the link). */
+const isPlainClick = (event: globalThis.MouseEvent): boolean => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+
+/** Asks the view of the image at a position to edit its alternative text (the image menu). */
 const altRequests = new EventTarget();
 type AltRequest = { view: EditorView; pos: number };
+
+/** Asks the image at `pos` of an editor to edit its alternative text. */
+export function editImageAlt(view: EditorView, pos: number): void {
+  altRequests.dispatchEvent(new CustomEvent<AltRequest>('edit', { detail: { view, pos } }));
+}
 
 function ImageView({ node, editor, getPos, updateAttributes }: ReactNodeViewProps) {
   const id = node.attrs.attachmentId as string | null;
@@ -70,7 +81,19 @@ function ImageView({ node, editor, getPos, updateAttributes }: ReactNodeViewProp
     content = editor.isEditable ? (
       picture
     ) : (
-      <a href={attachment.url} target="_blank" rel="noopener noreferrer" title={t('editor.image.open')}>
+      <a
+        href={attachment.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={t('editor.image.view', { name: alt || attachment.filename })}
+        title={t('editor.image.view', { name: alt || attachment.filename })}
+        onClick={(event) => {
+          if (!isPlainClick(event.nativeEvent)) return;
+          event.preventDefault();
+          const pos = getPos();
+          if (pos !== undefined) viewImageAt(editor.state.doc, pos, event.currentTarget);
+        }}
+      >
         {picture}
       </a>
     );
@@ -146,8 +169,9 @@ export const AttachmentImage = Image.extend({
 }).configure({ inline: false, allowBase64: false });
 
 /**
- * Enter on a selected image edits its alternative text. An extension of its own, before the keymaps that would split
- * the line: given to the image node, a higher priority would move images before paragraphs in the schema.
+ * Enter on a selected image opens the large view of the text's pictures (WEBU-7); the focus comes back to the editor,
+ * the image still selected. An extension of its own, before the keymaps that would split the line: given to the image
+ * node, a higher priority would move images before paragraphs in the schema.
  */
 export const ImageAltKey = Extension.create({
   name: 'imageAltKey',
@@ -157,7 +181,7 @@ export const ImageAltKey = Extension.create({
       Enter: ({ editor }) => {
         const { selection } = editor.state;
         if (!(selection instanceof NodeSelection) || selection.node.type.name !== 'image') return false;
-        altRequests.dispatchEvent(new CustomEvent<AltRequest>('edit', { detail: { view: editor.view, pos: selection.from } }));
+        viewImageAt(editor.state.doc, selection.from, editor.view.dom);
         return true;
       },
     };

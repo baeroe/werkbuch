@@ -55,6 +55,7 @@ import { AttachmentFile, AttachmentImage, ImageAltKey } from './nodes';
 import { PRESET_LABEL, PRESET_PLACEHOLDER, PRESET_PLACEHOLDER_PLAIN, PRESETS, type EditorPreset } from './presets';
 import { referenceExtension } from './references';
 import { slashMenu } from './slashMenu';
+import { ImageMenu } from './imageMenu';
 import { TableMenu } from './tables';
 import { UploadContext } from './UploadContext';
 import { pickFiles, uploadExtensions, uploadFiles, UploadSession } from './uploads';
@@ -477,6 +478,7 @@ function EditorBody({ value, onChange, preset, projectId, label, placeholder, au
       <EditorContent editor={editor} />
       {/* rows, columns and headers of the table the cursor is in (tables.tsx); only where tables exist */}
       {PRESETS[preset].table && <TableMenu editor={editor} frame={frameRef} />}
+      <ImageMenu editor={editor} frame={frameRef} />
       {/* the editor's live region, empty when it mounts: uploads and the lists write into it (announcer.ts) */}
       <div aria-live="polite" aria-atomic="true" className="sr-only" data-editor-announcer="" />
     </div>

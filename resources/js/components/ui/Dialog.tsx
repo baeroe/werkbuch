@@ -8,7 +8,7 @@ import { cx } from './cx';
 import { IconButton } from './IconButton';
 import { pauseWhileOpen } from './pauseWhileOpen';
 
-const WIDTHS = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' };
+const WIDTHS = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-5xl' };
 
 /** Wrap a footer button that cancels: <DialogClose render={<Button variant="ghost">{t('common.cancel')}</Button>} /> */
 export const DialogClose = BaseDialog.Close;

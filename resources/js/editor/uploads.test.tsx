@@ -12,6 +12,8 @@ import { makeAttachment } from '@/test/fixtures';
 import { FakeXhr, installFakeXhr, restoreFakeXhr } from '@/test/xhr';
 import type { Attachment, RichText } from '@/types';
 import { EditorEnvContext, type EditorEnv } from './EditorEnv';
+import { ImageViewerHost } from './ImageViewer';
+import { closeImageViewer } from './imageViewer';
 import { preloadEditor, RichTextEditor } from './RichTextEditor';
 import { RichTextView } from './RichTextView';
 import { UploadContext, useUploadCounter, useUploadsPending } from './UploadContext';
@@ -89,6 +91,7 @@ function renderEditor({ value = null, projectId = 'p_web', context = {}, routes 
           <RichTextEditor value={value} onChange={onChange} preset="description" projectId={projectId} editorRef={editorRef} />
         </Form>
       </EditorEnvContext>
+      <ImageViewerHost />
     </QueryClientProvider>,
   );
   const editor = screen.getByRole('textbox', { name: 'Beschreibung' });
@@ -388,14 +391,23 @@ describe('images and files in a text', () => {
   };
   const pictureRoute = { 'GET /api/v1/attachments/att_1': () => ({ body: { data: picture } }) };
 
-  it('lets a reader edit the alt text of an image', async () => {
+  it('shows the selected image large on Enter, and edits its alt text from its menu or a double click (WEBU-7)', async () => {
     const user = userEvent.setup();
     const { editor, editorRef, lastDoc } = renderEditor({ value: withImage, routes: pictureRoute });
     await screen.findByRole('img', { name: 'Formular' });
 
-    // Enter on the selected image opens its alternative text
+    // Enter on the selected image shows it large; Escape gives the focus back to the text
     act(() => void editorRef.current!.commands.setNodeSelection(0));
     fireEvent.keyDown(editor, { key: 'Enter', code: 'Enter', keyCode: 13 });
+    const viewer = await screen.findByRole('dialog', { name: 'Formular' });
+    expect(within(viewer).getAllByRole('img', { name: 'Formular' })[0]!.getAttribute('src')).toBe('/attachments/att_1');
+    act(() => closeImageViewer());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // Alt+F10 opens the menu of the selected image; its entry opens the alternative text
+    act(() => void editorRef.current!.commands.setNodeSelection(0));
+    fireEvent.keyDown(editor, { key: 'F10', altKey: true });
+    await user.click(await screen.findByRole('menuitem', { name: 'Alternativtext bearbeiten …' }));
     const field = await screen.findByRole('textbox', { name: 'Alternativtext' });
     await waitFor(() => expect(document.activeElement).toBe(field));
     expect(field).toHaveProperty('value', 'Formular');
@@ -429,18 +441,28 @@ describe('images and files in a text', () => {
     expect(lastDoc()?.content?.map((node) => node.type)).toEqual(['image', 'paragraph', 'paragraph']);
   });
 
-  it('opens the original in a new tab while reading and shows the preview when there is one', async () => {
+  it('shows an image large on a click while reading, the original on a click with a modifier, and the preview in the text', async () => {
     api = mockApi({ 'GET /api/v1/attachments/att_1': () => ({ body: { data: { ...picture, preview_url: '/attachments/att_1/preview' } } }) });
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         <RichTextView value={withImage} preset="comment" />
+        <ImageViewerHost />
       </QueryClientProvider>,
     );
     const image = await screen.findByRole('img', { name: 'Formular' });
     expect(image.getAttribute('src')).toBe('/attachments/att_1/preview');
-    const link = screen.getByRole('link', { name: 'Formular' });
+    const link = screen.getByRole('link', { name: 'Bild ansehen: Formular' });
     expect(link.getAttribute('href')).toBe('/attachments/att_1');
     expect(link).toMatchObject({ target: '_blank', rel: 'noopener noreferrer' });
+
+    // with a modifier the browser opens the link; a plain click the large view, and the focus comes back to the link
+    expect(fireEvent.click(link, { metaKey: true })).toBe(true);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(fireEvent.click(link)).toBe(false);
+    const viewer = await screen.findByRole('dialog', { name: 'Formular' });
+    expect(within(viewer).getByRole('link', { name: 'Original öffnen' }).getAttribute('href')).toBe('/attachments/att_1');
+    act(() => closeImageViewer());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
     // a reader cannot change the alternative text
     fireEvent.doubleClick(image);

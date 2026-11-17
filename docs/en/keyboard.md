@@ -182,5 +182,13 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Choose an entry of the list |
 | <kbd>↵ / Enter</kbd> / <kbd>Tab</kbd> | Take the entry |
 | <kbd>Esc</kbd> | Close the list |
-| <kbd>↵ / Enter</kbd> | Edit the alternative text of the selected image |
+| <kbd>↵ / Enter</kbd> | Show the selected image large |
 | <kbd>⌥ / Alt</kbd>+<kbd>F10</kbd> | Edit the table (cursor in a table) |
+| <kbd>⌥ / Alt</kbd>+<kbd>F10</kbd> | Edit the image (an image selected) |
+
+## Large view of an image
+
+| Keys | Action |
+| --- | --- |
+| <kbd>←</kbd> / <kbd>→</kbd> | Previous or next image of the text |
+| <kbd>Esc</kbd> | Close, back to the image |
