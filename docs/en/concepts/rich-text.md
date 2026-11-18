@@ -8,11 +8,11 @@ There is one editor in three levels. Each level shows what fits its place:
 
 | Level | Where | Blocks |
 |---|---|---|
-| Comment | Comments | Text, lists, quotes, code, links, mentions, references, images and files |
-| Description | Descriptions of items and [templates](/en/concepts/templates), rich text properties | Also headings (three levels), checklists and tables (in the `/` menu too) |
+| Comment | Comments | Text, lists, quotes, code, links, tables (in the `/` menu too), mentions, references, images and files |
+| Description | Descriptions of items and [templates](/en/concepts/templates), rich text properties | Also headings (three levels) and checklists |
 | Page | [Wiki pages](/en/concepts/wiki) | Also horizontal rules |
 
-A text that holds blocks its level does not know (a table pasted into a comment) shows their text as paragraphs. `mod+enter` saves or sends; the description, rich text properties and wiki pages also save on their own after a short pause and when you leave the field.
+A text that holds blocks its level does not know (a checklist pasted into a comment) shows their text as paragraphs. `mod+enter` saves or sends; the description, rich text properties and wiki pages also save on their own after a short pause and when you leave the field.
 
 ## Blocks and shortcuts
 

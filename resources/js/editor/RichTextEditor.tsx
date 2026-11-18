@@ -29,7 +29,7 @@
  *   otherwise; `invalid` and `describedBy` mark a field error. `editorRef` hands out the Tiptap editor.
  *
  * Tables and code highlighting come as chunks of their own (`preloadEditor`); an editor that renders before they
- * arrived waits once (a comment never waits for the tables, it has none). A chunk that failed to load is asked for
+ * arrived waits once (every level has tables since WEBU-11, the module asks for both chunks as it loads). A chunk that failed to load is asked for
  * again the next time an editor renders: the editor says it did not load and offers to try again; any other error of
  * the editor goes on to the page's error boundary. Tests call `await preloadEditor()` first. `RichTextView` (RichTextView.tsx) shows a document read-only with the same nodes.
  */
@@ -171,7 +171,7 @@ function lateChunk<T>(load: () => Promise<T>): () => Promise<T> {
   };
 }
 
-/** The table support: most texts have no table, and a comment never has one. */
+/** The table support: a chunk of its own, most texts have no table. */
 /** The narrowest a column of a table gets (6 rem): a wider table scrolls in its frame (`.tableWrapper`), WEBU-8. */
 export const TABLE_CELL_MIN_PX = 96;
 
@@ -179,9 +179,6 @@ const loadTables = lateChunk(() => import('@tiptap/extension-table').then(({ Tab
 
 /** Code blocks with highlighting (every level has code blocks). */
 const loadCode = lateChunk(() => import('./codeBlocks').then(({ highlightedCodeBlock }): AnyExtension => highlightedCodeBlock));
-
-/** What a level without tables reads instead of the table chunk: nothing, at once. */
-const NO_TABLES: Promise<AnyExtension | null> = Object.assign(Promise.resolve(null), { status: 'fulfilled', value: null });
 
 /** Loads what the editor loads late (tables, code highlighting); an editor rendered afterwards never waits. */
 export async function preloadEditor(): Promise<void> {
@@ -212,7 +209,7 @@ const stillChecklists = Extension.create({
  * The extensions of a level. `placeholder: null` builds a viewer: the same nodes, without the `/` menu, the uploads
  * and the placeholder. The placeholder is read when the editor draws, so a new one needs no new editor.
  */
-function buildExtensions(preset: EditorPreset, env: EditorEnvRef, placeholder: (() => string) | null, code: AnyExtension, tables: AnyExtension | null): AnyExtension[] {
+function buildExtensions(preset: EditorPreset, env: EditorEnvRef, placeholder: (() => string) | null, code: AnyExtension, tables: AnyExtension): AnyExtension[] {
   const features = PRESETS[preset];
   return [
     StarterKit.configure({
@@ -236,7 +233,7 @@ function buildExtensions(preset: EditorPreset, env: EditorEnvRef, placeholder: (
           stillChecklists,
         ]
       : []),
-    ...(tables ? [tables] : []),
+    ...(features.table ? [tables] : []),
     AttachmentImage,
     AttachmentFile,
     mentionExtension(env),
@@ -247,12 +244,11 @@ function buildExtensions(preset: EditorPreset, env: EditorEnvRef, placeholder: (
 
 /**
  * The extensions and the schema of a level. `use()` twice on every render, also once the chunks are there: React must
- * see the same calls before and after the wait (rules of hooks). A level without tables reads an answer that is
- * already there instead of the table chunk, so it never waits for it.
+ * see the same calls before and after the wait (rules of hooks). Every level has tables (WEBU-11).
  */
 export function useLevel(preset: EditorPreset, env: EditorEnvRef, placeholder: (() => string) | null): { extensions: AnyExtension[]; schema: Schema } {
   const code = use(loadCode());
-  const tables = use(PRESETS[preset].table ? loadTables() : NO_TABLES);
+  const tables = use(loadTables());
   return useMemo(() => {
     const extensions = buildExtensions(preset, env, placeholder, code, tables);
     return { extensions, schema: getSchema(extensions) };

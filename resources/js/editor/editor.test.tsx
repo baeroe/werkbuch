@@ -283,7 +283,7 @@ describe('RichTextEditor', () => {
     expect(container.querySelector<HTMLTableElement>('.tableWrapper table')?.style.minWidth).toBe(`${2 * TABLE_CELL_MIN_PX}px`);
   });
 
-  it('keeps tables and checklists of a description but not of a comment', () => {
+  it('keeps tables and checklists of a description, and the tables of a comment (WEBU-11)', () => {
     const { unmount } = render(<RichTextEditor value={tableDoc} onChange={vi.fn()} preset="description" />);
     const description = screen.getByRole('textbox', { name: 'Beschreibung' });
     expect(description.querySelectorAll('th')).toHaveLength(2);
@@ -296,11 +296,12 @@ describe('RichTextEditor', () => {
 
     render(<RichTextEditor value={tableDoc} onChange={vi.fn()} preset="comment" />);
     const comment = screen.getByRole('textbox', { name: 'Kommentar' });
-    expect(comment.querySelector('table')).toBeNull();
+    expect(comment.querySelectorAll('th')).toHaveLength(2);
+    expect(comment.querySelectorAll('td')).toHaveLength(2);
     expect(comment.querySelector('h2')).toBeNull();
     expect(screen.queryByRole('checkbox')).toBeNull();
-    // the text stays, in paragraphs
-    expect([...comment.querySelectorAll('p')].map((p) => p.textContent)).toEqual(['Vorher', 'Gerät', 'Stand', 'Pixel 9', 'offen', 'Testen', 'Ergebnis']);
+    // the text of what a comment does not know stays, in paragraphs
+    expect([...comment.querySelectorAll(':scope > p')].map((p) => p.textContent)).toEqual(['Vorher', 'Testen', 'Ergebnis']);
   });
 
   it('names an empty checklist item', () => {
@@ -566,11 +567,12 @@ describe('RichTextView', () => {
     expect(screen.getByRole('checkbox', { name: 'Testen: erledigt' })).toHaveProperty('checked', true);
     expect(view.querySelector('hr')).toBeNull();
 
-    // the same document on a page has its rule; in a comment the blocks it lacks are paragraphs
+    // the same document on a page has its rule; in a comment the blocks it lacks are paragraphs, its table stays
     rerender(<RichTextView value={tableDoc} preset="page" />);
     expect(document.querySelector('.rt-content hr')).not.toBeNull();
     rerender(<RichTextView value={tableDoc} preset="comment" />);
-    expect(document.querySelector('.rt-content table')).toBeNull();
+    expect(document.querySelector('.rt-content table')).not.toBeNull();
+    expect(document.querySelector('.rt-content h2')).toBeNull();
     expect(document.querySelector('.rt-content')?.textContent).toBe('VorherGerätStandPixel 9offenTestenErgebnis');
 
     // a new document replaces the text, null empties it
@@ -639,7 +641,7 @@ describe('the menus of the editor', () => {
     expect(lastDoc(onChange)?.content?.[0]).toEqual({ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Ziel' }] });
   });
 
-  it('offers a table in / where the level knows tables, not in a comment (WEBU-8)', async () => {
+  it('offers a table in / in every level, a comment included (WEBU-8, WEBU-11)', async () => {
     const user = userEvent.setup();
     const offered = async (preset: EditorPreset) => {
       const { unmount } = render(<RichTextEditor value={null} onChange={vi.fn()} preset={preset} />);
@@ -658,8 +660,8 @@ describe('the menus of the editor', () => {
     const description = await offered('description');
     expect(description).toContain('Tabelle');
     expect(description).not.toContain('Linie---');
-    // a comment has neither headings nor checklists, so the menu offers none
-    expect(await offered('comment')).toEqual(['Liste-', 'Nummerierte Liste1.', 'Code```', 'Zitat>']);
+    // a comment has neither headings nor checklists, so the menu offers none, but a table (WEBU-11)
+    expect(await offered('comment')).toEqual(['Liste-', 'Nummerierte Liste1.', 'Code```', 'Zitat>', 'Tabelle']);
   });
 
   it('inserts a table, a rule, a list, a numbered list, a checklist, code and a quote from /', async () => {

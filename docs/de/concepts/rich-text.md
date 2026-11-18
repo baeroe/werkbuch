@@ -8,11 +8,11 @@ Es gibt einen Editor in drei Stufen. Jede Stufe zeigt, was an ihren Ort passt:
 
 | Stufe | Wo | Blöcke |
 |---|---|---|
-| Kommentar | Kommentare | Text, Listen, Zitate, Code, Links, Erwähnungen, Verweise, Bilder und Dateien |
-| Beschreibung | Beschreibungen von Items und [Vorlagen](/de/concepts/templates), Rich-Text-Properties | Dazu Überschriften (drei Ebenen), Checklisten und Tabellen (auch im `/`-Menü) |
+| Kommentar | Kommentare | Text, Listen, Zitate, Code, Links, Tabellen (auch im `/`-Menü), Erwähnungen, Verweise, Bilder und Dateien |
+| Beschreibung | Beschreibungen von Items und [Vorlagen](/de/concepts/templates), Rich-Text-Properties | Dazu Überschriften (drei Ebenen) und Checklisten |
 | Seite | [Wiki-Seiten](/de/concepts/wiki) | Dazu Trennlinien |
 
-Ein Text mit Blöcken, die seine Stufe nicht kennt (eine Tabelle in einem Kommentar), zeigt deren Text als Absätze. `mod+enter` speichert bzw. sendet; Beschreibung, Rich-Text-Properties und Wiki-Seiten speichern außerdem nach einer kurzen Pause und beim Verlassen des Felds von selbst.
+Ein Text mit Blöcken, die seine Stufe nicht kennt (eine Checkliste in einem Kommentar), zeigt deren Text als Absätze. `mod+enter` speichert bzw. sendet; Beschreibung, Rich-Text-Properties und Wiki-Seiten speichern außerdem nach einer kurzen Pause und beim Verlassen des Felds von selbst.
 
 ## Blöcke und Kürzel
 
