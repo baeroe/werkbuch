@@ -1,8 +1,8 @@
 /*
  * The parts of a project: its items, its wiki, its templates (WEBU-3) and its settings (WEBU-12). The same tabs stand
- * under the header of each, so one gets from one part to the others without a star in the sidebar. Plain links like MyTabs: each part is a
- * page of its own. The part one is in carries `aria-current`: `page` on its own page, `true` below it (a page of the
- * wiki, a template), where its link leads back up.
+ * under the header of each, so one gets from one part to the others without a star in the sidebar. Plain links like
+ * MyTabs: each part is a page of its own. The part one is in carries `aria-current`: `page` on its own page, `true`
+ * below it (a page of the wiki, a template, any section of the settings), where its link leads back up.
  */
 
 import { Link } from '@inertiajs/react';

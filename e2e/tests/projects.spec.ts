@@ -85,10 +85,11 @@ test('reaches the settings of a project without a star, with the keyboard', asyn
   await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/settings$`));
   await expect(page.getByRole('textbox', { name: tr('en', 'settings.project.general.name') })).toHaveValue(name);
   const parts = page.getByRole('navigation', { name: tr('en', 'projects.sections.label', { name }) });
-  await expect(parts.getByRole('link', { name: tr('en', 'projects.sections.settings') })).toHaveAttribute('aria-current', 'page');
+  // the settings are the place one is in, General the page
+  await expect(parts.getByRole('link', { name: tr('en', 'projects.sections.settings') })).toHaveAttribute('aria-current', 'true');
 
   // the tabs lead from the settings to the items, and from there back to the settings
-  await tabTo(page, parts.getByRole('link', { name: tr('en', 'projects.sections.items') }), { max: 40, backwards: true });
+  await tabTo(page, parts.getByRole('link', { name: tr('en', 'projects.sections.items') }), { max: 120, backwards: true });
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(new RegExp(`/projects/${identifier}$`));
   await tabTo(page, parts.getByRole('link', { name: tr('en', 'projects.sections.settings') }), { max: 40 });

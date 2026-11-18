@@ -138,13 +138,13 @@ describe('ProjectSettings', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Einstellungen' })).toBeTruthy();
     expect(document.title).toBe('Allgemein – Einstellungen WEB – werkbuch');
     expect(screen.queryByText('Du kannst das nur lesen')).toBeNull();
-    // the parts of the project stand above, the settings are the page (WEBU-12)
+    // the parts of the project stand above; the settings are the place one is in, General alone is the page (WEBU-12)
     const parts = screen.getByRole('navigation', { name: 'Bereiche von Website-Relaunch' });
     expect(within(parts).getByRole('link', { name: 'Items' }).getAttribute('href')).toBe('/projects/WEB');
-    expect(within(parts).getByRole('link', { name: 'Einstellungen' }).getAttribute('aria-current')).toBe('page');
+    expect(within(parts).getByRole('link', { name: 'Einstellungen' }).getAttribute('aria-current')).toBe('true');
   });
 
-  it('marks the tab of the settings as the place one is in on a later section (WEBU-12)', async () => {
+  it('marks the tab of the settings as the place one is in on another section too (WEBU-12)', async () => {
     renderSettings('members');
 
     const parts = await screen.findByRole('navigation', { name: 'Bereiche von Website-Relaunch' });

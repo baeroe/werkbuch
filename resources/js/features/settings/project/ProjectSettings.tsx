@@ -109,8 +109,9 @@ export function ProjectSettings({ identifier, section }: { identifier: string; s
           </span>
         </span>
       }
-      // the parts of the project (WEBU-12): its settings are one, the tab leads back to the first section
-      tabs={<ProjectSections project={known} current="settings" below={current !== 'general'} />}
+      // the parts of the project (WEBU-12): its settings are one; the section list marks the page, the tab is the place
+      // one is in (otherwise General would be the current page twice)
+      tabs={<ProjectSections project={known} current="settings" below />}
       nav={<SectionNav label={t('settings.project.nav_label')} items={items} current={current} hrefFor={(slug) => paths.projectSettings(known.identifier, slug)} />}
     >
       {current === null ? (

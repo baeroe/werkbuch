@@ -1,6 +1,7 @@
 /*
- * "Wiki öffnen …", "Vorlagen öffnen …" (WEBU-3) and "Projekteinstellungen öffnen …" (WEBU-12) in the palette: each opens the list of the projects the person sees,
- * archived ones included (their wiki and templates stay readable), and leads to the part of the chosen one. The names
+ * "Wiki öffnen …", "Vorlagen öffnen …" (WEBU-3) and "Projekteinstellungen öffnen …" (WEBU-12) in the palette: each
+ * opens the list of the projects the person sees, archived ones included (their wiki, templates and settings stay
+ * readable; the settings are where an archived project is restored), and leads to the part of the chosen one. The names
  * of the projects are keywords of the options only, never of the commands: as keywords of a command at the root, a
  * search for "WEB" would put the command before the hits and take their Enter. Hidden until the projects are loaded;
  * the sidebar reaches only the starred projects, this every one.
