@@ -318,9 +318,12 @@ describe('Sidebar projects', () => {
     render(<Shell>Inhalt</Shell>);
 
     const nav = sidebar();
-    const apps = await within(nav).findByRole('button', { name: 'Kunden-App' });
-    const webs = within(nav).getByRole('button', { name: 'Website-Relaunch' });
+    const apps = await within(nav).findByRole('button', { name: 'Bereiche von Kunden-App' });
+    const webs = within(nav).getByRole('button', { name: 'Bereiche von Website-Relaunch' });
     expect(apps.compareDocumentPosition(webs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // the name of a project opens its items (WEBU-10)
+    expect(within(nav).getByRole('link', { name: 'Website-Relaunch' }).getAttribute('href')).toBe('/projects/WEB');
+    expect(within(nav).getByRole('link', { name: 'Kunden-App' }).getAttribute('href')).toBe('/projects/APP');
     expect(within(nav).queryByText('Altes Projekt')).toBeNull();
 
     // the project of the page is open, with its settings marked
@@ -338,6 +341,11 @@ describe('Sidebar projects', () => {
     expect(within(nav).getAllByRole('link', { name: 'Einstellungen' })).toHaveLength(2);
     await userEvent.click(apps);
     expect(apps.getAttribute('aria-expanded')).toBe('false');
+    // a click on the name goes to the items and forgets the closing: the current project is open again (jsdom does not
+    // follow the link of the mocked Inertia)
+    nav.addEventListener('click', (event) => event.preventDefault());
+    await userEvent.click(within(nav).getByRole('link', { name: 'Kunden-App' }));
+    expect(apps.getAttribute('aria-expanded')).toBe('true');
 
     // the sidebar and the rights share one list of the projects
     expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/projects')).map((call) => call.url)).toEqual(['/api/v1/projects?include_archived=1']);
@@ -368,7 +376,7 @@ describe('Sidebar projects', () => {
     expect(await within(nav).findByText('Projekte nicht geladen.')).toBeTruthy();
     fail = false;
     await userEvent.click(within(nav).getByRole('button', { name: 'Erneut versuchen' }));
-    expect(await within(nav).findByRole('button', { name: 'Website-Relaunch' })).toBeTruthy();
+    expect(await within(nav).findByRole('link', { name: 'Website-Relaunch' })).toBeTruthy();
   });
 });
 

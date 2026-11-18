@@ -1,9 +1,10 @@
 /*
  * The starred projects of the sidebar, in the order of the favorites (archived ones and those the person no longer
- * sees are left out); a project opens to Items, Wiki, Templates and Settings, the one of the current page starts open.
+ * sees are left out). The name of a project is a link to its items (WEBU-10); the chevron beside it opens the project to
+ * Items, Wiki, Templates and Settings, the one of the current page starts open.
  */
 
-import { usePage } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
 import { BookOpen, ChevronDown, LayoutTemplate, Settings, SquareKanban } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
@@ -65,17 +66,28 @@ export function ProjectsSection() {
       const areasId = `${id}-${project.id}`;
       return (
         <li key={project.id}>
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-controls={areasId}
-            onClick={() => setToggled((state) => ({ ...state, [project.id]: !open }))}
-            className="flex h-11 w-full min-w-0 cursor-pointer items-center gap-2 rounded-ctl px-2 text-left text-ui font-medium text-ink transition-colors duration-120 hover:bg-hover md:h-8"
-          >
-            <ProjectBadge project={project} />
-            <span className="min-w-0 flex-1 truncate">{project.name}</span>
-            <ChevronDown className={cx('size-3.5 shrink-0 text-muted transition-transform duration-160', !open && '-rotate-90')} aria-hidden="true" />
-          </button>
+          <div className="flex min-w-0 items-center rounded-ctl transition-colors duration-120 hover:bg-hover">
+            {/* the name opens the items; going there opens the project as the current one, so a closing of the
+                chevron from before no longer holds */}
+            <Link
+              href={paths.project(project.identifier)}
+              onClick={() => setToggled(({ [project.id]: _dropped, ...rest }) => rest)}
+              className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-ctl pl-2 text-ui font-medium text-ink md:h-8"
+            >
+              <ProjectBadge project={project} />
+              <span className="min-w-0 flex-1 truncate">{project.name}</span>
+            </Link>
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={areasId}
+              aria-label={t('projects.sections.label', { name: project.name })}
+              onClick={() => setToggled((state) => ({ ...state, [project.id]: !open }))}
+              className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-ctl text-muted hover:text-ink md:size-8"
+            >
+              <ChevronDown className={cx('size-3.5 transition-transform duration-160', !open && '-rotate-90')} aria-hidden="true" />
+            </button>
+          </div>
           {open && (
             <ul id={areasId} className="mt-0.5 flex flex-col gap-0.5">
               {PROJECT_AREAS.map(({ href, label, icon: Icon, end }) => (

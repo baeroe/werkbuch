@@ -86,7 +86,7 @@ test('stars a project into the sidebar and out again', async ({ page }) => {
   const unstar = card(page, name).getByRole('button', { name: tr('en', 'ui.favorite_star.remove', { name }) });
   await expect(unstar).toBeFocused();
   const navigation = await openNavigation(page, 'en', { backwards: true });
-  await expect(navigation.getByRole('button', { name })).toBeVisible();
+  await expect(navigation.getByRole('link', { name, exact: true })).toBeVisible();
   if (isPhone(page)) {
     await page.keyboard.press('Escape');
     await expect(navigation).toBeHidden();
@@ -96,7 +96,34 @@ test('stars a project into the sidebar and out again', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(star).toBeFocused();
   const after = await openNavigation(page, 'en', { backwards: true });
-  await expect(after.getByRole('button', { name })).toHaveCount(0);
+  await expect(after.getByRole('link', { name, exact: true })).toHaveCount(0);
+});
+
+test('opens the items of a starred project from its name in the sidebar and folds its parts with the chevron', async ({ page }) => {
+  const { name, identifier } = await createProject(page, 'L');
+  const project = (await (await api(page, 'GET', `/api/v1/projects/${identifier}`)).json()) as { data: { id: string } };
+  expect((await api(page, 'POST', '/api/v1/favorites/toggle', { kind: 'project', id: project.data.id })).status()).toBe(200);
+  await page.goto('/my-items');
+
+  // the name is a link to the items of the project (WEBU-10), not only a fold
+  const navigation = await openNavigation(page, 'en');
+  const entry = navigation.getByRole('link', { name, exact: true });
+  await tabTo(page, entry, { max: 150 });
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/projects/${identifier}$`));
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+
+  // on its items the project stands open; the chevron beside the name folds its parts and opens them again
+  const again = await openNavigation(page, 'en');
+  const chevron = again.getByRole('button', { name: tr('en', 'projects.sections.label', { name }) });
+  await expect(chevron).toHaveAttribute('aria-expanded', 'true');
+  await expect(again.getByRole('link', { name: tr('en', 'shell.nav.project_items'), exact: true })).toHaveAttribute('aria-current', 'page');
+  await tabTo(page, chevron, { max: 150 });
+  await page.keyboard.press('Enter');
+  await expect(chevron).toHaveAttribute('aria-expanded', 'false');
+  await expect(again.getByRole('link', { name: tr('en', 'shell.nav.project_items'), exact: true })).toHaveCount(0);
+  await page.keyboard.press('Enter');
+  await expect(chevron).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('renames the identifier and follows the old address', async ({ page }) => {
