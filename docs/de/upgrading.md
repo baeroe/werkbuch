@@ -35,6 +35,13 @@ Alle Versionen und ihre Änderungen: https://github.com/baeroe/werkbuch/releases
 
 <!-- nur absolute Links: jeder Abschnitt der englischen Fassung wird zu den Notizen seines GitHub-Releases -->
 
+### 0.3.0
+
+- **Projekte:** Der Name eines Projekts mit Stern in der Seitenleiste öffnet seine Items, der Pfeil daneben klappt seine Bereiche auf. Die Einstellungen eines Projekts sind ohne Seitenleiste erreichbar: ein vierter Reiter **Einstellungen** unter dem Kopf von Items, Wiki, Vorlagen und den Einstellungen, ein Link auf jeder Projektkarte und **Projekteinstellungen öffnen …** in der Befehlspalette.
+- **Kommentare** können jetzt auch Tabellen, über das `/`-Menü und mit dem Menü der Tabelle (`alt+F10`), wie Beschreibungen und Wiki-Seiten.
+- Die Compose-Dateien haben sich nicht geändert: wie unter [Aktualisieren](https://werkbuch.dev/de/upgrading) beschrieben aktualisieren.
+- Image `baeroe/werkbuch:0.3.0` für `linux/amd64` und `linux/arm64`.
+
 ### 0.2.0
 
 - **Die Compose-Datei hat sich geändert:** Der neue Dienst `gotenberg` ([Gotenberg](https://gotenberg.dev) 8.37) macht Wiki-Seiten zu PDFs. `docker-compose.yml` neu herunterladen (oder die neue Standalone-Datei einfügen und die eigenen Werte übernehmen), dann wie unter [Aktualisieren](https://werkbuch.dev/de/upgrading) beschrieben aktualisieren. Ohne den Dienst läuft werkbuch wie bisher, nur der Knopf **PDF** bleibt gesperrt. Siehe [Betrieb](https://werkbuch.dev/de/operations#pdf).
