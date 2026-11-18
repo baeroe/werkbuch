@@ -1,6 +1,7 @@
 /*
  * The sidebar (spec 5.2, moodboard): Inbox, Meine Items, the starred views and projects (sidebar/ViewsSection,
- * sidebar/ProjectsSection; a project opens to Items, Wiki, Templates and Settings), at the bottom the profile and the
+ * sidebar/ProjectsSection; the name of a project opens its items, its chevron its parts Items, Wiki, Templates and
+ * Settings), at the bottom the profile and the
  * settings. Tracing paper floating over the dot paper; collapsed it shrinks to a rail of icons. Below md the same
  * content lives in the drawer of the top bar (MobileBar). Below the wordmark the search opens the command palette
  * (`SearchButton`). The inbox carries the unread count (`InboxBadge`), in the sidebar and in the rail.

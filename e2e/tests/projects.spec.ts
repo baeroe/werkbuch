@@ -115,7 +115,7 @@ test('opens the items of a starred project from its name in the sidebar and fold
 
   // on its items the project stands open; the chevron beside the name folds its parts and opens them again
   const again = await openNavigation(page, 'en');
-  const chevron = again.getByRole('button', { name: tr('en', 'projects.sections.label', { name }) });
+  const chevron = again.getByRole('button', { name: tr('en', 'shell.nav.project_parts', { name }) });
   await expect(chevron).toHaveAttribute('aria-expanded', 'true');
   await expect(again.getByRole('link', { name: tr('en', 'shell.nav.project_items'), exact: true })).toHaveAttribute('aria-current', 'page');
   await tabTo(page, chevron, { max: 150 });

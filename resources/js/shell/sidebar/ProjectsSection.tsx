@@ -8,6 +8,7 @@ import { Link, usePage } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
 import { BookOpen, ChevronDown, LayoutTemplate, Settings, SquareKanban } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
+import { isPlainClick } from '@/components/items/ItemLink';
 import { cx } from '@/components/ui/cx';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { useProjects } from '@/hooks/projects';
@@ -68,10 +69,10 @@ export function ProjectsSection() {
         <li key={project.id}>
           <div className="flex min-w-0 items-center rounded-ctl transition-colors duration-120 hover:bg-hover">
             {/* the name opens the items; going there opens the project as the current one, so a closing of the
-                chevron from before no longer holds */}
+                chevron from before no longer holds (not for a click into a new tab: this page stays) */}
             <Link
               href={paths.project(project.identifier)}
-              onClick={() => setToggled(({ [project.id]: _dropped, ...rest }) => rest)}
+              onClick={(event) => isPlainClick(event) && setToggled(({ [project.id]: _dropped, ...rest }) => rest)}
               className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-ctl pl-2 text-ui font-medium text-ink md:h-8"
             >
               <ProjectBadge project={project} />
@@ -81,7 +82,7 @@ export function ProjectsSection() {
               type="button"
               aria-expanded={open}
               aria-controls={areasId}
-              aria-label={t('projects.sections.label', { name: project.name })}
+              aria-label={t('shell.nav.project_parts', { name: project.name })}
               onClick={() => setToggled((state) => ({ ...state, [project.id]: !open }))}
               className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-ctl text-muted hover:text-ink md:size-8"
             >

@@ -318,8 +318,8 @@ describe('Sidebar projects', () => {
     render(<Shell>Inhalt</Shell>);
 
     const nav = sidebar();
-    const apps = await within(nav).findByRole('button', { name: 'Bereiche von Kunden-App' });
-    const webs = within(nav).getByRole('button', { name: 'Bereiche von Website-Relaunch' });
+    const apps = await within(nav).findByRole('button', { name: 'Bereiche von Kunden-App ein- oder ausklappen' });
+    const webs = within(nav).getByRole('button', { name: 'Bereiche von Website-Relaunch ein- oder ausklappen' });
     expect(apps.compareDocumentPosition(webs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // the name of a project opens its items (WEBU-10)
     expect(within(nav).getByRole('link', { name: 'Website-Relaunch' }).getAttribute('href')).toBe('/projects/WEB');
@@ -344,7 +344,13 @@ describe('Sidebar projects', () => {
     // a click on the name goes to the items and forgets the closing: the current project is open again (jsdom does not
     // follow the link of the mocked Inertia)
     nav.addEventListener('click', (event) => event.preventDefault());
-    await userEvent.click(within(nav).getByRole('link', { name: 'Kunden-App' }));
+    // a click into a new tab leaves this page and its folding as they are
+    const user = userEvent.setup();
+    await user.keyboard('{Control>}');
+    await user.click(within(nav).getByRole('link', { name: 'Kunden-App' }));
+    await user.keyboard('{/Control}');
+    expect(apps.getAttribute('aria-expanded')).toBe('false');
+    await user.click(within(nav).getByRole('link', { name: 'Kunden-App' }));
     expect(apps.getAttribute('aria-expanded')).toBe('true');
 
     // the sidebar and the rights share one list of the projects

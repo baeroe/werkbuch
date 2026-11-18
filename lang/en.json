@@ -2915,6 +2915,7 @@
     "shell.nav.my_items": "My items",
     "shell.nav.organization_settings": "Organization settings",
     "shell.nav.project_items": "Items",
+    "shell.nav.project_parts": "Show or hide the parts of :name",
     "shell.nav.project_settings": "Settings",
     "shell.nav.project_templates": "Templates",
     "shell.nav.project_wiki": "Wiki",

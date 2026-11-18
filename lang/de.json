@@ -2915,6 +2915,7 @@
     "shell.nav.my_items": "Meine Items",
     "shell.nav.organization_settings": "Einstellungen der Organisation",
     "shell.nav.project_items": "Items",
+    "shell.nav.project_parts": "Bereiche von :name ein- oder ausklappen",
     "shell.nav.project_settings": "Einstellungen",
     "shell.nav.project_templates": "Vorlagen",
     "shell.nav.project_wiki": "Wiki",
