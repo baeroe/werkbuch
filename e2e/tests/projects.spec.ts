@@ -74,6 +74,42 @@ test('reaches the wiki and the templates of a project without a star, with the k
   await expect(parts.getByRole('link', { name: tr('en', 'projects.sections.templates') })).toHaveAttribute('aria-current', 'page');
 });
 
+test('reaches the settings of a project without a star, with the keyboard', async ({ page }) => {
+  const { name, identifier } = await createProject(page, 'E');
+  await page.goto('/projects');
+
+  // the card leads to the settings of a project nobody starred (WEBU-12)
+  const settings = card(page, name).getByRole('link', { name: tr('en', 'projects.card.settings', { name }) });
+  await tabTo(page, settings, { max: 150 });
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/settings$`));
+  await expect(page.getByRole('textbox', { name: tr('en', 'settings.project.general.name') })).toHaveValue(name);
+  const parts = page.getByRole('navigation', { name: tr('en', 'projects.sections.label', { name }) });
+  await expect(parts.getByRole('link', { name: tr('en', 'projects.sections.settings') })).toHaveAttribute('aria-current', 'page');
+
+  // the tabs lead from the settings to the items, and from there back to the settings
+  await tabTo(page, parts.getByRole('link', { name: tr('en', 'projects.sections.items') }), { max: 40, backwards: true });
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/projects/${identifier}$`));
+  await tabTo(page, parts.getByRole('link', { name: tr('en', 'projects.sections.settings') }), { max: 40 });
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/settings$`));
+
+  // and the palette from anywhere
+  await page.goto('/my-items');
+  await pressMod(page, 'k');
+  const palette = page.getByRole('dialog', { name: tr('en', 'palette.title') });
+  await expect(palette.getByRole('combobox', { name: tr('en', 'palette.input') })).toBeFocused();
+  await page.keyboard.type(tr('en', 'commands.project_settings.label').replace(' …', ''));
+  await expect(palette.getByRole('option', { name: new RegExp(`^${tr('en', 'commands.project_settings.label')}`) })).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Enter');
+  await expect(palette.getByRole('combobox', { name: tr('en', 'commands.project_settings.label') })).toBeFocused();
+  await page.keyboard.type(identifier);
+  await expect(palette.getByRole('option', { name: new RegExp(`^${name}`) })).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/settings$`));
+});
+
 test('stars a project into the sidebar and out again', async ({ page }) => {
   const { name } = await createProject(page, 'S');
   await page.goto('/projects');

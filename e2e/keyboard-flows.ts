@@ -285,6 +285,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'place a property below the description', file: 'types-properties.spec.ts', test: 'edits a rich text property below the description and moves it to the side panel' },
   { flow: 'open the items of a project from the sidebar', file: 'projects.spec.ts', test: 'opens the items of a starred project from its name in the sidebar and folds its parts with the chevron' },
   { flow: 'make a table in a comment', file: 'comments.spec.ts', test: 'writes a comment with a table from /, adds a column with alt+F10 and sends it with mod+enter' },
+  { flow: 'open the settings of a project without a star', file: 'projects.spec.ts', test: 'reaches the settings of a project without a star, with the keyboard' },
 ];
 
 /**

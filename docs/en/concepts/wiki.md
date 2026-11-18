@@ -2,7 +2,7 @@
 
 Every project has a wiki: a tree of pages for what the team needs to know, such as agreements, processes and technology. A page has a title, an emoji, a text in the full editor, who created it and who changed it last. Pages save on their own, keep older versions, can be referred to from items and comments, and are found by the search. There is no live collaboration: two people writing on the same page at once get a conflict that loses nobody's text.
 
-The wiki of a project lives under `/projects/WEB/wiki`. You reach it through **Wiki** on the card of the project, the tabs **Items · Wiki · Templates** below the header of each part, **Open wiki …** in the command palette, and, for a starred project, **Wiki** below it in the sidebar. Without a page open, it shows the six pages that changed last.
+The wiki of a project lives under `/projects/WEB/wiki`. You reach it through **Wiki** on the card of the project, the tabs **Items · Wiki · Templates · Settings** below the header of each part, **Open wiki …** in the command palette, and, for a starred project, **Wiki** below it in the sidebar. Without a page open, it shows the six pages that changed last.
 
 ![A wiki page with the tree of pages next to it and a reference to a work item](/screenshots/en/wiki.png)
 

@@ -1,6 +1,6 @@
 /*
- * The three parts of a project: its items, its wiki and its templates (WEBU-3). The same tabs stand under the header of
- * each, so one gets from one part to the others without a star in the sidebar. Plain links like MyTabs: each part is a
+ * The parts of a project: its items, its wiki, its templates (WEBU-3) and its settings (WEBU-12). The same tabs stand
+ * under the header of each, so one gets from one part to the others without a star in the sidebar. Plain links like MyTabs: each part is a
  * page of its own. The part one is in carries `aria-current`: `page` on its own page, `true` below it (a page of the
  * wiki, a template), where its link leads back up.
  */
@@ -10,12 +10,13 @@ import { t, type TranslationKey } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import type { Project } from '@/types';
 
-export type ProjectSection = 'items' | 'wiki' | 'templates';
+export type ProjectSection = 'items' | 'wiki' | 'templates' | 'settings';
 
 export const PROJECT_SECTIONS: readonly { section: ProjectSection; label: TranslationKey; href: (identifier: string) => string }[] = [
   { section: 'items', label: 'projects.sections.items', href: (identifier) => paths.project(identifier) },
   { section: 'wiki', label: 'projects.sections.wiki', href: (identifier) => paths.wiki(identifier) },
   { section: 'templates', label: 'projects.sections.templates', href: (identifier) => paths.templates(identifier) },
+  { section: 'settings', label: 'projects.sections.settings', href: (identifier) => paths.projectSettings(identifier) },
 ];
 
 interface ProjectSectionsProps {

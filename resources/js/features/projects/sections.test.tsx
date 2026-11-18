@@ -1,6 +1,7 @@
 /*
- * The parts of a project (WEBU-3): the tabs Items · Wiki · Vorlagen under the header of each part, and the palette
- * commands "Wiki öffnen …" and "Vorlagen öffnen …" over every project the person sees, starred or not.
+ * The parts of a project (WEBU-3, WEBU-12): the tabs Items · Wiki · Vorlagen · Einstellungen under the header of each
+ * part, and the palette commands "Wiki öffnen …", "Vorlagen öffnen …" and "Projekteinstellungen öffnen …" over every
+ * project the person sees, starred or not.
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -36,26 +37,27 @@ describe('ProjectSections', () => {
   const web = project('WEB', 'member', { name: 'Website-Relaunch' });
   const links = () => within(screen.getByRole('navigation', { name: 'Bereiche von Website-Relaunch' })).getAllByRole('link');
 
-  it('leads to the items, the wiki and the templates of the project', () => {
+  it('leads to the items, the wiki, the templates and the settings of the project', () => {
     render(<ProjectSections project={web} current="items" />);
 
     expect(links().map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
       ['Items', '/projects/WEB'],
       ['Wiki', '/projects/WEB/wiki'],
       ['Vorlagen', '/projects/WEB/templates'],
+      ['Einstellungen', '/projects/WEB/settings'],
     ]);
   });
 
   it('marks the part the screen shows as the page', () => {
     render(<ProjectSections project={web} current="wiki" />);
 
-    expect(links().map((link) => link.getAttribute('aria-current'))).toEqual([null, 'page', null]);
+    expect(links().map((link) => link.getAttribute('aria-current'))).toEqual([null, 'page', null, null]);
   });
 
   it('marks the part as the place one is in below it, on a page of the wiki or a template', () => {
     render(<ProjectSections project={web} current="templates" below />);
 
-    expect(links().map((link) => link.getAttribute('aria-current'))).toEqual([null, null, 'true']);
+    expect(links().map((link) => link.getAttribute('aria-current'))).toEqual([null, null, 'true', null]);
   });
 });
 
@@ -105,6 +107,12 @@ describe('useProjectPartCommands', () => {
     expect(templates.subpage!().placeholder).toBe('Projekt wählen …');
     templates.subpage!().options[2]!.run();
     expect(inertia.visit).toHaveBeenLastCalledWith('/projects/WEB/templates');
+
+    // the settings too (WEBU-12); a reader reads them
+    const settings = command('projects.open_settings');
+    expect(settings.label).toBe('Projekteinstellungen öffnen …');
+    settings.subpage!().options[1]!.run();
+    expect(inertia.visit).toHaveBeenLastCalledWith('/projects/APP/settings');
   });
 
   it('stays hidden while there is no project to offer', async () => {
