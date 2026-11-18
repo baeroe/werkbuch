@@ -56,7 +56,7 @@ test('invites a person who joins, gets a project and finds it', async ({ page, b
 
     try {
       const navigation = await openNavigation(page, 'en', { backwards: true });
-      const entry = navigation.getByRole('button', { name: projectName });
+      const entry = navigation.getByRole('button', { name: tr('en', 'shell.nav.project_parts', { name: projectName }) });
       await tabTo(page, entry, { backwards: true, max: 150 });
       await page.keyboard.press('Enter');
       await expect(entry).toHaveAttribute('aria-expanded', 'true');
