@@ -28,18 +28,21 @@ type FrameProps = {
   title: string;
   /** What the page is about, under the title (e.g. the project). */
   lead?: ReactNode;
+  /** Under the header, e.g. the tabs of the parts of a project (WEBU-12). */
+  tabs?: ReactNode;
   /** The `SectionNav`; without one (the page could not load) the content has the whole width. */
   nav: ReactNode;
   children: ReactNode;
 };
 
 /** Title, section navigation and the content. */
-export function SettingsFrame({ title, lead, nav, children }: FrameProps) {
+export function SettingsFrame({ title, lead, tabs, nav, children }: FrameProps) {
   return (
     <div className="mx-auto w-full max-w-6xl">
       <header className="min-w-0">
         <h1 className="scroll-mt-20 font-display text-xl font-bold tracking-title text-ink">{title}</h1>
         {lead && <div className="mt-1 min-w-0 text-ui text-muted">{lead}</div>}
+        {tabs}
       </header>
       <div className={cx('mt-4 grid items-start gap-3 lg:gap-8', nav ? 'lg:grid-cols-[12.5rem_minmax(0,1fr)]' : null)}>
         {nav}

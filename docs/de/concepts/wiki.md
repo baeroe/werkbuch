@@ -2,7 +2,7 @@
 
 Jedes Projekt hat ein Wiki: einen Baum aus Seiten für das, was das Team wissen muss, etwa Absprachen, Abläufe und Technik. Eine Seite hat einen Titel, ein Emoji, einen Text im vollen Editor, wer sie angelegt und wer sie zuletzt geändert hat. Seiten speichern von selbst, behalten ältere Versionen, lassen sich aus Items und Kommentaren verweisen und werden von der Suche gefunden. Live-Kollaboration gibt es nicht: Schreiben zwei Personen gleichzeitig an derselben Seite, bekommen sie einen Konflikt, bei dem niemandes Text verloren geht.
 
-Das Wiki eines Projekts liegt unter `/projects/WEB/wiki`. Hin kommst du über **Wiki** auf der Karte des Projekts, die Reiter **Items · Wiki · Vorlagen** unter dem Kopf jedes Bereichs, **Wiki öffnen …** in der Befehlspalette und, bei einem Projekt mit Stern, **Wiki** darunter in der Seitenleiste. Ohne offene Seite zeigt es die sechs zuletzt geänderten Seiten.
+Das Wiki eines Projekts liegt unter `/projects/WEB/wiki`. Hin kommst du über **Wiki** auf der Karte des Projekts, die Reiter **Items · Wiki · Vorlagen · Einstellungen** unter dem Kopf jedes Bereichs, **Wiki öffnen …** in der Befehlspalette und, bei einem Projekt mit Stern, **Wiki** darunter in der Seitenleiste. Ohne offene Seite zeigt es die sechs zuletzt geänderten Seiten.
 
 ![Eine Wiki-Seite mit dem Baum der Seiten daneben und einem Verweis auf ein Work Item](/screenshots/de/wiki.png)
 

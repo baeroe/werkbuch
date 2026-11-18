@@ -8,7 +8,7 @@
  */
 
 import { Link, router, usePage } from '@inertiajs/react';
-import { Archive, BookOpen, FolderKanban, Globe, LayoutTemplate, Lock, Plus, UserPlus } from 'lucide-react';
+import { Archive, BookOpen, FolderKanban, Globe, LayoutTemplate, Lock, Plus, Settings, UserPlus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { Avatar } from '@/components/ui/Avatar';
@@ -158,7 +158,7 @@ function ProjectCard({ project, lead, me, open }: { project: Project; lead: User
       </dl>
 
       <div className="relative z-10 mt-auto flex min-h-8 flex-wrap items-center gap-x-1 gap-y-2 pt-4">
-        {/* the card itself leads to the items; its wiki and its templates without a star in the sidebar (WEBU-3) */}
+        {/* the card itself leads to the items; its wiki, its templates (WEBU-3) and its settings without a star */}
         <Link href={paths.wiki(project.identifier)} aria-label={t('projects.card.wiki', { name: project.name })} className={CARD_PART}>
           <BookOpen className="size-3.5 shrink-0" aria-hidden="true" />
           {t('projects.sections.wiki')}
@@ -166,6 +166,11 @@ function ProjectCard({ project, lead, me, open }: { project: Project; lead: User
         <Link href={paths.templates(project.identifier)} aria-label={t('projects.card.templates', { name: project.name })} className={CARD_PART}>
           <LayoutTemplate className="size-3.5 shrink-0" aria-hidden="true" />
           {t('projects.sections.templates')}
+        </Link>
+        {/* and its settings (WEBU-12); a reader reads them */}
+        <Link href={paths.projectSettings(project.identifier)} aria-label={t('projects.card.settings', { name: project.name })} className={CARD_PART}>
+          <Settings className="size-3.5 shrink-0" aria-hidden="true" />
+          {t('projects.sections.settings')}
         </Link>
         <div className="ml-auto">
           <Membership project={project} me={me} />

@@ -14,6 +14,7 @@ import { Banner } from '@/components/ui/Banner';
 import { buttonClass } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
+import { ProjectSections } from '@/features/projects/ProjectSections';
 import { useProject, useProjects } from '@/hooks/projects';
 import { useCurrentUser } from '@/hooks/users';
 import { t } from '@/lib/i18n';
@@ -108,6 +109,9 @@ export function ProjectSettings({ identifier, section }: { identifier: string; s
           </span>
         </span>
       }
+      // the parts of the project (WEBU-12): its settings are one; the section list marks the page, the tab is the place
+      // one is in (otherwise General would be the current page twice)
+      tabs={<ProjectSections project={known} current="settings" below />}
       nav={<SectionNav label={t('settings.project.nav_label')} items={items} current={current} hrefFor={(slug) => paths.projectSettings(known.identifier, slug)} />}
     >
       {current === null ? (

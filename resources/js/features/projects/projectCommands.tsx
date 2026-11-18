@@ -1,13 +1,14 @@
 /*
- * "Wiki öffnen …" and "Vorlagen öffnen …" in the palette (WEBU-3): each opens the list of the projects the person sees,
- * archived ones included (their wiki and templates stay readable), and leads to the part of the chosen one. The names
+ * "Wiki öffnen …", "Vorlagen öffnen …" (WEBU-3) and "Projekteinstellungen öffnen …" (WEBU-12) in the palette: each
+ * opens the list of the projects the person sees, archived ones included (their wiki, templates and settings stay
+ * readable; the settings are where an archived project is restored), and leads to the part of the chosen one. The names
  * of the projects are keywords of the options only, never of the commands: as keywords of a command at the root, a
  * search for "WEB" would put the command before the hits and take their Enter. Hidden until the projects are loaded;
  * the sidebar reaches only the starred projects, this every one.
  */
 
 import { router } from '@inertiajs/react';
-import { BookOpen, LayoutTemplate, type LucideIcon } from 'lucide-react';
+import { BookOpen, LayoutTemplate, Settings, type LucideIcon } from 'lucide-react';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { useProjects } from '@/hooks/projects';
 import { SHELL_COMMAND_GROUPS, useCommand } from '@/lib/commands';
@@ -34,6 +35,14 @@ const TEMPLATES: Part = {
   href: (identifier) => paths.templates(identifier),
 };
 
+const SETTINGS: Part = {
+  id: 'projects.open_settings',
+  label: 'commands.project_settings.label',
+  keywords: 'commands.project_settings.keywords',
+  icon: Settings,
+  href: (identifier) => paths.projectSettings(identifier),
+};
+
 export function useProjectPartCommands(): void {
   const projects = useProjects({ include_archived: true });
   const collator = new Intl.Collator(intlLocale(), { sensitivity: 'base' });
@@ -42,9 +51,10 @@ export function useProjectPartCommands(): void {
 
   usePartCommand(WIKI, list, shown);
   usePartCommand(TEMPLATES, list, shown);
+  usePartCommand(SETTINGS, list, shown);
 }
 
-/** One of the two commands over the sorted projects; `shown` changes whenever what it offers changes. */
+/** One of the commands over the sorted projects; `shown` changes whenever what it offers changes. */
 function usePartCommand(part: Part, list: Project[], shown: string): void {
   useCommand(
     {
