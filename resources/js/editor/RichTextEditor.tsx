@@ -10,9 +10,9 @@
  *   <RichTextEditor value={doc} onChange={setDoc} preset="description" projectId={item.project_id} onSubmit={save} />
  *
  * - The schema is the server's (`App\RichText\Schema`): StarterKit without underline (the server has no such mark and
- *   would refuse the whole text), headings 1–3, links only to http, https and mailto, checklists and tables from
- *   `description` on, horizontal rules only on `page`. A document with blocks the level does not know (a table in a
- *   comment) shows their text in paragraphs.
+ *   would refuse the whole text), headings 1–3, links only to http, https and mailto, tables in every level (WEBU-11),
+ *   headings and checklists from `description` on, horizontal rules only on `page`. A document with blocks the level
+ *   does not know (a checklist in a comment) shows their text in paragraphs.
  * - `value` is controlled: a document that differs from what the editor shows replaces it (a reload, a reset after
  *   sending: pass a new document, or null). A document the editor reported itself changes nothing, also an older one
  *   (with fast typing the parent may render one the editor has moved past), so the cursor and every key stay; the same

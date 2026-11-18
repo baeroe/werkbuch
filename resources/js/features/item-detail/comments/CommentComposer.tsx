@@ -52,7 +52,9 @@ const same = (a: RichText | undefined, b: RichText | undefined) => JSON.stringif
  */
 function inlineRest(sent: RichText[], now: RichText[]): RichText[] | undefined {
   const last = sent.length - 1;
-  if (last < 0 || sent.length > now.length) return undefined;
+  if (sent.length > now.length) return undefined;
+  // nothing was sent in this block (the empty paragraph Tiptap keeps after a table or a list): all of it is new
+  if (last < 0) return trimmedStart(now);
   for (let index = 0; index < last; index += 1) if (!same(sent[index], now[index])) return undefined;
   const [tail, grown] = [sent[last]!, now[last]!];
   let rest: RichText[];
@@ -60,6 +62,11 @@ function inlineRest(sent: RichText[], now: RichText[]): RichText[] | undefined {
   else if (tail.type === 'text' && grown.type === 'text' && same(tail.marks, grown.marks) && grown.text!.startsWith(tail.text!)) {
     rest = [{ ...grown, text: grown.text!.slice(tail.text!.length) }, ...now.slice(sent.length)];
   } else return undefined;
+  return trimmedStart(rest);
+}
+
+/** Inline content without the space it starts with. */
+function trimmedStart(rest: RichText[]): RichText[] {
   const [first, ...others] = rest;
   if (first?.type !== 'text') return rest;
   const trimmed = first.text!.trimStart();
