@@ -1,7 +1,7 @@
 /*
  * An editor that renders before its late chunks (tables, code highlighting) arrived waits once and then shows up,
- * keeping the rules of hooks: React must see the same `use()` before and after the wait. A comment has no tables and
- * never waits for them; a chunk that failed is asked for again. Each test loads the editor anew (`vi.resetModules`),
+ * keeping the rules of hooks: React must see the same `use()` before and after the wait. Every level has tables
+ * (WEBU-11), a comment waits for them like a description; a chunk that failed is asked for again. Each test loads the editor anew (`vi.resetModules`),
  * without `preloadEditor()` first, and holds a chunk back or lets it fail. The root is React's own, outside act(), so
  * React retries the editor when the chunk arrives, as it does in the browser.
  */
@@ -92,7 +92,7 @@ it('waits for the tables without calling use() conditionally', async () => {
   expect(errors).not.toHaveBeenCalled();
 });
 
-it('shows a comment without waiting for the tables, which it does not have', async () => {
+it('holds a comment back until the tables are there, as a description (WEBU-11)', async () => {
   await freshModules();
   let release: () => void = () => {};
   // the chunk is asked for once the editor's module has loaded, which may come after the comment shows
@@ -113,15 +113,14 @@ it('shows a comment without waiting for the tables, which it does not have', asy
     </>,
   );
 
-  // the comment is there while the description still waits for the tables
-  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Kommentar' })).toBeTruthy(), { timeout: 3000 });
-  expect(screen.queryByRole('textbox', { name: 'Beschreibung' })).toBeNull();
-  expect(container.querySelectorAll('[aria-busy="true"]')).toHaveLength(1);
-
+  // both wait for the tables: two frames stand in for the editors
   await requested;
+  await waitFor(() => expect(container.querySelectorAll('[aria-busy="true"]')).toHaveLength(2), { timeout: 3000 });
+  expect(screen.queryByRole('textbox', { name: 'Kommentar' })).toBeNull();
   expect(screen.queryByRole('textbox', { name: 'Beschreibung' })).toBeNull();
   release();
-  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Beschreibung' })).toBeTruthy(), { timeout: 3000 });
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Kommentar' })).toBeTruthy(), { timeout: 3000 });
+  expect(screen.getByRole('textbox', { name: 'Beschreibung' })).toBeTruthy();
 });
 
 it('retries the extension chunk after a failed load', async () => {

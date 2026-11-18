@@ -459,6 +459,18 @@ describe('unsentRest', () => {
     expect(unsentRest(bullets('Eins', 'Zwei'), bullets('Ein', 'Zwei', 'Drei'))).toEqual(bullets('Ein', 'Zwei', 'Drei'));
   });
 
+  it('takes a sent table off the front when the text goes on in the empty paragraph after it (WEBU-11)', () => {
+    const cell = (value: string): RichText => ({ type: 'tableCell', content: [para(text(value))] });
+    const table: RichText = { type: 'table', content: [{ type: 'tableRow', content: [cell('Browser'), cell('Safari')] }] };
+    // Tiptap keeps an empty paragraph after a table: the sent text ends with it
+    const sent: RichText = { type: 'doc', content: [table, { type: 'paragraph' }] };
+    expect(unsentRest(sent, { type: 'doc', content: [table, para(text(' und mehr'))] })).toEqual(doc('und mehr'));
+    expect(unsentRest(sent, { type: 'doc', content: [table, { type: 'paragraph' }] })).toBeNull();
+    // a cell changed while it was on its way: all of it stays
+    const changed: RichText = { type: 'table', content: [{ type: 'tableRow', content: [cell('Browser'), cell('Firefox')] }] };
+    expect(unsentRest(sent, { type: 'doc', content: [changed, { type: 'paragraph' }] })).toEqual({ type: 'doc', content: [changed, { type: 'paragraph' }] });
+  });
+
   it('goes on counting a numbered list where the sent part stopped (N3)', () => {
     const item = (value: string): RichText => ({ type: 'listItem', content: [para(text(value))] });
     const numbers = (start: number, ...values: string[]): RichText => ({ type: 'doc', content: [{ type: 'orderedList', attrs: { start, type: null }, content: values.map(item) }] });

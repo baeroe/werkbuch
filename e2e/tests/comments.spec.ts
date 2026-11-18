@@ -62,6 +62,48 @@ test('writes a comment with m and mod+enter', async ({ page }) => {
   }
 });
 
+test('writes a comment with a table from /, adds a column with alt+F10 and sends it with mod+enter', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('table'), { types: ['Task'] });
+  try {
+    const item = await createItem(page, { project_id: id, title: 'E2E Tabelle im Kommentar' });
+    await page.goto(`/items/${item.key}`);
+    await expect(page.getByRole('heading', { level: 1, name: 'E2E Tabelle im Kommentar' })).toBeVisible();
+    await expect(page.getByRole('button', { name: tr('en', 'items.comments.write') })).toBeVisible();
+
+    await page.keyboard.press('m');
+    const editor = page.getByRole('textbox', { name: tr('en', 'editor.label.comment') });
+    await expect(editor).toBeFocused();
+    // a comment takes a table from / too (WEBU-11)
+    await page.keyboard.type('/');
+    await expect(page.getByRole('listbox', { name: tr('en', 'editor.slash.label') }).getByRole('option', { name: new RegExp(`^${tr('en', 'editor.slash.table')}`) })).toBeVisible();
+    await page.keyboard.type(tr('en', 'editor.slash.table'));
+    await page.keyboard.press('Enter');
+    await expect(editor.locator('table')).toBeVisible();
+    await page.keyboard.type('Browser');
+
+    // a column more from the menu of the table, the focus back in the cell
+    await page.keyboard.press('Alt+F10');
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    await arrowTo(page, menu.getByRole('menuitem', { name: tr('en', 'editor.table.column_after') }));
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeHidden();
+    await expect(editor).toBeFocused();
+    await expect(editor.locator('table tr').first().locator('th, td')).toHaveCount(4);
+
+    await pressMod(page, 'Enter');
+    await expect(page.getByRole('status').filter({ hasText: tr('en', 'items.comments.sent') })).toBeVisible();
+    // the card shows the table, and the server holds it as Markdown
+    const card = page.getByRole('article', { name: tr('en', 'items.comments.card', { name: PEOPLE.e2e.name }) });
+    await expect(card.locator('table tr').first().locator('th, td')).toHaveCount(4);
+    await expect(card.locator('table')).toContainText('Browser');
+    const [body] = await storedComments(page, item.id);
+    expect(body).toContain('| Browser |');
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
 test('keeps a draft over closing the preview', async ({ page }) => {
   const { id, identifier } = await createE2eProject(page, name('draft'), { types: ['Task'] });
   try {

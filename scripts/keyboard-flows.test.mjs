@@ -119,6 +119,7 @@ const FLOWS = [
   'make a table in a description', // 4.16, WEBU-8
   'place a property below the description', // 4.7, A470
   'open the items of a project from the sidebar', // 5.1, WEBU-10
+  'make a table in a comment', // 4.16, WEBU-11
 ];
 /** A name of `GAPS` with a space is a flow, one without a key of the catalog or the widgets. */
 const isFlow = (name) => /\s/.test(name);

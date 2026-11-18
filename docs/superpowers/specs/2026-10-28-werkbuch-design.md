@@ -2,6 +2,9 @@
 
 Stand: 2026-11-08 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 2026-11-02 (Phasen 5 und 6), vom 2026-11-03 (Phase 7), vom 2026-11-04 (Phasen 8 und 9), vom 2026-11-05 (Phase 10), vom 2026-11-06 (Phasen 11 und 12), vom 2026-11-07 (Phasen 13 und 14) und vom 2026-11-07 und 2026-11-08 (Phase 15) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
 
+> **Änderungen vom 2026-11-18 (nach v0.2.0, WEBU-8, WEBU-11):** Von Rafael entschieden (bestätigt):
+> - **Tabellen in jeder Stufe** (4.16): auch Kommentare und Beschreibungen haben Tabellen samt `/`-Menü und dem Menü der Tabelle (Reiter oben rechts, `alt+F10`). Überschriften und Checklisten bleiben ab der Beschreibung, Trennlinien im Wiki.
+
 > **Änderungen vom 2026-11-17 (nach v0.1.0, WEBU-4):** Auf Rafaels Ticket hat Claude Folgendes entschieden; es erweitert die Spec und **wartet auf Rafaels Bestätigung** (Begründung und „Falls falsch“ in `docs/superpowers/plans/2026-10-30-werkbuch-app-rulings.md`, A468, A469):
 > - **Wiki-Seiten als PDF** (4.15): jede Person, die eine Seite liest, lädt sie als PDF herunter, auf Wunsch mit allen Unterseiten in der Reihenfolge des Baums und einem Inhaltsverzeichnis (höchstens 100 Seiten). Das PDF zeigt den Text für den Leser (verborgene Verweise verborgen, Bilder eingebettet, nur des eigenen Projekts) und macht ein neunter Dienst des Stacks, Gotenberg, gehärtet im internen Netz (A468). REST antwortet einen Link, die Datei liegt auf einer Web-Route wie Anhänge (A469); ohne Gotenberg 503 `pdf_unavailable`, und der Knopf sagt warum.
 
@@ -702,8 +705,8 @@ Jedes Projekt hat einen Seitenbaum (abgestimmt). Eine Seite hat Titel, Emoji, In
 ### 4.16 Rich Text und Anhänge
 
 **Editor: Tiptap v3** (abgestimmt). Tiptap ist headless, deshalb bauen wir die Oberfläche selbst. Es gibt einen Editor-Baustein mit Ausbaustufen:
-- **Kommentar:** Text, Listen, Code, Links, Erwähnungen, Bilder
-- **Beschreibung und Vorlage:** zusätzlich Überschriften, Checklisten, Tabellen
+- **Kommentar:** Text, Listen, Code, Links, Erwähnungen, Bilder, Tabellen (seit 2026-11-18, siehe oben)
+- **Beschreibung und Vorlage:** zusätzlich Überschriften, Checklisten
 - **Wiki:** alles
 
 Gemeinsam haben alle Stufen: `/`-Menü, Markdown-Kürzel beim Tippen, Code-Blöcke mit Syntax-Highlighting, Bilder und Dateien per Einfügen und Drag & Drop mit Fortschritt.

@@ -160,7 +160,7 @@ describe('the entries of the / menu', () => {
   const ids = (...args: Parameters<typeof slashItemsFor>) => slashItemsFor(...args).map((item) => item.id);
 
   it('offers what the level knows', () => {
-    expect(ids('comment', '', { projectId: null })).toEqual(['list', 'ordered', 'code', 'quote']);
+    expect(ids('comment', '', { projectId: null })).toEqual(['list', 'ordered', 'code', 'quote', 'table']);
     expect(ids('description', '', { projectId: null })).toEqual(['heading1', 'heading2', 'heading3', 'list', 'ordered', 'tasks', 'code', 'quote', 'table']);
     expect(ids('page', '', { projectId: null })).toEqual(['heading1', 'heading2', 'heading3', 'list', 'ordered', 'tasks', 'code', 'quote', 'table', 'rule']);
   });
