@@ -35,6 +35,13 @@ All versions and their changes: https://github.com/baeroe/werkbuch/releases
 
 <!-- absolute links only: each section becomes the notes of its GitHub release -->
 
+### 0.3.0
+
+- **Projects:** the name of a starred project in the sidebar opens its items, the arrow beside it unfolds its parts. The settings of a project are reachable without the sidebar: a fourth tab **Settings** below the header of its items, wiki, templates and settings, a link on every project card, and **Open project settings …** in the command palette.
+- **Comments** take tables too, from the `/` menu and with the menu of the table (`alt+F10`), like descriptions and wiki pages.
+- The compose files did not change: update as described in [Upgrading](https://werkbuch.dev/en/upgrading).
+- Image `baeroe/werkbuch:0.3.0` for `linux/amd64` and `linux/arm64`.
+
 ### 0.2.0
 
 - **The compose file changed:** a new service `gotenberg` ([Gotenberg](https://gotenberg.dev) 8.37) turns wiki pages into PDFs. Download `docker-compose.yml` again (or paste the new standalone file and copy your values into it), then update as described in [Upgrading](https://werkbuch.dev/en/upgrading). Without the service werkbuch runs as before, only the PDF button stays disabled. See [Operations](https://werkbuch.dev/en/operations#pdf).
