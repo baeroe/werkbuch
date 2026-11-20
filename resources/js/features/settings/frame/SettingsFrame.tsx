@@ -8,7 +8,7 @@
 import { Link } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
 import { Lock } from 'lucide-react';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactElement, type ReactNode } from 'react';
 import { cx } from '@/components/ui/cx';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { t } from '@/lib/i18n';
@@ -34,10 +34,10 @@ type FrameProps = (
     }
   | {
       /**
-       * A header of the screen's own instead of title and lead: the project header with its tabs (WEBU-13). The frame
-       * then stands at the left edge like the other parts of the project, not in the middle.
+       * A header of the screen's own instead of title and lead: the project header with its tabs (WEBU-13). An element,
+       * never `null`: a frame without its header would have no h1.
        */
-      header: ReactNode;
+      header: ReactElement;
       title?: never;
       lead?: never;
     }
@@ -47,20 +47,33 @@ type FrameProps = (
   children: ReactNode;
 };
 
-/** Title, section navigation and the content. */
+/**
+ * Title, section navigation and the content. With a title the frame stands in the middle; with a header of its own (a
+ * project) the header takes the whole width like on the other parts of the project, and only the sections and the
+ * content keep the width a form reads well at, from the left edge.
+ */
 export function SettingsFrame({ title, lead, header, nav, children }: FrameProps) {
-  return (
-    <div className={cx('w-full max-w-6xl', header === undefined && 'mx-auto')}>
-      {header ?? (
-        <header className="min-w-0">
-          <h1 className="scroll-mt-20 font-display text-xl font-bold tracking-title text-ink">{title}</h1>
-          {lead && <div className="mt-1 min-w-0 text-ui text-muted">{lead}</div>}
-        </header>
-      )}
-      <div className={cx('mt-4 grid items-start gap-3 lg:gap-8', nav ? 'lg:grid-cols-[12.5rem_minmax(0,1fr)]' : null)}>
-        {nav}
-        <div className="flex min-w-0 flex-col gap-6 lg:pt-1">{children}</div>
+  const body = (
+    <div className={cx('mt-4 grid items-start gap-3 lg:gap-8', nav ? 'lg:grid-cols-[12.5rem_minmax(0,1fr)]' : null, header && 'max-w-6xl')}>
+      {nav}
+      <div className="flex min-w-0 flex-col gap-6 lg:pt-1">{children}</div>
+    </div>
+  );
+  if (header) {
+    return (
+      <div className="w-full min-w-0">
+        {header}
+        {body}
       </div>
+    );
+  }
+  return (
+    <div className="mx-auto w-full max-w-6xl">
+      <header className="min-w-0">
+        <h1 className="scroll-mt-20 font-display text-xl font-bold tracking-title text-ink">{title}</h1>
+        {lead && <div className="mt-1 min-w-0 text-ui text-muted">{lead}</div>}
+      </header>
+      {body}
     </div>
   );
 }

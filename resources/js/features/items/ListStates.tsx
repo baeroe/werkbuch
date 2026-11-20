@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import type { ItemsPreset } from '@/domain/viewState';
+import { ProjectHeaderSkeleton } from '@/features/projects/ProjectHeader';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
@@ -122,14 +123,19 @@ export function ListSkeleton({ layout, loadingLayout = false }: { layout: Displa
 }
 
 /** The whole screen in outline, while the project or view it belongs to loads. */
-export function ScreenSkeleton() {
+export function ScreenSkeleton({ project = false }: { project?: boolean }) {
   return (
     <SkeletonGroup label={t('common.loading')}>
-      <div className="flex h-8 items-center gap-2">
-        <Skeleton className="size-5" />
-        <Skeleton className="h-5 w-48" />
-        <Skeleton className="ml-auto h-8 w-64 max-sm:w-28" />
-      </div>
+      {project ? (
+        // the header every part of a project shares (WEBU-13), so the four load alike
+        <ProjectHeaderSkeleton />
+      ) : (
+        <div className="flex h-8 items-center gap-2">
+          <Skeleton className="size-5" />
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="ml-auto h-8 w-64 max-sm:w-28" />
+        </div>
+      )}
       <div className="mt-4">
         <ListShape mark={false} />
       </div>

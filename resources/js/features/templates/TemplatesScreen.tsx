@@ -19,7 +19,7 @@ import { buttonClass } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
-import { ProjectHeader } from '@/features/projects/ProjectHeader';
+import { ProjectHeader, ProjectHeaderSkeleton } from '@/features/projects/ProjectHeader';
 import { useProject } from '@/hooks/projects';
 import { useTemplates } from '@/hooks/templates';
 import { t } from '@/lib/i18n';
@@ -40,8 +40,8 @@ export interface TemplatesScreenProps {
 function ScreenSkeleton() {
   return (
     <SkeletonGroup label={t('templates.loading')}>
-      <Skeleton className="mt-1.5 h-5 w-56" />
-      <div className="mt-6 flex flex-col gap-3">
+      <ProjectHeaderSkeleton />
+      <div className="mt-4 flex max-w-5xl flex-col gap-3">
         <Skeleton className="h-14 w-full rounded-ctl" />
         <Skeleton className="h-14 w-full rounded-ctl" />
       </div>
@@ -101,9 +101,9 @@ function Templates({ project, templateId }: { project: Project; templateId: stri
 
   if (templateId === null) return <TemplateList project={project} header={header} heading={heading} rights={rights} />;
   return (
-    <div className="max-w-5xl min-w-0">
+    <div className="min-w-0">
       {header}
-      <div className="mt-4">
+      <div className="mt-4 max-w-5xl">
         <TemplateDetail project={project} templateId={templateId} rights={rights} />
       </div>
     </div>

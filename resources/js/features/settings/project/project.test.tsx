@@ -130,8 +130,12 @@ describe('ProjectSettings', () => {
     expect(screen.getByText('Projekteinstellungen werden geladen …')).toBeTruthy();
     expect(screen.getByText('Bereiche werden geladen …')).toBeTruthy();
     expect(document.title).toBe('Projekteinstellungen – werkbuch');
+    // the header in outline while the project loads (WEBU-13): no h1 yet, nothing for screen readers
+    expect(document.querySelector('[data-project-header-skeleton]')?.getAttribute('aria-hidden')).toBe('true');
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
 
     expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveProperty('value', 'Website-Relaunch');
+    expect(document.querySelector('[data-project-header-skeleton]')).toBeNull();
     const nav = screen.getByRole('navigation', { name: 'Bereiche der Projekteinstellungen' });
     expect(within(nav).getByRole('link', { name: 'Allgemein' }).getAttribute('aria-current')).toBe('page');
     expect(within(nav).getByRole('link', { name: 'Mitglieder' }).getAttribute('href')).toBe('/projects/WEB/settings/members');

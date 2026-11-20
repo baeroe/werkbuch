@@ -442,7 +442,7 @@ function ProjectItems({ identifier }: { identifier: string }) {
   if (!known && project.isError) {
     return <ScreenError title={t('items.screen.project_failed')} error={project.error} onRetry={() => void project.refetch()} retrying={project.isFetching} />;
   }
-  if (!known || moved) return <ScreenSkeleton />;
+  if (!known || moved) return <ScreenSkeleton project />;
   return <ItemsList key={known.id} preset="project" project={known} />;
 }
 

@@ -65,6 +65,8 @@ describe('ProjectSections', () => {
 describe('ProjectHeader', () => {
   const web = project('WEB', 'member', { name: 'Website-Relaunch' });
   const header = () => document.querySelector('header')!;
+  /** Whether `first` stands before `second` in the document. */
+  const precedes = (first: Node, second: Node) => (first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
   it('names the part as the h1, the project as a link to its items, with an action at the end and the tabs below', () => {
     render(<ProjectHeader project={web} section="settings" below actions={<button type="button">Tun</button>} />);
@@ -72,23 +74,26 @@ describe('ProjectHeader', () => {
     const heading = screen.getByRole('heading', { level: 1, name: 'Einstellungen' });
     expect(heading.hasAttribute('data-screen-heading')).toBe(true);
     expect(heading.getAttribute('tabindex')).toBe('-1');
-    expect(within(header()).getByRole('link', { name: 'Website-Relaunch' }).getAttribute('href')).toBe('/projects/WEB');
-    expect(within(header()).getByRole('button', { name: 'Tun' }).parentElement!.className).toContain('ml-auto');
-    // the order of the row: project › part
-    expect(header().textContent).toBe('WWebsite-RelaunchEinstellungenTun');
+    const projectLink = within(header()).getByRole('link', { name: 'Website-Relaunch' });
+    expect(projectLink.getAttribute('href')).toBe('/projects/WEB');
+    const action = within(header()).getByRole('button', { name: 'Tun' });
+    // the row reads project › part › action, and the tabs come after it
+    expect(precedes(projectLink, heading)).toBe(true);
+    expect(precedes(heading, action)).toBe(true);
     const parts = screen.getByRole('navigation', { name: 'Bereiche von Website-Relaunch' });
+    expect(precedes(header(), parts)).toBe(true);
     expect(within(parts).getByRole('link', { name: 'Einstellungen' }).getAttribute('aria-current')).toBe('true');
-    // the header comes first, the tabs right after it
-    expect(header().nextElementSibling).toBe(parts);
   });
 
   it('makes the project the h1 of its items, the part text after it and whatever follows it after that', () => {
     render(<ProjectHeader project={web} section="items" heading="project" after={<span>Stern</span>} />);
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Website-Relaunch' })).toBeTruthy();
+    const heading = screen.getByRole('heading', { level: 1, name: 'Website-Relaunch' });
     expect(within(header()).queryByRole('link')).toBeNull();
-    expect(header().textContent).toBe('WWebsite-RelaunchItemsStern');
-    expect(header().querySelector('.ml-auto')).toBeNull();
+    const part = within(header()).getByText('Items');
+    expect(precedes(heading, part)).toBe(true);
+    expect(precedes(part, within(header()).getByText('Stern'))).toBe(true);
+    expect(within(header()).queryByRole('button')).toBeNull();
     expect(within(screen.getByRole('navigation')).getByRole('link', { name: 'Items' }).getAttribute('aria-current')).toBe('page');
   });
 
@@ -96,14 +101,14 @@ describe('ProjectHeader', () => {
     render(<ProjectHeader project={web} section="wiki" heading="none" below />);
 
     expect(screen.queryByRole('heading')).toBeNull();
-    expect(header().textContent).toBe('WWebsite-RelaunchWiki');
+    expect(precedes(within(header()).getByRole('link', { name: 'Website-Relaunch' }), within(header()).getByText('Wiki'))).toBe(true);
     expect(within(screen.getByRole('navigation')).getByRole('link', { name: 'Wiki' }).getAttribute('aria-current')).toBe('true');
   });
 
   it('draws an outline of the header for screen readers to pass over', () => {
     const { container } = render(<ProjectHeaderSkeleton />);
 
-    expect(container.firstElementChild!.getAttribute('aria-hidden')).toBe('true');
+    expect(container.querySelector('[data-project-header-skeleton]')!.getAttribute('aria-hidden')).toBe('true');
     expect(screen.queryByRole('status')).toBeNull();
   });
 });

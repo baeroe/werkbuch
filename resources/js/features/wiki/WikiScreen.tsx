@@ -15,6 +15,7 @@ import { ApiError } from '@/api/client';
 import { cx } from '@/components/ui/cx';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
+import { ProjectHeaderSkeleton } from '@/features/projects/ProjectHeader';
 import { useProject } from '@/hooks/projects';
 import { t } from '@/lib/i18n';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
@@ -31,8 +32,8 @@ export interface WikiScreenProps {
 function ScreenSkeleton() {
   return (
     <SkeletonGroup label={t('wiki.loading')}>
-      <Skeleton className="mt-1.5 h-5 w-56" />
-      <div className="mt-6 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8 xl:grid-cols-[17rem_minmax(0,1fr)]">
+      <ProjectHeaderSkeleton />
+      <div className="mt-4 lg:mt-6 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8 xl:grid-cols-[17rem_minmax(0,1fr)]">
         <TreeSkeleton className="max-lg:hidden" />
         <div className={cx(SHEET, 'flex flex-col gap-3')}>
           <Skeleton className="h-8 w-2/3" />

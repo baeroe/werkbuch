@@ -84,17 +84,18 @@ export function ProjectHeader({ project, section, heading = 'part', below = fals
 }
 
 /**
- * The header in outline while the project loads: the row of badge and names, then the line of the tabs. Only a picture:
- * the skeleton of the content below says that the screen loads.
+ * The header in outline while the project loads, in the height of the real one (tabs of 44 px below md and on touch):
+ * the row of badge and names, then the line of the tabs. Only a picture: the skeleton group around it, or the skeleton
+ * of the content below, says that the screen loads.
  */
 export function ProjectHeaderSkeleton() {
   return (
-    <div aria-hidden="true">
+    <div aria-hidden="true" data-project-header-skeleton="">
       <div className="flex min-h-8 items-center gap-2">
         <Skeleton className="size-5 rounded-chip" />
         <Skeleton className="h-4 w-40" />
       </div>
-      <div className="mt-2 flex h-11 items-center gap-3 border-b border-line md:h-9">
+      <div className="mt-2 flex h-11 items-center gap-3 border-b border-line md:h-9 pointer-coarse:h-11">
         <Skeleton className="h-3.5 w-12" />
         <Skeleton className="h-3.5 w-10" />
         <Skeleton className="h-3.5 w-16" />
