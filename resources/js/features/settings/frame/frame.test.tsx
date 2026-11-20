@@ -104,6 +104,24 @@ describe('SettingsFrame', () => {
 
     expect(screen.getByText('Inhalt').parentElement?.parentElement?.className).not.toContain('grid-cols');
   });
+
+  it('puts a header of its own (a project, WEBU-13) in place of title and lead, before the sections', () => {
+    render(
+      <SettingsFrame header={<p>Kopf des Projekts</p>} nav={<nav aria-label="Bereiche">Liste</nav>}>
+        <p>Inhalt</p>
+      </SettingsFrame>,
+    );
+
+    expect(screen.queryByRole('heading')).toBeNull();
+    const own = screen.getByText('Kopf des Projekts');
+    expect(own.compareDocumentPosition(screen.getByRole('navigation', { name: 'Bereiche' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('Inhalt')).toBeTruthy();
+  });
+
+  it('takes no null for a header: a frame without one would have no h1', () => {
+    // @ts-expect-error a header is an element, never null
+    void (<SettingsFrame header={null} nav={null} children={null} />);
+  });
 });
 
 describe('SectionNav', () => {

@@ -1,13 +1,14 @@
 /*
- * The frame every settings screen sits in (organisation, personal, project; R26): the title with what the page is about,
- * the list of sections on the left, the chosen section on the right. Below the lg breakpoint (a phone, a tablet beside
- * the sidebar) the list is a row of links above the section, so the section keeps the room.
+ * The frame every settings screen sits in (organisation, personal, project; R26): the title with what the page is about
+ * (the project header with its tabs on a project, WEBU-13), the list of sections on the left, the chosen section on the
+ * right. Below the lg breakpoint (a phone, a tablet beside the sidebar) the list is a row of links above the section, so
+ * the section keeps the room.
  */
 
 import { Link } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
 import { Lock } from 'lucide-react';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactElement, type ReactNode } from 'react';
 import { cx } from '@/components/ui/cx';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { t } from '@/lib/i18n';
@@ -23,31 +24,56 @@ export interface SectionItem {
   locked?: boolean;
 }
 
-type FrameProps = {
-  /** The h1. */
-  title: string;
-  /** What the page is about, under the title (e.g. the project). */
-  lead?: ReactNode;
-  /** Under the header, e.g. the tabs of the parts of a project (WEBU-12). */
-  tabs?: ReactNode;
+type FrameProps = (
+  | {
+      /** The h1. */
+      title: string;
+      /** What the page is about, under the title. */
+      lead?: ReactNode;
+      header?: never;
+    }
+  | {
+      /**
+       * A header of the screen's own instead of title and lead: the project header with its tabs (WEBU-13). An element,
+       * never `null`: a frame without its header would have no h1.
+       */
+      header: ReactElement;
+      title?: never;
+      lead?: never;
+    }
+) & {
   /** The `SectionNav`; without one (the page could not load) the content has the whole width. */
   nav: ReactNode;
   children: ReactNode;
 };
 
-/** Title, section navigation and the content. */
-export function SettingsFrame({ title, lead, tabs, nav, children }: FrameProps) {
+/**
+ * Title, section navigation and the content. With a title the frame stands in the middle; with a header of its own (a
+ * project) the header takes the whole width like on the other parts of the project, and only the sections and the
+ * content keep the width a form reads well at, from the left edge.
+ */
+export function SettingsFrame({ title, lead, header, nav, children }: FrameProps) {
+  const body = (
+    <div className={cx('mt-4 grid items-start gap-3 lg:gap-8', nav ? 'lg:grid-cols-[12.5rem_minmax(0,1fr)]' : null, header && 'max-w-6xl')}>
+      {nav}
+      <div className="flex min-w-0 flex-col gap-6 lg:pt-1">{children}</div>
+    </div>
+  );
+  if (header) {
+    return (
+      <div className="w-full min-w-0">
+        {header}
+        {body}
+      </div>
+    );
+  }
   return (
     <div className="mx-auto w-full max-w-6xl">
       <header className="min-w-0">
         <h1 className="scroll-mt-20 font-display text-xl font-bold tracking-title text-ink">{title}</h1>
         {lead && <div className="mt-1 min-w-0 text-ui text-muted">{lead}</div>}
-        {tabs}
       </header>
-      <div className={cx('mt-4 grid items-start gap-3 lg:gap-8', nav ? 'lg:grid-cols-[12.5rem_minmax(0,1fr)]' : null)}>
-        {nav}
-        <div className="flex min-w-0 flex-col gap-6 lg:pt-1">{children}</div>
-      </div>
+      {body}
     </div>
   );
 }

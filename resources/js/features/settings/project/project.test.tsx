@@ -130,12 +130,19 @@ describe('ProjectSettings', () => {
     expect(screen.getByText('Projekteinstellungen werden geladen …')).toBeTruthy();
     expect(screen.getByText('Bereiche werden geladen …')).toBeTruthy();
     expect(document.title).toBe('Projekteinstellungen – werkbuch');
+    // the header in outline while the project loads (WEBU-13): no h1 yet, nothing for screen readers
+    expect(document.querySelector('[data-project-header-skeleton]')?.getAttribute('aria-hidden')).toBe('true');
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
 
     expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveProperty('value', 'Website-Relaunch');
+    expect(document.querySelector('[data-project-header-skeleton]')).toBeNull();
     const nav = screen.getByRole('navigation', { name: 'Bereiche der Projekteinstellungen' });
     expect(within(nav).getByRole('link', { name: 'Allgemein' }).getAttribute('aria-current')).toBe('page');
     expect(within(nav).getByRole('link', { name: 'Mitglieder' }).getAttribute('href')).toBe('/projects/WEB/settings/members');
-    expect(screen.getByRole('heading', { level: 1, name: 'Einstellungen' })).toBeTruthy();
+    // the header of every part of the project (WEBU-13): the project leads to its items, the part is the h1
+    const heading = screen.getByRole('heading', { level: 1, name: 'Einstellungen' });
+    expect(heading.hasAttribute('data-screen-heading')).toBe(true);
+    expect(within(heading.closest('header')!).getByRole('link', { name: 'Website-Relaunch' }).getAttribute('href')).toBe('/projects/WEB');
     expect(document.title).toBe('Allgemein – Einstellungen WEB – werkbuch');
     expect(screen.queryByText('Du kannst das nur lesen')).toBeNull();
     // the parts of the project stand above; the settings are the place one is in, General alone is the page (WEBU-12)
@@ -165,6 +172,8 @@ describe('ProjectSettings', () => {
 
     expect(await screen.findByText('Das Projekt konnte nicht geladen werden')).toBeTruthy();
     expect(screen.queryByRole('navigation')).toBeNull();
+    // no project, no header of it: the part alone
+    expect(screen.getByRole('heading', { level: 1, name: 'Einstellungen' })).toBeTruthy();
     fail = false;
     await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
     expect(await screen.findByRole('textbox', { name: 'Name' })).toBeTruthy();

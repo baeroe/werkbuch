@@ -25,18 +25,17 @@
  * cache entry (`usePages`).
  */
 
-import { Link, router, usePage as useInertiaPage } from '@inertiajs/react';
+import { router, usePage as useInertiaPage } from '@inertiajs/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, FilePlus2, Plus } from 'lucide-react';
+import { FilePlus2, Plus } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { ApiError, type Page as ListPage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { ErrorState } from '@/components/ui/ErrorState';
-import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
-import { ProjectSections } from '@/features/projects/ProjectSections';
+import { ProjectHeader } from '@/features/projects/ProjectHeader';
 import { qk } from '@/hooks/keys';
 import { useCreatePage, useDeletePage, useMovePage, usePages } from '@/hooks/pages';
 import { useCurrentUser } from '@/hooks/users';
@@ -353,32 +352,18 @@ export function Wiki({ project, pageId, pageFound }: WikiProps) {
 
   return (
     <div className="min-w-0">
-      <header className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <ProjectBadge project={project} />
-          <Link
-            href={paths.project(project.identifier)}
-            className="inline-flex min-h-11 min-w-0 items-center text-ui font-medium text-muted no-underline hover:text-ink hover:underline md:min-h-0"
-          >
-            <span className="truncate">{project.name}</span>
-          </Link>
-          <ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
-          {pageId !== null ? (
-            // the way back to the overview is the tab "Wiki" right below (ProjectSections): one link, not two
-            <span className="shrink-0 font-display text-lg font-bold tracking-title text-ink">{t('wiki.title')}</span>
-          ) : (
-            <h1 data-screen-heading="" tabIndex={-1} className="shrink-0 scroll-mt-20 font-display text-lg font-bold tracking-title text-ink">
-              {t('wiki.title')}
-            </h1>
-          )}
-        </div>
-        <div className="ml-auto">
+      {/* below the overview (a page) the part is text: the page has its own h1, the tab "Wiki" leads back */}
+      <ProjectHeader
+        project={project}
+        section="wiki"
+        heading={pageId !== null ? 'none' : 'part'}
+        below={pageId !== null}
+        actions={
           <Button variant="secondary" icon={Plus} pending={createPage.isPending} disabledReason={createReason} onClick={() => void create(null)}>
             {t('wiki.new')}
           </Button>
-        </div>
-      </header>
-      <ProjectSections project={project} current="wiki" below={pageId !== null} />
+        }
+      />
 
       <div className="mt-4 lg:mt-6 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start lg:gap-8 xl:grid-cols-[17rem_minmax(0,1fr)]">
         {treeArea && (

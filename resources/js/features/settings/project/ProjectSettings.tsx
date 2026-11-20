@@ -1,6 +1,8 @@
 /*
  * The settings of a project (spec 5.2) in the shared settings frame: General, Members, Workflow, Types and Automations,
- * one address each (`/projects/{identifier}/settings/{section?}`, General without a section).
+ * one address each (`/projects/{identifier}/settings/{section?}`, General without a section). The header and its place
+ * are those of the other parts of the project (`ProjectHeader`, WEBU-13): badge › project › "Einstellungen", the tabs
+ * below, the frame at the left edge.
  * Project admins and org admins change them; everybody else reads, with the reason from `usePermissions` (spec 4.3).
  * The server answers an old identifier with a 301; a rename made here (or elsewhere, while the page is open) moves the
  * address to the identifier the project has now.
@@ -13,8 +15,7 @@ import { ApiError } from '@/api/client';
 import { Banner } from '@/components/ui/Banner';
 import { buttonClass } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { ProjectBadge } from '@/components/ui/ProjectBadge';
-import { ProjectSections } from '@/features/projects/ProjectSections';
+import { ProjectHeader, ProjectHeaderSkeleton } from '@/features/projects/ProjectHeader';
 import { useProject, useProjects } from '@/hooks/projects';
 import { useCurrentUser } from '@/hooks/users';
 import { t } from '@/lib/i18n';
@@ -67,10 +68,16 @@ export function ProjectSettings({ identifier, section }: { identifier: string; s
     return <NotFound title={t('settings.project.not_found.title', { identifier })} description={t('settings.project.not_found.description')} />;
   }
 
+  // the header every part of the project shares (WEBU-13); the settings are one part, the section list marks the page,
+  // the tab is the place one is in (otherwise General would be the current page twice)
+  const header = known ? <ProjectHeader project={known} section="settings" below /> : <ProjectHeaderSkeleton />;
+
   const loadError = project.isError ? project.error : rights.isError ? rights.error : null;
   if (loadError) {
+    // without the project there is no header of it: the name of the part alone, at its place
+    const failed = known ? header : <h1 className="font-display text-lg font-bold tracking-title text-ink">{t('settings.project.title')}</h1>;
     return (
-      <SettingsFrame title={t('settings.project.title')} nav={null}>
+      <SettingsFrame header={failed} nav={null}>
         <SettingsError
           title={t('settings.project.load_failed')}
           error={loadError}
@@ -86,7 +93,7 @@ export function ProjectSettings({ identifier, section }: { identifier: string; s
 
   if (!known || loading || moved) {
     return (
-      <SettingsFrame title={t('settings.project.title')} nav={<SectionNavSkeleton items={SECTIONS.length} />}>
+      <SettingsFrame header={header} nav={<SectionNavSkeleton items={SECTIONS.length} />}>
         <SettingsSkeleton rows={4} label={t('settings.project.loading')} />
       </SettingsFrame>
     );
@@ -99,19 +106,7 @@ export function ProjectSettings({ identifier, section }: { identifier: string; s
 
   return (
     <SettingsFrame
-      title={t('settings.project.title')}
-      lead={
-        <span className="inline-flex max-w-full items-center gap-2">
-          <ProjectBadge project={known} />
-          <span className="min-w-0 truncate font-medium text-ink">{known.name}</span>
-          <span translate="no" className="shrink-0 tabular-nums">
-            {known.identifier}
-          </span>
-        </span>
-      }
-      // the parts of the project (WEBU-12): its settings are one; the section list marks the page, the tab is the place
-      // one is in (otherwise General would be the current page twice)
-      tabs={<ProjectSections project={known} current="settings" below />}
+      header={header}
       nav={<SectionNav label={t('settings.project.nav_label')} items={items} current={current} hrefFor={(slug) => paths.projectSettings(known.identifier, slug)} />}
     >
       {current === null ? (

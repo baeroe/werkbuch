@@ -134,9 +134,10 @@ export function TemplateList({ project, header, heading, rights }: TemplateListP
   }
 
   return (
-    <div className="max-w-5xl min-w-0">
+    // the header has the whole width like on every part of the project (WEBU-13), the list the width it reads well at
+    <div className="min-w-0">
       {header}
-      <div className="mt-3 flex flex-wrap items-start gap-x-4 gap-y-2">
+      <div className="mt-3 flex max-w-5xl flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0">
           <p className="max-w-[65ch] text-ui text-pretty text-muted">{t('templates.description')}</p>
           {rights.ready && rights.denied !== null && (
@@ -148,7 +149,7 @@ export function TemplateList({ project, header, heading, rights }: TemplateListP
         </div>
         <div className="ml-auto">{newTemplate(newButton)}</div>
       </div>
-      <div className={cx('mt-4', visible.length > 0 && 'dots rounded-card border border-line-strong bg-paper p-2 shadow-elev-1')}>{content}</div>
+      <div className={cx('mt-4 max-w-5xl', visible.length > 0 && 'dots rounded-card border border-line-strong bg-paper p-2 shadow-elev-1')}>{content}</div>
     </div>
   );
 }

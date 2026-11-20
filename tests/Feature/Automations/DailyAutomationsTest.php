@@ -92,14 +92,15 @@ it('acts at any hour when forced, and in one project only when it names one (K9)
 });
 
 it('runs every hour from its job on the queue bulk, for the hour it was planned in, one at a time (K19)', function () use ($world) {
+    // the job of 02:00 UTC (03:00 in Berlin) waited on the queue until 04:10 UTC: it still runs the night; the clock
+    // stands there before the world is made, else the item was closed 40 days before the real day, not before this one
+    $this->travelTo(CarbonImmutable::parse('2026-11-10 04:10', 'UTC'));
     Organization::current()->update(['timezone' => 'Europe/Berlin']);
     [, $closed] = $world();
     $task = collect(app(Schedule::class)->events())->sole(fn ($event) => $event->description === RunDailyAutomationsJob::class);
     $job = new RunDailyAutomationsJob(CarbonImmutable::parse('2026-11-10 02:00', 'UTC'));
     $middleware = $job->middleware();
 
-    // the job of 02:00 UTC (03:00 in Berlin) waited on the queue until 04:10 UTC: it still runs the night
-    $this->travelTo(CarbonImmutable::parse('2026-11-10 04:10', 'UTC'));
     $job->handle();
 
     expect($task->expression)->toBe('0 * * * *')
