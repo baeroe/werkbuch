@@ -104,6 +104,25 @@ describe('SettingsFrame', () => {
 
     expect(screen.getByText('Inhalt').parentElement?.parentElement?.className).not.toContain('grid-cols');
   });
+
+  it('stands in the middle with its title, at the left edge with a header of its own (a project, WEBU-13)', () => {
+    const { container, unmount } = render(
+      <SettingsFrame title="Einstellungen" nav={null}>
+        <p>Inhalt</p>
+      </SettingsFrame>,
+    );
+    expect(container.firstElementChild!.className).toContain('mx-auto');
+    unmount();
+
+    const own = render(
+      <SettingsFrame header={<p>Kopf des Projekts</p>} nav={null}>
+        <p>Inhalt</p>
+      </SettingsFrame>,
+    );
+    expect(own.container.firstElementChild!.className).not.toContain('mx-auto');
+    expect(own.container.firstElementChild!.firstElementChild!.textContent).toBe('Kopf des Projekts');
+    expect(screen.queryByRole('heading')).toBeNull();
+  });
 });
 
 describe('SectionNav', () => {

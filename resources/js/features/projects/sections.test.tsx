@@ -1,6 +1,6 @@
 /*
- * The parts of a project (WEBU-3, WEBU-12): the tabs Items · Wiki · Vorlagen · Einstellungen under the header of each
- * part, and the palette commands "Wiki öffnen …", "Vorlagen öffnen …" and "Projekteinstellungen öffnen …" over every
+ * The parts of a project (WEBU-3, WEBU-12, WEBU-13): the header all of them share, the tabs Items · Wiki · Vorlagen ·
+ * Einstellungen under it, and the palette commands "Wiki öffnen …", "Vorlagen öffnen …" and "Projekteinstellungen öffnen …" over every
  * project the person sees, starred or not.
  */
 
@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { listCommands, type CommandDef } from '@/lib/commands';
 import { mockApi, type MockApi } from '@/test/api';
 import { list, project } from '@/test/fixtures';
+import { ProjectHeader, ProjectHeaderSkeleton } from './ProjectHeader';
 import { ProjectSections } from './ProjectSections';
 import { useProjectPartCommands } from './projectCommands';
 
@@ -58,6 +59,52 @@ describe('ProjectSections', () => {
     render(<ProjectSections project={web} current="templates" below />);
 
     expect(links().map((link) => link.getAttribute('aria-current'))).toEqual([null, null, 'true', null]);
+  });
+});
+
+describe('ProjectHeader', () => {
+  const web = project('WEB', 'member', { name: 'Website-Relaunch' });
+  const header = () => document.querySelector('header')!;
+
+  it('names the part as the h1, the project as a link to its items, with an action at the end and the tabs below', () => {
+    render(<ProjectHeader project={web} section="settings" below actions={<button type="button">Tun</button>} />);
+
+    const heading = screen.getByRole('heading', { level: 1, name: 'Einstellungen' });
+    expect(heading.hasAttribute('data-screen-heading')).toBe(true);
+    expect(heading.getAttribute('tabindex')).toBe('-1');
+    expect(within(header()).getByRole('link', { name: 'Website-Relaunch' }).getAttribute('href')).toBe('/projects/WEB');
+    expect(within(header()).getByRole('button', { name: 'Tun' }).parentElement!.className).toContain('ml-auto');
+    // the order of the row: project › part
+    expect(header().textContent).toBe('WWebsite-RelaunchEinstellungenTun');
+    const parts = screen.getByRole('navigation', { name: 'Bereiche von Website-Relaunch' });
+    expect(within(parts).getByRole('link', { name: 'Einstellungen' }).getAttribute('aria-current')).toBe('true');
+    // the header comes first, the tabs right after it
+    expect(header().nextElementSibling).toBe(parts);
+  });
+
+  it('makes the project the h1 of its items, the part text after it and whatever follows it after that', () => {
+    render(<ProjectHeader project={web} section="items" heading="project" after={<span>Stern</span>} />);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Website-Relaunch' })).toBeTruthy();
+    expect(within(header()).queryByRole('link')).toBeNull();
+    expect(header().textContent).toBe('WWebsite-RelaunchItemsStern');
+    expect(header().querySelector('.ml-auto')).toBeNull();
+    expect(within(screen.getByRole('navigation')).getByRole('link', { name: 'Items' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('has no h1 below a part, whose screen has a heading of its own', () => {
+    render(<ProjectHeader project={web} section="wiki" heading="none" below />);
+
+    expect(screen.queryByRole('heading')).toBeNull();
+    expect(header().textContent).toBe('WWebsite-RelaunchWiki');
+    expect(within(screen.getByRole('navigation')).getByRole('link', { name: 'Wiki' }).getAttribute('aria-current')).toBe('true');
+  });
+
+  it('draws an outline of the header for screen readers to pass over', () => {
+    const { container } = render(<ProjectHeaderSkeleton />);
+
+    expect(container.firstElementChild!.getAttribute('aria-hidden')).toBe('true');
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });
 

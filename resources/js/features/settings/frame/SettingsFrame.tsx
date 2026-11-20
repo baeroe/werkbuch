@@ -1,7 +1,8 @@
 /*
- * The frame every settings screen sits in (organisation, personal, project; R26): the title with what the page is about,
- * the list of sections on the left, the chosen section on the right. Below the lg breakpoint (a phone, a tablet beside
- * the sidebar) the list is a row of links above the section, so the section keeps the room.
+ * The frame every settings screen sits in (organisation, personal, project; R26): the title with what the page is about
+ * (the project header with its tabs on a project, WEBU-13), the list of sections on the left, the chosen section on the
+ * right. Below the lg breakpoint (a phone, a tablet beside the sidebar) the list is a row of links above the section, so
+ * the section keeps the room.
  */
 
 import { Link } from '@inertiajs/react';
@@ -23,27 +24,39 @@ export interface SectionItem {
   locked?: boolean;
 }
 
-type FrameProps = {
-  /** The h1. */
-  title: string;
-  /** What the page is about, under the title (e.g. the project). */
-  lead?: ReactNode;
-  /** Under the header, e.g. the tabs of the parts of a project (WEBU-12). */
-  tabs?: ReactNode;
+type FrameProps = (
+  | {
+      /** The h1. */
+      title: string;
+      /** What the page is about, under the title. */
+      lead?: ReactNode;
+      header?: never;
+    }
+  | {
+      /**
+       * A header of the screen's own instead of title and lead: the project header with its tabs (WEBU-13). The frame
+       * then stands at the left edge like the other parts of the project, not in the middle.
+       */
+      header: ReactNode;
+      title?: never;
+      lead?: never;
+    }
+) & {
   /** The `SectionNav`; without one (the page could not load) the content has the whole width. */
   nav: ReactNode;
   children: ReactNode;
 };
 
 /** Title, section navigation and the content. */
-export function SettingsFrame({ title, lead, tabs, nav, children }: FrameProps) {
+export function SettingsFrame({ title, lead, header, nav, children }: FrameProps) {
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <header className="min-w-0">
-        <h1 className="scroll-mt-20 font-display text-xl font-bold tracking-title text-ink">{title}</h1>
-        {lead && <div className="mt-1 min-w-0 text-ui text-muted">{lead}</div>}
-        {tabs}
-      </header>
+    <div className={cx('w-full max-w-6xl', header === undefined && 'mx-auto')}>
+      {header ?? (
+        <header className="min-w-0">
+          <h1 className="scroll-mt-20 font-display text-xl font-bold tracking-title text-ink">{title}</h1>
+          {lead && <div className="mt-1 min-w-0 text-ui text-muted">{lead}</div>}
+        </header>
+      )}
       <div className={cx('mt-4 grid items-start gap-3 lg:gap-8', nav ? 'lg:grid-cols-[12.5rem_minmax(0,1fr)]' : null)}>
         {nav}
         <div className="flex min-w-0 flex-col gap-6 lg:pt-1">{children}</div>

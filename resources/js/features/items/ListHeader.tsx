@@ -1,17 +1,16 @@
 /*
- * The header of an item list: what the list is (a project with its badge, a view with its icon under "Views", or
- * "Meine Items" with its three tabs), the star that puts a project or view into the sidebar, and the switch of the
- * layout. The layouts also switch with 1–4 (`list.layout.*` of the catalog, A7); the focus stays where it is.
+ * The header of an item list: what the list is (a project in the header all its parts share, `ProjectHeader`; a view
+ * with its icon under "Views"; or "Meine Items" with its three tabs), the star that puts a project or view into the
+ * sidebar, and the switch of the layout. The layouts also switch with 1–4 (`list.layout.*` of the catalog, A7); the focus stays where it is.
  */
 
 import { Link } from '@inertiajs/react';
 import { ChartGantt, ChevronRight, List, SquareKanban, Table2 } from 'lucide-react';
-import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { ViewIcon } from '@/components/ui/ViewIcon';
 import type { ItemsPreset } from '@/domain/viewState';
 import { FavoriteToggle } from '@/features/favorites/FavoriteToggle';
-import { ProjectSections } from '@/features/projects/ProjectSections';
+import { ProjectHeader } from '@/features/projects/ProjectHeader';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { SHORTCUTS } from '@/lib/shortcuts/catalog';
@@ -45,19 +44,30 @@ export function ListHeader({ preset, project, view, layout, onLayout }: ListHead
     icon: LAYOUT_ICONS[option.value],
   }));
 
+  const layoutSwitch = (
+    <>
+      <SegmentedControl label={t('items.screen.layout')} size="sm" value={layout} onValueChange={onLayout} options={options} className="max-sm:hidden" />
+      <SegmentedControl label={t('items.screen.layout')} size="sm" iconOnly value={layout} onValueChange={onLayout} options={options} className="sm:hidden" />
+    </>
+  );
+
+  // a project: the header every part of it shares (WEBU-13), the project itself as the h1
+  if (project) {
+    return (
+      <ProjectHeader
+        project={project}
+        section="items"
+        heading="project"
+        after={<FavoriteToggle kind="project" id={project.id} name={project.name} />}
+        actions={layoutSwitch}
+      />
+    );
+  }
+
   return (
     <>
       <header className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
         <div className="flex min-w-0 items-center gap-2">
-          {project && (
-            <>
-              <ProjectBadge project={project} />
-              <h1 className={TITLE}>{project.name}</h1>
-              <ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
-              <span className="shrink-0 text-ui font-medium text-muted">{t('items.screen.items')}</span>
-              <FavoriteToggle kind="project" id={project.id} name={project.name} />
-            </>
-          )}
           {view && (
             <>
               <Link
@@ -74,13 +84,9 @@ export function ListHeader({ preset, project, view, layout, onLayout }: ListHead
           )}
           {isMyPreset(preset) && <h1 className={TITLE}>{t('items.my.title')}</h1>}
         </div>
-        <div className="ml-auto">
-          <SegmentedControl label={t('items.screen.layout')} size="sm" value={layout} onValueChange={onLayout} options={options} className="max-sm:hidden" />
-          <SegmentedControl label={t('items.screen.layout')} size="sm" iconOnly value={layout} onValueChange={onLayout} options={options} className="sm:hidden" />
-        </div>
+        <div className="ml-auto">{layoutSwitch}</div>
       </header>
       {isMyPreset(preset) && <MyTabs preset={preset} />}
-      {project && <ProjectSections project={project} current="items" />}
     </>
   );
 }

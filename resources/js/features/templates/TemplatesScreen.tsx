@@ -12,15 +12,14 @@
  */
 
 import { Link, router, usePage } from '@inertiajs/react';
-import { ChevronRight, FileQuestionMark } from 'lucide-react';
+import { FileQuestionMark } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { ApiError } from '@/api/client';
 import { buttonClass } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
-import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
-import { ProjectSections } from '@/features/projects/ProjectSections';
+import { ProjectHeader } from '@/features/projects/ProjectHeader';
 import { useProject } from '@/hooks/projects';
 import { useTemplates } from '@/hooks/templates';
 import { t } from '@/lib/i18n';
@@ -89,30 +88,15 @@ function Templates({ project, templateId }: { project: Project; templateId: stri
   const heading = useRef<HTMLHeadingElement>(null);
   useDocumentTitle(t('templates.tab', { identifier: project.identifier }));
 
+  // below the list (a template) the part is text: the editor has its own h1, the tab "Vorlagen" leads back
   const header = (
-    <>
-      <header className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <ProjectBadge project={project} />
-          <Link
-            href={paths.project(project.identifier)}
-            className="inline-flex min-h-11 min-w-0 items-center text-ui font-medium text-muted no-underline hover:text-ink hover:underline md:min-h-0"
-          >
-            <span className="truncate">{project.name}</span>
-          </Link>
-          <ChevronRight className="size-3.5 shrink-0 text-faint" aria-hidden="true" />
-          {templateId !== null ? (
-            // the way back to the list is the tab "Vorlagen" right below (ProjectSections): one link, not two
-            <span className="shrink-0 font-display text-lg font-bold tracking-title text-ink">{t('templates.title')}</span>
-          ) : (
-            <h1 ref={heading} data-screen-heading="" tabIndex={-1} className="shrink-0 scroll-mt-20 font-display text-lg font-bold tracking-title text-ink">
-              {t('templates.title')}
-            </h1>
-          )}
-        </div>
-      </header>
-      <ProjectSections project={project} current="templates" below={templateId !== null} />
-    </>
+    <ProjectHeader
+      project={project}
+      section="templates"
+      heading={templateId !== null ? 'none' : 'part'}
+      below={templateId !== null}
+      headingRef={heading}
+    />
   );
 
   if (templateId === null) return <TemplateList project={project} header={header} heading={heading} rights={rights} />;
