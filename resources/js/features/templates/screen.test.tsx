@@ -328,6 +328,23 @@ describe('the screen', () => {
 });
 
 describe('one template', () => {
+  it('outlines only the content below the real header while the templates load (no second header)', async () => {
+    renderTemplates({ templateId: 'tpl_app_report' });
+    // the answer of the templates is held: they load as long as the test looks
+    const answered = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes('/projects/p_app/templates') ? new Promise<Response>(() => {}) : answered(input, init)) as typeof fetch;
+    try {
+      // the project is there, its header stands; below it the templates load
+      expect(await screen.findByRole('navigation', { name: /^Bereiche von / })).toBeTruthy();
+      expect(screen.getByText('Vorlagen werden geladen …')).toBeTruthy();
+      expect(document.querySelectorAll('header')).toHaveLength(1);
+      expect(document.querySelector('[data-project-header-skeleton]')).toBeNull();
+    } finally {
+      globalThis.fetch = answered;
+    }
+  });
+
   it('shows its name with a link back to the list, and the log of its runs', async () => {
     runs = [
       makeTemplateRun({ id: 'tr_2', scheduled_for: null, ran_at: '2026-10-20T12:30:00.000Z', work_item_id: null, status: 'failed', error: 'Pflicht-Property Umgebung fehlt', triggered_by: 'u_ida' }),

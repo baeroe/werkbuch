@@ -16,6 +16,7 @@ import { FileQuestionMark } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { ApiError } from '@/api/client';
 import { buttonClass } from '@/components/ui/Button';
+import { cx } from '@/components/ui/cx';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
@@ -37,11 +38,12 @@ export interface TemplatesScreenProps {
   templateId: string | null;
 }
 
-function ScreenSkeleton() {
+/** The screen in outline; without the header (`header={false}`) below the real one, while a template loads. */
+function ScreenSkeleton({ header = true }: { header?: boolean }) {
   return (
     <SkeletonGroup label={t('templates.loading')}>
-      <ProjectHeaderSkeleton />
-      <div className="mt-4 flex max-w-5xl flex-col gap-3">
+      {header && <ProjectHeaderSkeleton />}
+      <div className={cx('flex max-w-5xl flex-col gap-3', header && 'mt-4')}>
         <Skeleton className="h-14 w-full rounded-ctl" />
         <Skeleton className="h-14 w-full rounded-ctl" />
       </div>
@@ -117,7 +119,8 @@ function Templates({ project, templateId }: { project: Project; templateId: stri
 function TemplateDetail({ project, templateId, rights }: { project: Project; templateId: string; rights: TemplateRights }) {
   const templates = useTemplates(project.id);
   if (templateId === NEW_TEMPLATE) return <TemplateEditor key={NEW_TEMPLATE} project={project} template={null} denied={rights.denied} ready={rights.ready} />;
-  if (templates.isPending) return <ScreenSkeleton />;
+  // the header stands above already: the outline of the content only
+  if (templates.isPending) return <ScreenSkeleton header={false} />;
   if (templates.isError && !templates.data) {
     return (
       <ErrorState
