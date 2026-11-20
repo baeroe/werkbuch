@@ -41,7 +41,7 @@ test('creates a project with the keyboard from the sidebar', async ({ page }) =>
 });
 
 test('reaches the wiki and the templates of a project without a star, with the keyboard', async ({ page }) => {
-  const { name, identifier } = await createProject(page, 'W');
+  const { name, identifier } = await createProject(page, 'K');
   await page.goto('/projects');
 
   // the card leads to the wiki of a project nobody starred
