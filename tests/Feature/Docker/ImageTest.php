@@ -7,12 +7,12 @@ use Illuminate\Filesystem\Filesystem;
 use Symfony\Component\Process\Process;
 use Tests\Support\RepoFiles;
 
-// what serversideup v5.1.1 (php 8.4.27-fpm-nginx-trixie) brings without install-php-extensions (`php -m` of the base)
+// what serversideup v5.1.5 (php 8.4.28-fpm-nginx-trixie) brings without install-php-extensions (`php -m` of the base)
 $baseExtensions = ['opcache', 'pcntl', 'pdo_mysql', 'pdo_pgsql', 'redis', 'zip'];
 
 $baseImages = [
     'node:24.22.0-trixie-slim@sha256:a6155384446670e9719bdc4fd0ebe4d4b29fb32a8d6aa523da3547a6cfbcf22c',
-    'serversideup/php:8.4.27-fpm-nginx-trixie-v5.1.1@sha256:68d1265af8d7ee11bc2f5636c3175296e5a40dd5180d75710d49877d454ee51f',
+    'serversideup/php:8.4.28-fpm-nginx-trixie-v5.1.5@sha256:c98282869232f27b765324f6b7d58daee3552f63df13dfaa7074c66e58930e6e',
 ];
 
 /** The instructions of the Dockerfile, continuation lines joined and comments dropped, optionally of one stage only. */
@@ -365,6 +365,15 @@ it('passes /app/ on to Reverb, resolved at request time, and never Reverb\'s HTT
         expect(RepoFiles::text($file))->not->toContain('proxy_pass http://reverb');
         expect(RepoFiles::text($file))->not->toMatch('#^\s*location\b[^{]*/apps#m');
     }
+});
+
+it('answers every /index.php/<rest> with 404 before the base\'s open redirect', function () {
+    // the base sends /index.php/%5Cevil.example to "Location: /\evil.example" (GHSA-3634-2fr7-xpw4); its regex location
+    // comes first, so only a prefix location with ^~ wins over it, and nothing else may answer there
+    $server = RepoFiles::text('docker/nginx/server-opts.d/werkbuch.conf');
+
+    expect($server)->toMatch('#^location \^~ /index\.php/ \{\n\s+return 404;\n\}#m');
+    expect($server)->not->toMatch('#^\s*location\s+~\*?\s+[^{]*index#m');
 });
 
 it('leaves HSTS to the TLS proxy', function () use ($instructions, $nginxFiles) {

@@ -491,6 +491,14 @@ export async function run(env, log = (line) => console.log(line)) {
   check(up.headers.get('x-content-type-options') === 'nosniff', `/up X-Content-Type-Options is ${up.headers.get('x-content-type-options')}`);
   ok('headers');
 
+  // (o2) no open redirect over /index.php/<rest> (GHSA-3634-2fr7-xpw4): the base answered "301 /\evil.example"
+  for (const path of ['/index.php/%5Cevil.example', '/index.php//evil.example', '/index.php/%09/evil.example', '/index.php/projects']) {
+    const answer = await session.request('GET', path, { headers: { Accept: 'text/html' } });
+    check(answer.status === 404, `GET ${path}: status ${answer.status}, expected 404`);
+    check(!answer.headers.has('location'), `GET ${path}: Location ${answer.headers.get('location')}`);
+  }
+  ok('no open redirect');
+
   log('smoke: ok');
 }
 
