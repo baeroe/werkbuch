@@ -9,7 +9,7 @@ use App\Webhooks\WebhookConsumer;
 
 return [
 
-    'version' => '0.3.0',
+    'version' => '0.3.1',
 
     // first admin, created by the install command when no user exists yet
     'admin' => [

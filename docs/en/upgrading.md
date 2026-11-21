@@ -35,6 +35,12 @@ All versions and their changes: https://github.com/baeroe/werkbuch/releases
 
 <!-- absolute links only: each section becomes the notes of its GitHub release -->
 
+### 0.3.1
+
+- **Projects:** items, wiki, templates and settings of a project share one header in the same place: the project badge, the project and the part, the tabs below it. The settings of a project no longer stand centred and narrower; their header and tabs span the width like the other parts, only the sections and the form keep their width.
+- The compose files did not change: update as described in [Upgrading](https://werkbuch.dev/en/upgrading).
+- Image `baeroe/werkbuch:0.3.1` for `linux/amd64` and `linux/arm64`.
+
 ### 0.3.0
 
 - **Projects:** the name of a starred project in the sidebar opens its items, the arrow beside it unfolds its parts. The settings of a project are reachable without the sidebar: a fourth tab **Settings** below the header of its items, wiki, templates and settings, a link on every project card, and **Open project settings …** in the command palette.

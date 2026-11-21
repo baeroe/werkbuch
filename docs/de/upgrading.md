@@ -35,6 +35,12 @@ Alle Versionen und ihre Änderungen: https://github.com/baeroe/werkbuch/releases
 
 <!-- nur absolute Links: jeder Abschnitt der englischen Fassung wird zu den Notizen seines GitHub-Releases -->
 
+### 0.3.1
+
+- **Projekte:** Items, Wiki, Vorlagen und Einstellungen eines Projekts haben einen gemeinsamen Kopf an derselben Stelle: das Zeichen des Projekts, das Projekt und der Bereich, darunter die Reiter. Die Einstellungen eines Projekts stehen nicht mehr zentriert und schmaler; Kopf und Reiter gehen über die ganze Breite wie in den anderen Bereichen, nur Abschnitte und Formular behalten ihre Breite.
+- Die Compose-Dateien haben sich nicht geändert: wie unter [Aktualisieren](https://werkbuch.dev/de/upgrading) beschrieben aktualisieren.
+- Image `baeroe/werkbuch:0.3.1` für `linux/amd64` und `linux/arm64`.
+
 ### 0.3.0
 
 - **Projekte:** Der Name eines Projekts mit Stern in der Seitenleiste öffnet seine Items, der Pfeil daneben klappt seine Bereiche auf. Die Einstellungen eines Projekts sind ohne Seitenleiste erreichbar: ein vierter Reiter **Einstellungen** unter dem Kopf von Items, Wiki, Vorlagen und den Einstellungen, ein Link auf jeder Projektkarte und **Projekteinstellungen öffnen …** in der Befehlspalette.
