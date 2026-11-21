@@ -7,12 +7,12 @@ use Illuminate\Filesystem\Filesystem;
 use Symfony\Component\Process\Process;
 use Tests\Support\RepoFiles;
 
-// what serversideup v5.0.4 (php 8.4.27-fpm-nginx-trixie) brings without install-php-extensions (`php -m` of the base)
+// what serversideup v5.1.1 (php 8.4.27-fpm-nginx-trixie) brings without install-php-extensions (`php -m` of the base)
 $baseExtensions = ['opcache', 'pcntl', 'pdo_mysql', 'pdo_pgsql', 'redis', 'zip'];
 
 $baseImages = [
     'node:24.22.0-trixie-slim@sha256:a6155384446670e9719bdc4fd0ebe4d4b29fb32a8d6aa523da3547a6cfbcf22c',
-    'serversideup/php:8.4.27-fpm-nginx-trixie-v5.0.4@sha256:c91d4ff3cb30582078050735b42e873a196d60a406a68cff14bda79e3b5fff56',
+    'serversideup/php:8.4.27-fpm-nginx-trixie-v5.1.1@sha256:68d1265af8d7ee11bc2f5636c3175296e5a40dd5180d75710d49877d454ee51f',
 ];
 
 /** The instructions of the Dockerfile, continuation lines joined and comments dropped, optionally of one stage only. */

@@ -23,10 +23,11 @@ COPY resources ./resources
 RUN pnpm build
 
 # ---------------------------------------------------------------------------------------------------------------------
-# app: PHP-FPM + nginx (serversideup), runs as www-data (UID 33) on port 8080. v5.0.4 closes two known holes of v5.0.2
-# (session upload progress, libbrotli1) and changes nothing else (A414).
+# app: PHP-FPM + nginx (serversideup), runs as www-data (UID 33) on port 8080. v5.1.1 compiles PHP itself (same
+# docker-library Dockerfiles and configure options as the official images) and ships install-php-extensions 2.12.6;
+# files, extensions, nginx, entrypoint scripts and healthchecks of fpm-nginx are those of v5.0.4 (A414, WEBU-2).
 # ---------------------------------------------------------------------------------------------------------------------
-FROM serversideup/php:8.4.27-fpm-nginx-trixie-v5.0.4@sha256:c91d4ff3cb30582078050735b42e873a196d60a406a68cff14bda79e3b5fff56 AS app
+FROM serversideup/php:8.4.27-fpm-nginx-trixie-v5.1.1@sha256:68d1265af8d7ee11bc2f5636c3175296e5a40dd5180d75710d49877d454ee51f AS app
 
 LABEL org.opencontainers.image.title="werkbuch" \
       org.opencontainers.image.description="Open, self-hosted project management: work items with your own types and workflows, a wiki per project, views, templates, automations, REST, MCP and webhooks." \

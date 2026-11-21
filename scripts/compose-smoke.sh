@@ -68,7 +68,8 @@ dc up -d --wait --wait-timeout 300
 smoke full
 
 # 2. inside the containers: never root, the code read-only, only storage/app writable, the hardening of the ini and
-#    the patched libbrotli (v5.0.4), glibc
+#    the patched libbrotli (Debian trixie's 1.1.0-2+deb13u1; v5.0.4 installed it itself, v5.1.1 builds on current
+#    trixie packages), glibc
 # shellcheck disable=SC2016 # evaluated by sh in the container
 dc exec -T werkbuch sh -c 'test "$(id -u)" != 0 && test ! -w /var/www && test ! -w /var/www/html && test ! -w app && test ! -w vendor && test -w storage/app && test ! -w "$PHP_INI_DIR/conf.d/zzz-serversideup-docker-php-debug.ini" && php -r "exit(ini_get(\"zend.exception_ignore_args\") === \"1\" ? 0 : 1);" && php -r "exit(in_array(ini_get(\"session.upload_progress.enabled\"), [\"\", \"0\"], true) ? 0 : 1);" && test "$(dpkg-query -W -f="\${Version}" libbrotli1)" = 1.1.0-2+deb13u1 && getconf GNU_LIBC_VERSION'
 for service in queue reverb; do
