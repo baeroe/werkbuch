@@ -243,6 +243,31 @@ test('pastes an image into a comment and sends it with mod+enter', async ({ page
   }
 });
 
+/**
+ * The widths of its paragraph (from its own down to 120 px) at which the glyph of a reference or a file chip stands on
+ * another line than the first character of its text, measured on the glyph and on that character alone.
+ */
+async function glyphApart(chip: Locator): Promise<number[]> {
+  return chip.evaluate((element) => {
+    const block = element.closest('p') as HTMLElement;
+    const glyph = element.querySelector('svg')!;
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, { acceptNode: (node) => (node.textContent!.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP) });
+    const text = walker.nextNode()!;
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, 1);
+    const apart: number[] = [];
+    for (let width = Math.floor(block.getBoundingClientRect().width); width >= 120; width -= 1) {
+      block.style.width = `${width}px`;
+      const one = glyph.getBoundingClientRect();
+      const two = range.getClientRects()[0]!;
+      if (!(two.top < one.bottom && one.top < two.bottom)) apart.push(width);
+    }
+    block.style.width = '';
+    return apart;
+  });
+}
+
 test('wraps a long page reference and a long file name inside the card (WEBU-14)', async ({ page }) => {
   const { id, identifier } = await createE2eProject(page, name('wrap'), { types: ['Task'] });
   try {
@@ -270,9 +295,9 @@ test('wraps a long page reference and a long file name inside the card (WEBU-14)
       });
       expect(outside).toBe(false);
     }
-    // the glyph stays on the line of the first word, never alone at the end of one
-    for (const glued of [reference.locator('.rt-glued'), card.locator('.rt-file .rt-glued')]) {
-      expect(await glued.evaluate((element) => element.getClientRects().length)).toBe(1);
+    // the glyph stays on the line of the first word, never alone at the end of one: at every width of the paragraph
+    for (const chip of [reference, card.locator('.rt-file a')]) {
+      expect(await glyphApart(chip)).toEqual([]);
     }
     if (isPhone(page)) {
       // at 390 px the title takes more than one line, the period stays after it

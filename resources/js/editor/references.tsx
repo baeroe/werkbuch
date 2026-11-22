@@ -144,7 +144,7 @@ function Shown({
   wraps?: boolean;
   children: ReactNode;
 }) {
-  const className = wraps ? 'rt-ref rt-ref-wraps' : 'rt-ref';
+  const className = wraps ? 'rt-ref rt-ref-flow' : 'rt-ref';
   return editable ? (
     <span className={className}>{children}</span>
   ) : (

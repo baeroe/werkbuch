@@ -300,7 +300,7 @@
 }
 /* a page title wraps like text (WEBU-14): background, corners and underline repeat on every line, the glyph stays
    with the first word (`Glued`); a key stays in one piece */
-.rt .rt-ref-wraps {
+.rt .rt-ref-flow {
   display: inline;
   white-space: normal;
   -webkit-box-decoration-break: clone;
@@ -312,14 +312,13 @@
 .rt .rt-glued > :first-child {
   margin-inline-end: 0.25rem;
 }
-.rt .rt-ref-wraps svg {
+.rt .rt-ref-flow svg {
   display: inline;
   vertical-align: -0.0625rem;
 }
 /* a node view sits in Tiptap's own span, which takes the class of the selected node (WEBU-14: a selected file chip
-   showed no frame); a mention is no node view and takes it itself */
-.rt .ProseMirror-selectednode:is(.rt-ref-wrap, .rt-mention, .rt-file),
-.rt .ProseMirror-selectednode > :is(.rt-ref-wrap, .rt-file),
+   showed no frame); mentions and references are `selectable: false` and never take it */
+.rt .ProseMirror-selectednode > .rt-file,
 .rt .rt-image.ProseMirror-selectednode img {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
