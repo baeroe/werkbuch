@@ -3,6 +3,8 @@ import { expect, test } from '../fixtures';
 import { createE2eProject, createItem, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 import { plus, range, shown, stateId, today, typeId } from '../timelineHelpers';
 
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // The timeline of a project with the keyboard only, signed in as the e2e person (playwright.config.ts), in English.
 // Each test works in a project of its own (`E2E …`, removed after it) with an epic, and its children, over the API.
 
@@ -32,10 +34,12 @@ test('moves an epic by a week with shift+right at month zoom', async ({ page }) 
     await expect(status(page)).toHaveText(tr('en', 'items.timeline.saved', { key: epic.key, range: range('2026-10-08', '2026-11-22') }));
     await expect(row(page, epic.key)).toBeFocused();
 
-    // the item's page has the due date a week later
+    // the item's page has the due date a week later; asked at the due date field, since on 2026-11-22 the fields
+    // "created" and "updated" show the same day
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(new RegExp(`/items/${epic.key}$`));
-    await expect(page.getByRole('complementary', { name: tr('en', 'items.detail.fields.label') }).getByText(shown('2026-11-22'))).toBeVisible();
+    const due = new RegExp(`^${escapeRegExp(`${tr('en', 'items.fields.date.due')}: ${shown('2026-11-22')}`)}`);
+    await expect(page.getByRole('complementary', { name: tr('en', 'items.detail.fields.label') }).getByRole('button', { name: due })).toBeVisible();
   } finally {
     await removeE2eProject(page, project.identifier);
   }
