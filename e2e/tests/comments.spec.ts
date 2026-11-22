@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, arrowTo, createE2eProject, createItem, pasteFile, PEOPLE, pngBytes, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { api, arrowTo, createE2ePage, createE2eProject, createItem, isPhone, pasteFile, PEOPLE, pngBytes, pressMod, removeE2eProject, runId, tabTo, tr, uploadViaApi, variant } from '../helpers';
 
 // Writing comments, signed in as the e2e person (Erik Ende, English). Each test works in a project of its own
 // (`E2E …`, removed in `finally`); its items come over the API.
@@ -238,6 +238,47 @@ test('pastes an image into a comment and sends it with mod+enter', async ({ page
     const card = page.getByRole('article', { name: tr('en', 'items.comments.card', { name: PEOPLE.e2e.name }) });
     await expect(card.getByRole('img', { name: 'fehler.png' })).toBeVisible();
     expect(await storedComments(page, item.id)).toEqual([expect.stringMatching(/^So sieht es aus:\s*!\[fehler\.png\]\(attachment:[0-9a-z]{26}\)\s*$/)]);
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('wraps a long page reference and a long file name inside the card (WEBU-14)', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('wrap'), { types: ['Task'] });
+  try {
+    const item = await createItem(page, { project_id: id, title: 'E2E Lange Verweise' });
+    const title = 'E2E Rahmenvertrag Betrieb & Support: Konditionen, Leistungsscheine und Eskalationsstufen im Regelbetrieb';
+    const wiki = await createE2ePage(page, id, { title });
+    const fileName = 'e2e-rahmenvertrag-betrieb-und-support-konditionen-leistungsscheine-entwurf.txt';
+    const file = await uploadViaApi(page, id, { name: fileName, type: 'text/plain', bytes: Buffer.from('Entwurf\n') });
+    await addComment(page, item.id, `Siehe [Vertrag](page:${wiki.id}). Dazu [${fileName}](attachment:${file.id}).`);
+
+    await page.goto(`/items/${item.key}`);
+    const card = page.locator('[data-comment-card]');
+    const reference = card.locator('a.rt-ref');
+    await expect(reference).toHaveText(title);
+    await expect(card.locator('.rt-file a')).toHaveText(fileName);
+
+    // nothing runs over the card or the page: the title and the name wrap like text
+    const widths = await card.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
+    expect(widths.scroll).toBeLessThanOrEqual(widths.client);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    for (const chip of [reference, card.locator('.rt-file')]) {
+      const outside = await chip.evaluate((element) => {
+        const box = element.closest('[data-comment-card]')!.getBoundingClientRect();
+        return [...element.getClientRects()].some((line) => line.right > box.right + 0.5 || line.left < box.left - 0.5);
+      });
+      expect(outside).toBe(false);
+    }
+    // the glyph stays on the line of the first word, never alone at the end of one
+    for (const glued of [reference.locator('.rt-glued'), card.locator('.rt-file .rt-glued')]) {
+      expect(await glued.evaluate((element) => element.getClientRects().length)).toBe(1);
+    }
+    if (isPhone(page)) {
+      // at 390 px the title takes more than one line, the period stays after it
+      expect(await reference.evaluate((element) => element.getClientRects().length)).toBeGreaterThan(1);
+      expect(await card.locator('.rt-file').evaluate((element) => element.getClientRects().length)).toBeGreaterThan(1);
+    }
   } finally {
     await removeE2eProject(page, identifier);
   }

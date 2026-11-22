@@ -24,6 +24,7 @@ import { attachmentUrl } from '@/api/attachments';
 import { formatSize } from '@/components/fields/format';
 import { useAttachment } from '@/hooks/attachments';
 import { t } from '@/lib/i18n';
+import { Glued } from './glued';
 import { viewImageAt } from './imageViewer';
 
 const attachmentId = {
@@ -195,17 +196,19 @@ function FileView({ node }: ReactNodeViewProps) {
   const attachment = useAttachment(node.attrs.attachmentId as string | null).data;
   const name = String(node.attrs.filename ?? attachment?.filename ?? t('editor.file.unknown'));
   return (
+    // a long name wraps like text, the paperclip stays with its first word (WEBU-14)
     <NodeViewWrapper as="span" className="rt-file">
-      <Paperclip aria-hidden="true" />
       {attachment ? (
         <>
           <a href={attachmentUrl(attachment, { download: true })} download={name}>
-            {name}
+            <Glued glyph={<Paperclip aria-hidden="true" />} text={name} />
           </a>
           <span className="rt-file-size">{formatSize(attachment.size)}</span>
         </>
       ) : (
-        <span>{name}</span>
+        <span>
+          <Glued glyph={<Paperclip aria-hidden="true" />} text={name} />
+        </span>
       )}
     </NodeViewWrapper>
   );

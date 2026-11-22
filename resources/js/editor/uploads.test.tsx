@@ -490,7 +490,9 @@ describe('images and files in a text', () => {
       },
       routes: { 'GET /api/v1/attachments/att_2': () => ({ status: 404, body: { status: 404, reason: 'not_found' } }) },
     });
-    expect((await screen.findByText('Datei')).isConnected).toBe(true);
+    // the name wraps like text, its first letter glued to the paperclip (WEBU-14)
+    await waitFor(() => expect(document.querySelector('.rt-file')?.textContent).toBe('Datei'));
+    expect(document.querySelector('.rt-file .rt-glued svg')).not.toBeNull();
     await waitFor(() => expect(api?.calls).toHaveLength(1));
     expect(screen.queryByRole('link')).toBeNull();
   });
