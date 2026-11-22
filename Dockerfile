@@ -23,10 +23,14 @@ COPY resources ./resources
 RUN pnpm build
 
 # ---------------------------------------------------------------------------------------------------------------------
-# app: PHP-FPM + nginx (serversideup), runs as www-data (UID 33) on port 8080. v5.0.4 closes two known holes of v5.0.2
-# (session upload progress, libbrotli1) and changes nothing else (A414).
+# app: PHP-FPM + nginx (serversideup), runs as www-data (UID 33) on port 8080. v5.1.5 instead of the two-week-old
+# v5.1.1 (A414): PHP 8.4.28 closes 14 holes of php-src (FPM request smuggling, session RCE), v5.1.3 adds
+# "try_files $uri =404" before PHP-FPM and "security.limit_extensions = .php" (GHSA-8wf6-vq49-m6w2), v5.1.4 brings
+# nginx 1.30.7. Since v5.1.0 the base compiles PHP itself (same docker-library Dockerfiles and configure options) and
+# ships install-php-extensions 2.12.6; extensions, entrypoint scripts, healthchecks and security.conf are those of
+# v5.0.4 (WEBU-2).
 # ---------------------------------------------------------------------------------------------------------------------
-FROM serversideup/php:8.4.27-fpm-nginx-trixie-v5.0.4@sha256:c91d4ff3cb30582078050735b42e873a196d60a406a68cff14bda79e3b5fff56 AS app
+FROM serversideup/php:8.4.28-fpm-nginx-trixie-v5.1.5@sha256:c98282869232f27b765324f6b7d58daee3552f63df13dfaa7074c66e58930e6e AS app
 
 LABEL org.opencontainers.image.title="werkbuch" \
       org.opencontainers.image.description="Open, self-hosted project management: work items with your own types and workflows, a wiki per project, views, templates, automations, REST, MCP and webhooks." \
