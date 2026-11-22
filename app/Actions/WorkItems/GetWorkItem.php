@@ -6,6 +6,7 @@ use App\Access\Authorize;
 use App\Exceptions\Problem;
 use App\Models\WorkItem;
 use App\Support\Actor;
+use App\Support\Includes;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -45,7 +46,7 @@ final class GetWorkItem
 
         Authorize::check($actor, 'view', $item);
 
-        $include = self::includes($include);
+        $include = Includes::read($include, self::INCLUDES);
 
         WorkItem::loadForResource($item, $actor->user);
         $item->includes = $include;
@@ -71,31 +72,5 @@ final class GetWorkItem
         }
 
         return $item;
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $include
-     * @return list<string> the names in the order of INCLUDES
-     *
-     * @throws ValidationException
-     */
-    private static function includes(array $include): array
-    {
-        $names = [];
-        foreach ($include as $name) {
-            $name = is_string($name) ? trim($name) : $name;
-            if ($name === '') {
-                continue;
-            }
-            if (! is_string($name) || ! in_array($name, self::INCLUDES, true)) {
-                throw ValidationException::withMessages(['include' => __('field.include.unknown', [
-                    'name' => is_string($name) ? $name : get_debug_type($name),
-                    'allowed' => implode(', ', self::INCLUDES),
-                ])]);
-            }
-            $names[] = $name;
-        }
-
-        return array_values(array_intersect(self::INCLUDES, $names));
     }
 }

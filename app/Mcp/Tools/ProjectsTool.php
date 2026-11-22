@@ -14,7 +14,9 @@ use App\Mcp\Support\McpArguments;
 use App\Mcp\Support\McpResult;
 use App\Mcp\Support\ReadTool;
 use App\Mcp\Support\ToolSchema;
+use App\OpenApi\ProjectDocs;
 use App\Support\Actor;
+use App\Support\Includes;
 use App\Support\References;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
@@ -32,18 +34,20 @@ final class ProjectsTool extends ReadTool
     protected string $title = 'Projects';
 
     protected string $description = 'Reads projects: the ones the account sees, one project, its members and the own favorites. '
-        .'Lists take `filter`, `sort`, `cursor` and `per_page`; a project is named by `project` (ULID, identifier or a former identifier).';
+        .'Lists take `filter`, `sort`, `cursor` and `per_page`; a project is named by `project` (ULID, identifier or a former identifier). '
+        .'`include: ["types"]` names the types a project switched on (name, `is_epic`; new items only with `archived_at: null`); `default_type_id` is the default.';
 
     protected function actions(): array
     {
         $projects = ToolSchema::list(ListProjects::spec());
         $members = ToolSchema::list(ListMembers::spec());
         $favorites = ToolSchema::list(ListFavorites::spec());
+        $include = ProjectDocs::includeParameter();
 
         return [
             new McpAction(
                 name: 'list',
-                summary: 'The projects of the account (`filter.member` only the ones it is a member of; `include` `members`).',
+                summary: 'The projects of the account (`filter.member` only the ones it is a member of; `include` `members`, `types`).',
                 run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::list(ListProjects::run($actor, $args->query([...array_keys($projects), 'include_archived'])), ProjectResource::class),
                 parameters: [
                     ...$projects,
@@ -53,9 +57,9 @@ final class ProjectsTool extends ReadTool
             ),
             new McpAction(
                 name: 'get',
-                summary: 'One project.',
-                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::resource(new ProjectResource(GetProject::run($actor, References::project($args->reference('project'))))),
-                parameters: ['project' => ToolSchema::reference('project')],
+                summary: 'One project; `include` `types` names its types.',
+                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::resource(new ProjectResource(GetProject::run($actor, References::project($args->reference('project')), Includes::fromQuery($args->query(['include'])['include'] ?? [])))),
+                parameters: ['project' => ToolSchema::reference('project'), 'include' => [...$include['schema'], 'description' => $include['description']]],
                 required: ['project'],
                 twin: 'GET projects/{project}',
             ),

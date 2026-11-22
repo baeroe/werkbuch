@@ -17,6 +17,7 @@ use App\Http\Resources\ProjectResource;
 use App\Models\Project;
 use App\OpenApi\CatalogSchemas;
 use App\Support\Actor;
+use App\Support\Includes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -50,11 +51,12 @@ final class ProjectsController extends Controller
     /**
      * Read a project.
      *
-     * By ULID, identifier or a former identifier; one the account does not see is 404.
+     * By ULID, identifier or a former identifier; one the account does not see is 404. `include=types` embeds the types
+     * it switched on.
      */
     public function show(Request $request, Project $project): ProjectResource
     {
-        return new ProjectResource(GetProject::run(Actor::fromRequest($request), $project));
+        return new ProjectResource(GetProject::run(Actor::fromRequest($request), $project, Includes::fromQuery($request->query('include'))));
     }
 
     /**

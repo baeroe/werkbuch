@@ -16,6 +16,7 @@ use App\OpenApi\ListParameters;
 use App\OpenApi\PathParameters;
 use App\OpenApi\ProblemExceptionResponses;
 use App\OpenApi\ProblemResponses;
+use App\OpenApi\ProjectDocs;
 use App\OpenApi\RelationEntrySchema;
 use Dedoc\Scramble\Scramble;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -103,7 +104,7 @@ final class ApiServiceProvider extends ServiceProvider
             ->routes(fn (Route $route) => str_starts_with($route->uri(), 'api/v1/') && ! str_starts_with($route->uri(), 'api/v1/_t/'))
             // after Scramble's own operation extensions: how a route is called, what its placeholders take, the query of
             // a list (`#[ListOf]`) or of the item queries, its errors
-            ->withOperationTransformers([Abilities::class, PathParameters::class, ListParameters::class, ListFlags::class, ItemQueryDocs::class, ContentDocs::class, Bodies::class, ProblemResponses::class])
+            ->withOperationTransformers([Abilities::class, PathParameters::class, ListParameters::class, ListFlags::class, ItemQueryDocs::class, ProjectDocs::class, ContentDocs::class, Bodies::class, ProblemResponses::class])
             ->withDocumentTransformers([Components::class])
             ->expose(
                 // the page loads the document itself (`/api/openapi.json`) and so generates nothing of its own

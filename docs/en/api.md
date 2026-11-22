@@ -116,7 +116,7 @@ Without `sort`, every list keeps its own order (the default in the table). Fixed
 | `GET /bots` | `disabled`, `owner_id` | `name`, `created_at` | creation | – |
 | `GET /invitations` | `org_role` (`admin`, `member`) | `expires_at`, `created_at` | creation | – |
 | `GET /tokens` | `user_id` (the owner, a ULID; without it your own tokens) | `name`, `created_at` | creation | – |
-| `GET /projects` | `visibility` (`public`, `private`), `lead_id`, `workflow_id`, `member` (whether you are a member) | `name`, `identifier`, `created_at` | `name` | `members` |
+| `GET /projects` | `visibility` (`public`, `private`), `lead_id`, `workflow_id`, `member` (whether you are a member) | `name`, `identifier`, `created_at` | `name` | `members`, `types` |
 | `GET /projects/{project}/members` | `type` (`person`, `bot`) | `name` | joining | – |
 | `GET /workflows` | `name` | `name`, `created_at` | catalog order | – |
 | `GET /work-item-types` | `name`, `is_epic`, `archived` | `name`, `created_at` | catalog order | – |
@@ -138,7 +138,7 @@ Without `sort`, every list keeps its own order (the default in the table). Fixed
 | `GET /templates/{template}/runs` | – | – | newest first | – |
 <!-- lists:end -->
 
-`created_at` sorts by the ULID, which grows with creation; "catalog order" is the order in which the entries were created, as the interface shows them. `include=members` adds `members` to every project of the page. The reference lists the values of every filter.
+`created_at` sorts by the ULID, which grows with creation; "catalog order" is the order in which the entries were created, as the interface shows them. `include=members` adds `members` to every project of the page, `include=types` adds `types`: the types the project switched on, in catalog order and as `GET /work-item-types/{workItemType}` gives them (name, `is_epic`, the IDs of the properties they ask for and which of them are required), archived ones that stay switched on included; only a type with `archived_at: null` takes new items, and the keys for `values` come from `GET /properties`. `GET /projects/{project}?include=types` embeds them for one project: before you create an item in a project, that names its types (an epic is the type with `is_epic`), and `default_type_id` is the one an item gets without `type_id`. The reference lists the values of every filter.
 
 ## Work items
 

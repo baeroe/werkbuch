@@ -21,6 +21,7 @@ use App\Mcp\Support\ToolSchema;
 use App\Models\WorkItem;
 use App\OpenApi\ItemQueryDocs;
 use App\Support\Actor;
+use App\Support\Includes;
 use App\Support\References;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
@@ -121,9 +122,7 @@ final class WorkItemsTool extends ReadTool
      */
     private static function includes(McpArguments $args): array
     {
-        $include = $args->query(['include'])['include'] ?? [];
-
-        return is_string($include) ? explode(',', $include) : (array) $include;
+        return Includes::fromQuery($args->query(['include'])['include'] ?? []);
     }
 
     /**

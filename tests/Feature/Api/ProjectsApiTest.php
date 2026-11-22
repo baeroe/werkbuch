@@ -227,6 +227,95 @@ it('keeps an archived type that was switched on, but switches on no archived one
         ->assertUnprocessable()->assertJsonPath('errors.enabled_type_ids', [__('field.enabled_type_ids.archived')]);
 });
 
+it('embeds the switched-on types with include=types as the catalog gives them (A471)', function () use ($typeId) {
+    $admin = User::factory()->admin()->create();
+    [$task, $bug, $epic] = [$typeId('Task'), $typeId('Bug'), $typeId('Epic')];
+    CreateProject::run(actor($admin), ['name' => 'Website', 'identifier' => 'WEB', 'enabled_type_ids' => [$epic, $bug, $task], 'default_type_id' => $task]);
+    // an archived type that stays switched on comes too, with its archived_at
+    WorkItemType::query()->whereKey($bug)->update(['archived_at' => now()]);
+    $this->actingAs($admin);
+
+    $project = $this->getJson('/api/v1/projects/WEB?include=types')->assertOk()->json('data');
+    $catalog = fn (string $id) => $this->getJson("/api/v1/work-item-types/{$id}")->json('data');
+
+    expect(array_column($project['types'], 'id'))->toBe($project['enabled_type_ids'])
+        ->and($project['types'])->toBe(array_map($catalog, $project['enabled_type_ids']))
+        ->and(collect($project['types'])->firstWhere('is_epic', true)['id'])->toBe($epic)
+        ->and(collect($project['types'])->firstWhere('id', $bug)['archived_at'])->not->toBeNull()
+        ->and($project['default_type_id'])->toBe($task);
+
+    // as a list, with blanks and empty names; without include no key
+    expect($this->getJson('/api/v1/projects/WEB?include[]=types')->json('data.types'))->toBe($project['types'])
+        ->and($this->getJson('/api/v1/projects/WEB?include=%20types%20,')->json('data.types'))->toBe($project['types'])
+        ->and($this->getJson('/api/v1/projects/WEB')->assertOk()->json('data'))->not->toHaveKey('types');
+});
+
+it('refuses an include a single project does not know', function (string $query, string $name) {
+    $admin = User::factory()->admin()->create();
+    CreateProject::run(actor($admin), ['name' => 'Website', 'identifier' => 'WEB']);
+
+    $this->actingAs($admin)->getJson("/api/v1/projects/WEB?{$query}")->assertUnprocessable()
+        ->assertJsonPath('errors.include', [__('field.include.unknown', ['name' => $name, 'allowed' => 'types'])]);
+})->with([
+    'members' => ['include=members', 'members'],
+    'upper case' => ['include=Types', 'Types'],
+    'a list in a list' => ['include[0][]=types', 'array'],
+]);
+
+it('answers 404 before the include for a project the account does not see', function () {
+    Project::factory()->identifier('SEC')->private()->create();
+
+    $this->actingAs(User::factory()->create())->getJson('/api/v1/projects/SEC?include=nope')->assertNotFound();
+});
+
+it('asks as often for one project with include=types whatever the number of its types', function () use ($typeId) {
+    $admin = User::factory()->admin()->create();
+    CreateProject::run(actor($admin), ['name' => 'Website', 'identifier' => 'WEB', 'enabled_type_ids' => [$typeId('Task')]]);
+    $this->actingAs($admin);
+    $count = function () {
+        Visibility::forget();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson('/api/v1/projects/WEB?include=types')->assertOk();
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $queries;
+    };
+    $one = $count();
+    $more = WorkItemType::factory()->count(5)->create();
+    $this->patchJson('/api/v1/projects/WEB', ['enabled_type_ids' => [$typeId('Task'), $typeId('Bug'), ...$more->modelKeys()]])->assertOk();
+
+    expect($this->getJson('/api/v1/projects/WEB?include=types')->json('data.types'))->toHaveCount(7)
+        ->and($count())->toBe($one);
+});
+
+it('embeds the types of every project of a page with as many queries for 5 as for 50 projects', function () {
+    $this->actingAs(User::factory()->create());
+    Project::factory()->identifier('PUB')->public()->create();
+    $count = function () {
+        Visibility::forget();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson('/api/v1/projects?include=types')->assertOk();
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $queries;
+    };
+
+    $page = $this->getJson('/api/v1/projects?include=types')->assertOk()->json('data.0');
+    expect(array_column($page['types'], 'id'))->toBe($page['enabled_type_ids'])
+        ->and($page['types'][0])->toHaveKeys(['name', 'is_epic', 'icon', 'description', 'properties'])
+        ->and($this->getJson('/api/v1/projects?include=members')->json('data.0'))->not->toHaveKey('types');
+
+    Project::factory()->count(4)->public()->create();
+    $five = $count();
+    Project::factory()->count(45)->public()->create();
+
+    expect($count())->toBe($five);
+});
+
 it('passes the own workflow back without complaint and refuses another one in a patch', function () {
     $admin = User::factory()->admin()->create();
     $web = CreateProject::run(actor($admin), ['name' => 'Website', 'identifier' => 'WEB']);
