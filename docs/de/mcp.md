@@ -180,12 +180,12 @@ Konten: Personen und Bots, offene Einladungen, API-Tokens (die eigenen; Org-Admi
 
 ### `projects`
 
-Die Projekte, die das Konto sieht, ein Projekt, seine Mitglieder und die eigenen Favoriten. (Braucht `read`.)
+Die Projekte, die das Konto sieht, ein Projekt, seine Mitglieder und die eigenen Favoriten. `get` mit `include: ["types"]` nennt neben `default_type_id` die Typen, die ein Projekt anbietet (Name, `is_epic`, die Properties, nach denen sie fragen): dort findet ein Agent die `type_id` eines neuen Items, auch in einem Projekt ohne Items. (Braucht `read`.)
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
-| `list` | Die Projekte des Kontos (`filter.member` nur die, in denen es Mitglied ist; `include` `members`). | – | `GET /projects` |
-| `get` | Ein Projekt. | `project` | `GET /projects/{project}` |
+| `list` | Die Projekte des Kontos (`filter.member` nur die, in denen es Mitglied ist; `include` `members`, `types`). | – | `GET /projects` |
+| `get` | Ein Projekt; `include` `types` nennt die Typen, die es anbietet. | `project` | `GET /projects/{project}` |
 | `members` | Die Mitglieder eines Projekts, Personen und Bots mit ihrer Rolle. | `project` | `GET /projects/{project}/members` |
 | `favorites` | Die eigenen Favoriten, Projekte und Views in einer Reihenfolge. | – | `GET /favorites` |
 

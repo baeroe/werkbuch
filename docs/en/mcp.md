@@ -180,12 +180,12 @@ Changes accounts; most actions are for org admins. A new e-mail address of a per
 
 ### `projects`
 
-The projects the account sees, one project, its members and your favorites. (Needs `read`.)
+The projects the account sees, one project, its members and your favorites. `get` with `include: ["types"]` names the types a project offers (name, `is_epic`, the properties they ask for) beside `default_type_id`: that is where an agent finds the `type_id` of a new item, also in a project without items. (Needs `read`.)
 
 | Action | Purpose | Required | REST twin |
 |---|---|---|---|
-| `list` | The projects of the account (`filter.member` only the ones it is a member of; `include` `members`). | – | `GET /projects` |
-| `get` | One project. | `project` | `GET /projects/{project}` |
+| `list` | The projects of the account (`filter.member` only the ones it is a member of; `include` `members`, `types`). | – | `GET /projects` |
+| `get` | One project; `include` `types` names the types it offers. | `project` | `GET /projects/{project}` |
 | `members` | The members of a project, people and bots with their role. | `project` | `GET /projects/{project}/members` |
 | `favorites` | The own favorites, projects and views in one order. | – | `GET /favorites` |
 

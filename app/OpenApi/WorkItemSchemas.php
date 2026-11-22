@@ -117,7 +117,7 @@ final class WorkItemSchemas
                 .'Every field error comes in one 422; a required property without a value is 422 at `values.<key>`.',
             [
                 'project_id' => ['type' => 'string', 'description' => 'The project: its ULID, identifier or a former identifier.'],
-                'type_id' => self::ulid('The type: switched on in the project and active. By default the default type of the project.', true),
+                'type_id' => self::ulid('The type: switched on in the project and active (the project names them with `include=types`, `projects:get` over MCP). By default the default type of the project.', true),
                 'title' => ['type' => 'string', 'minLength' => 1, 'maxLength' => ItemInput::TITLE_MAX, 'description' => 'Trimmed.'],
                 ...self::texts(),
                 'priority' => self::priority('By default `none`.', true),
@@ -192,7 +192,7 @@ final class WorkItemSchemas
             'Changes the type. Values of properties the new type does not have go; the required ones of the new type come in `values`. '
                 .'An item with children stays an epic, an item with a parent cannot become one (422 at `type_id`).',
             [
-                'type_id' => self::ulid('The new type: switched on in the project and active.'),
+                'type_id' => self::ulid('The new type: switched on in the project and active (the project names them with `include=types`).'),
                 'values' => self::values('Values for the properties of the new type.', true),
             ],
             ['type_id'],

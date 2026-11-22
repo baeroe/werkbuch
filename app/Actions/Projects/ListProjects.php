@@ -22,7 +22,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * The projects the account sees (App\Access\Visibility), by name, then ULID (a unique order for the cursor, P12).
  * Archived projects leave the navigation (spec 4.4), so they only come with `include_archived`. `include=members` loads
- * the memberships of the page with one query (K13).
+ * the memberships of the page with one query (K13), `include=types` the switched-on types of the page whole with their
+ * properties (two queries, A471).
  */
 final class ListProjects
 {
@@ -47,7 +48,7 @@ final class ListProjects
             ],
             sorts: ['name' => 'projects.name', 'identifier' => 'projects.identifier', 'created_at' => 'projects.id'],
             default: ['name'],
-            includes: ['members'],
+            includes: ['members', 'types'],
             flags: ['include_archived' => 'Archived projects too (`1`); without it only the active ones.'],
         );
     }
@@ -71,10 +72,19 @@ final class ListProjects
         $query = Project::query()->with(['media', 'types:work_item_types.id'])->visibleTo($actor->user)
             ->unless((bool) ($valid['include_archived'] ?? false), fn ($query) => $query->whereNull('projects.archived_at'));
         [$query, $signature] = ListQuery::apply($query, $input, self::spec($actor->user));
+        $include = explode(',', (string) ($input['include'] ?? ''));
+        $types = in_array('types', $include, true);
+        if ($types) {
+            // whole types with their properties instead of the ULIDs alone (the include of the query builder loads `types`)
+            $query->with(['types', 'types.typeProperties']);
+        }
 
         $result = ListResult::of($query, PageArgs::from($input), $signature);
+        foreach ($result->page->items() as $project) {
+            $project->embeds_types = $types;
+        }
         // the roles of all members of the page in one query, only for `include=members` (the resource asks nothing per project)
-        if (in_array('members', explode(',', (string) ($input['include'] ?? '')), true)) {
+        if (in_array('members', $include, true)) {
             Visibility::loadMembers($result->page->items());
         }
 

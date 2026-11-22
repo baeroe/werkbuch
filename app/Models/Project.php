@@ -53,6 +53,12 @@ final class Project extends Model implements HasMedia
     public bool $resolved_by_former_identifier = false;
 
     /**
+     * Set by GetProject and ListProjects for `include=types`, never stored: ProjectResource embeds the switched-on types
+     * (loaded whole with their properties). Without it the types are loaded with their ULIDs only, for `enabled_type_ids`.
+     */
+    public bool $embeds_types = false;
+
+    /**
      * The project a reference names: its ULID, its identifier or a former identifier, in any case. It does not check
      * who may see the project.
      */

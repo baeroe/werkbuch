@@ -80,6 +80,7 @@ final class WerkbuchServer extends Server
         .<<<'MARKDOWN'
         - Rich text goes in and out as Markdown, see `werkbuch://reference/markdown`. Filters are JSON, see `werkbuch://reference/filters`; the value of a property depends on its field type, see `werkbuch://reference/field-types`.
         - Files are uploaded with the signed URL of `get-upload-url`, never through a tool argument.
+        - Before you create an item, read its project with `projects` and `include: ["types"]`: it names the types the project offers (name, `is_epic` for an epic) and `default_type_id`; the tool `organization` lists every type of the organization.
         MARKDOWN;
 
     /** Tools and resources, no prompts (P4). */

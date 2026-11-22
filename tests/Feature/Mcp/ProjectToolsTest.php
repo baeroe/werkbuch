@@ -97,6 +97,39 @@ it('lists the projects of the account with a filter and the members', function (
     expect(array_column($members['structuredContent']['data'], 'user_id'))->toBe([$mara->id]);
 });
 
+it('finds the epic of a project without items through include types, without guessing (WEBU-16)', function () {
+    $mara = User::factory()->create();
+    $mcp = McpClient::for($this, apiToken($mara, ['read', 'write', 'mcp']));
+    $created = $mcp->call('manage-projects', ['action' => 'create', 'input' => ['name' => 'Leer', 'identifier' => 'LEER']]);
+    expect($created['isError'])->toBeFalse((string) json_encode($created));
+
+    // the instructions and the description of type_id point the way
+    expect($mcp->discover()['instructions'])->toContain('`projects` and `include: ["types"]`');
+    $create = collect($mcp->tools())->firstWhere('name', 'manage-work-items')['inputSchema']['properties']['input']['anyOf'][0];
+    expect($create['properties']['type_id']['description'])->toContain('`include=types`', '`projects:get`');
+
+    $project = $mcp->call('projects', ['action' => 'get', 'project' => 'LEER', 'include' => ['types']]);
+    expect($project['isError'])->toBeFalse((string) json_encode($project));
+    $types = collect($project['structuredContent']['data']['types']);
+    $epic = $types->firstWhere('is_epic', true);
+
+    expect($types->pluck('id')->all())->toBe($project['structuredContent']['data']['enabled_type_ids'])
+        ->and($epic['name'])->toBe('Epic')
+        ->and($types->firstWhere('id', $project['structuredContent']['data']['default_type_id'])['name'])->toBe('Task');
+
+    $item = $mcp->call('manage-work-items', ['action' => 'create', 'input' => ['project_id' => 'LEER', 'title' => 'Relaunch', 'type_id' => $epic['id']]]);
+    expect($item['isError'])->toBeFalse((string) json_encode($item))
+        ->and($item['structuredContent']['data']['type_id'])->toBe($epic['id']);
+
+    // the list embeds them too; a name the project does not know is the 422 of REST
+    $listed = $mcp->call('projects', ['action' => 'list', 'include' => ['types']]);
+    expect($listed['structuredContent']['data'][0]['types'])->toBe($project['structuredContent']['data']['types']);
+    $unknown = $mcp->call('projects', ['action' => 'get', 'project' => 'LEER', 'include' => ['members']]);
+    expect($unknown['isError'])->toBeTrue()
+        ->and($unknown['structuredContent']['status'])->toBe(422)
+        ->and(array_keys($unknown['structuredContent']['errors']))->toBe(['include']);
+});
+
 it('joins, toggles a favorite and manages the members', function () {
     $admin = User::factory()->create();
     $kira = User::factory()->create();

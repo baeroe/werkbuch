@@ -114,7 +114,7 @@ Ohne `sort` behält jede Liste ihre eigene Ordnung (der Standard in der Tabelle)
 | `GET /bots` | `disabled`, `owner_id` | `name`, `created_at` | Anlegen | – |
 | `GET /invitations` | `org_role` (`admin`, `member`) | `expires_at`, `created_at` | Anlegen | – |
 | `GET /tokens` | `user_id` (der Besitzer, eine ULID; ohne die eigenen Tokens) | `name`, `created_at` | Anlegen | – |
-| `GET /projects` | `visibility` (`public`, `private`), `lead_id`, `workflow_id`, `member` (ob du Mitglied bist) | `name`, `identifier`, `created_at` | `name` | `members` |
+| `GET /projects` | `visibility` (`public`, `private`), `lead_id`, `workflow_id`, `member` (ob du Mitglied bist) | `name`, `identifier`, `created_at` | `name` | `members`, `types` |
 | `GET /projects/{project}/members` | `type` (`person`, `bot`) | `name` | Beitritt | – |
 | `GET /workflows` | `name` | `name`, `created_at` | Katalog-Reihenfolge | – |
 | `GET /work-item-types` | `name`, `is_epic`, `archived` | `name`, `created_at` | Katalog-Reihenfolge | – |
@@ -136,7 +136,7 @@ Ohne `sort` behält jede Liste ihre eigene Ordnung (der Standard in der Tabelle)
 | `GET /templates/{template}/runs` | – | – | neueste zuerst | – |
 <!-- lists:end -->
 
-`created_at` sortiert nach der ULID, die mit dem Anlegen wächst; „Katalog-Reihenfolge“ ist die Reihenfolge, in der die Einträge angelegt wurden, wie die Oberfläche sie zeigt. `include=members` hängt an jedes Projekt der Seite `members`. Die Referenz nennt die Werte jedes Filters.
+`created_at` sortiert nach der ULID, die mit dem Anlegen wächst; „Katalog-Reihenfolge“ ist die Reihenfolge, in der die Einträge angelegt wurden, wie die Oberfläche sie zeigt. `include=members` hängt an jedes Projekt der Seite `members`, `include=types` hängt `types` an: die Typen, die das Projekt eingeschaltet hat, in Katalog-Reihenfolge und so, wie `GET /work-item-types/{workItemType}` sie gibt (Name, `is_epic`, die Properties, nach denen sie fragen), archivierte, die eingeschaltet bleiben, eingeschlossen. `GET /projects/{project}?include=types` bettet sie für ein Projekt ein: Bevor du in einem Projekt ein Item anlegst, nennt das seine Typen (ein Epic ist der Typ mit `is_epic`), und `default_type_id` ist der, den ein Item ohne `type_id` bekommt. Die Referenz nennt die Werte jedes Filters.
 
 ## Work Items
 

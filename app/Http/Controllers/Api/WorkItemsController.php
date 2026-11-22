@@ -27,6 +27,7 @@ use App\Models\WorkItem;
 use App\OpenApi\ItemQueryDocs;
 use App\OpenApi\WorkItemSchemas;
 use App\Support\Actor;
+use App\Support\Includes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -59,9 +60,7 @@ final class WorkItemsController extends Controller
      */
     public function show(Request $request, WorkItem $item): WorkItemResource
     {
-        $include = $request->query('include');
-
-        return new WorkItemResource(GetWorkItem::run(Actor::fromRequest($request), $item, is_string($include) ? explode(',', $include) : (array) $include));
+        return new WorkItemResource(GetWorkItem::run(Actor::fromRequest($request), $item, Includes::fromQuery($request->query('include'))));
     }
 
     /**

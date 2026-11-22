@@ -13,7 +13,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * A project as `Project` of resources/js/types.ts plus `my_role`, the role of the requesting account in it (P13), and
  * `is_member`, whether it is a member, so the interface needs no list of all memberships. `enabled_type_ids` are the
  * switched-on types in catalog order. Lists load the pictures and the types with the projects (`with(['media',
- * 'types:work_item_types.id'])`).
+ * 'types:work_item_types.id'])`). `types` embeds them whole only with `include=types`.
  *
  * @mixin Project
  */
@@ -46,6 +46,8 @@ final class ProjectResource extends JsonResource
             'is_member' => $user instanceof User && Visibility::isMember($user, $project),
             // only with `include=members` (K13)
             'members' => $this->when($project->relationLoaded('members'), fn () => ProjectMemberResource::collection($project->members)),
+            // only with `include=types`: the switched-on types in catalog order, archived ones that stay switched on included
+            'types' => $this->when($project->embeds_types, fn () => WorkItemTypeResource::collection($project->types)),
         ];
     }
 }
