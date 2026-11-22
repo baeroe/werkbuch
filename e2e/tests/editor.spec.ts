@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { api, arrowTo, createE2ePage, createE2eProject, createItem, pasteFile, pngBytes, removeE2eProject, runId, searchToken, tabTo, tr, uploadViaApi, variant, waitForSearch } from '../helpers';
 
@@ -21,6 +21,24 @@ async function editDescription(page: Page, key: string, title: string) {
   const editor = section.getByRole('textbox', { name: tr('en', 'editor.label.description') });
   await tabTo(page, editor, { max: 120 });
   return { section, editor };
+}
+
+/** The outline style of an element: `none` unless something frames it (the selection of an image, WEBU-15). */
+async function outlineOf(element: Locator): Promise<string> {
+  return element.evaluate((node) => getComputedStyle(node).outlineStyle);
+}
+
+/** Whether an element shows the frame of a selection: a solid outline in the colour of the focus ring. */
+async function framed(element: Locator): Promise<boolean> {
+  return element.evaluate((node) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--focus-ring)';
+    node.ownerDocument.body.append(probe);
+    const ring = getComputedStyle(probe).color;
+    probe.remove();
+    const style = getComputedStyle(node);
+    return style.outlineStyle === 'solid' && style.outlineColor === ring;
+  });
 }
 
 /** The Markdown of an item's description as the server holds it. */
@@ -259,8 +277,12 @@ test('shows a pasted image large with Enter and edits its alternative text from 
     await expect(section.getByRole('img', { name: 'lageplan.png' })).toBeVisible();
     await expect(section.getByRole('progressbar')).toHaveCount(0);
 
-    // the arrows select the image as a whole; Enter shows it large, Escape gives the focus back to the text
+    // the arrows select the image as a whole, and it shows so (WEBU-15); Enter shows it large, Escape gives the focus
+    // back to the text
+    const picture = section.getByRole('img', { name: 'lageplan.png' });
+    await expect.poll(() => outlineOf(picture)).toBe('none');
     await page.keyboard.press('ArrowDown');
+    await expect.poll(() => framed(picture)).toBe(true);
     await page.keyboard.press('Enter');
     const viewer = page.getByRole('dialog', { name: 'lageplan.png' });
     await expect(viewer).toBeVisible();
@@ -281,8 +303,102 @@ test('shows a pasted image large with Enter and edits its alternative text from 
     await page.keyboard.type('Lageplan mit Zufahrt');
     await page.keyboard.press('Enter');
     await expect(alt).toHaveCount(0);
-    await expect(section.getByRole('img', { name: 'Lageplan mit Zufahrt' })).toBeVisible();
+    const described = section.getByRole('img', { name: 'Lageplan mit Zufahrt' });
+    await expect(described).toBeVisible();
     await expect.poll(() => storedDescription(page, item.id)).toMatch(/!\[Lageplan mit Zufahrt\]\(attachment:[0-9a-z]{26}\)/);
+    // still selected after the alternative text, the frame goes once the selection moves on
+    await expect.poll(() => framed(described)).toBe(true);
+    await page.keyboard.press('ArrowUp');
+    await expect.poll(() => outlineOf(described)).toBe('none');
+  } finally {
+    await page.goto('/my-items');
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('frames an image selected with a click and lets the frame go with the selection (WEBU-15)', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('frame'), { types: ['Task'] });
+  try {
+    const file = await uploadViaApi(page, id, { name: 'zufahrt.png', type: 'image/png', bytes: pngBytes(60, 40) });
+    const item = await createItem(page, {
+      project_id: id,
+      title: 'E2E Zufahrt zeigen',
+      description_json: {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', content: [{ type: 'text', text: 'Die Zufahrt' }] },
+          { type: 'image', attrs: { attachmentId: file.id, alt: 'Zufahrt' } },
+        ],
+      },
+    });
+    const { section } = await editDescription(page, item.key, 'E2E Zufahrt zeigen');
+    const picture = section.getByRole('img', { name: 'Zufahrt' });
+    await expect.poll(() => picture.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth)).toBe(60);
+    await expect.poll(() => outlineOf(picture)).toBe('none');
+
+    // a click selects the image: it shows a frame, and the tab of its menu comes
+    await picture.click();
+    await expect.poll(() => framed(picture)).toBe(true);
+    await expect(section.getByRole('button', { name: tr('en', 'editor.image.menu') })).toBeVisible();
+
+    // the selection moves on to the text above: the frame goes
+    await page.keyboard.press('ArrowUp');
+    await expect.poll(() => outlineOf(picture)).toBe('none');
+  } finally {
+    await page.goto('/my-items');
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('frames the box of an image that does not load once it is selected (WEBU-15)', async ({ page, allowedErrors }) => {
+  const { id, identifier } = await createE2eProject(page, name('missing'), { types: ['Task'] });
+  try {
+    const file = await uploadViaApi(page, id, { name: 'fehlt.png', type: 'image/png', bytes: pngBytes(20, 20) });
+    const item = await createItem(page, {
+      project_id: id,
+      title: 'E2E Bild fehlt',
+      description_json: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Davor' }] }, { type: 'image', attrs: { attachmentId: file.id, alt: 'Fehlt' } }] },
+    });
+    // the attachment is gone for this page: the image keeps its place as a box that says so
+    allowedErrors.push(/status of 404 .*\/api\/v1\/attachments\//);
+    await page.route(`**/api/v1/attachments/${file.id}`, (route) => route.fulfill({ status: 404, contentType: 'application/problem+json', body: JSON.stringify({ status: 404, reason: 'not_found' }) }));
+    const { section } = await editDescription(page, item.key, 'E2E Bild fehlt');
+    const box = section.locator('.rt-image-missing');
+    await expect(box).toContainText(tr('en', 'editor.image.unavailable'));
+    await box.click();
+    await expect.poll(() => framed(box)).toBe(true);
+    await page.keyboard.press('ArrowUp');
+    await expect.poll(() => outlineOf(box)).toBe('none');
+  } finally {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await page.goto('/my-items');
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('leaves no frame on an image of a comment after it was shown large (WEBU-15)', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('read'), { types: ['Task'] });
+  try {
+    const item = await createItem(page, { project_id: id, title: 'E2E Bild lesen' });
+    const file = await uploadViaApi(page, id, { name: 'lesen.png', type: 'image/png', bytes: pngBytes(60, 40) });
+    const response = await api(page, 'POST', `/api/v1/work-items/${item.id}/comments`, {
+      body_json: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Ansehen' }] }, { type: 'image', attrs: { attachmentId: file.id, alt: 'Lesen' } }] },
+    });
+    expect(response.status(), await response.text()).toBe(201);
+    await page.goto(`/items/${item.key}`);
+    const card = page.locator('[data-comment-card]');
+    const picture = card.getByRole('img', { name: 'Lesen' });
+    await expect.poll(() => picture.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth)).toBe(60);
+
+    // a click shows it large; ProseMirror selects the clicked image while reading too, but only an editable text frames
+    // the selection: after Escape no frame stays on the image
+    await picture.click();
+    const viewer = page.getByRole('dialog', { name: 'Lesen' });
+    await expect(viewer).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(viewer).toBeHidden();
+    await expect(card.locator('.ProseMirror-selectednode')).toHaveCount(1);
+    expect(await outlineOf(picture)).toBe('none');
   } finally {
     await page.goto('/my-items');
     await removeE2eProject(page, identifier);

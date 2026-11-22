@@ -316,11 +316,12 @@
   display: inline;
   vertical-align: -0.0625rem;
 }
-/* a node view sits in Tiptap's own span, which takes the class of the selected node (WEBU-14: a selected file chip
-   showed no frame); mentions and references are `selectable: false` and never take it. Only in an editable text:
-   ProseMirror selects a clicked node while reading too, and the frame would stay after the click */
+/* a node view sits in Tiptap's own element, which takes the class of the selected node (a selected file chip, WEBU-14,
+   and a selected image, WEBU-15, showed no frame); mentions and references are `selectable: false` and never take it.
+   Only in an editable text: ProseMirror selects a clicked node while reading too, and the frame would stay after the
+   click */
 .rt .ProseMirror[contenteditable='true'] .ProseMirror-selectednode > .rt-file,
-.rt .rt-image.ProseMirror-selectednode img {
+.rt .ProseMirror[contenteditable='true'] .ProseMirror-selectednode > .rt-image :is(img, .rt-image-missing) {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
