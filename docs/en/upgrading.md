@@ -35,6 +35,13 @@ All versions and their changes: https://github.com/baeroe/werkbuch/releases
 
 <!-- absolute links only: each section becomes the notes of its GitHub release -->
 
+### 0.3.2
+
+- **Rich text:** long references to wiki pages and file chips wrap like text instead of running out of comments and descriptions; the icon stays with the first word. A selected image or file chip shows its selection frame while editing, never while reading.
+- **API and MCP:** a project names its types with `include=types` (`GET /api/v1/projects`, `GET /api/v1/projects/{project}`; over MCP `projects` with `include: ["types"]`): each type switched on in the project with its name, `is_epic` and required properties, so an agent finds the epic type of an empty project. `GET /api/v1/projects/{project}` now refuses an unknown `include` with 422 (before, `include=members` there was silently ignored; the list keeps `include=members`).
+- The compose files did not change: update as described in [Upgrading](https://werkbuch.dev/en/upgrading).
+- Image `baeroe/werkbuch:0.3.2` for `linux/amd64` and `linux/arm64`.
+
 ### 0.3.1
 
 - **Projects:** items, wiki, templates and settings of a project share one header in the same place: the project badge, the project and the part, the tabs below it. The settings of a project no longer stand centred and narrower; their header and tabs span the width like the other parts, only the sections and the form keep their width.

@@ -35,6 +35,13 @@ Alle Versionen und ihre Änderungen: https://github.com/baeroe/werkbuch/releases
 
 <!-- nur absolute Links: jeder Abschnitt der englischen Fassung wird zu den Notizen seines GitHub-Releases -->
 
+### 0.3.2
+
+- **Rich Text:** Lange Verweise auf Wiki-Seiten und Datei-Chips brechen um wie Text, statt aus Kommentaren und Beschreibungen hinauszulaufen; das Icon bleibt am ersten Wort. Ein ausgewähltes Bild oder ein ausgewählter Datei-Chip zeigt beim Bearbeiten seinen Auswahlrahmen, beim Lesen nie.
+- **API und MCP:** Ein Projekt nennt mit `include=types` seine Typen (`GET /api/v1/projects`, `GET /api/v1/projects/{project}`; über MCP `projects` mit `include: ["types"]`): jeden eingeschalteten Typ mit Name, `is_epic` und Pflicht-Properties, so findet ein Agent den Epic-Typ auch in einem leeren Projekt. `GET /api/v1/projects/{project}` lehnt ein unbekanntes `include` jetzt mit 422 ab (bisher wurde dort etwa `include=members` still übergangen; die Liste behält `include=members`).
+- Die Compose-Dateien haben sich nicht geändert: wie unter [Aktualisieren](https://werkbuch.dev/de/upgrading) beschrieben aktualisieren.
+- Image `baeroe/werkbuch:0.3.2` für `linux/amd64` und `linux/arm64`.
+
 ### 0.3.1
 
 - **Projekte:** Items, Wiki, Vorlagen und Einstellungen eines Projekts haben einen gemeinsamen Kopf an derselben Stelle: das Zeichen des Projekts, das Projekt und der Bereich, darunter die Reiter. Die Einstellungen eines Projekts stehen nicht mehr zentriert und schmaler; Kopf und Reiter gehen über die ganze Breite wie in den anderen Bereichen, nur Abschnitte und Formular behalten ihre Breite.
