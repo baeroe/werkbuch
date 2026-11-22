@@ -39,7 +39,7 @@ final class ProjectDocs extends OperationExtension
     {
         return [
             'schema' => ['type' => 'array', 'items' => ['type' => 'string', 'enum' => GetProject::INCLUDES]],
-            'description' => 'What to embed: `types`, the types the project switched on (catalog order, as `GET /work-item-types/{workItemType}` gives them: name, `is_epic`, the properties they ask for).',
+            'description' => 'What to embed: `types`, the types the project switched on (catalog order, as `GET /work-item-types/{workItemType}` gives them: name, `is_epic`, the IDs of the properties they ask for and which are required). Archived ones that stay switched on come too; only a type with `archived_at: null` takes new items.',
         ];
     }
 }

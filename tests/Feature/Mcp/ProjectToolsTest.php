@@ -106,7 +106,7 @@ it('finds the epic of a project without items through include types, without gue
     // the instructions and the description of type_id point the way
     expect($mcp->discover()['instructions'])->toContain('`projects` and `include: ["types"]`');
     $create = collect($mcp->tools())->firstWhere('name', 'manage-work-items')['inputSchema']['properties']['input']['anyOf'][0];
-    expect($create['properties']['type_id']['description'])->toContain('`include=types`', '`projects:get`');
+    expect($create['properties']['type_id']['description'])->toContain('include `types`')->not->toContain('projects:get');
 
     $project = $mcp->call('projects', ['action' => 'get', 'project' => 'LEER', 'include' => ['types']]);
     expect($project['isError'])->toBeFalse((string) json_encode($project));

@@ -35,7 +35,7 @@ final class ProjectsTool extends ReadTool
 
     protected string $description = 'Reads projects: the ones the account sees, one project, its members and the own favorites. '
         .'Lists take `filter`, `sort`, `cursor` and `per_page`; a project is named by `project` (ULID, identifier or a former identifier). '
-        .'`include: ["types"]` names the types a project offers (name, `is_epic`); `default_type_id` is the default.';
+        .'`include: ["types"]` names the types a project switched on (name, `is_epic`; new items only with `archived_at: null`); `default_type_id` is the default.';
 
     protected function actions(): array
     {
@@ -57,7 +57,7 @@ final class ProjectsTool extends ReadTool
             ),
             new McpAction(
                 name: 'get',
-                summary: 'One project; `include` `types` names the types it offers.',
+                summary: 'One project; `include` `types` names its types.',
                 run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::resource(new ProjectResource(GetProject::run($actor, References::project($args->reference('project')), Includes::fromQuery($args->query(['include'])['include'] ?? [])))),
                 parameters: ['project' => ToolSchema::reference('project'), 'include' => [...$include['schema'], 'description' => $include['description']]],
                 required: ['project'],
