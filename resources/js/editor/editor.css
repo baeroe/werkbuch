@@ -317,8 +317,9 @@
   vertical-align: -0.0625rem;
 }
 /* a node view sits in Tiptap's own span, which takes the class of the selected node (WEBU-14: a selected file chip
-   showed no frame); mentions and references are `selectable: false` and never take it */
-.rt .ProseMirror-selectednode > .rt-file,
+   showed no frame); mentions and references are `selectable: false` and never take it. Only in an editable text:
+   ProseMirror selects a clicked node while reading too, and the frame would stay after the click */
+.rt .ProseMirror[contenteditable='true'] .ProseMirror-selectednode > .rt-file,
 .rt .rt-image.ProseMirror-selectednode img {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;

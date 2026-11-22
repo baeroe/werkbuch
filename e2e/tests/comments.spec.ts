@@ -299,11 +299,36 @@ test('wraps a long page reference and a long file name inside the card (WEBU-14)
     for (const chip of [reference, card.locator('.rt-file a')]) {
       expect(await glyphApart(chip)).toEqual([]);
     }
+    // a click on the chip outside its link selects it while reading too (ProseMirror), but only an editable text
+    // frames the selection: no frame stays in the card
+    const chip = card.locator('.rt-file');
+    await chip.locator('.rt-file-size').click();
+    await expect(card.locator('.ProseMirror-selectednode')).toHaveCount(1);
+    expect(await chip.evaluate((element) => getComputedStyle(element).outlineStyle)).toBe('none');
     if (isPhone(page)) {
       // at 390 px the title takes more than one line, the period stays after it
       expect(await reference.evaluate((element) => element.getClientRects().length)).toBeGreaterThan(1);
       expect(await card.locator('.rt-file').evaluate((element) => element.getClientRects().length)).toBeGreaterThan(1);
     }
+
+    // while editing the comment, the selected chip shows its frame (a solid outline in the colour of the focus ring)
+    await card.getByRole('button', { name: tr('en', 'items.comments.actions', { name: PEOPLE.e2e.name }) }).click();
+    await page.getByRole('menuitem', { name: tr('en', 'items.comments.edit') }).click();
+    const editing = card.getByRole('textbox', { name: tr('en', 'items.comments.edit_label') });
+    await expect(editing).toBeVisible();
+    const editedChip = editing.locator('.rt-file');
+    await editedChip.locator('.rt-file-size').click();
+    await expect.poll(() => editedChip.evaluate((element) => getComputedStyle(element).outlineStyle)).toBe('solid');
+    expect(await editedChip.evaluate((element) => getComputedStyle(element).outlineColor)).toBe(
+      await page.evaluate(() => {
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--focus-ring)';
+        document.body.append(probe);
+        const colour = getComputedStyle(probe).color;
+        probe.remove();
+        return colour;
+      }),
+    );
   } finally {
     await removeE2eProject(page, identifier);
   }
