@@ -25,6 +25,7 @@ import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import type { EditorEnvRef } from './EditorEnv';
+import { Glued } from './glued';
 import { fitsAt } from './mentions';
 import { popupRenderer, SuggestionMenu, useAsked, type PopupProps, type SuggestionEntry } from './suggestions';
 
@@ -129,11 +130,25 @@ function Loading({ failed }: { failed: boolean }) {
  * A link while reading, plain text while editing. `label` names the link for screen readers in full: a visually
  * hidden span after the text would be read with a space before its comma (Chrome sets a positioned element apart).
  */
-function Shown({ href, editable, label, children }: { href: string; editable: boolean; label?: string; children: ReactNode }) {
+function Shown({
+  href,
+  editable,
+  label,
+  wraps = false,
+  children,
+}: {
+  href: string;
+  editable: boolean;
+  label?: string;
+  /** A title wraps like text (WEBU-14); a key stays in one piece. */
+  wraps?: boolean;
+  children: ReactNode;
+}) {
+  const className = wraps ? 'rt-ref rt-ref-flow' : 'rt-ref';
   return editable ? (
-    <span className="rt-ref">{children}</span>
+    <span className={className}>{children}</span>
   ) : (
-    <Link href={href} className="rt-ref" aria-label={label}>
+    <Link href={href} className={className} aria-label={label}>
       {children}
     </Link>
   );
@@ -168,9 +183,8 @@ function PageReference({ id, editable }: { id: string; editable: boolean }) {
   // which wiki, for screen readers: a page reads apart from a link of the same name (T18-M2)
   const label = known ? `${page.title}, ${t('wiki.place', { identifier: known })}` : undefined;
   return (
-    <Shown href={paths.wiki(identifier, page.id)} editable={editable} label={label}>
-      <PageGlyph emoji={page.emoji} className="" />
-      {page.title}
+    <Shown href={paths.wiki(identifier, page.id)} editable={editable} label={label} wraps>
+      <Glued glyph={<PageGlyph emoji={page.emoji} className="" />} text={page.title} />
     </Shown>
   );
 }

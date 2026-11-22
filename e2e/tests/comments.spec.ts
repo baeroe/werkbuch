@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, arrowTo, createE2eProject, createItem, pasteFile, PEOPLE, pngBytes, pressMod, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { api, arrowTo, createE2ePage, createE2eProject, createItem, isPhone, pasteFile, PEOPLE, pngBytes, pressMod, removeE2eProject, runId, tabTo, tr, uploadViaApi, variant } from '../helpers';
 
 // Writing comments, signed in as the e2e person (Erik Ende, English). Each test works in a project of its own
 // (`E2E …`, removed in `finally`); its items come over the API.
@@ -238,6 +238,97 @@ test('pastes an image into a comment and sends it with mod+enter', async ({ page
     const card = page.getByRole('article', { name: tr('en', 'items.comments.card', { name: PEOPLE.e2e.name }) });
     await expect(card.getByRole('img', { name: 'fehler.png' })).toBeVisible();
     expect(await storedComments(page, item.id)).toEqual([expect.stringMatching(/^So sieht es aus:\s*!\[fehler\.png\]\(attachment:[0-9a-z]{26}\)\s*$/)]);
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
+/**
+ * The widths of its paragraph (from its own down to 120 px) at which the glyph of a reference or a file chip stands on
+ * another line than the first character of its text, measured on the glyph and on that character alone.
+ */
+async function glyphApart(chip: Locator): Promise<number[]> {
+  return chip.evaluate((element) => {
+    const block = element.closest('p') as HTMLElement;
+    const glyph = element.querySelector('svg')!;
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, { acceptNode: (node) => (node.textContent!.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP) });
+    const text = walker.nextNode()!;
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, 1);
+    const apart: number[] = [];
+    for (let width = Math.floor(block.getBoundingClientRect().width); width >= 120; width -= 1) {
+      block.style.width = `${width}px`;
+      const one = glyph.getBoundingClientRect();
+      const two = range.getClientRects()[0]!;
+      if (!(two.top < one.bottom && one.top < two.bottom)) apart.push(width);
+    }
+    block.style.width = '';
+    return apart;
+  });
+}
+
+test('wraps a long page reference and a long file name inside the card (WEBU-14)', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('wrap'), { types: ['Task'] });
+  try {
+    const item = await createItem(page, { project_id: id, title: 'E2E Lange Verweise' });
+    const title = 'E2E Rahmenvertrag Betrieb & Support: Konditionen, Leistungsscheine und Eskalationsstufen im Regelbetrieb';
+    const wiki = await createE2ePage(page, id, { title });
+    const fileName = 'e2e-rahmenvertrag-betrieb-und-support-konditionen-leistungsscheine-entwurf.txt';
+    const file = await uploadViaApi(page, id, { name: fileName, type: 'text/plain', bytes: Buffer.from('Entwurf\n') });
+    await addComment(page, item.id, `Siehe [Vertrag](page:${wiki.id}). Dazu [${fileName}](attachment:${file.id}).`);
+
+    await page.goto(`/items/${item.key}`);
+    const card = page.locator('[data-comment-card]');
+    const reference = card.locator('a.rt-ref');
+    await expect(reference).toHaveText(title);
+    await expect(card.locator('.rt-file a')).toHaveText(fileName);
+
+    // nothing runs over the card or the page: the title and the name wrap like text
+    const widths = await card.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
+    expect(widths.scroll).toBeLessThanOrEqual(widths.client);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    for (const chip of [reference, card.locator('.rt-file')]) {
+      const outside = await chip.evaluate((element) => {
+        const box = element.closest('[data-comment-card]')!.getBoundingClientRect();
+        return [...element.getClientRects()].some((line) => line.right > box.right + 0.5 || line.left < box.left - 0.5);
+      });
+      expect(outside).toBe(false);
+    }
+    // the glyph stays on the line of the first word, never alone at the end of one: at every width of the paragraph
+    for (const chip of [reference, card.locator('.rt-file a')]) {
+      expect(await glyphApart(chip)).toEqual([]);
+    }
+    // a click on the chip outside its link selects it while reading too (ProseMirror), but only an editable text
+    // frames the selection: no frame stays in the card
+    const chip = card.locator('.rt-file');
+    await chip.locator('.rt-file-size').click();
+    await expect(card.locator('.ProseMirror-selectednode')).toHaveCount(1);
+    expect(await chip.evaluate((element) => getComputedStyle(element).outlineStyle)).toBe('none');
+    if (isPhone(page)) {
+      // at 390 px the title takes more than one line, the period stays after it
+      expect(await reference.evaluate((element) => element.getClientRects().length)).toBeGreaterThan(1);
+      expect(await card.locator('.rt-file').evaluate((element) => element.getClientRects().length)).toBeGreaterThan(1);
+    }
+
+    // while editing the comment, the selected chip shows its frame (a solid outline in the colour of the focus ring)
+    await card.getByRole('button', { name: tr('en', 'items.comments.actions', { name: PEOPLE.e2e.name }) }).click();
+    await page.getByRole('menuitem', { name: tr('en', 'items.comments.edit') }).click();
+    const editing = card.getByRole('textbox', { name: tr('en', 'items.comments.edit_label') });
+    await expect(editing).toBeVisible();
+    const editedChip = editing.locator('.rt-file');
+    await editedChip.locator('.rt-file-size').click();
+    await expect.poll(() => editedChip.evaluate((element) => getComputedStyle(element).outlineStyle)).toBe('solid');
+    expect(await editedChip.evaluate((element) => getComputedStyle(element).outlineColor)).toBe(
+      await page.evaluate(() => {
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--focus-ring)';
+        document.body.append(probe);
+        const colour = getComputedStyle(probe).color;
+        probe.remove();
+        return colour;
+      }),
+    );
   } finally {
     await removeE2eProject(page, identifier);
   }
