@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -29,6 +30,7 @@ type fake struct {
 	canceled  []string
 	cancelErr error
 	checks    []socket.Check
+	doctorErr error // the answer of /doctor while the daemon answers
 	doctors   int
 }
 
@@ -99,6 +101,9 @@ func (f *fake) Doctor(ctx context.Context) ([]socket.Check, error) {
 		return nil, errDown
 	}
 	f.doctors++
+	if f.doctorErr != nil {
+		return nil, f.doctorErr
+	}
 	return f.checks, nil
 }
 
@@ -721,4 +726,117 @@ func TestMiddle(t *testing.T) {
 	if middle("short", 10) != "short" || middle("~/.local/share/werkbuch-runner/worktrees/WEB-51", 20) != "~/.loca…trees/WEB-51" {
 		t.Fatal(middle("~/.local/share/werkbuch-runner/worktrees/WEB-51", 20))
 	}
+}
+
+// manyRuns are 18 running runs and 5 ended ones, WEB-1 … WEB-23.
+func manyRuns() []executor.Summary {
+	var runs []executor.Summary
+	for i := 1; i <= 23; i++ {
+		r := executor.Summary{ID: fmt.Sprintf("01run%02d", i), Type: "task", Model: "sonnet", Item: fmt.Sprintf("WEB-%d", i), Title: "Item " + itoa(i),
+			Status: "running", Branch: "agent/WEB-" + itoa(i), Started: now0.Add(-time.Minute)}
+		if i > 18 {
+			r.Status, r.Result, r.Ended = "finished", "succeeded", now0
+		}
+		runs = append(runs, r)
+	}
+	return runs
+}
+
+func TestListsScrollWithTheChoice(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {60, 16}} {
+		for _, tab := range []Tab{TabStatus, TabRuns} {
+			f := connected()
+			f.runs = manyRuns()
+			h := newHarness(t, f, Options{Tab: tab})
+			h.send(sizeMsg(size[0], size[1]))
+			h.sees("WEB-1 ")
+			for i := 2; i <= 23; i++ {
+				h.key("j")
+				label := fmt.Sprintf("WEB-%d ", i)
+				if !strings.Contains(h.view(), label) {
+					t.Fatalf("%v tab %d: %s chosen but not shown:\n%s", size, tab, label, h.view())
+				}
+			}
+			h.misses("WEB-1 ")
+			for range 22 {
+				h.key("k")
+			}
+			h.sees("WEB-1 ")
+		}
+	}
+}
+
+func TestTheFooterKeepsTheKeys(t *testing.T) {
+	f := connected()
+	h := newHarness(t, f, Options{Tab: TabRuns})
+	h.send(sizeMsg(80, 24))
+	footer := func() string { l := strings.Split(h.view(), "\n"); return l[len(l)-1] }
+	if !strings.Contains(footer(), "? help") || strings.Contains(footer(), "following") {
+		t.Fatalf("%q", footer())
+	}
+	h.key("1")
+	if !strings.Contains(footer(), "? help") {
+		t.Fatalf("%q", footer())
+	}
+	// a message wins while it is shown, then the keys come back
+	h.key("j", "j", "2", "c")
+	h.key("esc", "j", "c")
+	if !strings.Contains(footer(), "has ended") {
+		t.Fatalf("%q", footer())
+	}
+	h.now = h.now.Add(10 * time.Second)
+	if !strings.Contains(footer(), "? help") {
+		t.Fatalf("%q", footer())
+	}
+	// wide enough: keys and the quiet status
+	h.send(sizeMsg(160, 30))
+	h.key("k")
+	if !strings.Contains(footer(), "? help") || !strings.Contains(footer(), "following WEB-51") {
+		t.Fatalf("%q", footer())
+	}
+}
+
+func TestShortSlotsInANarrowTerminal(t *testing.T) {
+	h := newHarness(t, connected(), Options{})
+	h.send(sizeMsg(80, 30))
+	h.sees("■□  1 of 2   per repo 0/1   light 0/2")
+	h.misses("(from werkbuch)")
+}
+
+func TestTimesComeFromTheDaemonsClock(t *testing.T) {
+	f := connected()
+	f.st.Now = now0.Add(time.Minute)
+	h := newHarness(t, f, Options{})
+	h.sees("● 7:12", "last contact 1m ago")
+}
+
+func TestErrorsAreRedacted(t *testing.T) {
+	f := connected()
+	f.st.Connected, f.st.LastError = false, "POST https://werkbuch.example.com/api/runner/claim: Authorization: Bearer wbr_abcdefghijklmnopqrstuvwxyz0123 refused"
+	f.runs[0].Title = "leaks wb_abcdefghijklmnopqrstuvwxyz"
+	h := newHarness(t, f, Options{})
+	h.sees("[token]")
+	h.misses("wbr_abc", "wb_abc")
+}
+
+func TestDoctorSaysWhyThisTerminalChecked(t *testing.T) {
+	local := func(context.Context) []socket.Check {
+		return []socket.Check{{Name: "git", Level: "ok", Detail: "git version 2.47.1"}}
+	}
+	f := connected()
+	f.doctorErr = &socket.StatusError{Code: 404, Message: "Not Found"}
+	h := newHarness(t, f, Options{Tab: TabDoctor, LocalDoctor: local})
+	h.sees("The daemon has no checks (an older version, update it):", "checked by this terminal", "✓ git")
+	h.misses("No daemon answers")
+
+	f.doctorErr = &socket.StatusError{Code: 500, Message: "boom"}
+	h.key("r")
+	h.sees("The daemon did not answer the checks (boom):")
+
+	f.doctorErr = context.DeadlineExceeded
+	h.key("r")
+	h.sees("The daemon did not answer the checks (context deadline exceeded):")
+
+	h2 := newHarness(t, f, Options{Tab: TabDoctor})
+	h2.sees("The daemon did not answer the checks", "press r to ask again")
 }

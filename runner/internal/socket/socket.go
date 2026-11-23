@@ -42,6 +42,8 @@ type Status struct {
 	CLIs            []protocol.CLI      `json:"clis"`
 	Equipment       *protocol.Equipment `json:"equipment,omitempty"`
 	Started         time.Time           `json:"started"`
+	// Now is the clock of the daemon when it answered: the TUI counts the times of runs from it.
+	Now time.Time `json:"now"`
 }
 
 // LoadAnswer is what `GET /load` answers.
@@ -167,6 +169,15 @@ func Serve(ctx context.Context, l net.Listener, b Backend) error {
 	return err
 }
 
+// StatusError is an answer of the daemon with a status of 400 or more: a daemon answers, but refuses (404 for a route
+// an older daemon does not have).
+type StatusError struct {
+	Code    int
+	Message string
+}
+
+func (e *StatusError) Error() string { return e.Message }
+
 // Client talks to the daemon.
 type Client struct{ http *http.Client }
 
@@ -201,7 +212,11 @@ func (c *Client) do(ctx context.Context, method, path string, out any) error {
 	if resp.StatusCode >= 400 {
 		var e struct{ Error string }
 		json.NewDecoder(resp.Body).Decode(&e)
-		return errors.New(strings.TrimSpace(e.Error))
+		msg := strings.TrimSpace(e.Error)
+		if msg == "" {
+			msg = http.StatusText(resp.StatusCode)
+		}
+		return &StatusError{Code: resp.StatusCode, Message: msg}
 	}
 	if out == nil {
 		return nil

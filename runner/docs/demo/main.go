@@ -1,7 +1,8 @@
 // Command demo is a fake daemon of the runner for the screenshots of the TUI (runner/docs/screenshots.sh, A502): it
 // serves the socket API (internal/socket) with the demo data of the clickdummy (`/_tui`, WEBU-18): an instance
-// werkbuch.example.com, WEB-51 running with a log that grows every few seconds, recent runs, the load with a history,
-// and doctor with Codex not signed in and a second way to werkbuch. Nothing here talks to a real host.
+// werkbuch.example.com, WEB-51 running with a log that grows every few seconds, recent runs, a fixed load history,
+// and doctor with Codex not signed in and a second way to werkbuch, all on a fixed clock. Nothing here talks to a
+// real host.
 //
 //	go run ./docs/demo -socket /tmp/wr-demo.sock
 package main
@@ -26,6 +27,10 @@ import (
 
 const instance = "https://werkbuch.example.com"
 
+// clock is the fixed time of the demo (09:44:12 in Berlin): every answer names it as the daemon's now, so the times the
+// TUI shows (6:12 on WEB-51, the recent runs) are the same in every screenshot.
+var clock = time.Date(2026, 11, 23, 8, 44, 12, 0, time.UTC)
+
 func main() {
 	path := flag.String("socket", os.Getenv("WERKBUCH_RUNNER_SOCKET"), "the socket to serve")
 	flag.Parse()
@@ -38,7 +43,7 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	d := newDemo(time.Now())
+	d := newDemo(clock)
 	go d.feed(ctx)
 	defer os.Remove(*path)
 	if err := socket.Serve(ctx, l, d); err != nil {
@@ -83,14 +88,15 @@ func newDemo(now time.Time) *demo {
 		protocol.Event{Kind: protocol.KindTool, Text: "Bash pnpm vitest run tests/js/consent.test.ts", At: at(276)},
 		protocol.Event{Kind: protocol.KindResult, Text: "5 passed", At: at(289)},
 		protocol.Event{Kind: protocol.KindText, Text: "Die Signale stimmen. Jetzt das Banner im Browser.", At: at(310)},
-		protocol.Event{Kind: protocol.KindTool, Text: "playwright browser_navigate https://website.ddev.site", At: at(352)},
+		protocol.Event{Kind: protocol.KindTool, Text: "playwright browser_navigate https://website.example.test", At: at(352)},
 	)
+	// the lines that come while the TUI looks, at fixed times before the clock of the demo
 	d.next = []protocol.Event{
-		{Kind: protocol.KindTool, Text: "playwright browser_snapshot"},
-		{Kind: protocol.KindText, Text: "Das Banner zeigt die vier Schalter; „Alle ablehnen“ setzt alle Signale auf denied."},
-		{Kind: protocol.KindTool, Text: "Bash git commit -m \"fix(consent): send the four signals of consent v2 (WEB-51)\""},
-		{Kind: protocol.KindTool, Text: "Bash git push origin agent/WEB-51-cookie-banner-consent-v2"},
-		{Kind: protocol.KindText, Text: "Gepusht. Ich trage den Nachweis in „Lösung“ ein."},
+		{Kind: protocol.KindTool, Text: "playwright browser_snapshot", At: at(355)},
+		{Kind: protocol.KindText, Text: "Das Banner zeigt die vier Schalter; „Alle ablehnen“ setzt alle Signale auf denied.", At: at(359)},
+		{Kind: protocol.KindTool, Text: "Bash git commit -m \"fix(consent): send the four signals of consent v2 (WEB-51)\"", At: at(363)},
+		{Kind: protocol.KindTool, Text: "Bash git push origin agent/WEB-51-cookie-banner-consent-v2", At: at(367)},
+		{Kind: protocol.KindText, Text: "Gepusht. Ich trage den Nachweis in „Lösung“ ein.", At: at(371)},
 	}
 	ended := func(id, typ, model, key, title, result string, from, to time.Duration, text string) *executor.Execution {
 		s, e := now.Add(-from), now.Add(-to)
@@ -118,12 +124,10 @@ func sample(i int) protocol.Load {
 		DiskFree: 182, DiskTotal: 994}
 }
 
-// feed adds a line to the log of WEB-51 every few seconds and a load sample every 5 s.
+// feed adds a line to the log of WEB-51 every few seconds. The load stays as it is (a fixed history).
 func (d *demo) feed(ctx context.Context) {
-	lines, samples := time.NewTicker(4*time.Second), time.NewTicker(load.Interval)
+	lines := time.NewTicker(4 * time.Second)
 	defer lines.Stop()
-	defer samples.Stop()
-	i := len(d.samples)
 	for {
 		select {
 		case <-ctx.Done():
@@ -131,16 +135,9 @@ func (d *demo) feed(ctx context.Context) {
 		case <-lines.C:
 			d.mu.Lock()
 			if len(d.next) > 0 {
-				ev := d.next[0]
+				executor.Feed(d.running, d.next[0])
 				d.next = d.next[1:]
-				ev.At = time.Now()
-				executor.Feed(d.running, ev)
 			}
-			d.mu.Unlock()
-		case <-samples.C:
-			d.mu.Lock()
-			d.samples = append(d.samples[1:], sample(i))
-			i++
 			d.mu.Unlock()
 		}
 	}
@@ -154,7 +151,7 @@ func (d *demo) Status() socket.Status {
 	last := d.samples[len(d.samples)-1]
 	return socket.Status{
 		Instance: instance, System: "darwin/arm64", Version: "0.4.0", ExpectedVersion: "0.4.0", Connected: true,
-		LastContact: time.Now().Add(-2 * time.Second), Places: places, Running: 1, Load: &last, Started: d.started,
+		LastContact: clock.Add(-2 * time.Second), Now: clock, Places: places, Running: 1, Load: &last, Started: d.started,
 		CLIs: []protocol.CLI{
 			{CLI: "claude", Installed: true, Version: str("2.4.1"), LoggedIn: true, Path: str("/opt/homebrew/bin/claude")},
 			{CLI: "codex", Installed: true, Version: str("0.40.0"), Path: str("/opt/homebrew/bin/codex")},

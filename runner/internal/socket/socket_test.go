@@ -70,8 +70,12 @@ func TestSocket(t *testing.T) {
 	if err := c.Post(ctx, "/update", &upd); err != nil || upd["update"] != "none" {
 		t.Fatal(err)
 	}
-	if err := c.Post(ctx, "/runs/nope/cancel", nil); err == nil {
-		t.Fatal("unknown run canceled")
+	var se *StatusError
+	if err := c.Post(ctx, "/runs/nope/cancel", nil); !errors.As(err, &se) || se.Code != 404 || err.Error() != "no such run running" {
+		t.Fatalf("unknown run canceled: %v", err)
+	}
+	if err := c.Get(ctx, "/nope", nil); !errors.As(err, &se) || se.Code != 404 || err.Error() != "Not Found" {
+		t.Fatalf("an unknown route: %v", err)
 	}
 	if err := c.Post(ctx, "/runs/01run/cancel", nil); err != nil {
 		t.Fatal(err)

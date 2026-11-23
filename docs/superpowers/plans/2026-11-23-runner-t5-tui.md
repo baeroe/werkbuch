@@ -74,4 +74,5 @@ Ein falscher Daemon unter `runner/docs/demo/` (eigenes `main`, dasselbe `socket.
 - Tabs wechseln nur `tab`/`⇧tab` und `1`–`3` (wie skilltri); `l` ist auf Status das Abmelden.
 - Runs zeigt ab 90 Spalten Liste und Protokoll nebeneinander, darunter nur die Liste (`enter` öffnet das Protokoll).
 - Bilder: `runner/docs/screenshots/{status,runs,cancel,doctor}.png`, erzeugt mit `bash runner/docs/screenshots.sh`.
+- Review PR #67: Listen scrollen mit der Auswahl (Runs und der Block der Läufe auf Status), der Fuß behält die Tasten (nur Meldungen und Arbeit verdrängen sie), Doctor nennt den Grund des lokalen Prüfens (kein Daemon, älterer Daemon mit 404, Fehler) und prüft mit eigenem Kontext, `san` redigiert Tokens, `/doctor` läuft einmal zur Zeit, die Plätze kürzen sich bei 80 Spalten, die Demo hat eine feste Uhr (`Status.now`) und kein `ddev.site` mehr; neues Bild `narrow.png` (80 Spalten).
 - Tests: `internal/tui` (Modell-Tests gegen eine falsche `Source`, `SocketSource` gegen `socket.Handler`), `socket` (`GET /doctor`), `daemon` (Version im Doctor, `system`), `executor` (`branch`, `session`, `Fake`), `main` (ohne Terminal der Hinweis).

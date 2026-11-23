@@ -73,6 +73,14 @@ type Daemon struct {
 	report       protocol.Report
 	reportAt     time.Time
 	sweeping     atomic.Bool
+	doctorMu     sync.Mutex
+	doctorRun    *doctorRun
+}
+
+// doctorRun is the one run of the checks in flight: a second `GET /doctor` waits for it instead of starting its own.
+type doctorRun struct {
+	done   chan struct{}
+	checks []socket.Check
 }
 
 // ReportEvery is how often the report is refreshed in the background; claims and heartbeats only read it.
@@ -321,7 +329,7 @@ func (d *Daemon) Status() socket.Status {
 	d.defaults()
 	d.mu.Lock()
 	s := socket.Status{Instance: d.Instance, System: runtime.GOOS + "/" + runtime.GOARCH, Version: d.Version, ExpectedVersion: d.expected, Connected: d.connected, LastContact: d.lastContact,
-		LastError: d.lastError, Unauthorized: d.unauthorized, Places: d.places, Update: d.update, Running: len(d.running), Started: d.started}
+		LastError: d.lastError, Unauthorized: d.unauthorized, Places: d.places, Update: d.update, Running: len(d.running), Started: d.started, Now: time.Now()}
 	d.mu.Unlock()
 	r := d.Report()
 	s.Load, s.CLIs, s.Equipment = r.Load, r.CLIs, r.Equipment
@@ -343,11 +351,38 @@ func (d *Daemon) Doctor(ctx context.Context) []socket.Check {
 			version.Detail += " (update " + upd + ")"
 		}
 	}
-	out := []socket.Check{version}
-	if d.Checks != nil {
-		out = append(out, d.Checks(ctx)...)
+	return append([]socket.Check{version}, d.checks(ctx)...)
+}
+
+// checks runs Checks once at a time: callers that come while a run is in flight share its answer (it asks the CLIs,
+// the keychain and the instance and can take seconds).
+func (d *Daemon) checks(ctx context.Context) []socket.Check {
+	if d.Checks == nil {
+		return nil
 	}
-	return out
+	d.doctorMu.Lock()
+	run := d.doctorRun
+	if run == nil {
+		run = &doctorRun{done: make(chan struct{})}
+		d.doctorRun = run
+		d.doctorMu.Unlock()
+		// the run outlives a caller that gives up, the others still wait for it
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+		run.checks = d.Checks(rctx)
+		cancel()
+		d.doctorMu.Lock()
+		d.doctorRun = nil
+		d.doctorMu.Unlock()
+		close(run.done)
+		return run.checks
+	}
+	d.doctorMu.Unlock()
+	select {
+	case <-run.done:
+		return run.checks
+	case <-ctx.Done():
+		return nil
+	}
 }
 
 // Runs lists the running runs, then the recent ones.

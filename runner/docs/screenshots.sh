@@ -39,7 +39,7 @@ demo_pid=$!
 for _ in $(seq 50); do [ -S "$WR_DEMO_SOCKET" ] && break; sleep 0.1; done
 
 tapes=("$@")
-[ ${#tapes[@]} -eq 0 ] && tapes=(status runs cancel doctor)
+[ ${#tapes[@]} -eq 0 ] && tapes=(status runs cancel doctor narrow)
 for t in "${tapes[@]}"; do
 	vhs "docs/tapes/$t.tape"
 	echo "$t: terminal $(cat "$WR_DEMO_SIZE")"

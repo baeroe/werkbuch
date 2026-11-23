@@ -289,3 +289,45 @@ func TestDoctorAddsTheVersion(t *testing.T) {
 		t.Fatalf("%+v", checks)
 	}
 }
+
+func TestDoctorRunsOnceAtATime(t *testing.T) {
+	release := make(chan struct{})
+	var mu sync.Mutex
+	calls := 0
+	d := &Daemon{Version: "0.4.0", Checks: func(ctx context.Context) []socket.Check {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		<-release
+		return []socket.Check{{Name: "git", Level: "ok"}}
+	}}
+	results := make(chan []socket.Check, 3)
+	for range 3 {
+		go func() { results <- d.Doctor(context.Background()) }()
+	}
+	eventually(t, "the first run", func() bool { mu.Lock(); defer mu.Unlock(); return calls == 1 })
+	time.Sleep(50 * time.Millisecond) // the others wait
+	close(release)
+	for range 3 {
+		if r := <-results; len(r) != 2 || r[1].Name != "git" {
+			t.Fatalf("%+v", r)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("%d runs", calls)
+	}
+	// a caller that gives up gets nothing, the run goes on
+	again := make(chan struct{})
+	d.Checks = func(ctx context.Context) []socket.Check { <-again; return nil }
+	go d.Doctor(context.Background())
+	eventually(t, "a run in flight", func() bool { d.doctorMu.Lock(); defer d.doctorMu.Unlock(); return d.doctorRun != nil })
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if r := d.Doctor(ctx); len(r) != 1 {
+		t.Fatalf("%+v", r)
+	}
+	close(again)
+	if st := d.Status(); st.Now.IsZero() {
+		t.Fatal("no clock in the status")
+	}
+}

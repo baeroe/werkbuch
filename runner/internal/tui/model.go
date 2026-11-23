@@ -551,8 +551,11 @@ func (m *Model) footer(w int) string {
 	if status == "" {
 		return fit(left, w)
 	}
-	if width(left)+width(status)+3 > w { // the status wins over the hints while it is shown
-		return fit(" "+status, w)
+	if width(left)+width(status)+3 > w {
+		if m.busy == "" && (m.flash == "" || m.opts.Now().Sub(m.flashAt) >= flashTTL) {
+			return fit(left, w) // the quiet status gives way to the keys
+		}
+		return fit(" "+status, w) // a message wins over the keys while it is shown
 	}
 	return spread(left, status, w)
 }
@@ -574,6 +577,15 @@ func (m *Model) tabStatus() string {
 		return dimStyle.Render("asked " + ago(m.polledAt, m.opts.Now()))
 	}
 	return goodStyle.Render("polled " + ago(m.polledAt, m.opts.Now()))
+}
+
+// daemonNow is the clock of the daemon at the last answer: times of runs count from it (A501), so they agree with what
+// the daemon measured.
+func (m *Model) daemonNow() time.Time {
+	if m.st != nil && !m.st.Now.IsZero() {
+		return m.st.Now
+	}
+	return m.opts.Now()
 }
 
 func (m *Model) runByID(id string) *executor.Summary {

@@ -119,7 +119,7 @@ func step(runs []executor.Summary, id string, d int) string {
 func (m *Model) statusView(w, h int) string {
 	var b []string
 	add := func(l ...string) { b = append(b, l...) }
-	now := m.opts.Now()
+	now := m.daemonNow()
 	if !m.polled {
 		return "\n  " + dimStyle.Render("asking the daemon …")
 	}
@@ -151,15 +151,29 @@ func (m *Model) statusView(w, h int) string {
 	}
 	add("  " + kv("connection", conn, lw))
 	if p := st.Places; p != nil {
-		add("  " + kv("slots", slots(p.Used.Total, p.Total)+"   "+dimStyle.Render("per repo ")+fmt.Sprintf("%d of %d", p.Used.PerRepo, p.PerRepo)+
-			"   "+dimStyle.Render("light (reviews, answers) ")+slots(p.Used.Light, p.Light)+"   "+dimStyle.Render("(from werkbuch)"), lw))
+		line := "  " + kv("slots", slots(p.Used.Total, p.Total)+"   "+dimStyle.Render("per repo ")+fmt.Sprintf("%d of %d", p.Used.PerRepo, p.PerRepo)+
+			"   "+dimStyle.Render("light (reviews, answers) ")+slots(p.Used.Light, p.Light)+"   "+dimStyle.Render("(from werkbuch)"), lw)
+		if width(line) > w { // a narrow terminal: the short form
+			line = "  " + kv("slots", slots(p.Used.Total, p.Total)+"   "+dimStyle.Render("per repo ")+fmt.Sprintf("%d/%d", p.Used.PerRepo, p.PerRepo)+
+				"   "+dimStyle.Render("light ")+fmt.Sprintf("%d/%d", p.Used.Light, p.Light), lw)
+		}
+		add(line)
 	} else {
 		add("  " + kv("slots", dimStyle.Render("werkbuch names them on the first contact"), lw))
 	}
 	add("")
 	add(m.loadLines(w)...)
 	add("")
-	add("  " + boldStyle.Render("Running"))
+	// the block of runs scrolls with the chosen run (A501), the lines above stay
+	var rb []string
+	sel := -1
+	addRun := func(line string, r executor.Summary) {
+		if r.ID == m.statusSel {
+			sel = len(rb)
+		}
+		rb = append(rb, m.row(line, r.ID, w))
+	}
+	rb = append(rb, "  "+boldStyle.Render("Running"))
 	runs := m.statusRuns()
 	n := 0
 	for _, r := range runs {
@@ -167,9 +181,8 @@ func (m *Model) statusView(w, h int) string {
 			continue
 		}
 		n++
-		line := fmt.Sprintf("  %s  %s  %s  %s   %s", fit(runLabel(r), 8), fit(oneLine(r.Type), 10), fit(oneLine(r.Model), 7),
-			accentStyle.Render(fit(stateMark(r)+" "+clock(now.Sub(r.Started)), 10)), oneLine(r.Title))
-		add(m.row(line, r.ID, w))
+		addRun(fmt.Sprintf("  %s  %s  %s  %s   %s", fit(runLabel(r), 8), fit(oneLine(r.Type), 10), fit(oneLine(r.Model), 7),
+			accentStyle.Render(fit(stateMark(r)+" "+clock(now.Sub(r.Started)), 10)), oneLine(r.Title)), r)
 		var strand []string
 		if r.Branch != "" {
 			strand = append(strand, oneLine(r.Branch))
@@ -182,27 +195,33 @@ func (m *Model) statusView(w, h int) string {
 			strand = append(strand, "worktree "+middle(tildify(oneLine(r.Dir), m.opts.Home), max(w-used-1, 12)))
 		}
 		if len(strand) > 0 {
-			add("            " + dimStyle.Render(strings.Join(strand, "   ")))
+			if sel == len(rb)-1 {
+				sel++ // keep the strand of the chosen run in view, too
+			}
+			rb = append(rb, "            "+dimStyle.Render(strings.Join(strand, "   ")))
 		}
 	}
 	if n == 0 {
-		add("  " + dimStyle.Render("none: the runner waits for werkbuch to hand out a run"))
+		rb = append(rb, "  "+dimStyle.Render("none: the runner waits for werkbuch to hand out a run"))
 	}
 	if len(runs) > n {
-		add("")
-		add("  " + boldStyle.Render("Recent"))
+		rb = append(rb, "", "  "+boldStyle.Render("Recent"))
 		for _, r := range runs[n:] {
 			when := r.Started.Local().Format("15:04")
 			if !r.Ended.IsZero() {
 				when += "–" + r.Ended.Local().Format("15:04")
 			}
-			line := fmt.Sprintf("  %s  %s  %s  %s %s   %s", fit(runLabel(r), 8), fit(oneLine(r.Type), 10), fit(oneLine(r.Model), 7),
-				fit(resultMark(r), 13), fit(when, 11), oneLine(r.Title))
-			add(m.row(line, r.ID, w))
+			addRun(fmt.Sprintf("  %s  %s  %s  %s %s   %s", fit(runLabel(r), 8), fit(oneLine(r.Type), 10), fit(oneLine(r.Model), 7),
+				fit(resultMark(r), 13), fit(when, 11), oneLine(r.Title)), r)
 		}
 	}
-	add("")
-	add("  " + dimStyle.Render(configHint))
+	bottom := []string{"", "  " + dimStyle.Render(configHint)}
+	room := h - len(b) - len(bottom)
+	if len(rb) > room && room < 4 { // the hint gives way first
+		room, bottom = room+len(bottom), nil
+	}
+	add(window(rb, max(sel, 0), max(room, 1))...)
+	add(bottom...)
 	return strings.Join(b, "\n")
 }
 

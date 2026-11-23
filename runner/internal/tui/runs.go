@@ -224,22 +224,26 @@ func (m *Model) runsView(w, h int) string {
 
 // listView lists the runs, running first.
 func (m *Model) listView(w, h int) string {
-	b := []string{"", "  " + dimStyle.Render(fit("RUN", 26)+"STATUS")}
-	for _, r := range m.runs {
+	head := []string{"", "  " + dimStyle.Render(fit("RUN", 26)+"STATUS")}
+	var rows []string
+	sel := 0
+	for i, r := range m.runs {
 		line := "  " + fit(runLabel(r)+" "+fit(oneLine(r.Type), 10)+" "+oneLine(r.Model), 26) + resultMark(r)
 		if r.ID == m.runSel {
+			sel = i
 			line = highlightRow("  "+selStyle.Render(fit(runLabel(r)+" "+fit(oneLine(r.Type), 10)+" "+oneLine(r.Model), 26))+resultMark(r), w)
 		}
-		b = append(b, line)
+		rows = append(rows, line)
 	}
-	return strings.Join(b, "\n")
+	// the list scrolls with the chosen run
+	return strings.Join(append(head, window(rows, sel, max(h-len(head), 1))...), "\n")
 }
 
 // logView shows the log of the chosen run with a title line; indent is the left margin.
 func (m *Model) logView(w, h, indent int) string {
 	r := m.selected()
 	pad := strings.Repeat(" ", indent)
-	now := m.opts.Now()
+	now := m.daemonNow()
 	took := now.Sub(r.Started)
 	if !r.Ended.IsZero() {
 		took = r.Ended.Sub(r.Started)

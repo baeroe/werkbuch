@@ -8,6 +8,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/baeroe/werkbuch/runner/internal/redact"
 )
 
 // wideMin is the terminal width from which Runs shows the list and the log side by side.
@@ -50,10 +52,10 @@ func spread(left, right string, w int) string {
 	return left + strings.Repeat(" ", gap) + right + " "
 }
 
-// san makes external text (titles, logs, errors) safe to print: ANSI escapes are removed, tabs become spaces and
-// other control characters are shown as "?". Newlines are kept.
+// san makes external text (titles, logs, errors) safe to print: ANSI escapes are removed, tokens redacted (as in
+// every log line of the runner), tabs become spaces and other control characters are shown as "?". Newlines are kept.
 func san(s string) string {
-	s = ansi.Strip(s)
+	s = redact.String(ansi.Strip(s))
 	if !strings.ContainsFunc(s, func(r rune) bool { return r < 0x20 && r != '\n' || r == 0x7f || (r >= 0x80 && r < 0xa0) }) {
 		return s
 	}
@@ -113,6 +115,18 @@ func wrap(s string, w int) []string {
 		}
 	}
 	return out
+}
+
+// window keeps the line sel of lines visible in h lines, as skilltri scrolls its lists.
+func window(lines []string, sel, h int) []string {
+	if len(lines) <= h || h <= 0 {
+		return lines
+	}
+	start := 0
+	if sel >= h {
+		start = sel - h + 1
+	}
+	return lines[start:min(start+h, len(lines))]
 }
 
 // highlightRow renders a selected row with a background over the full width.

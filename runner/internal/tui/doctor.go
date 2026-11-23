@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -27,7 +28,7 @@ type doctorState struct {
 	gen     int
 	cancel  context.CancelFunc
 	checks  []socket.Check
-	local   bool // no daemon answered: this process checked
+	local   string // why this process checked ("" when the daemon did): one of the why… texts
 	at      time.Time
 	sel     int
 }
@@ -35,8 +36,15 @@ type doctorState struct {
 type doctorMsg struct {
 	gen    int
 	checks []socket.Check
-	local  bool
+	local  string
 }
+
+// Why this terminal checked instead of the daemon.
+const (
+	whyNoDaemon = "No daemon answers:"
+	whyOld      = "The daemon has no checks (an older version, update it):"
+	whyFailed   = "The daemon did not answer the checks"
+)
 
 // runDoctor asks the daemon for the checks (it checks with its own environment, A500) and checks here when none
 // answers.
@@ -46,19 +54,38 @@ func (m *Model) runDoctor() tea.Cmd {
 	}
 	m.doctor.asked, m.doctor.running = true, true
 	m.doctor.gen++
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	// quit cancels the run: the daemon's answer and the checks here each have a deadline of their own
+	parent, cancel := context.WithCancel(context.Background())
 	m.doctor.cancel = cancel
 	gen, src, local := m.doctor.gen, m.opts.Source, m.opts.LocalDoctor
 	return tea.Batch(m.startBusy("checking …"), func() tea.Msg {
 		defer cancel()
+		ctx, done := context.WithTimeout(parent, time.Minute)
 		checks, err := src.Doctor(ctx)
+		done()
 		if err == nil {
 			return doctorMsg{gen: gen, checks: checks}
 		}
-		if local == nil {
-			return doctorMsg{gen: gen, local: true}
+		why := whyNoDaemon
+		var se *socket.StatusError
+		switch {
+		case errors.As(err, &se) && se.Code == 404:
+			why = whyOld
+		case errors.As(err, &se):
+			why = whyFailed + " (" + oneLine(se.Message) + "):"
+		default:
+			sctx, sdone := context.WithTimeout(parent, 2*time.Second)
+			if _, serr := src.Status(sctx); serr == nil {
+				why = whyFailed + " (" + oneLine(err.Error()) + "):"
+			}
+			sdone()
 		}
-		return doctorMsg{gen: gen, checks: local(ctx), local: true}
+		if local == nil {
+			return doctorMsg{gen: gen, local: why}
+		}
+		lctx, ldone := context.WithTimeout(parent, time.Minute)
+		defer ldone()
+		return doctorMsg{gen: gen, checks: local(lctx), local: why}
 	})
 }
 
@@ -164,13 +191,15 @@ func (m *Model) doctorView(w, h int) string {
 		switch {
 		case m.doctor.running:
 			add("  " + dimStyle.Render("checking the CLIs, the keychain, the instance and the equipment …"))
-		case m.doctor.local:
+		case m.doctor.local == whyNoDaemon:
 			add("  " + warnStyle.Render("○ No daemon answers") + dimStyle.Render(": start it with werkbuch-runner daemon, then press r."))
+		case m.doctor.local != "":
+			add("  " + warnStyle.Render(m.doctor.local) + dimStyle.Render(" press r to ask again."))
 		}
 		return strings.Join(b, "\n")
 	}
-	if m.doctor.local {
-		add("  "+warnStyle.Render("No daemon answers:")+dimStyle.Render(" checked by this terminal with its own PATH and keychain, not the daemon's."), "")
+	if m.doctor.local != "" {
+		add("  "+warnStyle.Render(m.doctor.local)+dimStyle.Render(" checked by this terminal with its own PATH and keychain, not the daemon's."), "")
 	}
 	const nw = 16
 	items := m.doctorItems()

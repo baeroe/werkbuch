@@ -19,7 +19,8 @@ werkbuch-runner version
 ```
 
 The daemon listens on `~/.local/state/werkbuch-runner/runner.sock` (`GET /status`, `GET /runs`,
-`GET /runs/{id}/events`, `POST /runs/{id}/cancel`, `GET /load`, `GET /doctor`, `POST /update`) for the TUI.
+`GET /runs/{id}/events`, `POST /runs/{id}/cancel`, `GET /load`, `GET /doctor`, `POST /update`) for the TUI; `GET /status`
+names the daemon's clock (`now`), from which the TUI counts the times of runs.
 
 ## TUI
 
@@ -53,5 +54,5 @@ make build VERSION=0.3.2       # bin/werkbuch-runner, static, without cgo
 
 Tests run against a fake werkbuch (`internal/fakewerkbuch`) and a fake Claude Code (`testdata/claude`, a shell script
 that writes stream-json); the TUI against a fake daemon. `bash docs/screenshots.sh` renders the screenshots with VHS
-(`brew install vhs`) from the tapes in `docs/tapes/` against the demo daemon `docs/demo` (fictitious data, instance
-`werkbuch.example.com`), in a sandbox that never touches a real daemon, config or keychain. The design is in `docs/superpowers/specs/2026-11-23-runner-design.md`.
+(`brew install vhs`) from the tapes in `docs/tapes/` against the demo daemon `docs/demo` (fictitious data on a fixed clock,
+instance `werkbuch.example.com`), in a sandbox that never touches a real daemon, config or keychain. The design is in `docs/superpowers/specs/2026-11-23-runner-design.md`.
