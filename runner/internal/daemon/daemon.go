@@ -308,24 +308,7 @@ func (d *Daemon) sweepInBackground(ctx context.Context, wg *sync.WaitGroup) bool
 }
 
 func (d *Daemon) sweep(ctx context.Context) {
-	d.mu.Lock()
-	busy := map[string]bool{}
-	mark := func(raw string) {
-		if name, err := git.Name(raw); err == nil {
-			busy[name] = true
-		}
-	}
-	for _, e := range d.running {
-		mark("run-" + e.Run.ID)
-		if e.Run.Thread != nil {
-			mark(e.Run.Thread.ID)
-			if e.Run.Thread.Worktree != nil {
-				mark(*e.Run.Thread.Worktree)
-			}
-		}
-	}
-	d.mu.Unlock()
-	for _, dir := range d.Executor.Git.Sweep(ctx, d.Keep, busy, d.Executor.Teardown) {
+	for _, dir := range d.Executor.Git.Sweep(ctx, d.Keep, d.Executor.TrySlot, d.Executor.Teardown) {
 		d.Log.Info("removed an old worktree", "dir", dir)
 	}
 }

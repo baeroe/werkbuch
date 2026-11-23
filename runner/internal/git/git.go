@@ -330,24 +330,38 @@ func (m *Manager) Remove(ctx context.Context, dir string, teardown Teardown) err
 	return os.RemoveAll(dir)
 }
 
-// Sweep removes worktrees and folders whose last run is older than keep (A497); the names of runs still busy stay.
-func (m *Manager) Sweep(ctx context.Context, keep time.Duration, busy map[string]bool, teardown Teardown) []string {
+// Take hands the sweep a folder for itself: it returns how to give it back, or false while a run has it.
+type Take func(name string) (release func(), ok bool)
+
+// Sweep removes worktrees and folders whose last run is older than keep (A497). Each folder is taken first (take: the
+// turn of the runs, never one a run has); under it the last use is read again, and it is held over teardown and
+// removal, so a run that comes meanwhile waits at its folder and makes it anew afterwards.
+func (m *Manager) Sweep(ctx context.Context, keep time.Duration, take Take, teardown Teardown) []string {
 	var removed []string
+	old := func(metaFile string) bool {
+		var meta Meta
+		data, err := os.ReadFile(metaFile)
+		return err == nil && json.Unmarshal(data, &meta) == nil && time.Since(meta.LastUsed) >= keep
+	}
 	for _, area := range []string{"worktrees", "work"} {
 		metas, _ := filepath.Glob(filepath.Join(m.Data, area, "*.json"))
 		for _, metaFile := range metas {
 			dir := strings.TrimSuffix(metaFile, ".json")
-			if busy[filepath.Base(dir)] {
+			if !old(metaFile) {
 				continue
 			}
-			var meta Meta
-			data, err := os.ReadFile(metaFile)
-			if err != nil || json.Unmarshal(data, &meta) != nil || time.Since(meta.LastUsed) < keep {
-				continue
+			release := func() {}
+			if take != nil {
+				r, ok := take(filepath.Base(dir))
+				if !ok {
+					continue
+				}
+				release = r
 			}
-			if m.Remove(ctx, dir, teardown) == nil {
+			if old(metaFile) && m.Remove(ctx, dir, teardown) == nil {
 				removed = append(removed, dir)
 			}
+			release()
 		}
 	}
 	return removed

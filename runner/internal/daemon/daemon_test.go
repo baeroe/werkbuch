@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -215,3 +216,52 @@ func TestOneSweepAtATimeBesideThePolling(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestARunWaitsForTheSweepOfItsFolder(t *testing.T) {
+	fake := fakewerkbuch.New()
+	defer fake.Close()
+	fake.Heartbeat = 0
+	d := newDaemon(t, fake)
+	d.defaults()
+	d.Keep = -time.Second
+	origin := filepath.Join(t.TempDir(), "origin")
+	for _, args := range [][]string{{"init", "--quiet", "-b", "main", origin}, {"-C", origin, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "--allow-empty", "-m", "first"}} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("%v %s", err, out)
+		}
+	}
+	d.Executor.Repos = func() map[string]string { return map[string]string{"WEB": origin} }
+	marks := t.TempDir()
+	started, done := filepath.Join(marks, "started"), filepath.Join(marks, "done")
+	// an old worktree of the strand, whose teardown is slow
+	if _, err := d.Executor.Git.Prepare(context.Background(), git.Spec{Name: "thread-old", Repo: origin, Branch: "agent/old", Teardown: "touch " + started + "; sleep 1; touch " + done}); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	d.sweepInBackground(context.Background(), &wg)
+	eventually(t, "the teardown started", func() bool { _, err := os.Stat(started); return err == nil })
+
+	r := run("01corr", "answer")
+	r.Type = protocol.Correction
+	r.Thread = &protocol.Thread{ID: "thread-old", Branch: strp("agent/old")}
+	fake.Queue(r)
+	a, _ := d.Client.Claim(context.Background(), protocol.Report{})
+	e := executor.NewExecution(*a.Run)
+	status := d.Executor.Run(context.Background(), e)
+	wg.Wait()
+	if status != protocol.Succeeded {
+		t.Fatalf("%q", status)
+	}
+	if _, err := os.Stat(done); err != nil {
+		t.Fatal("the sweep did not finish its teardown")
+	}
+	// the run came after the sweep: its folder is there, made anew
+	if _, err := os.Stat(filepath.Join(e.Summary().Dir, ".git")); err != nil {
+		t.Fatalf("the run lost its folder: %v", err)
+	}
+	if !strings.Contains(fake.State("01corr").Events[0].Text, "working in") {
+		t.Fatal(fake.State("01corr").Events)
+	}
+}
+
+func strp(s string) *string { return &s }

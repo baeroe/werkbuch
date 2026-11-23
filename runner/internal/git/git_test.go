@@ -104,7 +104,8 @@ func TestReviewWorktreeAndSweep(t *testing.T) {
 	if !plain.Created || plain.Repo {
 		t.Fatalf("plain %+v", plain)
 	}
-	removed := m.Sweep(ctx, -time.Second, map[string]bool{"busy": true}, nil)
+	taken := func(name string) (func(), bool) { return func() {}, name != "busy" }
+	removed := m.Sweep(ctx, -time.Second, taken, nil)
 	if len(removed) != 2 {
 		t.Fatalf("removed %v", removed)
 	}

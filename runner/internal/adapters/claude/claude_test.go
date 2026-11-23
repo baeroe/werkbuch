@@ -2,6 +2,7 @@ package claude
 
 import (
 	"io"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -33,7 +34,7 @@ func TestArgs(t *testing.T) {
 	if light[slices.Index(light, "--permission-mode")+1] != "dontAsk" || slices.Contains(light, "bypassPermissions") {
 		t.Fatalf("light %v", light)
 	}
-	if allowed := light[slices.Index(light, "--allowedTools")+1]; allowed != "Read,Grep,Glob,mcp__werkbuch-run__*" {
+	if allowed := light[slices.Index(light, "--allowedTools")+1]; allowed != "Read(./**),mcp__werkbuch-run__*" {
 		t.Fatalf("allowed %q", allowed)
 	}
 	if light[slices.Index(light, "--disallowedTools")+1] != "Bash,Write,Edit,MultiEdit,NotebookEdit" {
@@ -45,10 +46,24 @@ func TestArgs(t *testing.T) {
 	if slices.Contains(args, "--setting-sources") {
 		t.Fatalf("a code run keeps the settings of its repository: %v", args)
 	}
+	private := t.TempDir()
 	jr := job("review", nil)
-	jr.Private = "/tmp/werkbuch-run-1"
-	if withDir := Args(jr); withDir[slices.Index(withDir, "--add-dir")+1] != "/tmp/werkbuch-run-1" {
+	jr.Private = private
+	withDir := Args(jr)
+	if withDir[slices.Index(withDir, "--add-dir")+1] != private {
 		t.Fatalf("the prepared context is readable: %v", withDir)
+	}
+	rules := strings.Split(withDir[slices.Index(withDir, "--allowedTools")+1], ",")
+	if rules[0] != "Read(./**)" || rules[1] != "Read(/"+private+"/**)" || rules[len(rules)-1] != "mcp__werkbuch-run__*" {
+		t.Fatalf("rules %v", rules)
+	}
+	for _, r := range rules {
+		if r == "Read" || r == "Grep" || r == "Glob" || strings.HasPrefix(r, "Bash") {
+			t.Fatalf("a rule without a path: %v", rules)
+		}
+	}
+	if resolved, _ := filepath.EvalSymlinks(private); resolved != private && !slices.Contains(rules, "Read(/"+resolved+"/**)") {
+		t.Fatalf("the resolved path is missing: %v", rules)
 	}
 	j := job("task", nil)
 	j.SystemPromptFile = "/tmp/x/system-prompt.md"

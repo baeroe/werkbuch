@@ -5,6 +5,7 @@ package adapters
 import (
 	"encoding/json"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -26,10 +27,24 @@ type Job struct {
 	Private string
 }
 
-// ReadOnlyTools are what a light run (`review`, `comment`) may use in Claude Code (A493): reading files and werkbuch
-// through `werkbuch-run`, no shell at all (even `git log --output=<file>` writes). What it would read with git, the
-// runner prepares as files (Job.Context).
-var ReadOnlyTools = []string{"Read", "Grep", "Glob", "mcp__werkbuch-run__*"}
+// ReadRules are the allow rules of a light run (`review`, `comment`) in Claude Code (A493): reading files only in the
+// worktree (`Read(./**)`, the working directory) and in the private folder of the run (an absolute rule `//…`, also
+// under the path with symlinks resolved, `/var` is `/private/var` on macOS), and werkbuch through `werkbuch-run`. No
+// bare `Read`, no shell (even `git log --output=<file>` writes). Grep and Glob have no path rules of their own: Claude
+// Code checks them against the `Read` rules. What a light run would ask git for, the runner prepares (Job.Context).
+func ReadRules(private string) []string {
+	rules := []string{"Read(./**)"}
+	if private != "" {
+		dirs := []string{private}
+		if resolved, err := filepath.EvalSymlinks(private); err == nil && resolved != private {
+			dirs = append(dirs, resolved)
+		}
+		for _, d := range dirs {
+			rules = append(rules, "Read(/"+strings.TrimRight(d, "/")+"/**)")
+		}
+	}
+	return append(rules, "mcp__werkbuch-run__*")
+}
 
 // WriteTools are what a light run never gets.
 var WriteTools = []string{"Bash", "Write", "Edit", "MultiEdit", "NotebookEdit"}

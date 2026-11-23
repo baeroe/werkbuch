@@ -242,6 +242,29 @@ func (x *Executor) slot(ctx context.Context, name string) (func(), error) {
 	}
 }
 
+// TrySlot takes the working folder of a run without waiting (the sweep, A497): false while a run has it or waits for it.
+func (x *Executor) TrySlot(name string) (func(), bool) {
+	x.slotsMu.Lock()
+	defer x.slotsMu.Unlock()
+	if x.slots == nil {
+		x.slots = map[string]*slot{}
+	}
+	if sl := x.slots[name]; sl != nil {
+		return nil, false
+	}
+	sl := &slot{turn: make(chan struct{}, 1), users: 1}
+	sl.turn <- struct{}{}
+	x.slots[name] = sl
+	return func() {
+		<-sl.turn
+		x.slotsMu.Lock()
+		if sl.users--; sl.users == 0 {
+			delete(x.slots, name)
+		}
+		x.slotsMu.Unlock()
+	}, true
+}
+
 // slotCount is the number of working folders with a run or a waiting one (tests).
 func (x *Executor) slotCount() int {
 	x.slotsMu.Lock()
