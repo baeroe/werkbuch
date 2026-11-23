@@ -58,17 +58,21 @@ shown() {
     esac
 }
 
-# the address of the instance: https, http only for this machine (like the runner, A499)
+# the address of the instance: https, http only for this machine (like the runner, A499); never a user in it (an @ would
+# make the host what follows it, `http://localhost@evil.example` is evil.example)
 check_instance() {
+    authority=${WERKBUCH_URL#*://}
+    authority=${authority%%/*}
+    case $authority in
+        *@*) die instance "the address of the instance names a user: $WERKBUCH_URL" ;;
+    esac
     case $WERKBUCH_URL in
         https://?*) proto='=https' ;;
         http://?*)
-            host=${WERKBUCH_URL#http://}
-            host=${host%%/*}
-            case $host in
+            case $authority in
                 \[::1\] | \[::1\]:*) ;;
                 *)
-                    host=${host%:*}
+                    host=${authority%:*}
                     case $host in
                         localhost) ;;
                         127.*)
@@ -148,7 +152,9 @@ main() {
     info system "$os/$arch"
     info instance "$WERKBUCH_URL"
 
-    tmp=$(mktemp -d "${TMPDIR:-/tmp}/werkbuch-runner.XXXXXX")
+    # the download waits next to its place, not in /tmp: /tmp may be mounted noexec, and the binary runs before it moves
+    mkdir -p "$bindir"
+    tmp=$(mktemp -d "$bindir/.werkbuch-runner.XXXXXX")
     trap 'rm -rf "$tmp"' EXIT
     trap 'exit 130' INT TERM
     url="$WERKBUCH_URL/runner/download/$os/$arch"
@@ -168,11 +174,8 @@ main() {
 
     chmod 755 "$tmp/werkbuch-runner"
     version=$("$tmp/werkbuch-runner" version </dev/null 2>/dev/null) || die installed "the downloaded runner does not start on this machine"
-    mkdir -p "$bindir"
-    # a new file renamed into place: a running daemon keeps its old binary until it starts again
-    cp "$tmp/werkbuch-runner" "$bindir/.werkbuch-runner.new.$$"
-    chmod 755 "$bindir/.werkbuch-runner.new.$$"
-    mv -f "$bindir/.werkbuch-runner.new.$$" "$bindir/werkbuch-runner"
+    # a new file renamed into place (same folder): a running daemon keeps its old binary until it starts again
+    mv -f "$tmp/werkbuch-runner" "$bindir/werkbuch-runner"
     runner="$bindir/werkbuch-runner"
     ok installed "$(shown "$runner") $dim($version)$reset"
 

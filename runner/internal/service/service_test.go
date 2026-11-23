@@ -88,7 +88,8 @@ func TestUnit(t *testing.T) {
 		"[Service]\nType=simple\nExecStart=/home/mara/.local/bin/werkbuch-runner daemon\n",
 		"Restart=always\nRestartSec=10\n",
 		`Environment="PATH=/Users/mara/.local/bin:/opt/homebrew/bin:/usr/bin:/bin"`,
-		`Environment="WERKBUCH_RUNNER_DATA_DIR=/srv/100%% \"runner\" $$HOME\\x"`,
+		// systemd.exec(5): Environment= takes specifiers (%) and C escapes, but expands no $
+		`Environment="WERKBUCH_RUNNER_DATA_DIR=/srv/100%% \"runner\" $HOME\\x"`,
 		"[Install]\nWantedBy=default.target\n",
 	} {
 		if !strings.Contains(text, want) {
@@ -113,6 +114,10 @@ func TestRenderRefuses(t *testing.T) {
 	o.Exe = "/home/a b/werkbuch-runner"
 	if _, err := Render(o); err == nil {
 		t.Fatal("a path with a space in ExecStart")
+	}
+	o.Exe = "/home/$USER/werkbuch-runner"
+	if _, err := Render(o); err == nil {
+		t.Fatal("a $ in ExecStart")
 	}
 	o.Exe = "relative/werkbuch-runner"
 	if _, err := Render(o); err == nil {
@@ -152,6 +157,53 @@ func TestInstallLaunchd(t *testing.T) {
 	}
 	if Started(o) != "launchd dev.werkbuch.runner loaded and started" {
 		t.Fatal(Started(o))
+	}
+}
+
+func TestInstallLaunchdWithoutAGUISession(t *testing.T) {
+	o := options(t, "darwin")
+	f := &fakeRun{fail: map[string]error{"launchctl bootstrap": errors.New("exit status 125")}}
+	o.Run = f.run
+	o.Pause = func() {}
+	_, err := Install(context.Background(), o, true)
+	if err == nil || !strings.Contains(err.Error(), "needs a GUI session of this user") || !strings.Contains(err.Error(), "werkbuch-runner service install") {
+		t.Fatal(err)
+	}
+}
+
+func TestTrimLog(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "runner.log")
+	if err := TrimLog(log, 10); err != nil {
+		t.Fatalf("no log yet: %v", err)
+	}
+	os.WriteFile(log, []byte("0123456789"), 0o600)
+	if err := TrimLog(log, 10); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(log); string(data) != "0123456789" {
+		t.Fatal("a log at the limit stays")
+	}
+	os.WriteFile(log+".1", []byte("older"), 0o600)
+	// launchd holds the file open with O_APPEND: the log is emptied in place, never renamed
+	held, _ := os.OpenFile(log, os.O_WRONLY|os.O_APPEND, 0)
+	defer held.Close()
+	held.WriteString("ab")
+	if err := TrimLog(log, 10); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(log + ".1"); string(data) != "0123456789ab" {
+		t.Fatalf("the predecessor is %q", data)
+	}
+	held.WriteString("new")
+	if data, _ := os.ReadFile(log); string(data) != "new" {
+		t.Fatalf("the log is %q", data)
+	}
+	if info, _ := os.Stat(log + ".1"); info.Mode().Perm() != 0o600 {
+		t.Fatal(info.Mode())
+	}
+	if LogFile("/s") != "/s/runner.log" || LogMax != 10<<20 {
+		t.Fatal(LogFile("/s"), LogMax)
 	}
 }
 

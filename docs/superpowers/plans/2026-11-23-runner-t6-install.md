@@ -44,7 +44,7 @@
 
 - PHP: `tests/Feature/Runners/RunnerDownloadTest.php` (Binary und Summe, 404 für unbekanntes System, fehlendes Binary, Skript mit URL, `sh -n`, Drossel, kein Cookie), `tests/Feature/Runners/InstallScriptTest.php` (das Skript mit falschem `curl`, `uname` und Runner vor dem `PATH`: Ablauf, Summe falsch, http, Pairing scheitert, Optionen), `ImageTest` (Stage, Pins, Ort, Version, `.dockerignore`).
 - Go: `internal/service` (Plist, Unit, Escaping, Laden mit falschem `launchctl`/`systemctl`), `main_test` (`service`, erste Zeile von `login`).
-- Smoke: Skript und vier Summen, Binary der eigenen Architektur, unbekanntes System 404; im Image als root ein Container mit `--network host`: `install.sh --no-service`, `systemd-analyze verify`, Daemon kurz → Runner online, dann widerrufen.
+- Smoke: Skript und vier Summen, unbekanntes System 404; ein Container des Images mit `--network host` als `www-data`: `install.sh --no-service`, Daemon kurz → Runner online, dann widerrufen; die Unit herauskopiert und auf dem Host mit `systemd-analyze --user verify` geprüft (ohne systemd übersprungen, kein `apt`, Review PR #70).
 
 ## Tasks
 

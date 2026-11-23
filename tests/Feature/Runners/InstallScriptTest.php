@@ -6,7 +6,7 @@ use Symfony\Component\Process\Process;
 
 /*
  * resources/runner/install.sh as the instance serves it (spec 8.2, A520), run by sh with a fake curl and uname before
- * the PATH (and id, for root): the fake curl serves files of a folder, the "binary" it serves is a shell script that writes down how it
+ * the PATH (and id for root, sysctl for Rosetta): the fake curl serves files of a folder, the "binary" it serves is a shell script that writes down how it
  * was called (version, login, service). Nothing reaches the network, launchd or systemd.
  */
 
@@ -31,6 +31,8 @@ beforeEach(function () {
         #!/bin/sh
         case $1 in -s) echo "${FAKE_UNAME_S:-Linux}" ;; -m) echo "${FAKE_UNAME_M:-x86_64}" ;; esac
         SH);
+    file_put_contents("{$this->root}/fakes/sysctl", "#!/bin/sh\n[ \"\$2\" = hw.optional.arm64 ] && echo \"\${FAKE_ARM64:-0}\"\n");
+    chmod("{$this->root}/fakes/sysctl", 0o755);
     file_put_contents("{$this->root}/fakes/id", "#!/bin/sh\necho \"\${FAKE_UID:-1000}\"\n");
     chmod("{$this->root}/fakes/id", 0o755);
     chmod("{$this->root}/fakes/curl", 0o755);
@@ -98,7 +100,7 @@ it('downloads the runner, checks its sum, installs, pairs and starts the service
         ->and($out)->toContain('~/.local/bin is not in your PATH')
         ->and(file_get_contents("{$this->root}/home/.local/bin/werkbuch-runner"))->toBe($runner)
         ->and(fileperms("{$this->root}/home/.local/bin/werkbuch-runner") & 0o777)->toBe(0o755)
-        ->and(glob("{$this->root}/home/.local/bin/.*new*"))->toBe([])
+        ->and(glob("{$this->root}/home/.local/bin/.werkbuch-runner*"))->toBe([])
         ->and(glob("{$this->root}/tmp/*"))->toBe([])
         ->and($log)->toHaveCount(5)
         ->and(array_slice($log, 2))->toBe(['runner version', 'runner login https://werkbuch.example.com --code K7QF-29XM --name box', 'runner service install'])
@@ -136,6 +138,7 @@ it('runs nothing it downloaded when the sum does not match', function () use ($s
         ->and($out)->not->toContain('✓ checksum')
         ->and(collect($log)->filter(fn (string $line) => str_starts_with($line, 'runner'))->all())->toBe([])
         ->and(file_exists("{$this->root}/home/.local/bin/werkbuch-runner"))->toBeFalse()
+        ->and(glob("{$this->root}/home/.local/bin/.werkbuch-runner*"))->toBe([])
         ->and(glob("{$this->root}/tmp/*"))->toBe([]);
 });
 
@@ -179,6 +182,9 @@ it('reaches an instance over https only, http on this machine', function (string
     'http' => ['http://werkbuch.example.com', false, ''],
     'a name starting with 127' => ['http://127.0.0.1.example.com', false, ''],
     'no scheme' => ['werkbuch.example.com', false, ''],
+    'a user before localhost' => ['http://localhost@werkbuch.example.com', false, ''],
+    'a user before a loopback' => ['http://werkbuch.example.com@127.0.0.1', false, ''],
+    'a user over https' => ['https://mara@werkbuch.example.com', false, ''],
 ]);
 
 it('refuses what it cannot install', function (array $arguments, array $env, int $exit, string $says) use ($serve, $install) {
@@ -197,3 +203,47 @@ it('refuses what it cannot install', function (array $arguments, array $env, int
     'no build for the system' => [['--code', 'X'], ['FAKE_UNAME_S' => 'Darwin', 'FAKE_UNAME_M' => 'arm64'], 1, 'could not download https://werkbuch.example.com/runner/download/darwin/arm64'],
     'help' => [['--help'], [], 0, 'Installs the werkbuch runner from this instance and pairs it.'],
 ]);
+
+it('takes the native runner on Apple silicon under Rosetta', function (string $arm64, string $arch) use ($serve, $install) {
+    $serve($this->root, 'darwin', 'arm64');
+    $serve($this->root, 'darwin', 'amd64');
+
+    [$code, $out, , $log] = $install($this->root, ['--code', 'X'], ['FAKE_UNAME_S' => 'Darwin', 'FAKE_UNAME_M' => 'x86_64', 'FAKE_ARM64' => $arm64]);
+
+    expect($code)->toBe(0, $out)
+        ->and($out)->toContain("  system       darwin/{$arch}\n")
+        ->and($log[0])->toEndWith("/runner/download/darwin/{$arch}");
+})->with(['Rosetta' => ['1', 'arm64'], 'an Intel Mac' => ['0', 'amd64']]);
+
+it('evaluates nothing of the name and the prefix', function () use ($serve, $install) {
+    $runner = $serve($this->root);
+    $name = 'box $(touch pwned-1) `touch pwned-2`; touch pwned-3 "it\'s"';
+    $prefix = "{$this->root}/p dir/\$(touch pwned-4)";
+
+    [$code, $out, $errors, $log] = $install($this->root, ['--code', 'K7QF-29XM', '--name', $name, '--prefix', $prefix, '--no-service']);
+
+    expect($code)->toBe(0, $out.$errors)
+        ->and(file_get_contents("{$prefix}/bin/werkbuch-runner"))->toBe($runner)
+        ->and($log)->toContain("runner login https://werkbuch.example.com --code K7QF-29XM --name {$name}")
+        ->and(glob("{$this->root}/pwned-*"))->toBe([])
+        ->and(glob(getcwd().'/pwned-*'))->toBe([]);
+});
+
+it('runs nothing of a script that arrived only in part', function (float $share) use ($serve) {
+    $serve($this->root);
+    config(['app.url' => 'https://werkbuch.example.com']);
+    $script = RunnerDist::script();
+    // the last line calls main; a cut before it or inside a function leaves nothing that runs
+    $cut = $share < 1 ? (int) (strlen($script) * $share) : strrpos($script, 'main "$@"');
+
+    $process = new Process(['sh', '-s', '--', '--code', 'K7QF-29XM'], $this->root, [
+        'PATH' => "{$this->root}/fakes:".getenv('PATH'), 'HOME' => "{$this->root}/home", 'TMPDIR' => "{$this->root}/tmp",
+        'FAKE_LOG' => "{$this->root}/log", 'FAKE_SERVE' => "{$this->root}/serve",
+    ]);
+    $process->setInput(substr($script, 0, $cut));
+    $process->run();
+
+    expect(file_exists("{$this->root}/log"))->toBeFalse($process->getOutput().$process->getErrorOutput())
+        ->and($process->getOutput())->not->toContain('installer')
+        ->and(file_exists("{$this->root}/home/.local"))->toBeFalse();
+})->with(['a third' => [0.33], 'two thirds' => [0.66], 'all but the call of main' => [1.0]]);

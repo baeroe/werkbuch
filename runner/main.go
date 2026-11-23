@@ -232,6 +232,10 @@ func logout(stdout io.Writer) error {
 
 func serve(stderr io.Writer) error {
 	log := slog.New(redact.Handler{Next: slog.NewTextHandler(stderr, nil)})
+	// the launch agent writes into one file that nothing rotates: a new one from 10 MB, the old one kept once
+	if err := service.TrimLog(service.LogFile(paths.StateDir()), service.LogMax); err != nil {
+		log.Warn("could not trim the log", "err", err)
+	}
 	cfg, err := config.Load(paths.ConfigFile())
 	if err != nil {
 		return err

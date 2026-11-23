@@ -173,16 +173,17 @@ func plist(o Options, names []string) string {
 		b.WriteString("\t</dict>\n")
 	}
 	str("WorkingDirectory", o.Home)
-	log := filepath.Join(o.State, "runner.log")
+	log := LogFile(o.State)
 	str("StandardOutPath", log)
 	str("StandardErrorPath", log)
 	b.WriteString("</dict>\n</plist>\n")
 	return b.String()
 }
 
-// quote writes a value for Environment= of systemd: in double quotes, with %, $, " and \ escaped.
+// quote writes a value for Environment= of systemd (systemd.exec(5)): in double quotes, with %, " and \ escaped;
+// Environment= expands no variables, a $ stays as it is.
 func quote(s string) string {
-	s = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "%", "%%", "$", "$$").Replace(s)
+	s = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "%", "%%").Replace(s)
 	return `"` + s + `"`
 }
 
@@ -263,7 +264,37 @@ func load(ctx context.Context, o Options, file string) error {
 			o.Pause()
 		}
 	}
-	return err
+	return fmt.Errorf("%w (a launch agent needs a GUI session of this user: sign in on the Mac once, then run `werkbuch-runner service install`)", err)
+}
+
+// LogMax is the size from which the daemon starts a new log (TrimLog).
+const LogMax = 10 << 20
+
+// LogFile is the log of the launch agent (launchd writes stdout and stderr there).
+func LogFile(state string) string { return filepath.Join(state, "runner.log") }
+
+// TrimLog keeps the log of the launch agent small: over max, its content becomes the one predecessor `<log>.1` and the
+// log is emptied in place. launchd holds the file open with O_APPEND, so it is never renamed (the daemon would go on
+// writing into the predecessor); the next line lands at the start of the empty log. The daemon calls it at its start.
+func TrimLog(path string, max int64) error {
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) || (err == nil && info.Size() <= max) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path+".1", data, 0o600); err != nil {
+		return err
+	}
+	if err := os.Chmod(path+".1", 0o600); err != nil {
+		return err
+	}
+	return os.Truncate(path, 0)
 }
 
 // Uninstall stops the service and removes its file; a service that is not there is fine.

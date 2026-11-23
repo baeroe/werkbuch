@@ -48,6 +48,7 @@ finish() {
         echo "smoke: failed, the last lines of the logs:" >&2
         dc logs --no-color 2>&1 | tail -n 400 >&2 || true
     fi
+    docker rm -f "${PROJECT}-runner" >/dev/null 2>&1 || true
     if [ "${SMOKE_KEEP:-}" = 1 ]; then
         echo "smoke: SMOKE_KEEP=1, the stack $PROJECT stays (remove: docker compose -p $PROJECT --env-file $ENV -f $ROOT/docker-compose.yml down -v)"
     else
@@ -68,30 +69,57 @@ dc up -d --wait --wait-timeout 300
 smoke full
 
 # 1b. the runner from the instance (A520): install.sh in a container of the image on the host network (http only to
-#     localhost, like the runner), as www-data (the installer refuses root); the systemd unit it writes checked by
-#     systemd-analyze (installed for that, nothing starts it), the daemon polls a few seconds, then werkbuch has the
-#     runner online (smoke runner revokes it)
+#     localhost, like the runner), as www-data (the installer refuses root), --no-service; the daemon polls a few
+#     seconds, then werkbuch has the runner online (smoke runner revokes it). The unit it wrote is copied out and checked
+#     with systemd-analyze here (the CI's Ubuntu has systemd; a Mac has none and skips it). Nothing is installed from
+#     package mirrors.
+RUNNER_BOX="${PROJECT}-runner"
 code=$(smoke pair | sed -n 's/^smoke: code //p')
 if [ -z "$code" ]; then
     echo "smoke: no one-time code for the runner" >&2
     exit 1
 fi
 # shellcheck disable=SC2016 # evaluated by sh in the container
-docker run --rm --network host --user root --entrypoint sh \
+docker run --name "$RUNNER_BOX" --network host --entrypoint sh -e HOME=/tmp/runner -e PATH=/tmp/runner/.local/bin:/usr/local/bin:/usr/bin:/bin \
     -e SMOKE_URL="http://localhost:${PORT}" -e CODE="$code" -e NAME="smoke-${SMOKE_PROBE}" "$WERKBUCH_IMAGE" -c '
         set -e
-        apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends systemd >/dev/null
-        mkdir -p /tmp/runner /tmp/xdg && chown www-data /tmp/runner /tmp/xdg && chmod 700 /tmp/xdg
-        runuser -u www-data -- env HOME=/tmp/runner XDG_RUNTIME_DIR=/tmp/xdg PATH=/tmp/runner/.local/bin:/usr/local/bin:/usr/bin:/bin sh -c "
-            set -e
-            cd /tmp/runner
-            curl -fsSL \"\$SMOKE_URL/runner/install.sh\" | sh -s -- --code \"\$CODE\" --name \"\$NAME\" --no-service
-            systemd-analyze --user verify .config/systemd/user/werkbuch-runner.service
-            test \"\$(werkbuch-runner version)\" != dev
-            timeout 15 werkbuch-runner daemon 2>/dev/null || test \$? = 124
-        "'
+        mkdir -p "$HOME" && cd "$HOME"
+        curl -fsSL "$SMOKE_URL/runner/install.sh" | sh -s -- --code "$CODE" --name "$NAME" --no-service
+        test "$(werkbuch-runner version)" != dev
+        status=0
+        timeout 15 werkbuch-runner daemon 2>"$HOME/daemon.log" || status=$?
+        if [ "$status" != 124 ]; then
+            echo "smoke: the daemon of the runner ended with $status:" >&2
+            cat "$HOME/daemon.log" >&2
+            exit 1
+        fi'
+mkdir -p "$DIR/unit"
+docker cp "$RUNNER_BOX:/tmp/runner/.config/systemd/user/werkbuch-runner.service" "$DIR/unit/werkbuch-runner.service" >/dev/null
+docker cp "$RUNNER_BOX:/tmp/runner/daemon.log" "$DIR/daemon.log" >/dev/null
+docker rm "$RUNNER_BOX" >/dev/null
 echo "smoke: runner installed"
-smoke runner
+if command -v systemd-analyze >/dev/null 2>&1; then
+    # the binary lives in the container: ExecStart points at a program of this machine, the rest stays as written
+    sed -i "s#^ExecStart=[^ ]*#ExecStart=$(type -P true)#" "$DIR/unit/werkbuch-runner.service"
+    mkdir -p "$DIR/xdg" && chmod 700 "$DIR/xdg"
+    # verify ends with 0 on a line it ignores: every remark about the unit counts as a failure
+    verified=$(XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-$DIR/xdg}" systemd-analyze --user verify "$DIR/unit/werkbuch-runner.service" 2>&1) || {
+        echo "smoke: systemd-analyze refuses the unit: $verified" >&2
+        exit 1
+    }
+    if grep -q 'werkbuch-runner.service' <<<"$verified"; then
+        echo "smoke: systemd-analyze remarks on the unit: $verified" >&2
+        exit 1
+    fi
+    echo "smoke: systemd unit ok"
+else
+    echo "smoke: no systemd-analyze on this machine, the unit stays unchecked (the CI checks it)"
+fi
+if ! smoke runner; then
+    echo "smoke: the log of the runner's daemon:" >&2
+    cat "$DIR/daemon.log" >&2
+    exit 1
+fi
 
 # 2. inside the containers: never root, the code read-only, only storage/app writable, the hardening of the ini and
 #    the patched libbrotli (Debian trixie's 1.1.0-2+deb13u1; v5.0.4 installed it itself), glibc. Since v5.1.0 the
