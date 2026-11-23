@@ -65,8 +65,9 @@ export const DB_KEY = 'werkbuch:db';
  * 10: runners report their CLIs; Otto works with Codex; agents have no slots or time limits of their own (WEBU-18).
  * 11: working rules per kind of run in the organization, guidance per item type, project info; no bot instruction.
  * 12: one GitHub app instead of two; repos say whether a ruleset protects the base branch; the merge guard.
+ * 13: the merge guard remembers the items assigned while it held the project (`held_item_ids`).
  */
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 /** An earlier identifier of a project: keys like `OLD-12` keep resolving after a rename. */
 export interface ProjectAlias {

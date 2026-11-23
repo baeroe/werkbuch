@@ -483,18 +483,21 @@ describe('an unauthorized merge (spec 7.1)', () => {
     expect(getDb().agent_runs.filter((run) => run.item_id === item.id)).toHaveLength(before);
   });
 
-    it('gives way to a disconnect of GitHub: the guard goes and the strands wait for GitHub', async () => {
+  it('gives way to a disconnect of GitHub: the guard goes and the strands wait for GitHub', async () => {
     await simulateUnauthorizedMerge('p_web');
     await disconnectGithub();
     expect((await getProjectAgents('p_web')).guard).toBeNull();
     expect(getDb().agent_threads.find((thread) => thread.id === 'th_web51')).toMatchObject({ status: 'paused', pause_reason: 'github' });
   });
 
-  it('lets the strands wait for GitHub when the project has no repo any more on a confirm', async () => {
+  it('lets the strands wait for GitHub when the project has no repo any more on a confirm, and starts what was assigned meanwhile', async () => {
     await simulateUnauthorizedMerge('p_web');
+    await updateWorkItem('wi_web_50', { assignee_id: 'u_kira' });
     await saveProjectAgents({ ...(await getProjectAgents('p_web')), repo: null });
     expect((await getProjectAgents('p_web')).guard).not.toBeNull();
-    expect(await confirmMergeGuard('p_web')).toEqual({ resumed: 0 });
+    expect(await confirmMergeGuard('p_web')).toEqual({ resumed: 1 });
+    // without a repo WEB-50 works in a folder, as without the guard
+    expect((await getItemAgents('WEB-50')).runs.at(-1)).toMatchObject({ type: 'task', status: 'queued' });
     expect(getDb().agent_threads.find((thread) => thread.id === 'th_web51')).toMatchObject({ status: 'paused', pause_reason: 'github' });
   });
 });

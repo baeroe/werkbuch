@@ -490,10 +490,24 @@ export function confirmMergeGuard(projectId: string): Promise<{ resumed: number 
     // item that stays with its bot (spec 7.2) gets nothing
     const held = new Set([...settings.guard.held_item_ids, ...threadsOf(db, project.id).filter((thread) => thread.pause_reason === 'guard').map((thread) => thread.item_id)]);
     settings.guard = null;
-    // without a repo (chosen away meanwhile) the paused strands wait as after a disconnect of GitHub
+    // without a repo (chosen away meanwhile) the paused strands wait as after a disconnect of GitHub; what was assigned
+    // meanwhile starts as without the guard, in a folder
     if (!settings.repo) {
-      for (const thread of threadsOf(db, project.id)) if (thread.pause_reason === 'guard') thread.pause_reason = 'github';
-      return { resumed: 0 };
+      const paused = new Set<string>();
+      for (const thread of threadsOf(db, project.id)) {
+        if (thread.pause_reason !== 'guard') continue;
+        thread.pause_reason = 'github';
+        paused.add(thread.item_id);
+      }
+      let started = 0;
+      for (const item of db.items.filter((entry) => held.has(entry.id) && !paused.has(entry.id))) {
+        const bot = agentBot(db, item.assignee_id ?? '');
+        if (bot?.type !== 'bot' || whyAssigneeIsNoAgent(db, item) !== null) continue;
+        if (db.agent_runs.some((run) => run.item_id === item.id && isActive(run) && run.status !== 'canceling')) continue;
+        onAssigneeChanged(ctx, me, item, null);
+        started += 1;
+      }
+      return { resumed: started };
     }
     let resumed = 0;
     for (const item of db.items.filter((entry) => held.has(entry.id))) {

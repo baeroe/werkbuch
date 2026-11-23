@@ -235,7 +235,7 @@ Der Klickdummy ist eingefroren; dieser Teil erweitert ihn bewusst, damit Rafael 
 - Die Auslastung ist ein fester Stand je Runner aus dem Seed.
 - Die TUI und `install.sh` sind Englisch wie skilltri und tussh; sie stehen in Mono-Schrift, nur auf `/_tui` (DESIGN.md, Entscheidungen 2026-11-23).
 - Arbeitsregeln speichert das Formular als Ganzes mit dem Rest des Abschnitts; „Standard wiederherstellen“ gilt nach dem Speichern.
-- Ein eigenmächtiger Merge kommt nur über den Knopf „Nur im Klickdummy“: er schreibt am Item des Auftrags einen Kommentar von Automation und benachrichtigt die Org-Admins (Spec 11.3); kam der Push aus keinem laufenden Auftrag, entfallen Kommentar und Benachrichtigung. Der Zustand überlebt einen Wechsel von Repo oder Basis-Branch (nur Bestätigen hebt ihn auf); „GitHub trennen“ hebt ihn auf, die Stränge warten dann wie nach jedem Trennen auf GitHub.
+- Ein eigenmächtiger Merge kommt nur über den Knopf „Nur im Klickdummy“: er schreibt am Item des Auftrags einen Kommentar von Automation und benachrichtigt die Org-Admins (Spec 11.3); kam der Push aus keinem laufenden Auftrag, entfallen Kommentar und Benachrichtigung. Der Zustand überlebt einen Wechsel von Repo oder Basis-Branch (nur Bestätigen hebt ihn auf); „GitHub trennen“ hebt ihn auf, die Stränge warten dann wie nach jedem Trennen auf GitHub. Ist beim Bestätigen kein Repo mehr gewählt, warten die pausierten Stränge ebenso auf GitHub; was während der Pause einem Agenten zugewiesen wurde, startet wie ohne Repo in einem Ordner.
 
 ## Wo die echte API andockt
 
