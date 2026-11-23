@@ -99,7 +99,7 @@ Ein abgelaufener oder benutzter Code ist eine klare Meldung im Terminal. Ein Run
 
 ### 6.3 Abholen
 
-`POST /api/runner/claim` mit dem freien Platz des Runners (gesamt, je Repo, leichte Aufträge; Plätze aus werkbuch, siehe 9) und seiner Auslastung (8.6). Ein Runner nimmt Aufträge aller Projekte *(Rafael: keine Einschränkung)*. werkbuch wählt in einer Transaktion den nächsten passenden Auftrag (Reihenfolge und Regeln 9), setzt ihn auf `running` mit Lease (Ablauf = jetzt + Heartbeat-Fenster) und antwortet mit allem, was der Runner braucht:
+`POST /api/runner/claim` mit dem freien Platz des Runners (gesamt, je Repo, leichte Aufträge; Plätze aus werkbuch, siehe 9) und seiner Auslastung (8.6). Ein Runner nimmt Aufträge aller Projekte *(Rafael: keine Einschränkung)*, aber nur für CLIs, die er installiert und angemeldet hat (8.8). werkbuch wählt in einer Transaktion den nächsten passenden Auftrag (Reihenfolge und Regeln 9), setzt ihn auf `running` mit Lease (Ablauf = jetzt + Heartbeat-Fenster) und antwortet mit allem, was der Runner braucht:
 
 - Auftrag: ID, Typ, Item (ID, Key, Titel), Projekt (Kennung), Strang (ID, Branch, Basis-Branch, Session-ID falls vorhanden), Zeitlimit.
 - Prompt und System-Prompt, fertig gebaut von werkbuch (7.3).
@@ -284,6 +284,14 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 - werkbuch selbst hängt der Runner je Auftrag dazu (8.1). Hat die Maschine einen weiteren Zugang zu werkbuch (etwa ein MCP-Server mit einem persönlichen Token), handelte ein Agent damit an Run-Token und Sperre (11.2) vorbei: „Doctor“ warnt davor (der Runner fragt die MCP-Liste des CLI ab und sucht Server, die die Instanz erreichen) und nennt den Server, den der Betreiber für den Runner abschalten sollte. Merges schützt das Ruleset ohnehin (11.3).
 - Der Runner meldet mit dem Heartbeat die Namen der MCP-Server, Skills und Plugins seines Harness; die Runner-Seite in werkbuch zeigt sie nur zum Lesen (10.1), „Doctor“ in der TUI ebenso.
 
+### 8.8 CLIs des Runners
+
+*(Claude, auf Rafaels Frage, was bei einem fehlenden CLI passiert)*
+
+- Der Runner meldet mit jedem Heartbeat bzw. Abholen seine CLIs: installiert (Pfad), Version, angemeldet ja/nein. Die Runner-Karte zeigt sie, „Doctor“ ebenso.
+- Vergeben wird ein Auftrag nur an einen Runner, der das CLI des Agenten installiert und angemeldet hat. Hat kein Runner im Pool des Agenten es, wartet der Auftrag (`waiting`) mit dem Grund „Kein Runner im Pool hat <CLI>“ (am Item sichtbar) und startet von selbst, sobald einer es meldet.
+- Beim Einrichten des Agenten (10.4) steht an einem CLI, das kein Runner im Pool meldet, „Auf keinem Runner im Pool verfügbar“; speichern geht trotzdem.
+
 ## 9. Parallelität
 
 | Ebene | Wo | Standard |
@@ -302,7 +310,7 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 
 ### 10.1 Organisation → Betrieb → „Runner“
 
-Liste der Runner (Name, online/offline nach letztem Kontakt, Version, System, Plätze belegt/gesamt, Auslastung CPU/GPU/RAM/Speicher (8.6), Ausstattung nur zum Lesen (8.7), laufende Aufträge mit Item und Abbrechen), Plätze bearbeiten (gesamt, je Repo, leichte Aufträge), „Runner verbinden“ (Dialog mit Befehl, Kopieren, Ablauf des Codes), Umbenennen, Widerrufen mit Rückfrage. Nur Org-Admins, wie Webhooks.
+Liste der Runner (Name, online/offline nach letztem Kontakt, Version, System, Plätze belegt/gesamt, Auslastung CPU/GPU/RAM/Speicher (8.6), Ausstattung nur zum Lesen (8.7), CLIs mit Version und Anmeldung (8.8), laufende Aufträge mit Item und Abbrechen), Plätze bearbeiten (gesamt, je Repo, leichte Aufträge), „Runner verbinden“ (Dialog mit Befehl, Kopieren, Ablauf des Codes), Umbenennen, Widerrufen mit Rückfrage. Nur Org-Admins, wie Webhooks.
 
 ### 10.2 Organisation → Betrieb → „GitHub“
 
