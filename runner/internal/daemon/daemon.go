@@ -8,6 +8,7 @@ package daemon
 import (
 	"context"
 	"log/slog"
+	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -44,6 +45,8 @@ type Daemon struct {
 	Equipment *equipment.Collector
 	Updater   Updater
 	Log       *slog.Logger
+	// Checks runs the checks of `doctor` in the environment of the daemon (`GET /doctor`, A500).
+	Checks func(ctx context.Context) []socket.Check
 
 	// Fast and Slow are the intervals of polling without work, Slow after SlowAfter without any.
 	Fast, Slow, SlowAfter time.Duration
@@ -70,6 +73,14 @@ type Daemon struct {
 	report       protocol.Report
 	reportAt     time.Time
 	sweeping     atomic.Bool
+	doctorMu     sync.Mutex
+	doctorRun    *doctorRun
+}
+
+// doctorRun is the one run of the checks in flight: a second `GET /doctor` waits for it instead of starting its own.
+type doctorRun struct {
+	done   chan struct{}
+	checks []socket.Check
 }
 
 // ReportEvery is how often the report is refreshed in the background; claims and heartbeats only read it.
@@ -317,12 +328,64 @@ func (d *Daemon) sweep(ctx context.Context) {
 func (d *Daemon) Status() socket.Status {
 	d.defaults()
 	d.mu.Lock()
-	s := socket.Status{Instance: d.Instance, Version: d.Version, ExpectedVersion: d.expected, Connected: d.connected, LastContact: d.lastContact,
-		LastError: d.lastError, Unauthorized: d.unauthorized, Places: d.places, Update: d.update, Running: len(d.running), Started: d.started}
+	s := socket.Status{Instance: d.Instance, System: runtime.GOOS + "/" + runtime.GOARCH, Version: d.Version, ExpectedVersion: d.expected, Connected: d.connected, LastContact: d.lastContact,
+		LastError: d.lastError, Unauthorized: d.unauthorized, Places: d.places, Update: d.update, Running: len(d.running), Started: d.started, Now: time.Now()}
 	d.mu.Unlock()
 	r := d.Report()
 	s.Load, s.CLIs, s.Equipment = r.Load, r.CLIs, r.Equipment
 	return s
+}
+
+// Doctor is the answer of `GET /doctor`: the version of the daemon against the one werkbuch expects, then the checks.
+func (d *Daemon) Doctor(ctx context.Context) []socket.Check {
+	d.mu.Lock()
+	expected, upd := d.expected, d.update
+	d.mu.Unlock()
+	version := socket.Check{Name: "version", Level: "ok", Detail: d.Version}
+	switch {
+	case d.Version == "dev":
+		version.Detail = "dev (a build without a version never updates itself)"
+	case expected != "" && expected != d.Version:
+		version.Level, version.Detail = "warn", d.Version+", werkbuch expects "+expected
+		if upd != "" {
+			version.Detail += " (update " + upd + ")"
+		}
+	}
+	return append([]socket.Check{version}, d.checks(ctx)...)
+}
+
+// checks runs Checks once at a time: callers that come while a run is in flight share its answer (it asks the CLIs,
+// the keychain and the instance and can take seconds).
+func (d *Daemon) checks(ctx context.Context) []socket.Check {
+	if d.Checks == nil {
+		return nil
+	}
+	d.doctorMu.Lock()
+	run := d.doctorRun
+	if run == nil {
+		run = &doctorRun{done: make(chan struct{})}
+		d.doctorRun = run
+		d.doctorMu.Unlock()
+		// even after a panic in Checks the run leaves the table and its waiters go on
+		defer func() {
+			d.doctorMu.Lock()
+			d.doctorRun = nil
+			d.doctorMu.Unlock()
+			close(run.done)
+		}()
+		// the run outlives a caller that gives up, the others still wait for it
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+		defer cancel()
+		run.checks = d.Checks(rctx)
+		return run.checks
+	}
+	d.doctorMu.Unlock()
+	select {
+	case <-run.done:
+		return run.checks
+	case <-ctx.Done():
+		return nil
+	}
 }
 
 // Runs lists the running runs, then the recent ones.

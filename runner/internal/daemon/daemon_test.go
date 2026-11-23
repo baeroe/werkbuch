@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +20,7 @@ import (
 	"github.com/baeroe/werkbuch/runner/internal/fakewerkbuch"
 	"github.com/baeroe/werkbuch/runner/internal/git"
 	"github.com/baeroe/werkbuch/runner/internal/protocol"
+	"github.com/baeroe/werkbuch/runner/internal/socket"
 	"github.com/baeroe/werkbuch/runner/internal/sysexec"
 )
 
@@ -265,3 +267,85 @@ func TestARunWaitsForTheSweepOfItsFolder(t *testing.T) {
 }
 
 func strp(s string) *string { return &s }
+
+func TestDoctorAddsTheVersion(t *testing.T) {
+	d := &Daemon{Instance: "https://werkbuch.example.com", Version: "0.1.0", Checks: func(ctx context.Context) []socket.Check {
+		return []socket.Check{{Name: "git", Level: "ok", Detail: "git version 2.47.1"}}
+	}}
+	checks := d.Doctor(context.Background())
+	if len(checks) != 2 || checks[0].Name != "version" || checks[0].Level != "ok" || checks[1].Name != "git" {
+		t.Fatalf("%+v", checks)
+	}
+	d.mu.Lock()
+	d.expected, d.update = "0.2.0", "failed: checksum mismatch"
+	d.mu.Unlock()
+	if c := d.Doctor(context.Background())[0]; c.Level != "warn" || !strings.Contains(c.Detail, "werkbuch expects 0.2.0") || !strings.Contains(c.Detail, "update failed: checksum mismatch") {
+		t.Fatalf("%+v", c)
+	}
+	if st := d.Status(); st.System != runtime.GOOS+"/"+runtime.GOARCH {
+		t.Fatal(st.System)
+	}
+	if checks := (&Daemon{Version: "dev"}).Doctor(context.Background()); len(checks) != 1 || !strings.Contains(checks[0].Detail, "dev") {
+		t.Fatalf("%+v", checks)
+	}
+}
+
+func TestDoctorRunsOnceAtATime(t *testing.T) {
+	release := make(chan struct{})
+	var mu sync.Mutex
+	calls := 0
+	d := &Daemon{Version: "0.4.0", Checks: func(ctx context.Context) []socket.Check {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		<-release
+		return []socket.Check{{Name: "git", Level: "ok"}}
+	}}
+	results := make(chan []socket.Check, 3)
+	for range 3 {
+		go func() { results <- d.Doctor(context.Background()) }()
+	}
+	eventually(t, "the first run", func() bool { mu.Lock(); defer mu.Unlock(); return calls == 1 })
+	time.Sleep(50 * time.Millisecond) // the others wait
+	close(release)
+	for range 3 {
+		if r := <-results; len(r) != 2 || r[1].Name != "git" {
+			t.Fatalf("%+v", r)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("%d runs", calls)
+	}
+	// a caller that gives up gets nothing, the run goes on
+	again := make(chan struct{})
+	d.Checks = func(ctx context.Context) []socket.Check { <-again; return nil }
+	go d.Doctor(context.Background())
+	eventually(t, "a run in flight", func() bool { d.doctorMu.Lock(); defer d.doctorMu.Unlock(); return d.doctorRun != nil })
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if r := d.Doctor(ctx); len(r) != 1 {
+		t.Fatalf("%+v", r)
+	}
+	close(again)
+	if st := d.Status(); st.Now.IsZero() {
+		t.Fatal("no clock in the status")
+	}
+}
+
+func TestDoctorRecoversFromAPanic(t *testing.T) {
+	d := &Daemon{Version: "0.4.0", Checks: func(ctx context.Context) []socket.Check { panic("checks broke") }}
+	func() {
+		defer func() { recover() }()
+		d.Doctor(context.Background())
+	}()
+	d.doctorMu.Lock()
+	left := d.doctorRun
+	d.doctorMu.Unlock()
+	if left != nil {
+		t.Fatal("a dead run stays")
+	}
+	d.Checks = func(ctx context.Context) []socket.Check { return []socket.Check{{Name: "git", Level: "ok"}} }
+	if r := d.Doctor(context.Background()); len(r) != 2 {
+		t.Fatalf("%+v", r)
+	}
+}

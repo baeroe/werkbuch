@@ -6,6 +6,7 @@
 //	GET  /runs/{id}/events   the log of a run as NDJSON, live until it ends
 //	POST /runs/{id}/cancel   stops a run (werkbuch hears `canceled`)
 //	GET  /load               the last load and the samples of the last minutes
+//	GET  /doctor             the checks of `doctor`, made by the daemon with its own environment (A500)
 //	POST /update             updates now when no run is left (else when the last ends)
 package socket
 
@@ -27,6 +28,7 @@ import (
 // Status is what `GET /status` answers.
 type Status struct {
 	Instance        string              `json:"instance"`
+	System          string              `json:"system"`
 	Version         string              `json:"version"`
 	ExpectedVersion string              `json:"expected_version,omitempty"`
 	Connected       bool                `json:"connected"`
@@ -40,12 +42,21 @@ type Status struct {
 	CLIs            []protocol.CLI      `json:"clis"`
 	Equipment       *protocol.Equipment `json:"equipment,omitempty"`
 	Started         time.Time           `json:"started"`
+	// Now is the clock of the daemon when it answered: the TUI counts the times of runs from it.
+	Now time.Time `json:"now"`
 }
 
 // LoadAnswer is what `GET /load` answers.
 type LoadAnswer struct {
 	Last    *protocol.Load  `json:"last"`
 	History []protocol.Load `json:"history"`
+}
+
+// Check is one finding of `GET /doctor` (the form of doctor.Check, which imports this package).
+type Check struct {
+	Name   string `json:"name"`
+	Level  string `json:"level"`
+	Detail string `json:"detail"`
 }
 
 // Backend is the daemon as the socket sees it.
@@ -55,6 +66,7 @@ type Backend interface {
 	Execution(id string) *executor.Execution
 	Load() LoadAnswer
 	RequestUpdate() string
+	Doctor(ctx context.Context) []Check
 }
 
 // ErrRunning says another daemon listens on the socket.
@@ -93,6 +105,7 @@ func Handler(b Backend) http.Handler {
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) { write(w, 200, b.Status()) })
 	mux.HandleFunc("GET /runs", func(w http.ResponseWriter, r *http.Request) { write(w, 200, b.Runs()) })
 	mux.HandleFunc("GET /load", func(w http.ResponseWriter, r *http.Request) { write(w, 200, b.Load()) })
+	mux.HandleFunc("GET /doctor", func(w http.ResponseWriter, r *http.Request) { write(w, 200, b.Doctor(r.Context())) })
 	mux.HandleFunc("POST /update", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 202, map[string]string{"update": b.RequestUpdate()})
 	})
@@ -156,6 +169,15 @@ func Serve(ctx context.Context, l net.Listener, b Backend) error {
 	return err
 }
 
+// StatusError is an answer of the daemon with a status of 400 or more: a daemon answers, but refuses (404 for a route
+// an older daemon does not have).
+type StatusError struct {
+	Code    int
+	Message string
+}
+
+func (e *StatusError) Error() string { return e.Message }
+
 // Client talks to the daemon.
 type Client struct{ http *http.Client }
 
@@ -190,7 +212,11 @@ func (c *Client) do(ctx context.Context, method, path string, out any) error {
 	if resp.StatusCode >= 400 {
 		var e struct{ Error string }
 		json.NewDecoder(resp.Body).Decode(&e)
-		return errors.New(strings.TrimSpace(e.Error))
+		msg := strings.TrimSpace(e.Error)
+		if msg == "" {
+			msg = http.StatusText(resp.StatusCode)
+		}
+		return &StatusError{Code: resp.StatusCode, Message: msg}
 	}
 	if out == nil {
 		return nil

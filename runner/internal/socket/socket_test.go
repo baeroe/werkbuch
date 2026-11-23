@@ -23,6 +23,9 @@ func (b backend) Execution(id string) *executor.Execution {
 }
 func (b backend) Load() LoadAnswer      { return LoadAnswer{Last: &protocol.Load{CPU: 5}} }
 func (b backend) RequestUpdate() string { return "none" }
+func (b backend) Doctor(ctx context.Context) []Check {
+	return []Check{{Name: "git", Level: "ok", Detail: "git version 2.47.1"}, {Name: "codex", Level: "warn", Detail: "not signed in"}}
+}
 
 func TestSocket(t *testing.T) {
 	dir, err := filepath.Abs(t.TempDir())
@@ -59,12 +62,20 @@ func TestSocket(t *testing.T) {
 	if err := c.Get(ctx, "/load", &load); err != nil || load.Last.CPU != 5 {
 		t.Fatal(err)
 	}
+	var checks []Check
+	if err := c.Get(ctx, "/doctor", &checks); err != nil || len(checks) != 2 || checks[1] != (Check{Name: "codex", Level: "warn", Detail: "not signed in"}) {
+		t.Fatalf("%+v %v", checks, err)
+	}
 	var upd map[string]string
 	if err := c.Post(ctx, "/update", &upd); err != nil || upd["update"] != "none" {
 		t.Fatal(err)
 	}
-	if err := c.Post(ctx, "/runs/nope/cancel", nil); err == nil {
-		t.Fatal("unknown run canceled")
+	var se *StatusError
+	if err := c.Post(ctx, "/runs/nope/cancel", nil); !errors.As(err, &se) || se.Code != 404 || err.Error() != "no such run running" {
+		t.Fatalf("unknown run canceled: %v", err)
+	}
+	if err := c.Get(ctx, "/nope", nil); !errors.As(err, &se) || se.Code != 404 || err.Error() != "Not Found" {
+		t.Fatalf("an unknown route: %v", err)
 	}
 	if err := c.Post(ctx, "/runs/01run/cancel", nil); err != nil {
 		t.Fatal(err)

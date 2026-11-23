@@ -8,6 +8,7 @@ instance URL (`~/.config/werkbuch-runner/config.yaml`) and its token (in the key
 ## Commands
 
 ```sh
+werkbuch-runner           # the TUI: status, runs with their live logs, doctor (in a terminal)
 werkbuch-runner login https://werkbuch.example.com --code ABCD-EFGH   # pair (the code comes from Settings → Runners)
 werkbuch-runner daemon    # poll and run (launchd/systemd units come with the installer)
 werkbuch-runner status    # what the daemon does now
@@ -18,7 +19,31 @@ werkbuch-runner version
 ```
 
 The daemon listens on `~/.local/state/werkbuch-runner/runner.sock` (`GET /status`, `GET /runs`,
-`GET /runs/{id}/events`, `POST /runs/{id}/cancel`, `GET /load`, `POST /update`) for the TUI.
+`GET /runs/{id}/events`, `POST /runs/{id}/cancel`, `GET /load`, `GET /doctor`, `POST /update`) for the TUI; `GET /status`
+names the daemon's clock (`now`), from which the TUI counts the times of runs.
+
+## TUI
+
+`werkbuch-runner` without a command opens the TUI. It reads the daemon over its socket every two seconds; nothing is set
+up in it except logging out (`l`): slots and setup commands live in werkbuch (Organization → Runners), MCP servers,
+skills and plugins are set up on the machine for the user of the runner.
+
+![Status: connection, slots from werkbuch, the load with its history, the running and the recent runs](docs/screenshots/status.png)
+
+- **Status** (`1`): instance, version, connection, the slots werkbuch sets, CPU, GPU, memory and disk with the last five
+  minutes, the running runs with branch, session and worktree, the recent ones. `enter` opens the chosen run in Runs.
+- **Runs** (`2`): the runs on the left, the log of the chosen one on the right, live while the agent works; `enter` shows
+  the log in full (`j`/`k`, `g`/`G`), `f` follows it, `c` cancels the run after a question (werkbuch hears `canceled`).
+- **Doctor** (`3`): the checks of `werkbuch-runner doctor`, made by the daemon with its own environment (its `PATH` and
+  keychain under launchd), the version werkbuch expects, the equipment of the machine and a warning when an MCP server
+  reaches werkbuch past the run token. Without a daemon the TUI checks itself and says so. `r` checks again, `enter`
+  shows a check in full.
+
+`tab`/`⇧tab` or `1`–`3` switch tabs, `?` shows the keys, `q` quits.
+
+![Runs: the log of WEB-51 live](docs/screenshots/runs.png)
+
+![Doctor: Codex not signed in and a second way to werkbuch](docs/screenshots/doctor.png)
 
 ## Development
 
@@ -28,4 +53,6 @@ make build VERSION=0.3.2       # bin/werkbuch-runner, static, without cgo
 ```
 
 Tests run against a fake werkbuch (`internal/fakewerkbuch`) and a fake Claude Code (`testdata/claude`, a shell script
-that writes stream-json). The design is in `docs/superpowers/specs/2026-11-23-runner-design.md`.
+that writes stream-json); the TUI against a fake daemon. `bash docs/screenshots.sh` renders the screenshots with VHS
+(`brew install vhs`) from the tapes in `docs/tapes/` against the demo daemon `docs/demo` (fictitious data on a fixed clock,
+instance `werkbuch.example.com`), in a sandbox that never touches a real daemon, config or keychain. The design is in `docs/superpowers/specs/2026-11-23-runner-design.md`.
