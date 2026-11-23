@@ -426,6 +426,29 @@ it('gives the MariaDB of every job that runs the app the max_allowed_packet of t
     }
 });
 
+it('checks the runner in a job of its own', function () use ($stepUsing, $runs) {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+    $runner = $jobs['runner'];
+
+    // Go from the go.mod of the runner, vet and the tests with the race detector (spec 14), never the required check
+    expect($stepUsing($runner, 'actions/setup-go')['with']['go-version-file'])->toBe('runner/go.mod')
+        ->and($runner['defaults']['run']['working-directory'])->toBe('runner')
+        ->and($runner['name'] ?? 'runner')->not->toBe('tests')
+        ->and($runner)->not->toHaveKey('needs');
+    $script = implode("\n", $runs($runner));
+    expect($script)->toContain('go vet ./...')
+        ->toContain('go test -race -count=1 ./...')
+        ->toContain('gofmt -l .');
+
+    // static binaries without cgo (go-keyring and gopsutil run without it, spec 8.2)
+    $build = collect($runner['steps'])->firstWhere('name', 'Build without cgo');
+    expect($build['env']['CGO_ENABLED'])->toBe('0')
+        ->and($build['run'])->toContain('GOOS=darwin GOARCH=arm64')->toContain('GOOS=linux GOARCH=amd64');
+
+    // the required job never builds Go
+    expect(str_contains(implode("\n", $runs($jobs['tests'])), 'go test'))->toBeFalse('the job tests runs the runner');
+});
+
 it('deploys the docs only from main', function () {
     $workflow = RepoFiles::yaml('.github/workflows/docs.yml');
 
