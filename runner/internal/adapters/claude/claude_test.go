@@ -13,13 +13,7 @@ import (
 func job(kind string, session *string) adapters.Job {
 	var r protocol.Run
 	r.Type, r.Model, r.Prompt, r.SystemPrompt = kind, "haiku", "do it", "contract"
-	r.Thread = &struct {
-		ID         string  `json:"id"`
-		Branch     *string `json:"branch"`
-		BaseBranch *string `json:"base_branch"`
-		Worktree   *string `json:"worktree"`
-		SessionID  *string `json:"session_id"`
-	}{ID: "t", SessionID: session}
+	r.Thread = &protocol.Thread{ID: "t", SessionID: session}
 	return adapters.Job{Run: r, Binary: "/bin/claude", Dir: "/w", MCPConfig: "/tmp/x/mcp.json"}
 }
 

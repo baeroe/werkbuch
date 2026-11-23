@@ -15,13 +15,7 @@ func TestArgsAndPrompt(t *testing.T) {
 	r.Type, r.Model, r.Prompt, r.SystemPrompt = "comment", "gpt-5-codex", "answer", "contract"
 	r.Werkbuch.MCPURL, r.Werkbuch.Token = "https://werkbuch.example.com/mcp", "01abc|wb_secretsecretsecretsecretsecret"
 	sess := "th-1"
-	r.Thread = &struct {
-		ID         string  `json:"id"`
-		Branch     *string `json:"branch"`
-		BaseBranch *string `json:"base_branch"`
-		Worktree   *string `json:"worktree"`
-		SessionID  *string `json:"session_id"`
-	}{ID: "t", SessionID: &sess}
+	r.Thread = &protocol.Thread{ID: "t", SessionID: &sess}
 	j := adapters.Job{Run: r, Binary: "/bin/codex", Dir: "/w", TokenEnv: "WERKBUCH_RUN_TOKEN"}
 	args := Args(j)
 	joined := strings.Join(args, " ")

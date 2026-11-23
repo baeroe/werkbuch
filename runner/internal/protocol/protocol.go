@@ -122,53 +122,70 @@ type PairAnswer struct {
 	Token string `json:"token"`
 }
 
+// ProjectRef names the project of a run.
+type ProjectRef struct {
+	ID         string `json:"id"`
+	Identifier string `json:"identifier"`
+}
+
+// ItemRef names the item of a run.
+type ItemRef struct {
+	ID    string `json:"id"`
+	Key   string `json:"key"`
+	Title string `json:"title"`
+}
+
+// Thread is the strand of a run (spec 5): branch, base, worktree name and the session to resume.
+type Thread struct {
+	ID         string  `json:"id"`
+	Branch     *string `json:"branch"`
+	BaseBranch *string `json:"base_branch"`
+	Worktree   *string `json:"worktree"`
+	SessionID  *string `json:"session_id"`
+}
+
+// Identity is the commit identity of the bot.
+type Identity struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+// MCP is the way of the agent to werkbuch: the server `werkbuch-run` with the run token.
+type MCP struct {
+	MCPURL     string `json:"mcp_url"`
+	ServerName string `json:"server_name"`
+	Token      string `json:"token"`
+}
+
+// Git is the repository and installation token (spec 6.3, 11.3), null until WEBU-24 and for projects without one.
+type Git struct {
+	RepoURL   string     `json:"repo_url"`
+	Token     string     `json:"token"`
+	ExpiresAt *time.Time `json:"expires_at"`
+}
+
 // Run is what a claim hands the runner (ClaimRun::payload).
 type Run struct {
-	ID             string     `json:"id"`
-	Attempt        int        `json:"attempt"`
-	Type           string     `json:"type"`
-	CLI            string     `json:"cli"`
-	Model          string     `json:"model"`
-	ModelSource    string     `json:"model_source"`
-	TimeoutMinutes int        `json:"timeout_minutes"`
-	DeadlineAt     *time.Time `json:"deadline_at"`
-	LeaseExpiresAt *time.Time `json:"lease_expires_at"`
-	Project        struct {
-		ID         string `json:"id"`
-		Identifier string `json:"identifier"`
-	} `json:"project"`
-	Item *struct {
-		ID    string `json:"id"`
-		Key   string `json:"key"`
-		Title string `json:"title"`
-	} `json:"item"`
-	Thread *struct {
-		ID         string  `json:"id"`
-		Branch     *string `json:"branch"`
-		BaseBranch *string `json:"base_branch"`
-		Worktree   *string `json:"worktree"`
-		SessionID  *string `json:"session_id"`
-	} `json:"thread"`
-	HeadSHA         *string `json:"head_sha"`
-	SetupCommand    *string `json:"setup_command"`
-	TeardownCommand *string `json:"teardown_command"`
-	CommitIdentity  struct {
-		Name  string `json:"name"`
-		Email string `json:"email"`
-	} `json:"commit_identity"`
-	SystemPrompt string `json:"system_prompt"`
-	Prompt       string `json:"prompt"`
-	Werkbuch     struct {
-		MCPURL     string `json:"mcp_url"`
-		ServerName string `json:"server_name"`
-		Token      string `json:"token"`
-	} `json:"werkbuch"`
-	// Git is the repository and installation token (spec 6.3, 11.3), null until WEBU-24 and for projects without one.
-	Git *struct {
-		RepoURL   string     `json:"repo_url"`
-		Token     string     `json:"token"`
-		ExpiresAt *time.Time `json:"expires_at"`
-	} `json:"git"`
+	ID              string     `json:"id"`
+	Attempt         int        `json:"attempt"`
+	Type            string     `json:"type"`
+	CLI             string     `json:"cli"`
+	Model           string     `json:"model"`
+	ModelSource     string     `json:"model_source"`
+	TimeoutMinutes  int        `json:"timeout_minutes"`
+	DeadlineAt      *time.Time `json:"deadline_at"`
+	LeaseExpiresAt  *time.Time `json:"lease_expires_at"`
+	Project         ProjectRef `json:"project"`
+	Item            *ItemRef   `json:"item"`
+	Thread          *Thread    `json:"thread"`
+	HeadSHA         *string    `json:"head_sha"`
+	SetupCommand    *string    `json:"setup_command"`
+	TeardownCommand *string    `json:"teardown_command"`
+	CommitIdentity  Identity   `json:"commit_identity"`
+	SystemPrompt    string     `json:"system_prompt"`
+	Prompt          string     `json:"prompt"`
+	Werkbuch        MCP        `json:"werkbuch"`
+	Git             *Git       `json:"git"`
 }
 
 // Deadline is when the time limit ends: werkbuch's `deadline_at`, else start plus the limit.
