@@ -59,30 +59,37 @@ Befehle: `login <url> --code <CODE> [--name]`, `daemon`, `status`, `doctor`, `lo
 ## Tasks
 
 ### 1. Gerüst, Pfade, Config, Keyring, Redact
-- [ ] Tests `paths_test.go`, `config_test.go`, `keyring_test.go`, `redact_test.go`.
-- [ ] Umsetzung, `Makefile`, `main.go` mit `version`.
-- [ ] Commit.
+- [x] Tests `paths_test.go`, `config_test.go`, `keyring_test.go`, `redact_test.go`.
+- [x] Umsetzung, `Makefile`, `main.go` mit `version`.
+- [x] Commit.
 
 ### 2. Client und falscher Server
-- [ ] `internal/fakewerkbuch` (httptest, Protokoll wie PR #65, Zustand für Tests), `client_test.go` (Header, Problem, 204/409/401, kein Token im Fehlertext).
-- [ ] Commit.
+- [x] `internal/fakewerkbuch` (httptest, Protokoll wie PR #65, Zustand für Tests), `client_test.go` (Header, Problem, 204/409/401, kein Token im Fehlertext).
+- [x] Commit.
 
 ### 3. Bericht: Auslastung, CLIs, Ausstattung
-- [ ] Tests mit falschem `PATH` und falschen Befehlen (`ioreg`, `claude`), Parser getrennt testbar.
-- [ ] Commit.
+- [x] Tests mit falschem `PATH` und falschen Befehlen (`ioreg`, `claude`), Parser getrennt testbar.
+- [x] Commit.
 
 ### 4. Adapter, MCP-Config, Git, Hooks
-- [ ] Tests: Argumente (`--model`, `--resume`, `--mcp-config` ohne `--strict-mcp-config`), Parser von stream-json und Codex-JSONL, Urteil, MCP-Datei 0600 und weg nach dem Lauf, Worktree je Strang wiederverwendet, Review am Commit, Token nie in `.git/config`.
-- [ ] Commit.
+- [x] Tests: Argumente (`--model`, `--resume`, `--mcp-config` ohne `--strict-mcp-config`), Parser von stream-json und Codex-JSONL, Urteil, MCP-Datei 0600 und weg nach dem Lauf, Worktree je Strang wiederverwendet, Review am Commit, Token nie in `.git/config`.
+- [x] Commit.
 
 ### 5. Executor und Daemon
-- [ ] Tests mit falschem CLI (`testdata/fake-claude`, Shell): Claim → Lauf → Ereignisse → Ergebnis; Abbruch; Zeitlimit (SIGTERM ignoriert → SIGKILL, `timed_out`); Lease-Verlust (409) ohne Ergebnis; Resume; Polling ohne Auftrag; Geheimnisse nie im Log.
-- [ ] Commit.
+- [x] Tests mit falschem CLI (`testdata/fake-claude`, Shell): Claim → Lauf → Ereignisse → Ergebnis; Abbruch; Zeitlimit (SIGTERM ignoriert → SIGKILL, `timed_out`); Lease-Verlust (409) ohne Ergebnis; Resume; Polling ohne Auftrag; Geheimnisse nie im Log.
+- [x] Commit.
 
 ### 6. Socket, Update, Doctor, Befehle
-- [ ] Tests: Socket-API über einen Temp-Socket, Update (Summe falsch → alter bleibt; richtig → ersetzt), Doctor (Warnung bei weiterem werkbuch-Zugang), `login`/`logout` mit falschem Server.
-- [ ] Commit.
+- [x] Tests: Socket-API über einen Temp-Socket, Update (Summe falsch → alter bleibt; richtig → ersetzt), Doctor (Warnung bei weiterem werkbuch-Zugang), `login`/`logout` mit falschem Server.
+- [x] Commit.
 
 ### 7. CI, Doku, Abnahme
-- [ ] Job `runner` in `tests.yml` (gofmt, vet, `go test -race`), `WorkflowsTest` „checks the runner in a job of its own“; `CLAUDE.md` Abschnitt „Runner (Go)“, `runner/README.md`, Rulings.
-- [ ] Abnahme gegen das DDEV des Worktrees mit falschem CLI und lokalem Repo; Nachweis.
+- [x] Job `runner` in `tests.yml` (gofmt, vet, `go test -race`), `WorkflowsTest` „checks the runner in a job of its own“; `CLAUDE.md` Abschnitt „Runner (Go)“, `runner/README.md`, Rulings.
+- [x] Abnahme gegen das DDEV des Worktrees mit falschem CLI und lokalem Repo; Nachweis.
+
+## Abweichungen und Stand (nach der Umsetzung)
+
+- PR #65 schickt im Claim noch kein `git` und keine Setup-/Teardown-Befehle (`null`); der Runner nimmt beide Formen (WEBU-24 liefert `git {repo_url, token, expires_at}`), bis dahin `repos` aus A488. Die Erneuerung des Git-Tokens (`POST runs/{id}/git-token`) kommt mit WEBU-24.
+- Adapter: statt `Session(events)` ein `Stream` je Lauf (`Feed`, `Outcome`), weil Session, Nutzung und Antwort beim Lesen anfallen.
+- Codex kommt im ersten Wurf mit (Aufruf und Parser getestet, kein echter Lauf).
+- Die Abnahme mit Claude Code selbst ist Teil von WEBU-29; hier lief der Runner gegen das DDEV des Worktrees mit dem falschen CLI und einem lokalen Repo.

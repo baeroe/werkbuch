@@ -304,7 +304,7 @@ func TestCommentWithoutRepository(t *testing.T) {
 
 func TestSecretsNeverLeave(t *testing.T) {
 	w := newWorld(t)
-	run := w.run("01leak", protocol.Task, "leak werkbuch")
+	run := w.run("01leak", protocol.Task, "leak second-access")
 	if _, status := w.execute(run); status != protocol.Succeeded {
 		t.Fatal(status)
 	}

@@ -7,7 +7,7 @@
 #   fail      ends with an error result
 #   review    answers a review with the verdict approve
 #   leak      prints the run token (the runner has to blank it)
-#   werkbuch  shows a second MCP server with werkbuch's tools
+#   second-access  shows a second MCP server with werkbuch's tools
 # FAKE_ARGS (a file) gets the arguments of a run, FAKE_LINES the number of text lines (default 3).
 case "$1" in
 --version) echo "2.1.330 (Claude Code)"; exit 0 ;;
@@ -22,10 +22,10 @@ for a in "$@"; do
 	prev="$a"
 done
 [ -n "$FAKE_ARGS" ] && printf '%s\n' "$@" > "$FAKE_ARGS"
-prompt=$(cat)
+prompt=$(cat | tr "[:upper:]" "[:lower:]")
 
 tools='"Bash","mcp__werkbuch-run__manage-work-items"'
-case "$prompt" in *werkbuch*) tools="$tools"',"mcp__skilltri__werkbuch_manage-work-items"' ;; esac
+case "$prompt" in *second-access*) tools="$tools"',"mcp__skilltri__werkbuch_manage-work-items"' ;; esac
 printf '{"type":"system","subtype":"init","session_id":"%s","model":"fake-model","tools":[%s],"mcp_servers":[{"name":"werkbuch-run","status":"connected"}]}\n' "$session" "$tools"
 
 n=${FAKE_LINES:-3}

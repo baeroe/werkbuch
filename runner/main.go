@@ -122,7 +122,7 @@ func login(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		var p *client.ProblemError
 		if errors.As(err, &p) && len(p.Errors["code"]) > 0 {
-			return errors.New("the code was refused: " + strings.Join(p.Errors["code"], " ") + " Make a new one in werkbuch (Settings → Runners).")
+			return errors.New("the code was refused: " + strings.Join(p.Errors["code"], " "))
 		}
 		return err
 	}
