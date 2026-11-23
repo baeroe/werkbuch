@@ -182,9 +182,9 @@ Inhalt der Standards *(Claude, der Builder schreibt die Texte)*:
 
 Epics (7.6) bekommen dazu den Kontext des Epics und der Geschwister.
 
-### 7.4 Status je Projekt
+### 7.4 Status je Workflow
 
-In den Projekteinstellungen (Abschnitt „Agenten“, 10.3) stellt ein Projekt-Admin ein, welcher Status gesetzt wird *(Rafael: einstellbar)*. werkbuch prüft die Kategorie:
+Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt ein Org-Admin ein, welcher Status des Workflows für welchen Schritt gesetzt wird *(Rafael: einstellbar; 2026-11-23: am Workflow statt je Projekt, damit es nicht jedes Projekt einrichten muss)*. Alle Projekte des Workflows nutzen diese Schritte, auch für PRs von Personen (12). werkbuch prüft die Kategorie:
 
 | Schritt | Kategorie | Vorschlag |
 |---|---|---|
@@ -193,7 +193,10 @@ In den Projekteinstellungen (Abschnitt „Agenten“, 10.3) stellt ein Projekt-A
 | Korrektur | Unstarted oder Backlog | „Todo“ |
 | Gemergt bzw. nach Abschluss (ohne Repo) | Completed | „Done“ |
 
-Ohne Einstellung sind die Agenten im Projekt aus (kein Auftrag startet, die Zuweisung an den Bot bleibt eine normale Zuweisung, ein Hinweis in der Oberfläche sagt warum) *(Claude)*. Ein Workflow-Wechsel des Projekts verlangt die Zuordnung neu (wie Auto-Close, A345).
+- Der Editor schlägt je Schritt einen Status nach Name und Kategorie vor; gespeichert wird erst, was jemand übernimmt.
+- Hat ein Workflow keine (vollständigen) Schritte, sind die Agenten in seinen Projekten aus (kein Auftrag startet, die Zuweisung an den Bot bleibt eine normale Zuweisung; Projekt → Agenten sagt warum und verweist auf den Editor; ohne Katalogrecht mit dem Hinweis, dass ein Org-Admin es einrichtet) *(Claude)*.
+- Ein Workflow-Wechsel eines Projekts bringt die Schritte des neuen Workflows mit; fehlen sie dort, sind die Agenten aus, und der Dialog sagt es vorher.
+- Entfernt `SaveWorkflow` einen Status, der einen Schritt belegt, folgt der Schritt der Status-Zuordnung (`state_mapping`), wenn deren Ziel die Kategorie erfüllt, sonst wird er geleert (Hinweis vor dem Speichern). Eine Kategorie-Änderung eines belegten Status ist 422 am Status.
 
 ### 7.5 Aufträge in werkbuch
 
@@ -307,7 +310,7 @@ Liste der Runner (Name, online/offline nach letztem Kontakt, Version, System, Pl
 
 ### 10.3 Projekt → „Agenten“ (neuer Abschnitt der Projekteinstellungen)
 
-Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Setup- und Teardown-Befehle des Worktrees (8.4), Review-Agent (ein Bot, für PRs von Menschen und Bots), Status-Zuordnung (7.4), Bremsen (Korrektur, Konflikt), Modell je Auftragstyp (7.7), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
+Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Setup- und Teardown-Befehle des Worktrees (8.4), Review-Agent (ein Bot, für PRs von Menschen und Bots), die Schritte des Workflows nur zum Lesen mit Link in den Editor (7.4), Bremsen (Korrektur, Konflikt), Modell je Auftragstyp (7.7), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
 
 ### 10.4 Organisation → Bots → Agent
 
@@ -369,7 +372,7 @@ Vorbild sind itsaplan (feste Wörter, Checks je Link) und Plane (Status je PR-Zu
 - **PR geöffnet bzw. aus dem Entwurf bereit:** jedes verknüpfte Item in einem Backlog- oder Unstarted-Status geht auf „In Review“ (7.4). Items in Started bleiben (wer schon arbeitet, verliert nichts), Completed/Canceled bleiben.
 - **PR in den Basis-Branch des Projekts gemergt:** Items, die der PR **schließt**, gehen auf „Gemergt“, aber nur, wenn am Item kein anderer offener (auch Entwurfs-)PR hängt; Completed/Canceled bleiben. Items, die er nur verknüpft, bleiben.
 - **PR ohne Merge geschlossen:** bei PRs von Personen keine Statusänderung; bei PRs des Agenten 7.2.
-- Statuswechsel mit Actor `agent` des Review-Agenten des Projekts (7.2) bzw. eines eigenen Systems-Actors, wenn das Projekt keinen hat (Builder); mit Übergangsprüfung wie 7.2. Ohne Status-Zuordnung (7.4) wird nur verknüpft.
+- Statuswechsel mit Actor `agent` des Review-Agenten des Projekts (7.2) bzw. eines eigenen Systems-Actors, wenn das Projekt keinen hat (Builder); mit Übergangsprüfung wie 7.2. Ohne Agenten-Schritte am Workflow (7.4) wird nur verknüpft.
 - **Kommentar am PR** *(Rafael)*: bei einer neuen Verknüpfung schreibt die Agenten-App einen Kommentar mit Link auf die Items (einer je PR, wird aktualisiert), je Projekt abschaltbar, standardmäßig an.
 
 **Daten** *(Rafael: Checks als eigene Tabelle)*:
