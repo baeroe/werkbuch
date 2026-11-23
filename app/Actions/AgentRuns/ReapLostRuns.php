@@ -6,9 +6,7 @@ use App\Domain\Agents\Protocol;
 use App\Domain\Agents\RunStatus;
 use App\Events\EventRecorder;
 use App\Events\EventType;
-use App\Models\AgentConfig;
 use App\Models\AgentRun;
-use App\Models\Runner;
 use App\Support\Actor;
 use App\Support\RunQueue;
 use App\Support\RunTokens;
@@ -19,8 +17,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * The reaper (every minute, spec 6.4, A475, A486). A busy run past its time limit and one more lease without a result
  * is `timed_out`. A busy run whose lease ran out (the machine slept, lost the net, the runner crashed) is lost: the first
  * time it goes back to the queue as a new attempt (the runner of the old one gets 409 `run_replaced`), the second time
- * it ends as `lost`; one being canceled ends as `canceled`. Waiting runs get their reason anew: `no_cli` while no runner of the pool has the CLI,
- * `runner_offline` while the runner of their strand is offline, none once a runner could take them.
+ * it ends as `lost`; one being canceled ends as `canceled`. Waiting runs get their reason anew (`RunQueue::refreshReasons`): `agent_off` while the
+ * agent is off, `no_cli` while no runner of the pool has the CLI, `runner_offline` while the runner of their strand is
+ * offline, none once a runner could take them.
  */
 final class ReapLostRuns
 {
@@ -87,30 +86,8 @@ final class ReapLostRuns
             }
         }
 
-        $counts['waiting'] = $this->reason();
+        $counts['waiting'] = RunQueue::refreshReasons();
 
         return $counts;
-    }
-
-    /** Gives the waiting runs their reason anew; how many wait now. */
-    private function reason(): int
-    {
-        $pending = AgentRun::query()->whereIn('status', [RunStatus::Queued->value, RunStatus::Waiting->value])->with('thread.runner')->get();
-        $runners = Runner::query()->whereNull('revoked_at')->get();
-        $configs = AgentConfig::query()->whereIn('bot_id', $pending->pluck('bot_id')->unique()->values())->get()->keyBy('bot_id');
-        $waiting = 0;
-
-        foreach ($pending as $run) {
-            $reason = RunQueue::waitingReason($run, $configs->get($run->bot_id), $runners);
-            $status = $reason === null ? RunStatus::Queued : RunStatus::Waiting;
-            $waiting += $reason === null ? 0 : 1;
-
-            if ($run->status !== $status || $run->waiting_reason !== $reason) {
-                AgentRun::query()->whereKey($run->id)->whereIn('status', [RunStatus::Queued->value, RunStatus::Waiting->value])
-                    ->update(['status' => $status->value, 'waiting_reason' => $reason, 'updated_at' => now()]);
-            }
-        }
-
-        return $waiting;
     }
 }

@@ -108,6 +108,8 @@ return new class extends Migration
             $table->index(['status', 'type']);
             // what runs on a runner (its places) and the runs of a runner page
             $table->index(['runner_id', 'status']);
+            // whether a strand runs (a claim reads it under the lock of the strand, locking only the busy runs, A488)
+            $table->index(['thread_id', 'status']);
         });
 
         Schema::create('agent_run_events', function (Blueprint $table) {
@@ -126,7 +128,8 @@ return new class extends Migration
         });
 
         Schema::table('personal_access_tokens', function (Blueprint $table) {
-            $table->foreignUlid('agent_run_id')->nullable()->after('tokenable_id')->constrained('agent_runs')->nullOnDelete();
+            // a run token goes with its run (a purged project takes its runs): it never turns into a plain token of the bot
+            $table->foreignUlid('agent_run_id')->nullable()->after('tokenable_id')->constrained('agent_runs')->cascadeOnDelete();
         });
     }
 

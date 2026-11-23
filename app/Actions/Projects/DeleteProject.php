@@ -4,10 +4,13 @@ namespace App\Actions\Projects;
 
 use App\Access\Authorize;
 use App\Access\Visibility;
+use App\Actions\AgentRuns\FinishRun;
+use App\Domain\Agents\RunStatus;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Jobs\PurgeProject as PurgeProjectJob;
+use App\Models\AgentRun;
 use App\Models\Project;
 use App\Support\Actor;
 use App\Support\ProjectLock;
@@ -37,6 +40,15 @@ final class DeleteProject
             ProjectLock::lock($project);
 
             $project->update(['deleting_at' => now()]);
+
+            // the runs of the project end now (A489): a pending one never starts, a busy one is canceled like a revoked
+            // runner's (its runner gets 409 on its next call), and their tokens go before the project does
+            $runs = AgentRun::query()->lockForUpdate()->where('project_id', $project->id)
+                ->whereIn('status', [RunStatus::Queued->value, RunStatus::Waiting->value, RunStatus::Running->value, RunStatus::Canceling->value])
+                ->orderBy('id')->get();
+            foreach ($runs as $run) {
+                FinishRun::end($run, RunStatus::Canceled, ['canceled_by' => $actor->user->id, 'error' => 'project_deleted']);
+            }
             EventRecorder::record(EventType::ProjectDeleted, $actor, $project, $project, null, [
                 'identifier' => $project->identifier,
                 'name' => $project->name,

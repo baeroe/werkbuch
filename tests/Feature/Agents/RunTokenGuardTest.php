@@ -14,6 +14,7 @@ use App\Models\WorkItemType;
 use App\Support\Actor;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\AgentWorld;
+use Tests\Support\Mcp\McpClient;
 
 /*
  * The hard lock of run tokens (spec 11.2, A477): what the flow keeps to werkbuch is a 403 `agent_forbidden` through the
@@ -108,4 +109,27 @@ it('leaves run tokens out of the token list', function () {
     expect($runToken->fresh())->not->toBeNull()
         ->and($runToken->abilities)->toBe(['read', 'write', 'mcp'])
         ->and($runToken->expires_at->diffInMinutes(now()->addMinutes(70), true))->toBeLessThan(1);
+});
+
+it('refuses a state change through MCP with the token of a run, as over REST', function () {
+    $doing = $this->project->workflow->states()->where('name', 'In Progress')->value('id');
+    $mcp = McpClient::for($this, $this->token);
+
+    $answer = $mcp->call('manage-work-items', ['action' => 'transition', 'item' => $this->item->key, 'input' => ['to_state_id' => $doing]]);
+    expect($answer['isError'])->toBeTrue()
+        ->and($answer['structuredContent']['status'])->toBe(403)
+        ->and($answer['structuredContent']['reason'])->toBe('agent_forbidden')
+        ->and($this->item->fresh()?->state_id)->not->toBe($doing);
+
+    // reading goes
+    expect($mcp->call('work-items', ['action' => 'get', 'item' => $this->item->key])['isError'] ?? false)->toBeFalse();
+});
+
+it('refuses the answer of an item sent back as a whole: an agent sends only what it changes (A477)', function () use ($refused) {
+    $answer = $this->withToken($this->token)->getJson("/api/v1/work-items/{$this->item->id}")->assertOk()->json('data');
+    forgetApiAuth();
+
+    $refused('PATCH', "/api/v1/work-items/{$this->item->id}", $answer);
+    forgetApiAuth();
+    $this->withToken($this->token)->patchJson("/api/v1/work-items/{$this->item->id}", ['description' => 'Plan'])->assertOk();
 });

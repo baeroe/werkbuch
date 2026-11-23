@@ -20,7 +20,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * A runner redeems its one-time code (`werkbuch-runner login`, spec 6.2, A472, A473): like the link of an invitation, the
  * code is the only credential, so this runs before any sign-in, without an actor (A4); the event names the org admin who
- * made the code (`Actor::system`). The code row is read `for update`: two runners with one code get one runner. An
+ * made the code (`Actor::system`). The code row is read `for update` and checked first, only then the organization is
+ * locked for the free name: two runners with one code get one runner, a wrong code never waits for the organization. An
  * unknown, used or expired code is a clear 422 at `code`. The runner gets the host name it sends (with `-2`, … when an
  * active runner has it), the default places and a token of its own, which only this answer carries.
  */
@@ -58,7 +59,6 @@ final class PairRunner
         ])->validate();
 
         return DB::transaction(function () use ($valid, $input): array {
-            CatalogLock::take();
             $pairing = RunnerPairingCode::query()->lockForUpdate()->where('code_hash', RunnerPairingCode::hashCode($valid['code']))->first();
 
             if ($pairing === null) {
@@ -73,6 +73,10 @@ final class PairRunner
             if ($refusal !== null) {
                 throw ValidationException::withMessages(['code' => __($refusal)]);
             }
+
+            // only a valid code reaches the organization lock (the free name of the runner): a route without sign-in
+            // never holds it for a guessed code
+            CatalogLock::take();
 
             $token = Runner::newToken();
             $runner = Runner::query()->create([

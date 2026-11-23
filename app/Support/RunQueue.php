@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
 use App\Models\AgentConfig;
 use App\Models\AgentRun;
@@ -11,7 +12,8 @@ use Illuminate\Support\Collection;
 /**
  * The rules of who may take a waiting run (spec 8.8, 9): the runners of the agent's pool (empty: every runner, A485), only
  * one that reports the run's CLI installed and signed in, and for a run at a strand (but a review) the strand's runner
- * until it has been offline for the fixed grace. `waitingReason` says why a run cannot start anywhere right now (A486).
+ * until it has been offline for the fixed grace. `waitingReason` says why a run cannot start anywhere right now (A486,
+ * A490), `refreshReasons` writes it.
  */
 final class RunQueue
 {
@@ -39,14 +41,18 @@ final class RunQueue
     }
 
     /**
-     * Why a run cannot start now: no runner of the pool has its CLI (`no_cli`), or the runner of its strand is offline
-     * (`runner_offline`); null when a runner could take it.
+     * Why a run cannot start now: its agent is off (`agent_off`), no runner of the pool has its CLI (`no_cli`), or the
+     * runner of its strand is offline (`runner_offline`); null when a runner could take it.
      *
      * @param  Collection<int, Runner>  $runners  every runner that is not revoked
      */
     public static function waitingReason(AgentRun $run, ?AgentConfig $config, Collection $runners): ?string
     {
-        $pool = $runners->filter(fn (Runner $runner) => $config === null || $config->pools($runner));
+        if ($config === null || ! $config->enabled) {
+            return 'agent_off';
+        }
+
+        $pool = $runners->filter(fn (Runner $runner) => $config->pools($runner));
 
         if (! $pool->contains(fn (Runner $runner) => $runner->hasCli($run->cli))) {
             return 'no_cli';
@@ -55,5 +61,32 @@ final class RunQueue
         $bound = self::boundTo($run);
 
         return $bound !== null && ! $bound->isOnline() ? 'runner_offline' : null;
+    }
+
+    /**
+     * Gives the waiting runs (of one bot, or all) their reason anew: `waiting` with it, `queued` without (A486). Each run
+     * is written only if it still waits and its state changes; no event, the reason is bookkeeping. Answers how many wait.
+     */
+    public static function refreshReasons(?string $botId = null): int
+    {
+        $pending = AgentRun::query()->whereIn('status', [RunStatus::Queued->value, RunStatus::Waiting->value])
+            ->when($botId !== null, fn ($query) => $query->where('bot_id', $botId))
+            ->with('thread.runner')->get();
+        $runners = Runner::query()->whereNull('revoked_at')->get();
+        $configs = AgentConfig::query()->whereIn('bot_id', $pending->pluck('bot_id')->unique()->values())->get()->keyBy('bot_id');
+        $waiting = 0;
+
+        foreach ($pending as $run) {
+            $reason = self::waitingReason($run, $configs->get($run->bot_id), $runners);
+            $status = $reason === null ? RunStatus::Queued : RunStatus::Waiting;
+            $waiting += $reason === null ? 0 : 1;
+
+            if ($run->status !== $status || $run->waiting_reason !== $reason) {
+                AgentRun::query()->whereKey($run->id)->whereIn('status', [RunStatus::Queued->value, RunStatus::Waiting->value])
+                    ->update(['status' => $status->value, 'waiting_reason' => $reason, 'updated_at' => now()]);
+            }
+        }
+
+        return $waiting;
     }
 }

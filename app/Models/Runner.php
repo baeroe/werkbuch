@@ -143,12 +143,23 @@ final class Runner extends Model
     /** Whether the last report names the CLI installed and signed in (spec 8.8). */
     public function hasCli(AgentCli $cli): bool
     {
+        return in_array($cli->value, $this->readyClis(), true);
+    }
+
+    /**
+     * The CLIs the last report names installed and signed in.
+     *
+     * @return list<string>
+     */
+    public function readyClis(): array
+    {
+        $ready = [];
         foreach ($this->clis as $entry) {
-            if (($entry['cli'] ?? null) === $cli->value && ($entry['installed'] ?? false) === true && ($entry['logged_in'] ?? false) === true) {
-                return true;
+            if (is_string($entry['cli'] ?? null) && ($entry['installed'] ?? false) === true && ($entry['logged_in'] ?? false) === true) {
+                $ready[] = $entry['cli'];
             }
         }
 
-        return false;
+        return array_values(array_unique($ready));
     }
 }

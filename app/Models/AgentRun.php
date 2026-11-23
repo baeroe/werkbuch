@@ -75,7 +75,7 @@ final class AgentRun extends Model
     public const MODEL_SOURCES = ['label', 'project', 'bot', 'default'];
 
     /** Why a run waits (A486): no runner of the pool has the CLI, or the runner of its strand is offline. */
-    public const WAITING_REASONS = ['no_cli', 'runner_offline'];
+    public const WAITING_REASONS = ['agent_off', 'no_cli', 'runner_offline'];
 
     /** What werkbuch writes into `error` itself; a runner's failure has its own sentence. */
     public const LOST = 'lost';

@@ -2,12 +2,14 @@
 
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
+use App\Actions\AgentRuns\ClaimRun;
 use App\Actions\AgentRuns\EnqueueRun;
 use App\Actions\AgentRuns\ReapLostRuns;
 use App\Domain\Agents\Contract;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
 use App\Events\EventType;
+use App\Models\AgentRun;
 use App\Models\AgentThread;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
@@ -245,7 +247,65 @@ it('hands a correction or comment of an open thread to the runner of the thread,
         ->and($answer['thread'])->toMatchArray(['id' => $thread->id, 'branch' => 'agent/x', 'session_id' => null])
         ->and($thread->fresh()->runner_id)->not->toBe($home->id);
 
-    // the comment follows the strand to its new runner; the old one, back again, gets nothing of it
+    // one run at a strand at a time (spec 7.8, A488): the comment waits for the correction, even in the light pot
+    expect($claim($otherToken)->json('run'))->toBeNull();
+    $this->postJson("/api/runner/runs/{$correction->id}/result", ['attempt' => 1, 'status' => 'succeeded'], AgentWorld::headers($otherToken))->assertOk();
+
+    // then it follows the strand to its new runner; the old one, back again, gets nothing of it
     $claim($homeToken)->assertJsonPath('run', null);
     expect($claim($otherToken)->json('run.id'))->toBe($comment->id);
+});
+
+it('never runs two runs of a strand at once, also with places for both', function () use ($claim, $system) {
+    [$runner, $token] = AgentWorld::runner(['slots_total' => 4, 'slots_per_repo' => 4, 'slots_light' => 4]);
+    $item = WorkItem::factory()->create(['project_id' => $this->project->id]);
+    $thread = AgentThread::factory()->create(['bot_id' => $this->agent->id, 'work_item_id' => $item->id, 'project_id' => $this->project->id]);
+    $first = EnqueueRun::run($system(), $this->agent, $this->project, $item, 'correction', $thread);
+    $second = EnqueueRun::run($system(), $this->agent, $this->project, $item, 'conflict', $thread);
+    $review = EnqueueRun::run($system(), $this->agent, $this->project, $item, 'review', $thread);
+    $other = AgentWorld::run($this->agent, $this->project);
+
+    // the first run of the strand, then the review (no strand) and a run elsewhere, never the second of the strand
+    $order = array_map(fn () => $claim($token)->json('run.id'), range(1, 4));
+    expect($order)->toBe([$first->id, $review->id, $other->id, null])
+        ->and($thread->fresh()?->runner_id)->toBe($runner->id);
+
+    $this->postJson("/api/runner/runs/{$first->id}/result", ['attempt' => 1, 'status' => 'failed', 'error' => 'tests red'], AgentWorld::headers($token))->assertOk();
+    expect($claim($token)->json('run.id'))->toBe($second->id);
+});
+
+it('hands no run of a project being deleted', function () use ($claim) {
+    [, $token] = AgentWorld::runner();
+    AgentWorld::run($this->agent, $this->project);
+    $this->project->update(['deleting_at' => now()]);
+
+    expect($claim($token)->json('run'))->toBeNull();
+});
+
+it('finds the run for this runner behind a full queue of runs it cannot take', function () use ($claim) {
+    [, $token] = AgentWorld::runner();
+    $codex = AgentWorld::agent([$this->project], ['cli' => 'codex', 'model' => 'gpt-5-codex'], 'Otto');
+    $item = WorkItem::factory()->create(['project_id' => $this->project->id, 'priority' => 'urgent']);
+    AgentRun::factory()->type(RunType::Task)->count(ClaimRun::CANDIDATES + 5)->create([
+        'bot_id' => $codex->id, 'cli' => 'codex', 'model' => 'gpt-5-codex', 'work_item_id' => $item->id, 'project_id' => $this->project->id,
+    ]);
+    $mine = AgentWorld::run($this->agent, $this->project);
+
+    expect($claim($token)->json('run.id'))->toBe($mine->id);
+});
+
+it('says agent_off for the waiting runs of an agent switched off and hands them again once it is on', function () use ($claim) {
+    [, $token] = AgentWorld::runner();
+    $run = AgentWorld::run($this->agent, $this->project);
+    $admin = User::factory()->admin()->create();
+    $config = fn (bool $on) => ['enabled' => $on, 'runner_ids' => [], 'cli' => 'claude', 'model' => 'sonnet', 'models' => []];
+    $this->actingAs($admin);
+
+    $this->putJson("/api/v1/bots/{$this->agent->id}/agent", $config(false))->assertOk();
+    expect([$run->fresh()?->status, $run->fresh()?->waiting_reason])->toBe([RunStatus::Waiting, 'agent_off'])
+        ->and($claim($token)->json('run'))->toBeNull();
+
+    $this->putJson("/api/v1/bots/{$this->agent->id}/agent", $config(true))->assertOk();
+    expect([$run->fresh()?->status, $run->fresh()?->waiting_reason])->toBe([RunStatus::Queued, null])
+        ->and($claim($token)->json('run.id'))->toBe($run->id);
 });

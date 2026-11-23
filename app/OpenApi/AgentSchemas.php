@@ -140,7 +140,7 @@ final class AgentSchemas
             'AgentRunResource' => [
                 'type' => ['type' => 'string', 'enum' => RunType::VALUES],
                 'status' => ['type' => 'string', 'enum' => RunStatus::VALUES],
-                'waiting_reason' => ['type' => ['string', 'null'], 'enum' => [...AgentRun::WAITING_REASONS, null], 'description' => '`no_cli`: no runner of the pool has the CLI; `runner_offline`: the runner of its strand is offline (30 minutes, then another takes over).'],
+                'waiting_reason' => ['type' => ['string', 'null'], 'enum' => [...AgentRun::WAITING_REASONS, null], 'description' => '`agent_off`: the agent is switched off; `no_cli`: no runner of the pool has the CLI; `runner_offline`: the runner of its strand is offline (30 minutes, then another takes over).'],
                 'cli' => ['type' => 'string', 'enum' => AgentCli::VALUES],
                 'model_source' => ['type' => 'string', 'enum' => AgentRun::MODEL_SOURCES],
                 'lease_expires_at' => $nullTime, 'started_at' => $nullTime, 'deadline_at' => $nullTime, 'finished_at' => $nullTime,

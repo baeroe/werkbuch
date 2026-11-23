@@ -3,6 +3,7 @@
 use App\Actions\AgentRuns\CancelRun;
 use App\Actions\AgentRuns\PruneRunEvents;
 use App\Actions\AgentRuns\ReapLostRuns;
+use App\Actions\Projects\PurgeProject as PurgeProjectAction;
 use App\Actions\Runners\RevokeRunner;
 use App\Domain\Agents\Protocol;
 use App\Domain\Agents\RunStatus;
@@ -10,6 +11,7 @@ use App\Domain\Agents\RunType;
 use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Jobs\PruneRunEventsJob;
+use App\Jobs\PurgeProject;
 use App\Jobs\ReapLostRunsJob;
 use App\Models\AgentRun;
 use App\Models\AgentRunEvent;
@@ -23,6 +25,7 @@ use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Tests\Support\AgentWorld;
 
 /*
@@ -200,13 +203,13 @@ it('keeps the log of a run with its kinds, blanks tokens and stores it in order'
 
     $log($run, [
         ['kind' => 'system', 'text' => 'claude 2.4.1, model sonnet'],
-        ['kind' => 'tool', 'text' => "Bash: curl -H 'Authorization: Bearer {$token}' and wbr_".str_repeat('a', 40).' ghs_'.str_repeat('B', 36), 'at' => now()->subSecond()->toJSON()],
+        ['kind' => 'tool', 'text' => "Bash: curl -H 'Authorization: Bearer {$token}' and wbr_".str_repeat('a', 40).' ghs_'.str_repeat('B', 36).' '.explode('|', $token)[1], 'at' => now()->subSecond()->toJSON()],
         ['kind' => 'text', 'text' => str_repeat('x', 5000), 'at' => now()->addDay()->toJSON()],
     ])->assertOk()->assertExactJson(['stored' => 3, 'dropped' => 0]);
 
     $lines = AgentRunEvent::query()->where('run_id', $run->id)->orderBy('id')->get();
     expect($lines->pluck('kind')->all())->toBe(['system', 'tool', 'text'])
-        ->and($lines[1]->text)->toBe("Bash: curl -H 'Authorization: Bearer [token]' and [token] [token]")
+        ->and($lines[1]->text)->toBe("Bash: curl -H 'Authorization: Bearer [token]' and [token] [token] [token]")
         ->and(mb_strlen($lines[2]->text))->toBe(Protocol::EVENT_TEXT_MAX)
         ->and($lines[2]->at->isFuture())->toBeFalse();
 
@@ -283,4 +286,31 @@ it('reaps every minute and prunes every hour as jobs that never run twice at onc
         ->and(collect((new PruneRunEventsJob)->middleware())->sole())->toBeInstanceOf(WithoutOverlapping::class)
         ->and($run->fresh()->status)->toBe(RunStatus::Queued)
         ->and(AgentRunEvent::query()->count())->toBe(0);
+});
+
+it('ends the runs of a project being deleted and takes their tokens with them (A489)', function () use ($claimed) {
+    [$run, $token] = $claimed();
+    $waiting = AgentWorld::run(test()->agent, test()->project);
+    $admin = User::factory()->admin()->create();
+    Queue::fake([PurgeProject::class]);
+
+    $this->actingAs($admin)->deleteJson('/api/v1/projects/'.test()->project->id)->assertStatus(202);
+    expect([$run->fresh()?->status, $run->fresh()?->error, $waiting->fresh()?->status])->toBe([RunStatus::Canceled, 'project_deleted', RunStatus::Canceled])
+        ->and(PersonalAccessToken::query()->where('agent_run_id', $run->id)->exists())->toBeFalse();
+    forgetApiAuth();
+    $this->withToken($token)->getJson('/api/v1/me')->assertUnauthorized();
+    forgetApiAuth();
+    $this->postJson("/api/runner/runs/{$run->id}/heartbeat", ['attempt' => 1], AgentWorld::headers(test()->token))->assertConflict();
+});
+
+it('takes the token of a run with the run when a project is purged (A489)', function () {
+    $run = AgentWorld::run(test()->agent, test()->project);
+    AgentWorld::token($run);
+    test()->project->update(['deleting_at' => now()]);
+
+    PurgeProjectAction::run(actor(User::defaultBot()), test()->project);
+
+    expect(AgentRun::query()->find($run->id))->toBeNull()
+        ->and(PersonalAccessToken::query()->where('agent_run_id', $run->id)->exists())->toBeFalse()
+        ->and(PersonalAccessToken::query()->where('tokenable_id', test()->agent->id)->exists())->toBeFalse();
 });

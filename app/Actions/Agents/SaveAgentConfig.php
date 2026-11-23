@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Support\Actor;
 use App\Support\CatalogInput;
 use App\Support\Ids;
+use App\Support\RunQueue;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -85,7 +86,7 @@ final class SaveAgentConfig
         ];
         ksort($next['models']);
 
-        return DB::transaction(function () use ($actor, $bot, $next): AgentConfig {
+        $saved = DB::transaction(function () use ($actor, $bot, $next): AgentConfig {
             $config = AgentConfig::query()->lockForUpdate()->where('bot_id', $bot->id)->first() ?? AgentConfig::unsaved($bot);
             $changes = CatalogInput::changes(self::snapshot($config), $next);
 
@@ -98,6 +99,12 @@ final class SaveAgentConfig
 
             return $config;
         }, 3);
+
+        // the waiting runs of the bot say at once why they wait (switched off: `agent_off`, A490); after the commit, so
+        // no claim ever waits for the configuration while holding a run (Runner → run → configuration)
+        RunQueue::refreshReasons($bot->id);
+
+        return $saved;
     }
 
     /** Why a bot cannot work as an agent (spec 7.2), or null. */
