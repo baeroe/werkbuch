@@ -227,6 +227,7 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 
 - Labels statt eines eigenen Felds am Item: sie gelten in allen Projekten, lassen sich schon beim Anlegen, aus Vorlagen, per Mehrfachbearbeitung und per MCP setzen und filtern; ein neues Item-Feld liefe durch Resource, REST, Vorlagen und das ausgeschöpfte MCP-Budget von `work-items`.
 - Das Modell kommt aus einer **festen Liste je CLI** *(Rafael: keine freien Namen)*, gepflegt im Code und mit Releases von werkbuch erweitert (Claude Code etwa `haiku`, `sonnet`, `opus`, `fable`; Codex dessen Namen). Alle Modellfelder sind Selects; wechselt das CLI und gibt es das gewählte Modell dort nicht, gilt der Standard des CLI (mit Hinweis). Der Runner reicht es durch (`--model` bzw. `-m`); lehnt das CLI es ab, scheitert der Auftrag mit dem Grund.
+- Modelle in Projekt und Label nennen CLI und Modell (die Selects gruppieren nach CLI); sie gelten nur für Agenten mit diesem CLI, für andere wird die Stufe übergangen *(Claude)*. Die Oberfläche sagt es unter dem Feld.
 - Am Auftrag stehen das gewählte Modell und woher es kam (Label, Projekt, Bot) und, falls gemeldet, der Verbrauch.
 - Eine automatische Wahl (ein kleines Modell schätzt das Ticket ein) ist ein Nicht-Ziel von v1.
 
