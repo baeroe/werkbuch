@@ -10,16 +10,16 @@
  * - Bremsen: corrections and conflicts per strand before the item goes back to the bot's responsible person.
  * - Modelle: per kind of run. A model label of the item (a label of the organization with a model for agents) goes
  *   first; those are set in Organisation → Labels (spec 7.7).
- * - Arbeitsregeln: a Markdown text per kind of run, with the standard werkbuch ships and "Standard wiederherstellen".
+ * - Projektinformationen und Regeln: one Markdown text for every kind of run; the working rules per kind are the
+ *   organization's (Organisation → Agenten, spec 7.3).
  * Everybody in the project reads; project admins change it.
  */
 
-import { CircleAlert, GitBranch, RotateCcw } from 'lucide-react';
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { CircleAlert, GitBranch } from 'lucide-react';
+import { useMemo, useRef, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar';
 import { Banner } from '@/components/ui/Banner';
-import { Button } from '@/components/ui/Button';
 import { ToneDot } from '@/components/ui/Chip';
 import { Input } from '@/components/ui/Input';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
@@ -27,11 +27,9 @@ import { Select } from '@/components/ui/Select';
 import { StatusIcon } from '@/components/ui/StatusIcon';
 import { labelClass } from '@/components/ui/styles';
 import { Switch } from '@/components/ui/Switch';
-import { Tab, Tabs, TabsList, TabsPanel } from '@/components/ui/Tabs';
 import { Textarea } from '@/components/ui/Textarea';
 import { toast } from '@/components/ui/toast';
-import { DEFAULT_RULES } from '@/domain/agentRuleDefaults';
-import { AGENT_STEPS, categoriesText, isModelLabel, mappingComplete, missingSteps, RUN_TYPE_HINTS, RUN_TYPE_NAMES, RUN_TYPES, STEP_CATEGORIES, STEP_HINTS, STEP_NAMES } from '@/domain/agents';
+import { AGENT_STEPS, categoriesText, isModelLabel, mappingComplete, missingSteps, RUN_TYPE_NAMES, RUN_TYPES, STEP_CATEGORIES, STEP_HINTS, STEP_NAMES } from '@/domain/agents';
 import { ModelField } from '@/features/agents/ModelField';
 import { SaveBar } from '@/features/agents/SaveBar';
 import { useAgentBotIds, useAgentModels, useGithub, useProjectAgents, useRepoOwners, useSaveProjectAgents } from '@/hooks/agents';
@@ -62,7 +60,7 @@ interface Form {
   review_human_prs: boolean;
   comment_on_pr: boolean;
   models: Record<RunType, string>;
-  rules: Record<RunType, string | null>;
+  info: string;
 }
 
 const formOf = (settings: ProjectAgents): Form => ({
@@ -77,7 +75,7 @@ const formOf = (settings: ProjectAgents): Form => ({
   review_human_prs: settings.review_human_prs,
   comment_on_pr: settings.comment_on_pr,
   models: Object.fromEntries(RUN_TYPES.map((type) => [type, settings.models[type] ?? ''])) as Record<RunType, string>,
-  rules: settings.rules,
+  info: settings.info,
 });
 
 const toSettings = (project_id: string, form: Form): ProjectAgents => ({
@@ -93,7 +91,7 @@ const toSettings = (project_id: string, form: Form): ProjectAgents => ({
   review_human_prs: form.review_human_prs,
   comment_on_pr: form.comment_on_pr,
   models: form.models,
-  rules: form.rules,
+  info: form.info,
 });
 
 const MERGE_METHODS = [
@@ -130,70 +128,6 @@ function StepRow({ step, workflow }: { step: AgentStep; workflow: Workflow }) {
         )}
       </dd>
     </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- the rules */
-
-type Rules = Record<RunType, string | null>;
-
-/** `onChange` takes a change of the rules as they are when it applies: the undo of a toast comes later. */
-function RulesEditor({ value, onChange, readOnly }: { value: Rules; onChange: (change: (rules: Rules) => Rules) => void; readOnly: boolean }) {
-  const [tab, setTab] = useState<RunType>('task');
-  return (
-    <Tabs value={tab} onValueChange={(next) => setTab(next as RunType)}>
-      <TabsList aria-label="Arbeitsregeln je Auftragstyp" className="-mx-4 px-4 md:mx-0 md:px-0">
-        {RUN_TYPES.map((type) => (
-          <Tab key={type} value={type}>
-            {RUN_TYPE_NAMES[type]}
-            {value[type] !== null && (
-              <span className="size-1.5 rounded-full bg-accent" aria-label="eigener Text" role="img" />
-            )}
-          </Tab>
-        ))}
-      </TabsList>
-      {RUN_TYPES.map((type) => {
-        const own = value[type];
-        const text = own ?? DEFAULT_RULES[type];
-        return (
-          <TabsPanel key={type} value={type} className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="max-w-[60ch] text-sm text-pretty text-muted">{RUN_TYPE_HINTS[type]}</p>
-              <span className="inline-flex h-6 items-center rounded-chip border border-line bg-sunken px-1.5 text-sm font-medium text-muted">{own === null ? 'Standard von werkbuch' : 'Eigener Text'}</span>
-            </div>
-            <Textarea
-              label={`Arbeitsregeln für „${RUN_TYPE_NAMES[type]}“`}
-              rows={11}
-              value={text}
-              readOnly={readOnly}
-              className={readOnly ? READ_ONLY : undefined}
-              spellCheck
-              hint="Markdown. Wird nach dem festen Vertrag und der Anweisung des Bots in jeden Auftrag dieses Typs gesetzt."
-              onChange={(event) => {
-                const next = event.target.value === DEFAULT_RULES[type] ? null : event.target.value;
-                onChange((rules) => ({ ...rules, [type]: next }));
-              }}
-            />
-            {!readOnly && own !== null && (
-              <div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={RotateCcw}
-                  onClick={() => {
-                    onChange((rules) => ({ ...rules, [type]: null }));
-                    // the undo puts back this one text, into the rules as they are by then
-                    toast({ title: `Standard für „${RUN_TYPE_NAMES[type]}“ wiederhergestellt`, description: 'Gilt nach dem Speichern.', action: { label: 'Rückgängig', onClick: () => onChange((rules) => ({ ...rules, [type]: own })) } });
-                  }}
-                >
-                  Standard wiederherstellen
-                </Button>
-              </div>
-            )}
-          </TabsPanel>
-        );
-      })}
-    </Tabs>
   );
 }
 
@@ -527,8 +461,29 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds,
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Arbeitsregeln" description="Wie Agenten in diesem Projekt arbeiten, je Auftragstyp. Was nie erlaubt ist (Status setzen, mergen, Force-Push) und das Ausgabeformat stehen fest im Code und gehen vor; die Regeln für den Code stehen im Repo (CLAUDE.md, AGENTS.md).">
-        <RulesEditor value={value.rules} readOnly={readOnly} onChange={(change) => draft.update((current) => ({ rules: change(current.rules) }))} />
+      <SettingsCard
+        title="Projektinformationen und Regeln für Agenten"
+        description="Was Agenten über dieses Projekt wissen sollen, für jeden Auftragstyp. Im Prompt steht es nach den Arbeitsregeln der Organisation und dem Vorgehen des Item-Typs, vor CLAUDE.md im Repo."
+      >
+        <Textarea
+          label="Projektinformationen und Regeln"
+          name="info"
+          rows={8}
+          spellCheck
+          placeholder="keine"
+          value={value.info}
+          readOnly={readOnly}
+          className={readOnly ? READ_ONLY : undefined}
+          hint="Markdown. Für Regeln des Codes ist CLAUDE.md bzw. AGENTS.md im Repo da."
+          error={problems.errors.info}
+          onChange={(event) => edit({ info: event.target.value }, 'info')}
+        />
+        <p className="max-w-[65ch] text-sm text-pretty text-muted">
+          {'Die Arbeitsregeln je Auftragstyp gelten für die ganze Organisation. '}
+          <Link to="/settings/agents" className="font-medium text-accent-text underline-offset-2 hover:underline">
+            Arbeitsregeln ansehen
+          </Link>
+        </p>
       </SettingsCard>
 
       {canManage && (

@@ -127,6 +127,11 @@ export interface WorkItemType {
   icon: string;
   tone: TypeTone;
   description: string;
+  /**
+   * How agents go about items of this type (spec 7.3, the layer after the working rules of the kind of run), e.g.
+   * "start with a failing test" for a bug. Empty: nothing of its own.
+   */
+  agent_guidance: string;
   /** Items of epic types appear on the timeline. */
   is_epic: boolean;
   properties: { property_id: string; required: boolean; position: number }[];
@@ -799,8 +804,6 @@ export interface AgentConfig {
   model: string;
   /** Overrides per kind of run; missing ones take `model`. */
   models: Partial<Record<RunType, string>>;
-  /** A free instruction added to every prompt of this bot. */
-  instruction: string;
 }
 
 /** The steps of the flow that set a status (spec 7.4). */
@@ -837,9 +840,18 @@ export interface ProjectAgents {
   review_human_prs: boolean;
   comment_on_pr: boolean;
   models: Partial<Record<RunType, string>>;
-  /** The working rules per kind of run as Markdown; null takes the standard werkbuch ships. */
-  rules: Record<RunType, string | null>;
+  /**
+   * What agents should know about the project and how they work in it, for every kind of run (spec 7.3, the layer
+   * after the item type and before CLAUDE.md in the repo). Markdown; empty: nothing of its own.
+   */
+  info: string;
 }
+
+/**
+ * The working rules of the organization per kind of run (spec 7.3, the layer after the contract): Markdown, null takes
+ * the standard werkbuch ships.
+ */
+export type AgentRules = Record<RunType, string | null>;
 
 /** The two GitHub apps of the instance (spec 11.3). */
 export interface GithubApp {

@@ -4,7 +4,7 @@
  */
 
 import type { LucideIcon } from 'lucide-react';
-import { BadgeCheck, Bot, Building2, Cpu, GitBranch, Link2, Server, Shapes, SlidersHorizontal, Tags, Users, Webhook, Workflow } from 'lucide-react';
+import { BadgeCheck, Bot, BookText, Building2, Cpu, GitBranch, Link2, Server, Shapes, SlidersHorizontal, Tags, Users, Webhook, Workflow } from 'lucide-react';
 import type { OrgPermission } from './access';
 
 export type SectionSlug =
@@ -20,6 +20,7 @@ export type SectionSlug =
   | 'webhooks'
   | 'runners'
   | 'github'
+  | 'agents'
   | 'system';
 
 export type SectionGroup = 'organization' | 'catalogs' | 'operations';
@@ -56,6 +57,7 @@ export const SECTIONS: readonly SectionDef[] = [
   { slug: 'webhooks', label: 'Webhooks', icon: Webhook, group: 'operations', permission: 'org.manage', members: 'blocked', keywords: ['ereignisse', 'zustellungen', 'geheimnis', 'ping'] },
   { slug: 'runners', label: 'Runner', icon: Cpu, group: 'operations', permission: 'org.manage', members: 'blocked', keywords: ['agenten', 'maschine', 'mac', 'claude', 'codex', 'verbinden', 'code'] },
   { slug: 'github', label: 'GitHub', icon: GitBranch, group: 'operations', permission: 'org.manage', members: 'blocked', keywords: ['repo', 'app', 'pull request', 'ruleset', 'review'] },
+  { slug: 'agents', label: 'Agenten', icon: BookText, group: 'operations', permission: 'org.manage', members: 'read', keywords: ['arbeitsregeln', 'prompt', 'vertrag', 'regeln', 'umsetzen', 'review', 'korrektur'] },
   { slug: 'system', label: 'System', icon: Server, group: 'operations', permission: 'org.manage', members: 'blocked', keywords: ['version', 'queue', 'jobs', 'meilisearch', 'testmail'] },
 ];
 

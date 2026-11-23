@@ -19,6 +19,7 @@ import type {
   Automation,
   Comment,
   Favorite,
+  AgentRules,
   GithubConnection,
   Invitation,
   ItemEvent,
@@ -62,8 +63,9 @@ export const DB_KEY = 'werkbuch:db';
  * 8: no catalog: the equipment of a runner's harness, reported by the runner (WEBU-18).
  * 9: the status per step of the agents belongs to the workflow, not to the project (WEBU-18).
  * 10: runners report their CLIs; Otto works with Codex; agents have no slots or time limits of their own (WEBU-18).
+ * 11: working rules per kind of run in the organization, guidance per item type, project info; no bot instruction.
  */
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 /** An earlier identifier of a project: keys like `OLD-12` keep resolving after a rename. */
 export interface ProjectAlias {
@@ -118,6 +120,7 @@ export interface Db {
   runners: StoredRunner[];
   runner_pairings: StoredPairing[];
   github: GithubConnection;
+  agent_rules: AgentRules;
   agent_configs: AgentConfig[];
   project_agents: ProjectAgents[];
   agent_threads: AgentThread[];
@@ -163,7 +166,7 @@ const ARRAY_KEYS = [
   'agent_runs',
   'pull_requests',
 ] as const;
-const OBJECT_KEYS = ['organization', 'counters', 'unsubscribed', 'system', 'github'] as const;
+const OBJECT_KEYS = ['organization', 'counters', 'unsubscribed', 'system', 'github', 'agent_rules'] as const;
 
 let cache: Db | null = null;
 /** What is in storage (or would be, when storage is blocked): the state a rollback returns to. */

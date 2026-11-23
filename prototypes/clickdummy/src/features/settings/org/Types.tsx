@@ -83,6 +83,7 @@ function TypeDialog({ open, onOpenChange, type, properties }: TypeDialogProps) {
   const [icon, setIcon] = useState(type?.icon ?? 'square-check');
   const [tone, setTone] = useState<TypeTone>(type?.tone ?? 'sky');
   const [description, setDescription] = useState(type?.description ?? '');
+  const [guidance, setGuidance] = useState(type?.agent_guidance ?? '');
   const [isEpic, setIsEpic] = useState(type?.is_epic ?? false);
   const [assigned, setAssigned] = useState<Assigned[]>(() =>
     [...(type?.properties ?? [])].sort((a, b) => a.position - b.position).map((entry) => ({ id: entry.property_id, required: entry.required })),
@@ -109,6 +110,7 @@ function TypeDialog({ open, onOpenChange, type, properties }: TypeDialogProps) {
         icon,
         tone,
         description: description.trim(),
+        agent_guidance: guidance.trim(),
         is_epic: isEpic,
         properties: assigned.map((entry, position) => ({ property_id: entry.id, required: entry.required, position })),
       }),
@@ -150,7 +152,20 @@ function TypeDialog({ open, onOpenChange, type, properties }: TypeDialogProps) {
       <FieldGroup legend="Farbe" hint="Der Reiter trägt die Farbe, das Icon und der Name stehen immer dabei.">
         <TonePicker label="Farbe des Typs" value={tone} onChange={setTone} />
       </FieldGroup>
-      <Textarea label="Beschreibung" name="description" autoComplete="off" hint="Wofür der Typ da ist. Sie erscheint in der Auswahl." rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Textarea label="Beschreibung" name="description" autoComplete="off" hint="Wofür der Typ da ist. Sie erscheint in der Auswahl." rows={3} value={description} onChange={(event) => setDescription(event.target.value)} />
+        <Textarea
+          label="Vorgehen für Agenten (optional)"
+          name="agent_guidance"
+          autoComplete="off"
+          hint="Steht im Prompt nach den Arbeitsregeln des Auftragstyps, für Items dieses Typs."
+          placeholder="Etwa: Beginne mit einem fehlschlagenden Test, wenn möglich."
+          rows={3}
+          value={guidance}
+          error={fieldMessage(save.error, 'agent_guidance')}
+          onChange={(event) => setGuidance(event.target.value)}
+        />
+      </div>
       <div>
         <Checkbox
           label="Epic: Items dieses Typs erscheinen in der Timeline"

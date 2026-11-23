@@ -17,6 +17,7 @@ import { useCurrentUser } from '@/hooks/users';
 import { useCommand } from '@/lib/commands';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { NotForMembers, useOrgRight } from './access';
+import AgentRules from './AgentRules';
 import Bots from './Bots';
 import Github from './Github';
 import General from './General';
@@ -46,6 +47,7 @@ const COMPONENTS: Record<SectionSlug, ComponentType<SectionProps>> = {
   webhooks: Webhooks,
   runners: Runners,
   github: Github,
+  agents: AgentRules,
   system: System,
 };
 

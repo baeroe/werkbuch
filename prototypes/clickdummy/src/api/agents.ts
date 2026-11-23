@@ -4,13 +4,13 @@
  * without settings answers defaults without any status: agents are off there until all four steps have one.
  */
 
+import { DEFAULT_RULES, RUN_CONTRACTS } from '@/domain/agentRuleDefaults';
 import { KNOWN_MODELS, RUN_TYPES, whyNotAgent, whyNotHere } from '@/domain/agents';
-import type { AgentConfig, ProjectAgents, ProjectRole, RunType } from '@/types';
+import type { AgentConfig, AgentRules, ProjectAgents, ProjectRole, RunType } from '@/types';
 import { canSeeProject, requireOrgAdmin, requireRole, requireWritable } from './access';
 import { FieldErrors, notFound, paginate, read, write, type Page } from './client';
 import type { Db } from './db';
 
-const NO_RULES: Record<RunType, string | null> = { task: null, correction: null, conflict: null, review: null, comment: null };
 
 export const defaultAgentConfig = (bot_id: string): AgentConfig => ({
   bot_id,
@@ -19,7 +19,6 @@ export const defaultAgentConfig = (bot_id: string): AgentConfig => ({
   cli: 'claude',
   model: 'sonnet',
   models: {},
-  instruction: '',
 });
 
 export const defaultProjectAgents = (project_id: string): ProjectAgents => ({
@@ -35,7 +34,7 @@ export const defaultProjectAgents = (project_id: string): ProjectAgents => ({
   review_human_prs: true,
   comment_on_pr: true,
   models: {},
-  rules: { ...NO_RULES },
+  info: '',
 });
 
 /** The configurations of all bots that have one. */
@@ -49,6 +48,31 @@ export function listAgentConfigs(): Promise<Page<AgentConfig>> {
 /** The bots that work as agents (the review agent of a project is one of them); every account may read the list. */
 export function listAgentBotIds(): Promise<string[]> {
   return read(({ db }) => db.agent_configs.filter((config) => config.enabled).map((config) => config.bot_id));
+}
+
+/** The working rules of the organization per kind of run, with the standards and the contracts werkbuch gives (spec 7.3, 10.8). */
+export interface AgentRulesView {
+  rules: AgentRules;
+  /** The standard werkbuch ships per kind of run: what a rule without a text of its own is. */
+  defaults: Record<RunType, string>;
+  /** The contract per kind of run, fixed in code and always first in the prompt. */
+  contracts: Record<RunType, string>;
+}
+
+export function getAgentRules(): Promise<AgentRulesView> {
+  return read(({ db }) => ({ rules: { ...db.agent_rules }, defaults: { ...DEFAULT_RULES }, contracts: { ...RUN_CONTRACTS } }));
+}
+
+/** Saves the working rules (org admins); a text equal to the standard is stored as none of its own. */
+export function saveAgentRules(rules: AgentRules): Promise<AgentRulesView> {
+  return write(({ db, me }) => {
+    requireOrgAdmin(me, 'Die Arbeitsregeln der Agenten ändern nur Org-Admins.');
+    const errors = new FieldErrors();
+    for (const type of RUN_TYPES) if (rules[type] !== null && rules[type]!.trim() === '') errors.add(`rules.${type}`, 'Leer geht nicht. Stelle den Standard wieder her, wenn es keinen eigenen Text braucht.');
+    errors.throwIfAny();
+    db.agent_rules = Object.fromEntries(RUN_TYPES.map((type) => [type, rules[type] === null || rules[type]!.trim() === DEFAULT_RULES[type].trim() ? null : rules[type]!.trim()])) as AgentRules;
+    return { rules: { ...db.agent_rules }, defaults: { ...DEFAULT_RULES }, contracts: { ...RUN_CONTRACTS } };
+  });
 }
 
 /** The models of the bots that work as agents; every account may read them (what "Wie beim Bot" means in a project). */
@@ -86,7 +110,7 @@ export function saveAgentConfig(input: AgentConfig): Promise<AgentConfig> {
       if (model && !known.includes(model)) errors.add(`models.${type}`, `„${model}“ gibt es bei ${input.cli === 'claude' ? 'Claude Code' : 'Codex'} nicht.`);
     }
     errors.throwIfAny();
-    const stored: AgentConfig = { ...input, model: input.model.trim(), instruction: input.instruction.trim(), models: trimModels(input.models) };
+    const stored: AgentConfig = { ...input, model: input.model.trim(), models: trimModels(input.models) };
     const index = db.agent_configs.findIndex((config) => config.bot_id === input.bot_id);
     if (index >= 0) db.agent_configs[index] = stored;
     else db.agent_configs.push(stored);
@@ -146,6 +170,7 @@ export function saveProjectAgents(input: ProjectAgents): Promise<ProjectAgents> 
       base_branch: input.base_branch.trim(),
       setup_command: input.setup_command.trim(),
       teardown_command: input.teardown_command.trim(),
+      info: input.info.trim(),
       models: trimModels(input.models),
     };
     const index = db.project_agents.findIndex((settings) => settings.project_id === project.id);

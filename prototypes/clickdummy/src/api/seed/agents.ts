@@ -17,7 +17,7 @@
 
 import { DEFAULT_RULES } from '@/domain/agentRuleDefaults';
 import { RUN_TIMEOUTS } from '@/domain/agents';
-import type { AgentConfig, AgentRun, AgentThread, Comment, GithubConnection, ItemEvent, ProjectAgents, PullRequestLink, RunLogLine, RunnerCli, RunnerEquipment, RunnerLoad, RunnerSlots, RunType } from '@/types';
+import type { AgentConfig, AgentRules, AgentRun, AgentThread, Comment, GithubConnection, ItemEvent, ProjectAgents, PullRequestLink, RunLogLine, RunnerCli, RunnerEquipment, RunnerLoad, RunnerSlots, RunType } from '@/types';
 import { comment, event, state } from './activity';
 import { at, doc, p, ul } from './helpers';
 import { itemId } from './items';
@@ -137,7 +137,6 @@ export const agentConfigs: AgentConfig[] = [
     cli: 'claude',
     model: 'sonnet',
     models: { review: 'opus' },
-    instruction: 'Schreib Commits und PR-Texte auf Englisch, Kommentare an Personen auf Deutsch. Frag lieber in einem Kommentar nach, als zu raten.',
   },
   // Otto works with Codex, which no runner of his pool has logged in: his run on WEB-55 waits (spec 8.8)
   {
@@ -147,11 +146,8 @@ export const agentConfigs: AgentConfig[] = [
     cli: 'codex',
     model: 'gpt-5-codex',
     models: {},
-    instruction: 'Kleine, klar umrissene Aufgaben. Frag in einem Kommentar nach, wenn etwas unklar ist.',
   },
 ];
-
-const NO_RULES: Record<RunType, string | null> = { task: null, correction: null, conflict: null, review: null, comment: null };
 
 export const projectAgents: ProjectAgents[] = [
   {
@@ -168,13 +164,23 @@ export const projectAgents: ProjectAgents[] = [
     review_human_prs: true,
     comment_on_pr: true,
     models: { comment: 'haiku' },
-    // WEB reviews with a focus of its own; the other kinds use the standard
-    rules: {
-      ...NO_RULES,
-      review: `${DEFAULT_RULES.review}\n- Prüfe Kontraste und Fokus nach \`DESIGN.md\`, hell und dunkel.\n- Neue Texte auf der Website: Tippfehler und Duzen/Siezen (wir siezen).`,
-    },
+    // what agents should know about the website, for every kind of run
+    info: `Die Website von Feldwerk: Laravel mit Blade und Vite, lokal in DDEV.
+
+- Gestaltung nach \`DESIGN.md\`: Kontraste und Fokus hell und dunkel prüfen.
+- Texte auf der Website siezen die Leserinnen und Leser.
+- Bilder als AVIF mit WebP als Rückfall; Alt-Texte sind Pflicht.`,
   },
 ];
+
+/** The working rules of the organization (spec 7.3): reviews with a focus of their own, the other kinds the standard. */
+export const agentRules: AgentRules = {
+  task: null,
+  correction: null,
+  conflict: null,
+  review: `${DEFAULT_RULES.review}\n- Neue Texte: Tippfehler und eine einheitliche Anrede.`,
+  comment: null,
+};
 
 export const github: GithubConnection = {
   agent_app: {

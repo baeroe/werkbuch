@@ -9,7 +9,7 @@
 
 import type { Db } from '../db';
 import { attachments, comments, events, watchers } from './activity';
-import { agentComments, agentConfigs, agentEvents, agentRuns, agentThreads, github, projectAgents, pullRequests, runners } from './agents';
+import { agentComments, agentConfigs, agentEvents, agentRuns, agentThreads, agentRules, github, projectAgents, pullRequests, runners } from './agents';
 import { labels, projectAutomations, properties, relationTypes, resolutions, types, workflows } from './config';
 import { notifications, system, webhookDeliveries, webhooks } from './inbox';
 import { buildItems, relations } from './items';
@@ -59,6 +59,7 @@ export function createSeed(): Omit<Db, 'schema_version'> {
     runners,
     runner_pairings: [],
     github,
+    agent_rules: agentRules,
     agent_configs: agentConfigs,
     project_agents: projectAgents,
     agent_threads: agentThreads,

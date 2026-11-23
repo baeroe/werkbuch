@@ -1,6 +1,6 @@
 /*
- * Bot → Agent (WEBU-18, spec 10.4): whether a bot works as an agent, on which runners, with which CLI and models,
- * with what instruction, how many runs at once and how long each kind may take. A view of the section „Bots“
+ * Bot → Agent (WEBU-18, spec 10.4): whether a bot works as an agent, on which runners, with which CLI and models.
+ * Slots stand at the runners, time limits are fixed, working rules are the organization's (Organisation → Agenten). A view of the section „Bots“
  * (`/settings/bots?agent=<bot>`), like the delivery log of a webhook. A bot that cannot be an agent (the default bot,
  * one without a responsible person) says why instead of showing the form. The projects list says where the agent
  * works and, where not, why: not a member who may edit items, or the project has not set up agents yet.
@@ -17,7 +17,6 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { labelClass } from '@/components/ui/styles';
 import { Switch } from '@/components/ui/Switch';
-import { Textarea } from '@/components/ui/Textarea';
 import { toast } from '@/components/ui/toast';
 import { CLI_NAMES, DEFAULT_MODELS, modelsFor, RUN_TYPE_NAMES, RUN_TYPES, whyNotAgent } from '@/domain/agents';
 import { ModelField } from '@/features/agents/ModelField';
@@ -38,7 +37,6 @@ interface Form {
   cli: AgentCli;
   model: string;
   models: Record<RunType, string>;
-  instruction: string;
 }
 
 const formOf = (config: AgentConfig): Form => ({
@@ -47,7 +45,6 @@ const formOf = (config: AgentConfig): Form => ({
   cli: config.cli,
   model: config.model,
   models: Object.fromEntries(RUN_TYPES.map((type) => [type, config.models[type] ?? ''])) as Record<RunType, string>,
-  instruction: config.instruction,
 });
 
 const toConfig = (bot_id: string, form: Form): AgentConfig => ({
@@ -57,7 +54,6 @@ const toConfig = (bot_id: string, form: Form): AgentConfig => ({
   cli: form.cli,
   model: form.model,
   models: form.models,
-  instruction: form.instruction,
 });
 
 const CLIS = [
@@ -264,17 +260,6 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
             ))}
           </div>
         </FieldGroup>
-      </SettingsCard>
-
-      <SettingsCard title="Anweisung" description="Steht in jedem Auftrag dieses Bots, nach dem festen Vertrag und vor den Arbeitsregeln des Projekts.">
-        <Textarea
-          label="Anweisung"
-          name="instruction"
-          rows={4}
-          value={value.instruction}
-          hint="Markdown. Was dieser Bot anders macht als andere, etwa Sprache oder Ton."
-          onChange={(event) => edit({ instruction: event.target.value })}
-        />
       </SettingsCard>
 
       <SaveBar
