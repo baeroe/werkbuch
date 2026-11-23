@@ -19,7 +19,6 @@ export const types: WorkItemType[] = [
     icon: 'square-check',
     tone: 'sky',
     description: 'Eine Aufgabe, die jemand erledigt.',
-    agent_guidance: 'Halte die Änderung klein: ein PR je Item. Was darüber hinausgeht, gehört in einen Kommentar.',
     is_epic: false,
     properties: [
       { property_id: 'pr_customer', required: false, position: 0 },
@@ -33,7 +32,6 @@ export const types: WorkItemType[] = [
     icon: 'bug',
     tone: 'ochre',
     description: 'Ein Fehler, der behoben werden muss. Die Umgebung, in der er auftritt, ist Pflicht.',
-    agent_guidance: 'Beginne mit einem fehlschlagenden Test, wenn möglich.',
     is_epic: false,
     properties: [
       { property_id: 'pr_customer', required: false, position: 0 },
@@ -50,7 +48,6 @@ export const types: WorkItemType[] = [
     icon: 'zap',
     tone: 'moss',
     description: 'Ein größeres Vorhaben, das in Items zerfällt. Erscheint in der Timeline.',
-    agent_guidance: '',
     is_epic: true,
     properties: [
       { property_id: 'pr_target_quarter', required: false, position: 0 },
@@ -64,7 +61,6 @@ export const types: WorkItemType[] = [
     icon: 'message-square-heart',
     tone: 'plum',
     description: 'Ein Wunsch einer Kundin oder eines Kunden, der vor der Umsetzung freigegeben wird.',
-    agent_guidance: '',
     is_epic: false,
     properties: [
       { property_id: 'pr_customer', required: true, position: 0 },
@@ -194,10 +190,6 @@ export const labels: Label[] = [
   { id: 'lb_a11y', name: 'Barrierefreiheit', color: 'slate' },
   { id: 'lb_backend', name: 'Backend', color: 'sky' },
   { id: 'lb_design', name: 'Design', color: 'plum' },
-  // model labels (WEBU-18, spec 7.7): an item with one runs its agent on this model
-  { id: 'lb_agent_haiku', name: 'Haiku Agent', color: 'moss', agent_model: 'haiku', agent_cli: 'claude' },
-  { id: 'lb_agent_opus', name: 'Opus Agent', color: 'plum', agent_model: 'opus', agent_cli: 'claude' },
-  { id: 'lb_agent_fable', name: 'Fable Agent', color: 'ochre', agent_model: 'fable', agent_cli: 'claude' },
 ];
 
 export const relationTypes: RelationType[] = [

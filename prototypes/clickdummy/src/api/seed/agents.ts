@@ -17,9 +17,9 @@
 
 import { DEFAULT_RULES } from '@/domain/agentRuleDefaults';
 import { RUN_TIMEOUTS } from '@/domain/agents';
-import type { AgentConfig, AgentRules, AgentRun, AgentThread, Comment, GithubConnection, ItemEvent, ProjectAgents, PullRequestLink, RunLogLine, RunnerCli, RunnerEquipment, RunnerLoad, RunnerSlots, RunType } from '@/types';
+import type { AgentConfig, AgentRules, AgentRun, AgentThread, Comment, GithubConnection, ItemEvent, Label, ProjectAgents, ProjectMember, PullRequestLink, RunLogLine, RunnerCli, RunnerEquipment, RunnerLoad, RunnerSlots, RunType, User, WorkItemRecord, WorkItemType } from '@/types';
 import { comment, event, state } from './activity';
-import { at, doc, p, ul } from './helpers';
+import { at, doc, p, ul, ZONE } from './helpers';
 import { itemId } from './items';
 
 /** A runner as stored: `last_seen_at` only matters while it is offline; online ones call in all the time. */
@@ -646,3 +646,78 @@ export const agentEvents: ItemEvent[] = [
   event('ev_web49_brake', 'work_item.state_changed', 'WEB-49', 'kira', '10-27 12:58', state('std_pending', 'std_todo'), `${AGENT}: Bremse nach 3 Korrekturen`, 5),
   event('ev_web49_back', 'work_item.assigned', 'WEB-49', 'kira', '10-27 12:58', { assignee_id: { old: 'u_kira', new: 'u_mara' } }, `${AGENT}: Bremse nach 3 Korrekturen`, 6),
 ];
+
+/* ------------------------------------------------------------------ the scenario on the base seed */
+
+/*
+ * The agent demo changes a few things of the base seed (people, labels, types, items). They are applied here, after the
+ * base seed is built, and never written into it: the app's demo seeders compare their data with the base seed files
+ * (`people.ts`, `config.ts`, `items.ts`), and the app's demo stays as it is.
+ */
+
+/** Otto, a second agent: Jonas's bot that works with Codex (spec 8.8). */
+const otto: User = {
+  id: 'u_otto',
+  type: 'bot',
+  name: 'Otto',
+  handle: 'otto',
+  email: null,
+  org_role: 'member',
+  is_default_bot: false,
+  owner_id: 'u_jonas',
+  description: 'Bot von Jonas. Arbeitet als Agent mit Codex.',
+  disabled_at: null,
+  avatar_url: null,
+  locale: 'de',
+  timezone: ZONE,
+};
+
+/** Model labels (spec 7.7): an item with one runs its agent on this model. */
+const MODEL_LABELS: Label[] = [
+  { id: 'lb_agent_haiku', name: 'Haiku Agent', color: 'moss', agent_model: 'haiku', agent_cli: 'claude' },
+  { id: 'lb_agent_opus', name: 'Opus Agent', color: 'plum', agent_model: 'opus', agent_cli: 'claude' },
+  { id: 'lb_agent_fable', name: 'Fable Agent', color: 'ochre', agent_model: 'fable', agent_cli: 'claude' },
+];
+
+/** How agents go about a type of item (spec 7.3). */
+const GUIDANCE: Record<string, string> = {
+  t_task: 'Halte die Änderung klein: ein PR je Item. Was darüber hinausgeht, gehört in einen Kommentar.',
+  t_bug: 'Beginne mit einem fehlschlagenden Test, wenn möglich.',
+};
+
+/** The items of the demo states: WEB-44, -49, -51, -53, -54, -55 (see the top of this file). */
+const ITEM_CHANGES: Record<string, Partial<WorkItemRecord>> = {
+  'WEB-44': { label_ids: ['lb_a11y', 'lb_agent_opus'], started_at: at('10-28 08:52'), updated_at: at('10-28 09:49') },
+  // Kira gave WEB-49 back after three corrections
+  'WEB-49': { state_id: 'std_todo', assignee_id: 'u_mara', started_at: at('10-27 09:10'), updated_at: at('10-27 12:58') },
+  // Kira works on WEB-51
+  'WEB-51': { state_id: 'std_progress', assignee_id: 'u_kira', created_by: 'u_mara', started_at: at('10-28 09:56'), updated_at: at('10-28 09:56') },
+  'WEB-53': { label_ids: ['lb_seo', 'lb_agent_haiku'], started_at: at('10-28 08:05'), updated_at: at('10-28 09:10') },
+  'WEB-54': { assignee_id: 'u_kira', updated_at: at('10-28 09:35') },
+  // Otto (Codex) has WEB-55, but no runner of his pool has Codex logged in: the run waits
+  'WEB-55': { assignee_id: 'u_otto', created_by: 'u_jonas', updated_at: at('10-28 09:40') },
+};
+
+/** The people of the demo with Otto after Kira. */
+export function withAgentUsers(users: User[]): User[] {
+  return [...users, otto];
+}
+
+/** The members with Otto in WEB, right after Kira. */
+export function withAgentMembers(members: ProjectMember[]): ProjectMember[] {
+  const kira = members.findIndex((member) => member.project_id === 'p_web' && member.user_id === 'u_kira');
+  return [...members.slice(0, kira + 1), { project_id: 'p_web', user_id: 'u_otto', role: 'member' }, ...members.slice(kira + 1)];
+}
+
+export function withAgentLabels(labels: Label[]): Label[] {
+  return [...labels, ...MODEL_LABELS];
+}
+
+export function withAgentGuidance(types: WorkItemType[]): WorkItemType[] {
+  return types.map((type) => ({ ...type, agent_guidance: GUIDANCE[type.id] ?? '' }));
+}
+
+/** Changes the items of the demo states in place. */
+export function applyAgentItems(items: WorkItemRecord[]): void {
+  for (const item of items) Object.assign(item, ITEM_CHANGES[item.key] ?? {});
+}

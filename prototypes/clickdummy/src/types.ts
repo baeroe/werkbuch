@@ -129,9 +129,9 @@ export interface WorkItemType {
   description: string;
   /**
    * How agents go about items of this type (spec 7.3, the layer after the working rules of the kind of run), e.g.
-   * "start with a failing test" for a bug. Empty: nothing of its own.
+   * "start with a failing test" for a bug. Empty or missing: nothing of its own.
    */
-  agent_guidance: string;
+  agent_guidance?: string;
   /** Items of epic types appear on the timeline. */
   is_epic: boolean;
   properties: { property_id: string; required: boolean; position: number }[];
