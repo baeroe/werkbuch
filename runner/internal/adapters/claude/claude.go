@@ -26,9 +26,14 @@ func (Adapter) Name() string { return "claude" }
 func Args(job adapters.Job) []string {
 	args := []string{"-p", "--output-format", "stream-json", "--verbose"}
 	if protocol.Light(job.Run.Type) {
-		args = append(args, "--permission-mode", "dontAsk",
+		// only the settings of the runner's user: `.claude/settings.json` of the checked-out pull request could allow
+		// tools and add hooks that run whatever the mode (A493)
+		args = append(args, "--setting-sources", "user", "--permission-mode", "dontAsk",
 			"--allowedTools", strings.Join(adapters.ReadOnlyTools, ","),
 			"--disallowedTools", strings.Join(adapters.WriteTools, ","))
+		if job.Private != "" {
+			args = append(args, "--add-dir", job.Private)
+		}
 	} else {
 		args = append(args, "--permission-mode", "bypassPermissions")
 	}

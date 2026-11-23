@@ -22,14 +22,17 @@ type Job struct {
 	SystemPromptFile string
 	// TokenEnv is the environment variable holding the run token for CLIs that read it from there (Codex only).
 	TokenEnv string
+	// Private is the private folder of the run (MCP config, system prompt, prepared context).
+	Private string
 }
 
-// ReadOnlyTools are what a light run (`review`, `comment`) may use in Claude Code (A493): reading files, reading git,
-// and werkbuch through `werkbuch-run`.
-var ReadOnlyTools = []string{"Read", "Grep", "Glob", "Bash(git log:*)", "Bash(git diff:*)", "Bash(git show:*)", "Bash(git status:*)", "mcp__werkbuch-run__*"}
+// ReadOnlyTools are what a light run (`review`, `comment`) may use in Claude Code (A493): reading files and werkbuch
+// through `werkbuch-run`, no shell at all (even `git log --output=<file>` writes). What it would read with git, the
+// runner prepares as files (Job.Context).
+var ReadOnlyTools = []string{"Read", "Grep", "Glob", "mcp__werkbuch-run__*"}
 
 // WriteTools are what a light run never gets.
-var WriteTools = []string{"Write", "Edit", "MultiEdit", "NotebookEdit"}
+var WriteTools = []string{"Bash", "Write", "Edit", "MultiEdit", "NotebookEdit"}
 
 // Outcome is what the output of a run told.
 type Outcome struct {

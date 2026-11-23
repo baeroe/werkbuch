@@ -27,7 +27,12 @@ func (Adapter) Name() string { return "codex" }
 func Args(job adapters.Job) []string {
 	args := []string{"exec", "--json", "--skip-git-repo-check"}
 	if protocol.Light(job.Run.Type) {
+		// read-only, and the working folder untrusted: Codex then ignores `.codex/` of the checked-out pull request
+		// (project config, hooks, exec policies, A493)
 		args = append(args, "--sandbox", "read-only")
+		if job.Dir != "" {
+			args = append(args, "-c", "projects."+strconv.Quote(job.Dir)+".trust_level=\"untrusted\"")
+		}
 	} else {
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
 	}

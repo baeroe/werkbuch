@@ -5,6 +5,7 @@
 #   stubborn  ignores SIGTERM (the runner has to SIGKILL it)
 #   commit    commits a file in the working folder and pushes it
 #   fail      ends with an error result
+#   background  leaves a process in its group that ignores SIGTERM
 #   nap       works a second and fails when another run works in the same folder
 #   review    answers a review with the verdict approve
 #   leak      prints the run token of its MCP config (the runner has to blank it)
@@ -22,10 +23,14 @@ prev=""
 for a in "$@"; do
 	[ "$prev" = "--resume" ] && session="$a"
 	[ "$prev" = "--mcp-config" ] && mcp="$a"
+	[ "$prev" = "--add-dir" ] && adddir="$a"
 	prev="$a"
 done
 [ -n "$FAKE_ARGS" ] && printf '%s\n' "$@" > "$FAKE_ARGS"
+# the prepared context of a light run, kept for the test (the private folder goes with the run)
+[ -n "$FAKE_CONTEXT" ] && [ -n "$adddir" ] && cp "$adddir"/*.txt "$adddir"/*.diff "$FAKE_CONTEXT"/ 2>/dev/null
 prompt=$(cat | tr "[:upper:]" "[:lower:]")
+[ -n "$FAKE_PROMPT" ] && printf '%s' "$prompt" > "$FAKE_PROMPT"
 
 tools='"Bash","mcp__werkbuch-run__manage-work-items"'
 case "$prompt" in *second-access*) tools="$tools"',"mcp__skilltri__werkbuch_manage-work-items"' ;; esac
@@ -49,6 +54,13 @@ case "$prompt" in
 	trap 'exit 143' TERM
 	sleep 600 &
 	wait $!
+	;;
+esac
+case "$prompt" in
+*background*)
+	# leaves a process in its group that ignores SIGTERM and holds the output
+	(trap '' TERM; exec sleep 600) &
+	[ -n "$FAKE_BG" ] && echo $! > "$FAKE_BG"
 	;;
 esac
 case "$prompt" in

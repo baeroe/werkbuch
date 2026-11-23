@@ -33,12 +33,22 @@ func TestArgs(t *testing.T) {
 	if light[slices.Index(light, "--permission-mode")+1] != "dontAsk" || slices.Contains(light, "bypassPermissions") {
 		t.Fatalf("light %v", light)
 	}
-	allowed := light[slices.Index(light, "--allowedTools")+1]
-	if !strings.Contains(allowed, "Bash(git diff:*)") || !strings.Contains(allowed, "mcp__werkbuch-run__*") || strings.Contains(allowed, "Write") {
+	if allowed := light[slices.Index(light, "--allowedTools")+1]; allowed != "Read,Grep,Glob,mcp__werkbuch-run__*" {
 		t.Fatalf("allowed %q", allowed)
 	}
-	if light[slices.Index(light, "--disallowedTools")+1] != "Write,Edit,MultiEdit,NotebookEdit" {
+	if light[slices.Index(light, "--disallowedTools")+1] != "Bash,Write,Edit,MultiEdit,NotebookEdit" {
 		t.Fatalf("%v", light)
+	}
+	if i := slices.Index(light, "--setting-sources"); i < 0 || light[i+1] != "user" {
+		t.Fatalf("a light run reads no settings of the repository: %v", light)
+	}
+	if slices.Contains(args, "--setting-sources") {
+		t.Fatalf("a code run keeps the settings of its repository: %v", args)
+	}
+	jr := job("review", nil)
+	jr.Private = "/tmp/werkbuch-run-1"
+	if withDir := Args(jr); withDir[slices.Index(withDir, "--add-dir")+1] != "/tmp/werkbuch-run-1" {
+		t.Fatalf("the prepared context is readable: %v", withDir)
 	}
 	j := job("task", nil)
 	j.SystemPromptFile = "/tmp/x/system-prompt.md"

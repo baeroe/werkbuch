@@ -191,3 +191,32 @@ func TestParallelPrepareOnOneMirror(t *testing.T) {
 		}
 	}
 }
+
+func TestContextOfLightRuns(t *testing.T) {
+	ctx := context.Background()
+	origin := Origin(t)
+	sh(t, origin, "checkout", "--quiet", "-b", "feature")
+	os.WriteFile(filepath.Join(origin, "new.txt"), []byte("a change\n"), 0o644)
+	sh(t, origin, "add", ".")
+	sh(t, origin, "commit", "--quiet", "-m", "the change of the pull request")
+	head := sh(t, origin, "rev-parse", "HEAD")
+	sh(t, origin, "checkout", "--quiet", "main")
+	m := &Manager{Data: t.TempDir()}
+	ws, err := m.Prepare(ctx, Spec{Name: "run-r", Repo: origin, Head: head})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := m.Context(ctx, ws, "review", "")
+	if !strings.Contains(files["pull-request.diff"], "+a change") || !strings.Contains(files["pull-request-log.txt"], "the change of the pull request") || strings.Contains(files["pull-request-log.txt"], "first") {
+		t.Fatalf("%v", files)
+	}
+	strand, _ := m.Prepare(ctx, Spec{Name: "s", Repo: origin, Branch: "b"})
+	files = m.Context(ctx, strand, "comment", "main")
+	if !strings.Contains(files["git-log.txt"], "first") || !strings.Contains(files["git-status.txt"], "On branch b") {
+		t.Fatalf("%v", files)
+	}
+	plain, _ := m.Prepare(ctx, Spec{Name: "plain"})
+	if m.Context(ctx, plain, "comment", "") != nil {
+		t.Fatal("no repository, no context")
+	}
+}

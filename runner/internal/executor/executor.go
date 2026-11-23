@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -63,9 +64,15 @@ type Executor struct {
 	// LookPath finds the binary of a CLI (tests point it at a fake).
 	LookPath func(string) (string, error)
 
-	once  sync.Once
-	pulse atomic.Int64
-	slots sync.Map // working folder name → chan struct{} (one run at a time)
+	once    sync.Once
+	pulse   atomic.Int64
+	slotsMu sync.Mutex
+	slots   map[string]*slot // working folder name → its turn (one run at a time), gone when nobody waits
+}
+
+type slot struct {
+	turn  chan struct{}
+	users int
 }
 
 // SetHeartbeat changes the interval of heartbeats (werkbuch names it in every answer).
@@ -205,17 +212,45 @@ func (x *Executor) spec(run protocol.Run) git.Spec {
 	return spec
 }
 
-// slot takes the working folder of a run for it alone; a second run of the strand waits (its heartbeat goes on).
+// slot takes the working folder of a run for it alone; a second run of the strand waits (its heartbeat goes on). The
+// wait counts against its time limit: werkbuch hands out at most one run per strand anyway, so this only guards (A497).
 func (x *Executor) slot(ctx context.Context, name string) (func(), error) {
-	v, _ := x.slots.LoadOrStore(name, make(chan struct{}, 1))
-	ch := v.(chan struct{})
+	x.slotsMu.Lock()
+	if x.slots == nil {
+		x.slots = map[string]*slot{}
+	}
+	sl := x.slots[name]
+	if sl == nil {
+		sl = &slot{turn: make(chan struct{}, 1)}
+		x.slots[name] = sl
+	}
+	sl.users++
+	x.slotsMu.Unlock()
+	leave := func() {
+		x.slotsMu.Lock()
+		if sl.users--; sl.users == 0 {
+			delete(x.slots, name)
+		}
+		x.slotsMu.Unlock()
+	}
 	select {
-	case ch <- struct{}{}:
-		return func() { <-ch }, nil
+	case sl.turn <- struct{}{}:
+		return func() { <-sl.turn; leave() }, nil
 	case <-ctx.Done():
+		leave()
 		return nil, ctx.Err()
 	}
 }
+
+// slotCount is the number of working folders with a run or a waiting one (tests).
+func (x *Executor) slotCount() int {
+	x.slotsMu.Lock()
+	defer x.slotsMu.Unlock()
+	return len(x.slots)
+}
+
+// GroupGrace is how long what a CLI left running in its group gets after the CLI ended by itself.
+const GroupGrace = 2 * time.Second
 
 // Teardown runs the teardown command of a folder before it goes (also for the sweep of the daemon).
 func (x *Executor) Teardown(ctx context.Context, dir, command string) {
@@ -293,6 +328,14 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, log *slog.Logger) 
 	if run.CLI == "codex" {
 		job.TokenEnv = RunTokenEnv
 	}
+	if protocol.Light(run.Type) {
+		job.Private = private.Dir
+		if head, err := x.prepareContext(ctx, private, ws, run.Type, spec.Base); err != nil {
+			return failed("context: " + err.Error()), ""
+		} else if head != "" {
+			job.Run.Prompt = head + job.Run.Prompt
+		}
+	}
 	cmd := adapter.Command(job)
 	cmd.Env = append(os.Environ(), ws.Env...)
 	cmd.Env = append(cmd.Env,
@@ -304,26 +347,31 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, log *slog.Logger) 
 		cmd.Env = append(cmd.Env, job.TokenEnv+"="+run.Werkbuch.Token)
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	// stdout is a pipe of its own: Wait never waits for a descendant that keeps it open
+	// stdout and stderr are pipes of their own (files, no copying in os/exec): Wait ends with the CLI, never waits for
+	// a descendant that keeps them open
 	out, in, err := os.Pipe()
 	if err != nil {
 		return failed(err.Error()), ""
 	}
-	cmd.Stdout = in
-	stderr := &tail{max: 8192}
-	cmd.Stderr = stderr
-	cmd.WaitDelay = Drain
-	if ctx.Err() != nil {
+	errOut, errIn, err := os.Pipe()
+	if err != nil {
 		out.Close()
 		in.Close()
+		return failed(err.Error()), ""
+	}
+	closeAll := func() { out.Close(); in.Close(); errOut.Close(); errIn.Close() }
+	cmd.Stdout, cmd.Stderr = in, errIn
+	stderr := &tail{max: 8192}
+	if ctx.Err() != nil {
+		closeAll()
 		return protocol.Result{}, l.reason()
 	}
 	if err := cmd.Start(); err != nil {
-		out.Close()
-		in.Close()
+		closeAll()
 		return failed("start " + run.CLI + ": " + err.Error()), ""
 	}
 	in.Close()
+	errIn.Close()
 	pid := cmd.Process.Pid
 	if err := procs.Note(x.Procs, run.ID, pid); err != nil {
 		log.Warn("no record of the cli", "err", err)
@@ -334,6 +382,7 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, log *slog.Logger) 
 
 	stream := adapter.Stream()
 	read := make(chan struct{})
+	readErr := make(chan struct{})
 	go func() {
 		defer close(read)
 		sc := bufio.NewScanner(out)
@@ -342,23 +391,36 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, log *slog.Logger) 
 			s.add(stream.Feed(sc.Bytes())...)
 		}
 	}()
+	go func() {
+		defer close(readErr)
+		io.Copy(stderr, errOut)
+	}()
 	waited := make(chan error, 1)
 	exited := make(chan struct{})
 	go func() {
 		err := cmd.Wait()
 		close(exited)
-		select {
-		case <-read:
-		case <-time.After(Drain):
+		drain := time.After(Drain)
+		for _, done := range []chan struct{}{read, readErr} {
+			select {
+			case <-done:
+			case <-drain:
+			}
 		}
 		out.Close()
+		errOut.Close()
 		<-read
+		<-readErr
 		waited <- err
 	}()
 
+	// the reason is fixed when the CLI ends: a cancel or time limit after its own end changes nothing, only a run
+	// werkbuch gave away stays unreported
+	stoppedBy := ""
 	select {
 	case <-exited:
 	case <-l.decided:
+		stoppedBy = l.reason()
 		e.set("stopping")
 		procs.Stop(pid, x.Grace, func() bool {
 			select {
@@ -369,8 +431,13 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, log *slog.Logger) 
 			}
 		})
 	}
+	// what the CLI left running in its group (a dev server started with &) goes with it
+	procs.Stop(pid, GroupGrace, func() bool { return syscall.Kill(-pid, 0) != nil })
 	exitErr := <-waited
-	if r := l.reason(); r != "" {
+	if l.reason() == replaced {
+		stoppedBy = replaced
+	}
+	if r := stoppedBy; r != "" {
 		o := stream.Outcome()
 		res := protocol.Result{Usage: o.Usage}
 		if o.SessionID != "" {
@@ -404,6 +471,29 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, log *slog.Logger) 
 	}
 	x.complete(context.WithoutCancel(ctx), &res, run, ws, outcome)
 	return res, ""
+}
+
+// prepareContext writes what a light run would ask git for into its private folder (it has no shell, A493) and returns
+// the head of the prompt that names the files.
+func (x *Executor) prepareContext(ctx context.Context, private *mcpconfig.File, ws *git.Workspace, kind, base string) (string, error) {
+	files := x.Git.Context(ctx, ws, kind, base)
+	if len(files) == 0 {
+		return "", nil
+	}
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	head := "The runner prepared these files for this run (read them with the Read tool; there is no shell):\n"
+	for _, name := range names {
+		path, err := private.Put(name, files[name])
+		if err != nil {
+			return "", err
+		}
+		head += "- " + path + "\n"
+	}
+	return head + "\n", nil
 }
 
 var (

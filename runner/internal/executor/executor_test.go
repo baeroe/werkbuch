@@ -3,12 +3,14 @@ package executor
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -266,7 +268,16 @@ func TestFailedRun(t *testing.T) {
 
 func TestReview(t *testing.T) {
 	w := newWorld(t)
+	gitIn(t, w.origin, "checkout", "--quiet", "-b", "feature")
+	os.WriteFile(filepath.Join(w.origin, "feature.txt"), []byte("the feature\n"), 0o644)
+	gitIn(t, w.origin, "add", ".")
+	gitIn(t, w.origin, "commit", "--quiet", "-m", "add the feature")
 	head := gitIn(t, w.origin, "rev-parse", "HEAD")
+	gitIn(t, w.origin, "checkout", "--quiet", "main")
+	kept := t.TempDir()
+	t.Setenv("FAKE_CONTEXT", kept)
+	prompt := filepath.Join(t.TempDir(), "prompt")
+	t.Setenv("FAKE_PROMPT", prompt)
 	torn := filepath.Join(w.t.TempDir(), "teardown")
 	run := w.run("01rev", protocol.Review, "review", func(r *protocol.Run) {
 		r.HeadSHA = &head
@@ -282,6 +293,20 @@ func TestReview(t *testing.T) {
 	}
 	if _, err := os.Stat(torn); err != nil {
 		t.Fatal("the teardown command did not run")
+	}
+	// no shell for a review: the runner hands it the diff and the log of the pull request
+	diff, _ := os.ReadFile(filepath.Join(kept, "pull-request.diff"))
+	log, _ := os.ReadFile(filepath.Join(kept, "pull-request-log.txt"))
+	if !strings.Contains(string(diff), "+the feature") || !strings.Contains(string(log), "add the feature") {
+		t.Fatalf("context %q %q", diff, log)
+	}
+	asked, _ := os.ReadFile(prompt)
+	if !strings.Contains(string(asked), "pull-request.diff") || !strings.Contains(string(asked), "there is no shell") {
+		t.Fatalf("prompt %q", asked)
+	}
+	args, _ := os.ReadFile(w.args)
+	if !strings.Contains(string(args), "--setting-sources\nuser") || strings.Contains(string(args), "Bash") && !strings.Contains(string(args), "--disallowedTools\nBash") {
+		t.Fatalf("args %s", args)
 	}
 }
 
@@ -434,5 +459,48 @@ func TestTwoRunsOfOneStrandTakeTurns(t *testing.T) {
 	wg.Wait()
 	if statuses[0] != protocol.Succeeded || statuses[1] != protocol.Succeeded {
 		t.Fatalf("%v\n%s\n%s", statuses, w.texts(a.ID), w.texts(b.ID))
+	}
+}
+
+func TestCommentGetsLogAndStatus(t *testing.T) {
+	w := newWorld(t)
+	kept := t.TempDir()
+	t.Setenv("FAKE_CONTEXT", kept)
+	run := w.run("01ask", protocol.Comment, "answer")
+	if _, status := w.execute(run); status != protocol.Succeeded {
+		t.Fatal(status)
+	}
+	logText, _ := os.ReadFile(filepath.Join(kept, "git-log.txt"))
+	status, _ := os.ReadFile(filepath.Join(kept, "git-status.txt"))
+	if !strings.Contains(string(logText), "first") || !strings.Contains(string(status), "On branch") {
+		t.Fatalf("%q %q", logText, status)
+	}
+	if w.x.slotCount() != 0 {
+		t.Fatal("the turn of a folder stays after its runs")
+	}
+}
+
+func TestANaturalEndKeepsItsStatusAndEndsTheGroup(t *testing.T) {
+	w := newWorld(t)
+	bg := filepath.Join(t.TempDir(), "bg")
+	t.Setenv("FAKE_BG", bg)
+	// the CLI ends at once, but what it left in its group ignores SIGTERM: ending it takes the group grace, and the
+	// time limit passes meanwhile; the run stays succeeded
+	run := w.run("01bg", protocol.Task, "background", func(r *protocol.Run) {
+		d := time.Now().Add(800 * time.Millisecond)
+		r.DeadlineAt = &d
+	})
+	if _, status := w.execute(run); status != protocol.Succeeded {
+		t.Fatalf("%q\n%s", status, w.log.String())
+	}
+	data, _ := os.ReadFile(bg)
+	pid := 0
+	fmt.Sscan(string(data), &pid)
+	if pid == 0 {
+		t.Fatal("no background process")
+	}
+	if syscall.Kill(pid, 0) == nil {
+		syscall.Kill(pid, syscall.SIGKILL)
+		t.Fatal("the background process of the CLI outlived it")
 	}
 }

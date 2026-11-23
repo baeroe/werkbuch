@@ -62,10 +62,15 @@ func Reap(dir string, grace time.Duration) []int {
 		if err != nil || json.Unmarshal(data, &r) != nil || r.PID <= 1 || r.Start == "" {
 			continue
 		}
-		if StartTime(r.PID) != r.Start {
+		groupAlive := func() bool { return syscall.Kill(-r.PID, 0) == nil }
+		switch start := StartTime(r.PID); {
+		case start == r.Start:
+		case start == "" && groupAlive():
+			// the CLI is gone, what it started lives on in its group (a group ID is not reused while the group lives)
+		default:
 			continue
 		}
-		Stop(r.PID, grace, func() bool { return StartTime(r.PID) == "" })
+		Stop(r.PID, grace, func() bool { return !groupAlive() })
 		ended = append(ended, r.PID)
 	}
 	return ended
@@ -107,14 +112,18 @@ func Descendants(pid int) []int {
 // Stop sends SIGTERM to the group of pid and to every descendant, waits up to grace for gone to say so, then SIGKILLs
 // the group and every descendant it knows of (spec 6.4: SIGTERM, after 10 s SIGKILL).
 func Stop(pid int, grace time.Duration, gone func() bool) {
-	known := map[int]bool{}
+	known := map[int]string{} // descendant → its start time: a PID reused meanwhile is never signaled
 	signal := func(sig syscall.Signal) {
 		for _, d := range Descendants(pid) {
-			known[d] = true
+			if _, ok := known[d]; !ok {
+				known[d] = StartTime(d)
+			}
 		}
 		syscall.Kill(-pid, sig)
-		for d := range known {
-			syscall.Kill(d, sig)
+		for d, start := range known {
+			if start != "" && StartTime(d) == start {
+				syscall.Kill(d, sig)
+			}
 		}
 	}
 	signal(syscall.SIGTERM)
@@ -128,9 +137,11 @@ func Stop(pid int, grace time.Duration, gone func() bool) {
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
-	// the CLI ended; descendants that left its group still go
-	for d := range known {
-		syscall.Kill(d, syscall.SIGKILL)
+	// the CLI ended; descendants that left its group still go, if they are still the processes they were
+	for d, start := range known {
+		if start != "" && StartTime(d) == start {
+			syscall.Kill(d, syscall.SIGKILL)
+		}
 	}
 }
 

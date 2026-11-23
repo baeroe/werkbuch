@@ -47,6 +47,7 @@ func (m *Manager) lock(mirror string) func() {
 type Workspace struct {
 	Dir       string
 	Repo      bool
+	Source    string // the repository, "" without one
 	Created   bool   // made now: the setup command runs
 	Temporary bool   // removed after the run (a review without strand)
 	StartHead string // HEAD when the run started (a code run reports a new one)
@@ -213,7 +214,7 @@ func (m *Manager) Prepare(ctx context.Context, s Spec) (*Workspace, error) {
 		return nil, err
 	}
 	dir := filepath.Join(m.Data, "worktrees", name)
-	ws := &Workspace{Dir: dir, Repo: true, Env: env, meta: dir + ".json"}
+	ws := &Workspace{Dir: dir, Repo: true, Source: s.Repo, Env: env, meta: dir + ".json"}
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
 		os.RemoveAll(dir)
 		if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
@@ -254,6 +255,40 @@ func (m *Manager) Prepare(ctx context.Context, s Spec) (*Workspace, error) {
 	}
 	ws.StartHead = m.Head(ctx, ws)
 	return ws, m.touch(ws, s)
+}
+
+// ContextMax bounds one prepared file.
+const ContextMax = 4 << 20
+
+// Context prepares what a light run would ask git for, as files of text (A493: light runs have no shell): for a review
+// the diff of the checked-out head against the base (`<base>...HEAD`) and the log of its commits, for a comment the
+// last 20 commits and the status of the strand's worktree. Without a repository: none.
+func (m *Manager) Context(ctx context.Context, ws *Workspace, kind, base string) map[string]string {
+	if !ws.Repo {
+		return nil
+	}
+	if base == "" {
+		base = m.DefaultBranch(ctx, m.mirror(ws.Source))
+	}
+	files := map[string]string{}
+	add := func(name string, args ...string) {
+		out, err := m.run(ctx, nil, ws.Dir, args...)
+		if err != nil {
+			out = "not available: " + err.Error()
+		}
+		if len(out) > ContextMax {
+			out = out[:ContextMax] + "\n… cut at 4 MB"
+		}
+		files[name] = out + "\n"
+	}
+	if kind == "review" {
+		add("pull-request.diff", "diff", "--no-color", "--end-of-options", "origin/"+base+"...HEAD")
+		add("pull-request-log.txt", "log", "--no-color", "--stat", "--end-of-options", "origin/"+base+"..HEAD")
+		return files
+	}
+	add("git-log.txt", "log", "--no-color", "-20", "--stat")
+	add("git-status.txt", "status")
+	return files
 }
 
 // Head is the commit checked out in a worktree, "" outside of git.

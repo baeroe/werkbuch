@@ -101,3 +101,25 @@ func TestCleanTemp(t *testing.T) {
 	Note("", "x", 1)
 	Forget("", "x")
 }
+
+func TestReapEndsAGroupWhoseLeaderIsGone(t *testing.T) {
+	dir := t.TempDir()
+	cmd := start(t, "sleep 600 & exit 0")
+	pid := cmd.Process.Pid
+	if err := Note(dir, "01run", pid); err != nil {
+		t.Fatal(err)
+	}
+	cmd.Wait()
+	if syscall.Kill(-pid, 0) != nil {
+		t.Fatal("the group should outlive its leader")
+	}
+	if ended := Reap(dir, time.Second); len(ended) != 1 {
+		t.Fatalf("ended %v", ended)
+	}
+	for i := 0; i < 50 && syscall.Kill(-pid, 0) == nil; i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if syscall.Kill(-pid, 0) == nil {
+		t.Fatal("the group lives on")
+	}
+}

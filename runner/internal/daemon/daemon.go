@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/baeroe/werkbuch/runner/internal/client"
@@ -68,6 +69,7 @@ type Daemon struct {
 	once         sync.Once
 	report       protocol.Report
 	reportAt     time.Time
+	sweeping     atomic.Bool
 }
 
 // ReportEvery is how often the report is refreshed in the background; claims and heartbeats only read it.
@@ -173,7 +175,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		}
 		if time.Since(lastSweep) >= d.Sweep {
 			lastSweep = time.Now()
-			d.sweep(ctx)
+			d.sweepInBackground(ctx, &wg)
 		}
 		select {
 		case <-ctx.Done():
@@ -291,15 +293,34 @@ func (d *Daemon) RequestUpdate() string {
 	return "updating to " + d.expected + " when no run is left"
 }
 
+// sweepInBackground removes old worktrees beside the polling (teardowns can take minutes); one sweep at a time.
+func (d *Daemon) sweepInBackground(ctx context.Context, wg *sync.WaitGroup) bool {
+	if !d.sweeping.CompareAndSwap(false, true) {
+		return false
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer d.sweeping.Store(false)
+		d.sweep(ctx)
+	}()
+	return true
+}
+
 func (d *Daemon) sweep(ctx context.Context) {
 	d.mu.Lock()
 	busy := map[string]bool{}
+	mark := func(raw string) {
+		if name, err := git.Name(raw); err == nil {
+			busy[name] = true
+		}
+	}
 	for _, e := range d.running {
-		busy["run-"+e.Run.ID] = true
+		mark("run-" + e.Run.ID)
 		if e.Run.Thread != nil {
-			busy[e.Run.Thread.ID] = true
+			mark(e.Run.Thread.ID)
 			if e.Run.Thread.Worktree != nil {
-				busy[*e.Run.Thread.Worktree] = true
+				mark(*e.Run.Thread.Worktree)
 			}
 		}
 	}

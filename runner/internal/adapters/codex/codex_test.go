@@ -25,8 +25,11 @@ func TestArgsAndPrompt(t *testing.T) {
 	if !strings.Contains(joined, "--sandbox read-only") || strings.Contains(joined, "dangerously") {
 		t.Fatalf("a comment runs read-only: %v", args)
 	}
+	if !strings.Contains(joined, `projects."/w".trust_level="untrusted"`) {
+		t.Fatalf("the working folder stays untrusted: %v", args)
+	}
 	r.Type = "task"
-	if task := strings.Join(Args(adapters.Job{Run: r, TokenEnv: "T"}), " "); !strings.Contains(task, "dangerously-bypass") || strings.Contains(task, "read-only") {
+	if task := strings.Join(Args(adapters.Job{Run: r, TokenEnv: "T", Dir: "/w"}), " "); !strings.Contains(task, "dangerously-bypass") || strings.Contains(task, "read-only") || strings.Contains(task, "untrusted") {
 		t.Fatalf("task %v", task)
 	}
 	r.Type = "comment"

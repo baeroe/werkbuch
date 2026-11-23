@@ -192,3 +192,26 @@ func TestReportReadsTheCache(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+func TestOneSweepAtATimeBesideThePolling(t *testing.T) {
+	fake := fakewerkbuch.New()
+	defer fake.Close()
+	d := newDaemon(t, fake)
+	d.defaults()
+	d.Keep = -time.Second
+	if _, err := d.Executor.Git.Prepare(context.Background(), git.Spec{Name: "slow", Teardown: "sleep 0.5"}); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	if !d.sweepInBackground(context.Background(), &wg) {
+		t.Fatal("the first sweep did not start")
+	}
+	if d.sweepInBackground(context.Background(), &wg) {
+		t.Fatal("a second sweep ran beside the first")
+	}
+	wg.Wait()
+	if !d.sweepInBackground(context.Background(), &wg) {
+		t.Fatal("no sweep after the first ended")
+	}
+	wg.Wait()
+}
