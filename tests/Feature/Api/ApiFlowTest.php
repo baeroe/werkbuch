@@ -189,8 +189,8 @@ it('answers every list with the same envelope', function () {
         })
         ->map(fn (RoutingRoute $route) => '/'.$route->uri())
         ->values();
-    // 24 since GET /work-items/{item}/pages (Task 21u)
-    expect($lists)->toHaveCount(24);
+    // 24 since GET /work-items/{item}/pages (Task 21u), 27 since the runners and runs (WEBU-20)
+    expect($lists)->toHaveCount(27);
 
     foreach ($lists as $uri) {
         $row = $rows->first(fn (array $row) => $row[0] === 'GET' && $row[1] === $uri);

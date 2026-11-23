@@ -61,14 +61,17 @@ final class PairRunner
             CatalogLock::take();
             $pairing = RunnerPairingCode::query()->lockForUpdate()->where('code_hash', RunnerPairingCode::hashCode($valid['code']))->first();
 
+            if ($pairing === null) {
+                throw ValidationException::withMessages(['code' => __('field.code.runner_unknown')]);
+            }
+
             $refusal = match (true) {
-                $pairing === null => 'field.code.runner_unknown',
                 $pairing->redeemed_at !== null => 'field.code.runner_used',
                 $pairing->expires_at->isPast() => 'field.code.runner_expired',
                 default => null,
             };
-            if ($pairing === null || $refusal !== null) {
-                throw ValidationException::withMessages(['code' => __($refusal ?? 'field.code.runner_unknown')]);
+            if ($refusal !== null) {
+                throw ValidationException::withMessages(['code' => __($refusal)]);
             }
 
             $token = Runner::newToken();

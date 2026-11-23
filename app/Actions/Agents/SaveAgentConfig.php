@@ -103,12 +103,14 @@ final class SaveAgentConfig
     /** Why a bot cannot work as an agent (spec 7.2), or null. */
     public static function refusal(User $bot): ?string
     {
-        return match (true) {
-            $bot->is_default_bot => __('field.enabled.default_bot'),
-            $bot->owner_id === null => __('field.enabled.no_owner'),
-            $bot->isDisabled() => __('field.enabled.disabled'),
+        $key = match (true) {
+            $bot->is_default_bot => 'field.enabled.default_bot',
+            $bot->owner_id === null => 'field.enabled.no_owner',
+            $bot->isDisabled() => 'field.enabled.disabled',
             default => null,
         };
+
+        return $key === null ? null : (string) __($key);
     }
 
     /**

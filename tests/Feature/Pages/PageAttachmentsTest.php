@@ -128,7 +128,8 @@ $matrix = function () use ($png): array {
 
 it('gives the picture of a page to whoever sees the project and 404 to everyone else', function (string $column) use ($matrix) {
     [$w, $pictures, $ops] = $matrix();
-    $sees = ! in_array($column, ['outsider_public', 'outsider_private'], true);
+    // the agent of the column run_token is a member of WEB only
+    $sees = ! in_array($column, ['outsider_public', 'outsider_private', 'run_token'], true);
     $this->actingAs($w->account($column));
 
     // WEB is public: everybody sees it; OPS only its members and the org admins (the default bot is one)

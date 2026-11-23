@@ -122,11 +122,11 @@ final class RunnerProtocol
      */
     public static function running(Runner $runner): array
     {
-        return AgentRun::query()->where('runner_id', $runner->id)
+        return array_values(AgentRun::query()->where('runner_id', $runner->id)
             ->whereIn('status', [RunStatus::Running->value, RunStatus::Canceling->value])
             ->get(['type', 'project_id'])
             ->map(fn (AgentRun $run) => ['type' => $run->type, 'repo' => $run->project_id])
-            ->values()->all();
+            ->all());
     }
 
     /**

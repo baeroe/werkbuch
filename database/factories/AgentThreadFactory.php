@@ -22,7 +22,7 @@ class AgentThreadFactory extends Factory
         return [
             'bot_id' => fn () => AgentConfig::factory()->create()->bot_id,
             'work_item_id' => WorkItem::factory(),
-            'project_id' => fn (array $attributes) => WorkItem::query()->findOrFail($attributes['work_item_id'])->project_id,
+            'project_id' => fn (array $attributes) => WorkItem::query()->whereKey((string) $attributes['work_item_id'])->firstOrFail()->project_id,
             'runner_id' => null,
             'branch' => null,
             'base_branch' => 'main',

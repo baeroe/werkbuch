@@ -60,7 +60,7 @@ final class AgentThread extends Model
     {
         $slug = implode('-', array_slice(explode('-', Str::slug(Str::ascii($item->title))), 0, 5));
 
-        return 'agent/'.$item->key.($slug === '' ? '' : '-'.$slug);
+        return rtrim('agent/'.$item->key.'-'.$slug, '-');
     }
 
     /** @return BelongsTo<WorkItem, $this> */

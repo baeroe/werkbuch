@@ -51,7 +51,11 @@ class RunnerFactory extends Factory
         return $this->state(['slots_total' => $total, 'slots_per_repo' => $perRepo, 'slots_light' => $light]);
     }
 
-    /** A runner whose machine reports these CLIs (`cli` → signed in). */
+    /**
+     * A runner whose machine reports these CLIs (`cli` → signed in).
+     *
+     * @param  array<string, bool>  $clis
+     */
     public function clis(array $clis): static
     {
         return $this->state(['clis' => array_map(fn (string $cli, bool $in) => ['cli' => $cli, 'installed' => true, 'version' => '1.0.0', 'logged_in' => $in, 'path' => "/usr/local/bin/{$cli}"], array_keys($clis), $clis)]);

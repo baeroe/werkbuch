@@ -38,6 +38,9 @@ it('knows the events of this phase that have no webhook', function () {
         'system.failed_jobs_retried',
         'template.created', 'template.updated', 'template.deleted', 'automation.updated',
         'webhook.created', 'webhook.updated', 'webhook.deleted', 'webhook.secret_rotated', 'webhook.disabled',
+        // runners, agents and their runs (WEBU-20, A478)
+        'runner.paired', 'runner.updated', 'runner.revoked', 'agent_config.updated',
+        'agent_run.queued', 'agent_run.started', 'agent_run.canceled', 'agent_run.finished',
     ])->sort()->values()->all());
 });
 

@@ -22,7 +22,9 @@ final class RunQueue
             return false;
         }
 
-        return self::boundTo($run) === null || self::boundTo($run)?->id === $runner->id;
+        $bound = self::boundTo($run);
+
+        return $bound === null || $bound->id === $runner->id;
     }
 
     /**

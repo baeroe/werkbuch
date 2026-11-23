@@ -38,11 +38,11 @@ final class ReapLostRuns
 
         $suspects = AgentRun::query()->whereIn('status', [RunStatus::Running->value, RunStatus::Canceling->value])
             ->where(fn ($query) => $query->where('lease_expires_at', '<', now())->orWhere('started_at', '<', now()->subMinutes(self::SHORTEST_LIMIT)))
-            ->pluck('id');
+            ->pluck('id')->map(fn (mixed $id) => (string) $id);
 
         foreach ($suspects as $id) {
             $outcome = DB::transaction(function () use ($id): ?string {
-                $run = AgentRun::query()->lockForUpdate()->find($id);
+                $run = AgentRun::query()->lockForUpdate()->whereKey($id)->first();
                 if ($run === null || ! $run->status->busy()) {
                     return null;
                 }

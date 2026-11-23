@@ -24,7 +24,7 @@ final class RunnerResource extends JsonResource
     {
         /** @var Runner $runner */
         $runner = $this->resource;
-        $busy = $runner->busyRuns->map(fn (AgentRun $run) => ['type' => $run->type, 'repo' => $run->project_id])->values()->all();
+        $busy = array_values($runner->busyRuns->map(fn (AgentRun $run) => ['type' => $run->type, 'repo' => $run->project_id])->all());
 
         return [
             'id' => $runner->id,

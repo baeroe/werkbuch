@@ -33,7 +33,7 @@ class AgentRunFactory extends Factory
             'model' => 'sonnet',
             'model_source' => 'default',
             'work_item_id' => WorkItem::factory(),
-            'project_id' => fn (array $attributes) => WorkItem::query()->findOrFail($attributes['work_item_id'])->project_id,
+            'project_id' => fn (array $attributes) => WorkItem::query()->whereKey((string) $attributes['work_item_id'])->firstOrFail()->project_id,
             'context' => [],
             'attempt' => 1,
         ];
