@@ -163,7 +163,7 @@ export const projectAgents: ProjectAgents[] = [
     max_conflicts: 2,
     review_human_prs: true,
     comment_on_pr: true,
-    models: { comment: 'haiku' },
+    models: { comment: { cli: 'claude', model: 'haiku' } },
     // what agents should know about the website, for every kind of run
     info: `Die Website von Feldwerk: Laravel mit Blade und Vite, lokal in DDEV.
 

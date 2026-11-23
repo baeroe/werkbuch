@@ -22,14 +22,17 @@ type SegmentedControlProps<T extends string> = {
   size?: 'sm' | 'md';
   /** Only icons; the labels become accessible names and tooltips are up to the caller. */
   iconOnly?: boolean;
+  /** The id of a text that describes the group, e.g. why a choice will not work yet. */
+  describedBy?: string;
   className?: string;
 };
 
 /** One of a few views or modes. Segments (radius 6) sit concentrically in a sunken well (radius 10, 4 px inset). */
-export function SegmentedControl<T extends string>({ label, value, onValueChange, options, size = 'md', iconOnly = false, className }: SegmentedControlProps<T>) {
+export function SegmentedControl<T extends string>({ label, value, onValueChange, options, size = 'md', iconOnly = false, describedBy, className }: SegmentedControlProps<T>) {
   return (
     <ToggleGroup
       aria-label={label}
+      aria-describedby={describedBy}
       value={[value]}
       // pressing the active segment would empty the group; a segmented control always keeps one
       onValueChange={(next) => next[0] && onValueChange(next[0] as T)}

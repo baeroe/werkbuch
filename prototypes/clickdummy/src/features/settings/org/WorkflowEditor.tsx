@@ -303,7 +303,15 @@ function AgentSteps({ draft, saved, readOnly, onChange }: AgentStepsProps) {
       description="Den Status setzt werkbuch in jedem Schritt eines Agenten, mit der Übergangsprüfung dieses Workflows. Er gilt für jedes Projekt mit diesem Workflow; erst mit allen vier arbeiten dort Agenten."
       actions={
         readOnly || proposed.length === 0 ? null : (
-          <Button variant="secondary" size="sm" onClick={() => onChange({ ...draft.agent_states, ...Object.fromEntries(proposed.map((step) => [step, proposal[step]])) })}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              onChange({ ...draft.agent_states, ...Object.fromEntries(proposed.map((step) => [step, proposal[step]])) });
+              // the button goes with the proposal taken: the focus moves to the first step
+              requestAnimationFrame(() => document.getElementById('agent-step-working')?.focus());
+            }}
+          >
             Vorschlag übernehmen
           </Button>
         )
@@ -325,6 +333,7 @@ function AgentSteps({ draft, saved, readOnly, onChange }: AgentStepsProps) {
               </div>
               <div className="flex min-w-0 flex-col gap-1">
                 <Select
+                  id={`agent-step-${step}`}
                   aria-label={`Status für ${STEP_NAMES[step]}`}
                   disabled={readOnly}
                   value={removed ? null : (value ?? 'none')}

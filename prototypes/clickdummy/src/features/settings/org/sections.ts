@@ -57,7 +57,7 @@ export const SECTIONS: readonly SectionDef[] = [
   { slug: 'webhooks', label: 'Webhooks', icon: Webhook, group: 'operations', permission: 'org.manage', members: 'blocked', keywords: ['ereignisse', 'zustellungen', 'geheimnis', 'ping'] },
   { slug: 'runners', label: 'Runner', icon: Cpu, group: 'operations', permission: 'org.manage', members: 'blocked', keywords: ['agenten', 'maschine', 'mac', 'claude', 'codex', 'verbinden', 'code'] },
   { slug: 'github', label: 'GitHub', icon: GitBranch, group: 'operations', permission: 'org.manage', members: 'blocked', keywords: ['repo', 'app', 'pull request', 'ruleset', 'review'] },
-  { slug: 'agents', label: 'Agenten', icon: BookText, group: 'operations', permission: 'org.manage', members: 'read', keywords: ['arbeitsregeln', 'prompt', 'vertrag', 'regeln', 'umsetzen', 'review', 'korrektur'] },
+  { slug: 'agents', label: 'Agenten', icon: BookText, group: 'operations', permission: 'org.manage_catalog', members: 'read', keywords: ['arbeitsregeln', 'prompt', 'vertrag', 'regeln', 'umsetzen', 'review', 'korrektur'] },
   { slug: 'system', label: 'System', icon: Server, group: 'operations', permission: 'org.manage', members: 'blocked', keywords: ['version', 'queue', 'jobs', 'meilisearch', 'testmail'] },
 ];
 

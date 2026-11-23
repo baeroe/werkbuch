@@ -59,7 +59,7 @@ describe('the status of each step (spec 7.4)', () => {
 
 describe('the model of a run: model label, then project, then bot (spec 7.7)', () => {
   const agent = { model: 'sonnet', models: { review: 'opus' } };
-  const project = { models: { comment: 'haiku', task: '' } };
+  const project = { models: { comment: { cli: 'claude' as const, model: 'haiku' }, task: { cli: 'claude' as const, model: '' } } };
   // the catalog in its order; a model label is recognized by its field, never by its name
   const catalog = [
     { id: 'lb_seo', agent_model: null },
@@ -97,6 +97,15 @@ describe('the model of a run: model label, then project, then bot (spec 7.7)', (
   it('then the bot’s model for the kind of run, then its default; also without project settings', () => {
     expect(pickModel({ type: 'review', catalog, labelIds: [], project, agent })).toEqual({ model: 'opus', source: 'bot', label_id: null });
     expect(pickModel({ type: 'correction', catalog, labelIds: ['lb_seo'], project: null, agent })).toEqual({ model: 'sonnet', source: 'bot', label_id: null });
+  });
+
+  it('takes a model of the project or a label only for agents with its CLI', () => {
+    const kira = { cli: 'claude' as const, model: 'sonnet', models: {} };
+    const codexProject = { models: { task: { cli: 'codex' as const, model: 'gpt-5-codex' } } };
+    expect(pickModel({ type: 'task', catalog: [], labelIds: [], project: codexProject, agent: kira })).toEqual({ model: 'sonnet', source: 'bot', label_id: null });
+    expect(pickModel({ type: 'task', catalog: [], labelIds: [], project: codexProject, agent: { cli: 'codex', model: 'gpt-5-codex-mini', models: {} } })).toEqual({ model: 'gpt-5-codex', source: 'project', label_id: null });
+    const codexLabel = [{ id: 'lb_codex', agent_model: 'gpt-5-codex', agent_cli: 'codex' as const }];
+    expect(pickModel({ type: 'task', catalog: codexLabel, labelIds: ['lb_codex'], project: null, agent: kira }).source).toBe('bot');
   });
 
   it('passes over a model of a label or the project that the bot\'s CLI does not have', () => {

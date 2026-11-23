@@ -258,6 +258,8 @@ describe('the agents\' steps of a workflow', () => {
     expect((await stored('wf_agency')).agent_states.review).toBeNull();
 
     await user.click(within(panel).getByRole('button', { name: 'Vorschlag übernehmen' }));
+    // the button goes: the focus moves to the first step
+    await waitFor(() => expect(document.activeElement).toBe(within(panel).getByRole('combobox', { name: /Status für In Arbeit/ })));
     expect(within(panel).getByRole('combobox', { name: /Status für In Review/ }).textContent).toContain('Review');
     await user.click(save());
     await waitFor(async () => expect((await stored('wf_agency')).agent_states).toEqual({ working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: 'app_done' }));

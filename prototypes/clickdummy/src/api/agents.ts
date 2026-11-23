@@ -67,6 +67,7 @@ export function getAgentRules(): Promise<AgentRulesView> {
 export function saveAgentRules(rules: AgentRules): Promise<AgentRulesView> {
   return write(({ db, me }) => {
     requireOrgAdmin(me, 'Die Arbeitsregeln der Agenten ändern nur Org-Admins.');
+    // the catalog right of the organization (org/sections: org.manage_catalog); the fake API knows org admins only
     const errors = new FieldErrors();
     for (const type of RUN_TYPES) if (rules[type] !== null && rules[type]!.trim() === '') errors.add(`rules.${type}`, 'Leer geht nicht. Stelle den Standard wieder her, wenn es keinen eigenen Text braucht.');
     errors.throwIfAny();
@@ -131,7 +132,8 @@ function projectOrThrow(db: Db, id: string) {
 export function getProjectAgents(project_id: string): Promise<ProjectAgents> {
   return read(({ db, me }) => {
     requireRole(db, me, projectOrThrow(db, project_id), 'viewer');
-    return db.project_agents.find((settings) => settings.project_id === project_id) ?? defaultProjectAgents(project_id);
+    const stored = db.project_agents.find((settings) => settings.project_id === project_id);
+    return stored ? { ...stored, configured: true } : { ...defaultProjectAgents(project_id), configured: false };
   });
 }
 
@@ -153,8 +155,8 @@ export function saveProjectAgents(input: ProjectAgents): Promise<ProjectAgents> 
     }
     if (input.base_branch.trim() === '') errors.add('base_branch', 'Gib den Basis-Branch an, etwa main.');
     for (const type of RUN_TYPES) {
-      const model = input.models[type];
-      if (model && !KNOWN_MODELS.claude.includes(model)) errors.add(`models.${type}`, `„${model}“ ist kein Modell der Liste.`);
+      const ref = input.models[type];
+      if (ref && !(KNOWN_MODELS[ref.cli] ?? []).includes(ref.model)) errors.add(`models.${type}`, `„${ref.model}“ ist kein Modell der Liste.`);
     }
     if (!wholeIn(input.max_corrections, 1, 10)) errors.add('max_corrections', 'Eine ganze Zahl von 1 bis 10.');
     if (!wholeIn(input.max_conflicts, 1, 10)) errors.add('max_conflicts', 'Eine ganze Zahl von 1 bis 10.');
@@ -165,18 +167,19 @@ export function saveProjectAgents(input: ProjectAgents): Promise<ProjectAgents> 
       else if (!db.agent_configs.find((config) => config.bot_id === reviewer.id)?.enabled) errors.add('review_bot_id', `${reviewer.name} arbeitet nicht als Agent. Schalte „Als Agent arbeiten“ in den Einstellungen des Bots ein.`);
     }
     errors.throwIfAny();
+    const { configured: _configured, ...fields } = input;
     const stored: ProjectAgents = {
-      ...input,
+      ...fields,
       base_branch: input.base_branch.trim(),
       setup_command: input.setup_command.trim(),
       teardown_command: input.teardown_command.trim(),
       info: input.info.trim(),
-      models: trimModels(input.models),
+      models: Object.fromEntries(Object.entries(input.models).filter(([, ref]) => ref && ref.model !== '')),
     };
     const index = db.project_agents.findIndex((settings) => settings.project_id === project.id);
     if (index >= 0) db.project_agents[index] = stored;
     else db.project_agents.push(stored);
-    return stored;
+    return { ...stored, configured: true };
   });
 }
 

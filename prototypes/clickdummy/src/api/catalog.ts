@@ -28,10 +28,12 @@ export function saveLabel(input: SaveInput<Label>): Promise<Label> {
     else if (db.labels.some((label) => label.id !== existing?.id && sameName(label.name, input.name))) errors.add('name', 'Diesen Namen gibt es schon.');
     if (!TONES.includes(input.color)) errors.add('color', 'Diese Farbe gibt es nicht.');
     const model = input.agent_model?.trim() ?? '';
-    if (model !== '' && !KNOWN_MODELS.claude.includes(model)) errors.add('agent_model', `Wähle ein Modell der Liste: ${KNOWN_MODELS.claude.join(', ')}.`);
+    // a model of a CLI's list, stored with its CLI: the label counts only for agents with that CLI
+    const cli = input.agent_cli ?? 'claude';
+    if (model !== '' && !(KNOWN_MODELS[cli] ?? []).includes(model)) errors.add('agent_model', `Wähle ein Modell der Liste: ${(KNOWN_MODELS[cli] ?? []).join(', ')}.`);
     errors.throwIfAny();
 
-    const label: Label = { id: existing?.id ?? newId('lb'), name: input.name.trim(), color: input.color, agent_model: model === '' ? null : model };
+    const label: Label = { id: existing?.id ?? newId('lb'), name: input.name.trim(), color: input.color, agent_model: model === '' ? null : model, agent_cli: model === '' ? null : cli };
     if (existing) db.labels[db.labels.indexOf(existing)] = label;
     else db.labels.push(label);
     return label;

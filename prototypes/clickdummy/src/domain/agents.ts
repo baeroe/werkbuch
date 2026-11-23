@@ -176,7 +176,7 @@ export interface ModelChoice {
 export interface ModelInput {
   type: RunType;
   /** The label catalog of the organization, in its order: the labels with `agent_model` are the model labels. */
-  catalog: readonly Pick<Label, 'id' | 'agent_model'>[];
+  catalog: readonly Pick<Label, 'id' | 'agent_model' | 'agent_cli'>[];
   /** The labels of the item. */
   labelIds: readonly string[];
   /** A child of an epic without a model label takes the epic's (spec 7.7). */
@@ -198,13 +198,14 @@ export const isModelLabel = (label: Pick<Label, 'agent_model'>) => filled(label.
  * over.
  */
 export function pickModel({ type, catalog, labelIds, epicLabelIds = [], project, agent }: ModelInput): ModelChoice {
-  const fits = (model: string) => !agent.cli || KNOWN_MODELS[agent.cli].includes(model.trim());
+  // a model counts only for agents with its CLI; without a CLI stored, the list of the agent's CLI decides
+  const fits = (model: string, cli: AgentConfig['cli'] | null | undefined) => !agent.cli || (cli ? cli === agent.cli : KNOWN_MODELS[agent.cli].includes(model.trim()));
   for (const labels of [labelIds, epicLabelIds]) {
-    const label = catalog.find((entry) => labels.includes(entry.id) && isModelLabel(entry) && fits(entry.agent_model!));
+    const label = catalog.find((entry) => labels.includes(entry.id) && isModelLabel(entry) && fits(entry.agent_model!, entry.agent_cli));
     if (label) return { model: label.agent_model!.trim(), source: 'label', label_id: label.id };
   }
   const fromProject = project?.models[type];
-  if (filled(fromProject) && fits(fromProject)) return { model: fromProject.trim(), source: 'project', label_id: null };
+  if (fromProject && filled(fromProject.model) && fits(fromProject.model, fromProject.cli)) return { model: fromProject.model.trim(), source: 'project', label_id: null };
   const fromBot = agent.models[type];
   return { model: filled(fromBot) ? fromBot.trim() : agent.model.trim(), source: 'bot', label_id: null };
 }
@@ -272,7 +273,9 @@ export function whyNotHere(bot: Pick<User, 'name' | 'type' | 'is_default_bot' | 
   if (general.length > 0) return general[0];
   if (!agent?.enabled) return `${bot.name} ist kein Agent: In den Einstellungen des Bots ist „Als Agent arbeiten“ aus.`;
   if (project.role === null || project.role === 'viewer') return `${bot.name} ist in ${project.identifier} ${project.role === 'viewer' ? 'nur Viewer' : 'kein Mitglied'} und darf Items nicht bearbeiten.`;
-  if (!project.settings || !project.workflow) return `In ${project.identifier} sind die Agenten noch nicht eingerichtet.`;
+  if (!project.settings || !project.workflow) {
+    return `In ${project.identifier} sind die Agenten noch nicht eingerichtet: Unter Projekteinstellungen → Agenten ist noch nichts gespeichert (Repo oder ohne Repo, Bremsen, Review-Agent).`;
+  }
   if (!mappingComplete(project.workflow, project.workflow.agent_states)) {
     return `In ${project.identifier} sind die Agenten aus: Der Workflow „${project.workflow.name}“ hat noch ${missingSteps(project.workflow).length === AGENT_STEPS.length ? 'keine' : 'nicht alle'} Agenten-Schritte.`;
   }

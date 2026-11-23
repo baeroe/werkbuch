@@ -226,23 +226,26 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
         <div className="flex flex-col gap-1.5">
           <p className={labelClass}>CLI</p>
           <div>
-            <SegmentedControl label="CLI" value={value.cli} onValueChange={chooseCli} options={CLIS} />
+            <SegmentedControl label="CLI" value={value.cli} onValueChange={chooseCli} options={CLIS} describedBy="cli-hint" />
           </div>
-          {cliMissing ? (
-            <p id="cli-missing" className="flex items-start gap-1.5 text-sm font-medium text-danger">
-              <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-              {`${CLI_NAMES[value.cli]}: auf keinem Runner im Pool verfügbar (installiert und angemeldet). Speichern geht; Aufträge warten, bis ein Runner es meldet.`}
-            </p>
-          ) : (
-            <p className="text-sm text-muted">Der Runner startet es headless und reicht das Modell durch. Es muss auf den Runnern installiert und angemeldet sein; „Doctor“ in der TUI prüft das.</p>
-          )}
-        </div>
-        <div aria-live="polite" className="empty:hidden">
-          {cliNote && draft.dirty && (
-            <Banner tone="info" title="Modelle angepasst">
-              {cliNote}
-            </Banner>
-          )}
+          {/* one live region, always in the page: what the CLI means for the pool and the models is announced when it changes */}
+          <div aria-live="polite" className="flex flex-col gap-3">
+            {cliMissing ? (
+              <p id="cli-hint" className="flex items-start gap-1.5 text-sm font-medium text-danger">
+                <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                {`${CLI_NAMES[value.cli]}: auf keinem Runner im Pool verfügbar (installiert und angemeldet). Speichern geht; Aufträge warten, bis ein Runner es meldet.`}
+              </p>
+            ) : (
+              <p id="cli-hint" className="text-sm text-muted">
+                Der Runner startet es headless und reicht das Modell durch. Es muss auf den Runnern installiert und angemeldet sein; „Doctor“ in der TUI prüft das.
+              </p>
+            )}
+            {cliNote && draft.dirty && (
+              <Banner tone="info" title="Modelle angepasst">
+                {cliNote}
+              </Banner>
+            )}
+          </div>
         </div>
         <ModelField label="Standard-Modell" cli={value.cli} value={value.model} error={problems.errors.model} onChange={(model) => edit({ model }, 'model')} />
         <FieldGroup legend="Modell je Auftragstyp" hint="„Wie Standard“ nimmt das Standard-Modell.">

@@ -30,7 +30,7 @@ import { Switch } from '@/components/ui/Switch';
 import { Textarea } from '@/components/ui/Textarea';
 import { toast } from '@/components/ui/toast';
 import { AGENT_STEPS, categoriesText, isModelLabel, mappingComplete, missingSteps, RUN_TYPE_NAMES, RUN_TYPES, STEP_CATEGORIES, STEP_HINTS, STEP_NAMES } from '@/domain/agents';
-import { ModelField } from '@/features/agents/ModelField';
+import { ModelChoice } from '@/features/agents/ModelField';
 import { SaveBar } from '@/features/agents/SaveBar';
 import { useAgentBotIds, useAgentModels, useGithub, useProjectAgents, useRepoOwners, useSaveProjectAgents } from '@/hooks/agents';
 import { useLabels } from '@/hooks/catalog';
@@ -39,7 +39,7 @@ import { useUsers } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
 import { notifyError } from '@/lib/errors';
 import { usePermissions } from '@/lib/permissions';
-import type { AgentStep, Label, MergeMethod, ProjectAgents, RunType, User, Workflow } from '@/types';
+import type { AgentStep, Label, MergeMethod, ModelRef, ProjectAgents, RunType, User, Workflow } from '@/types';
 import { fieldErrors, useDraft, useFieldErrors, useSaveShortcut } from './form';
 import type { SectionProps } from './sectionProps';
 import { SettingsCard, SettingsError, SettingsSkeleton, UnsavedGuard } from './SettingsParts';
@@ -59,7 +59,7 @@ interface Form {
   max_conflicts: string;
   review_human_prs: boolean;
   comment_on_pr: boolean;
-  models: Record<RunType, string>;
+  models: Record<RunType, ModelRef | null>;
   info: string;
 }
 
@@ -74,7 +74,7 @@ const formOf = (settings: ProjectAgents): Form => ({
   max_conflicts: String(settings.max_conflicts),
   review_human_prs: settings.review_human_prs,
   comment_on_pr: settings.comment_on_pr,
-  models: Object.fromEntries(RUN_TYPES.map((type) => [type, settings.models[type] ?? ''])) as Record<RunType, string>,
+  models: Object.fromEntries(RUN_TYPES.map((type) => [type, settings.models[type] ?? null])) as Record<RunType, ModelRef | null>,
   info: settings.info,
 });
 
@@ -90,7 +90,7 @@ const toSettings = (project_id: string, form: Form): ProjectAgents => ({
   max_conflicts: Number(form.max_conflicts),
   review_human_prs: form.review_human_prs,
   comment_on_pr: form.comment_on_pr,
-  models: form.models,
+  models: Object.fromEntries(Object.entries(form.models).filter(([, ref]) => ref !== null)) as Partial<Record<RunType, ModelRef>>,
   info: form.info,
 });
 
@@ -235,7 +235,8 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds,
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (readOnly || save.isPending) return;
-    if (!draft.dirty) return draft.tellNothingToSave();
+    // a project that never saved its settings may save the values as they stand: that sets agents up
+    if (!draft.dirty && settings.configured !== false) return draft.tellNothingToSave();
     try {
       await save.mutateAsync(toSettings(project.id, value));
       draft.reset();
@@ -270,6 +271,15 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds,
   return (
     <form ref={form} noValidate onSubmit={(event) => void submit(event)} className="flex flex-col gap-6">
       {canManage && <UnsavedGuard dirty={draft.dirty} saving={save.isPending} />}
+      {settings.configured === false && (
+        <Banner tone="info" title={`Agenten in ${project.identifier} noch nicht eingerichtet`}>
+          <span className="block max-w-[65ch]">
+            {canManage
+              ? 'Prüfe die Werte unten (Repo oder ohne Repo, Bremsen, Review-Agent) und speichere einmal. Bis dahin bleibt eine Zuweisung an einen Bot eine normale Zuweisung.'
+              : 'Ein Admin des Projekts legt die Werte unten fest und speichert sie. Bis dahin bleibt eine Zuweisung an einen Bot eine normale Zuweisung.'}
+          </span>
+        </Banner>
+      )}
       {!complete && (
         <Banner tone="info" title={`Agenten aus: der Workflow „${workflow.name}“ hat noch ${missing.length === AGENT_STEPS.length ? 'keine' : 'nicht alle'} Agenten-Schritte`}>
           <span className="block max-w-[65ch]">
@@ -446,10 +456,9 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds,
           <p className={labelClass}>Modell je Auftragstyp</p>
           <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
             {RUN_TYPES.map((type) => (
-              <ModelField
+              <ModelChoice
                 key={type}
                 label={RUN_TYPE_NAMES[type]}
-                cli="claude"
                 readOnly={readOnly}
                 inherit={botModelText(type)}
                 value={value.models[type]}

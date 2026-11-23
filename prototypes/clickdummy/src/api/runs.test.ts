@@ -381,3 +381,21 @@ describe('the layers of a prompt (spec 7.3, 10.8)', () => {
     expect((await saveProjectAgents({ ...web, info: '  Kurz.  ' })).info).toBe('Kurz.');
   });
 });
+
+describe('models with their CLI (spec 7.7)', () => {
+  it('stores a model of the project and of a label with its CLI', async () => {
+    const web = await getProjectAgents('p_web');
+    expect(web.models.comment).toEqual({ cli: 'claude', model: 'haiku' });
+    const saved = await saveProjectAgents({ ...web, models: { ...web.models, task: { cli: 'codex', model: 'gpt-5-codex' } } });
+    expect(saved.models.task).toEqual({ cli: 'codex', model: 'gpt-5-codex' });
+    expect(Object.keys((await failure(saveProjectAgents({ ...web, models: { task: { cli: 'codex', model: 'opus' } } }))).errors ?? {})).toEqual(['models.task']);
+  });
+
+  it('says what a project without settings lacks, and saving once sets it up', async () => {
+    const ops = await getProjectAgents('p_ops');
+    expect(ops.configured).toBe(false);
+    const saved = await saveProjectAgents(ops);
+    expect(saved.configured).toBe(true);
+    expect(getDb().project_agents.find((settings) => settings.project_id === 'p_ops')).not.toHaveProperty('configured');
+  });
+});

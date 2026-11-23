@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { archiveProject, getProject, updateProject } from '@/api/projects';
 import { dismissToast, runToastAction } from '@/components/ui/toast';
 import { listCommands } from '@/lib/commands';
+import { getProjectAgents } from '@/api/agents';
 import { failure } from '@/test/api';
 import { renderSettings, textbox, toastTitled, useSettingsTestSetup } from './testing';
 
@@ -415,6 +416,28 @@ describe('the models of a project', () => {
     renderSettings('/projects/WEB/settings/agents');
     const task = await screen.findByRole('combobox', { name: /^Umsetzen/ });
     expect(task.textContent).toContain('Wie beim Bot (Kira: sonnet, Otto: gpt-5-codex)');
-    expect(screen.getByRole('combobox', { name: /^Antwort/ }).textContent).toContain('haiku');
+    const answer = screen.getByRole('combobox', { name: /^Antwort/ });
+    expect(answer.textContent).toContain('haiku');
+    expect(screen.getByText('Gilt nur für Agenten mit Claude Code.')).toBeTruthy();
+  });
+
+  it('groups the models by CLI and stores a choice with its CLI', async () => {
+    const user = userEvent.setup();
+    renderSettings('/projects/WEB/settings/agents');
+    await user.click(await screen.findByRole('combobox', { name: /^Umsetzen/ }));
+    const codex = await screen.findByRole('group', { name: 'Codex' });
+    expect(within(screen.getByRole('group', { name: 'Claude Code' })).getByRole('option', { name: 'opus' })).toBeTruthy();
+    await user.click(within(codex).getByRole('option', { name: 'gpt-5-codex' }));
+    expect(await screen.findByText('Gilt nur für Agenten mit Codex.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /^Speichern/ }));
+    await waitFor(async () => expect((await getProjectAgents('p_web')).models.task).toEqual({ cli: 'codex', model: 'gpt-5-codex' }));
+  });
+
+  it('says that a project without saved settings has its agents off, and saving once sets them up', async () => {
+    const user = userEvent.setup();
+    renderSettings('/projects/OPS/settings/agents', 'u_jonas');
+    expect(await screen.findByText('Agenten in OPS noch nicht eingerichtet')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /^Speichern/ }));
+    await waitFor(async () => expect((await getProjectAgents('p_ops')).configured).toBe(true));
   });
 });

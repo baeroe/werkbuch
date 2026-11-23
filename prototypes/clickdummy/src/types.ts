@@ -172,6 +172,8 @@ export interface Label {
    * ordinary label. werkbuch reads the field, never the name.
    */
   agent_model?: string | null;
+  /** The CLI the model belongs to: the label counts only for agents with this CLI. */
+  agent_cli?: AgentCli | null;
 }
 
 export interface RelationType {
@@ -821,6 +823,12 @@ export interface RunnerEquipment {
   werkbuch_access: string[];
 }
 
+/** A model of a CLI (spec 7.7). */
+export interface ModelRef {
+  cli: AgentCli;
+  model: string;
+}
+
 export interface ProjectAgents {
   project_id: string;
   /** `owner/name` of a repo both apps are installed on; null: the project has no repo (runs end with a summary). */
@@ -839,12 +847,15 @@ export interface ProjectAgents {
   max_conflicts: number;
   review_human_prs: boolean;
   comment_on_pr: boolean;
-  models: Partial<Record<RunType, string>>;
+  /** A model per kind of run, with its CLI: it counts only for agents with that CLI (spec 7.7). */
+  models: Partial<Record<RunType, ModelRef>>;
   /**
    * What agents should know about the project and how they work in it, for every kind of run (spec 7.3, the layer
    * after the item type and before CLAUDE.md in the repo). Markdown; empty: nothing of its own.
    */
   info: string;
+  /** Only in answers: whether the project has saved its settings once; before that agents are off there. */
+  configured?: boolean;
 }
 
 /**

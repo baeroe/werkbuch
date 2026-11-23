@@ -18,10 +18,11 @@ import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
 import { isModelLabel } from '@/domain/agents';
-import { ModelField } from '@/features/agents/ModelField';
+import { CLI_NAMES } from '@/domain/agents';
+import { ModelChoice } from '@/features/agents/ModelField';
 import { useDeleteLabel, useLabels, useSaveLabel } from '@/hooks/catalog';
 import { useSettle } from '@/hooks/mutation';
-import type { Label, TypeTone } from '@/types';
+import type { Label, ModelRef, TypeTone } from '@/types';
 import { ReadOnlyNotice } from './access';
 import { TONE_NAMES } from './catalog';
 import { fieldMessage, noticeOf } from './errors';
@@ -44,12 +45,12 @@ function LabelDialog({ open, onOpenChange, label }: { open: boolean; onOpenChang
   const save = useSaveLabel();
   const [name, setName] = useState(label?.name ?? '');
   const [tone, setTone] = useState<TypeTone>(label?.color ?? 'sky');
-  const [model, setModel] = useState(label?.agent_model ?? '');
+  const [model, setModel] = useState<ModelRef | null>(label?.agent_model ? { cli: label.agent_cli ?? 'claude', model: label.agent_model } : null);
   const [attempted, setAttempted] = useState(false);
 
   // the name follows the model while it is empty or still the suggestion of the model before
-  function chooseModel(next: string) {
-    if (name.trim() === '' || name === modelLabelName(model)) setName(modelLabelName(next));
+  function chooseModel(next: ModelRef | null) {
+    if (name.trim() === '' || name === modelLabelName(model?.model ?? '')) setName(modelLabelName(next?.model ?? ''));
     setModel(next);
   }
   const nameError = attempted && name.trim() === '' ? 'Gib dem Label einen Namen.' : fieldMessage(save.error, 'name');
@@ -60,7 +61,7 @@ function LabelDialog({ open, onOpenChange, label }: { open: boolean; onOpenChang
       document.getElementById('label-name')?.focus();
       return;
     }
-    settle(save.mutateAsync({ id: label?.id, name, color: tone, agent_model: model.trim() === '' ? null : model.trim() }), {
+    settle(save.mutateAsync({ id: label?.id, name, color: tone, agent_model: model?.model ?? null, agent_cli: model?.cli ?? null }), {
       onSuccess: (saved) => {
         onOpenChange(false);
         toast({ title: label ? `Label „${saved.name}“ gespeichert` : `Label „${saved.name}“ ist angelegt`, tone: 'success' });
@@ -83,11 +84,10 @@ function LabelDialog({ open, onOpenChange, label }: { open: boolean; onOpenChang
       <FieldGroup legend="Farbe" hint="Die Farbe hilft beim Überfliegen. Der Name steht immer dabei.">
         <TonePicker label="Farbe des Labels" value={tone} onChange={setTone} />
       </FieldGroup>
-      <ModelField
+      <ModelChoice
         label="Modell für Agenten"
         value={model}
         onChange={chooseModel}
-        cli="claude"
         inherit="Kein Modell"
         hint="Ein Agent nimmt für Items mit diesem Label dieses Modell, vor dem Modell des Projekts und des Bots. Ohne Modell ein gewöhnliches Label."
         error={fieldMessage(save.error, 'agent_model')}
@@ -156,6 +156,7 @@ export default function Labels({ readOnlyReason }: SectionProps) {
                       <Badge tone="quiet" icon={Bot}>
                         <span>
                           Modell für Agenten: <span translate="no">{label.agent_model}</span>
+                          {label.agent_cli && label.agent_cli !== 'claude' ? ` (${CLI_NAMES[label.agent_cli]})` : ''}
                         </span>
                       </Badge>
                     )}

@@ -63,6 +63,7 @@ export function RulesEditor({ value, defaults, contracts, onChange, readOnly, er
               </div>
             </details>
             <Textarea
+              id={`rules-${type}`}
               label={`Arbeitsregeln für „${RUN_TYPE_NAMES[type]}“`}
               rows={11}
               value={text}
@@ -84,6 +85,8 @@ export function RulesEditor({ value, defaults, contracts, onChange, readOnly, er
                   icon={RotateCcw}
                   onClick={() => {
                     onChange((rules) => ({ ...rules, [type]: null }));
+                    // the button goes with the own text: the focus moves to the text, now the standard
+                    requestAnimationFrame(() => document.getElementById(`rules-${type}`)?.focus());
                     // the undo puts back this one text, into the rules as they are by then
                     toast({ title: `Standard für „${RUN_TYPE_NAMES[type]}“ wiederhergestellt`, description: 'Gilt nach dem Speichern.', action: { label: 'Rückgängig', onClick: () => onChange((rules) => ({ ...rules, [type]: own })) } });
                   }}

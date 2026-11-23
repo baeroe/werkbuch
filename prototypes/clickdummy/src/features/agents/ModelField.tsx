@@ -5,8 +5,8 @@
  */
 
 import { Select } from '@/components/ui/Select';
-import { KNOWN_MODELS } from '@/domain/agents';
-import type { AgentCli } from '@/types';
+import { CLI_NAMES, KNOWN_MODELS } from '@/domain/agents';
+import type { AgentCli, ModelRef } from '@/types';
 
 /** The value of the option that inherits; the field reports it as an empty string. */
 const INHERIT = '__inherit';
@@ -43,6 +43,49 @@ export function ModelField({ label, value, onChange, cli, inherit, hint, error, 
       placeholder="Modell wählen …"
       options={options}
       onValueChange={(next) => next !== null && onChange(next === INHERIT ? '' : next)}
+    />
+  );
+}
+
+type ModelChoiceProps = {
+  label: string;
+  value: ModelRef | null;
+  onChange: (value: ModelRef | null) => void;
+  /** What no model means, as the first option: "Wie beim Bot (…)", "Kein Modell". */
+  inherit: string;
+  /** Shown while no model is chosen; with one, the field says which agents it counts for. */
+  hint?: string;
+  error?: string;
+  readOnly?: boolean;
+  className?: string;
+};
+
+/**
+ * A model of any CLI, the lists grouped by CLI (spec 7.7): the project per kind of run and a model label. What is chosen
+ * is stored with its CLI and counts only for agents with that CLI; the line below the field says so.
+ */
+export function ModelChoice({ label, value, onChange, inherit, hint, error, readOnly = false, className }: ModelChoiceProps) {
+  const clis = Object.keys(KNOWN_MODELS) as AgentCli[];
+  const options = [
+    { value: INHERIT, label: inherit },
+    ...clis.flatMap((cli) => KNOWN_MODELS[cli].map((model) => ({ value: `${cli}:${model}`, label: model, group: CLI_NAMES[cli] }))),
+  ];
+  const current = value && value.model !== '' ? `${value.cli}:${value.model}` : INHERIT;
+  return (
+    <Select
+      label={label}
+      hint={value && value.model !== '' ? `Gilt nur für Agenten mit ${CLI_NAMES[value.cli]}.` : hint}
+      error={error}
+      disabled={readOnly}
+      className={className}
+      value={current}
+      options={options}
+      onValueChange={(next) => {
+        if (next === null) return;
+        if (next === INHERIT) return onChange(null);
+        const [cli, model] = next.split(':') as [AgentCli, string];
+        onChange({ cli, model });
+      }}
     />
   );
 }

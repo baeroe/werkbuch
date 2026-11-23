@@ -148,7 +148,7 @@ describe('Labels', () => {
     await choose('haiku');
     expect(name).toHaveProperty('value', 'Schnell');
     await user.click(within(dialog).getByRole('button', { name: 'Anlegen' }));
-    await waitFor(() => expect(getDb().labels.find((label) => label.name === 'Schnell')?.agent_model).toBe('haiku'));
+    await waitFor(() => expect(getDb().labels.find((label) => label.name === 'Schnell')).toMatchObject({ agent_model: 'haiku', agent_cli: 'claude' }));
   });
 
   it('marks the model labels in the list', async () => {
@@ -173,7 +173,9 @@ function renderInDataRouter(node: ReactNode) {
 describe('Bot → Agent', () => {
   it('says when no runner of the pool has the CLI, and saving still works', async () => {
     renderInDataRouter(<BotAgent botId="u_otto" />);
-    expect(await screen.findByText(/Codex: auf keinem Runner im Pool verfügbar/)).toBeTruthy();
+    const hint = await screen.findByText(/Codex: auf keinem Runner im Pool verfügbar/);
+    // the CLI switch is described by it
+    expect(screen.getByRole('group', { name: 'CLI' }).getAttribute('aria-describedby')).toBe(hint.id);
     expect(screen.queryByText('Grenzen')).toBeNull();
     expect(screen.queryByRole('textbox', { name: 'Plätze' })).toBeNull();
   });
@@ -213,6 +215,9 @@ describe('Organisation → Agenten', () => {
     await user.type(task, '\n8. Kurz halten.');
     await user.click(screen.getByRole('button', { name: /^Speichern/ }));
     await waitFor(() => expect(getDb().agent_rules.task).toContain('8. Kurz halten.'));
+    // back to the standard: the button goes, the focus moves to the text
+    await user.click(await screen.findByRole('button', { name: 'Standard wiederherstellen' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: /Arbeitsregeln für „Umsetzen“/ })));
   });
 
   it('is read only for members', async () => {
