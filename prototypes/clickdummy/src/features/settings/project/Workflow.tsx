@@ -11,9 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { Select } from '@/components/ui/Select';
 import { StatusIcon } from '@/components/ui/StatusIcon';
-import { AGENT_STEPS } from '@/domain/agents';
 import { statesInOrder } from '@/domain/workflow';
-import { useProjectAgents } from '@/hooks/agents';
 import { useAutomations } from '@/hooks/automations';
 import { useWorkflows } from '@/hooks/workflows';
 import { usePermissions } from '@/lib/permissions';
@@ -62,7 +60,6 @@ export function Workflow({ project, canManage }: SectionProps) {
   const workflows = useWorkflows();
   const items = useProjectItems(project.id);
   const automations = useAutomations(project.id);
-  const agents = useProjectAgents(project.id);
   const { can, reason } = usePermissions();
   const [target, setTarget] = useState<string | null>(null);
   // the question as it was when it opened; `asking` shows or hides it
@@ -97,8 +94,6 @@ export function Workflow({ project, canManage }: SectionProps) {
       to: next,
       counts: countByState(items.data.items),
       autoClose: automations.data?.items.find((entry) => entry.key === 'auto_close' && entry.enabled),
-      // the agents' status per step follows the mapping like Auto-Close (spec 7.4); only when they are set up
-      agentStates: agents.data && AGENT_STEPS.some((step) => agents.data.states[step] !== null) ? agents.data.states : undefined,
     });
     returnTo.current = trigger.current;
     setAsking(true);

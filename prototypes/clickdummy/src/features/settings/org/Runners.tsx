@@ -18,6 +18,7 @@ import { Dialog, DialogClose } from '@/components/ui/Dialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { toast } from '@/components/ui/toast';
+import { CLI_NAMES } from '@/domain/agents';
 import { CommandBlock } from '@/features/agents/CommandBlock';
 import { clockTime, runName, statusLabel, useNow } from '@/features/agents/runParts';
 import { focusWhenLost } from '@/features/item-detail/shared';
@@ -334,19 +335,57 @@ function Load({ runner }: { runner: Runner }) {
   );
 }
 
+/** The CLIs the runner reports (spec 8.8): a run goes only to a runner with its agent's CLI logged in. */
+function Clis({ runner }: { runner: Runner }) {
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {runner.clis.map((entry) => {
+        const ready = entry.installed && entry.logged_in;
+        return (
+          <li key={entry.cli} className="flex flex-wrap items-baseline gap-x-1.5">
+            <span>{CLI_NAMES[entry.cli]}</span>
+            {entry.version && (
+              <span className="text-muted" translate="no">
+                {entry.version}
+              </span>
+            )}
+            <span className={ready ? 'text-muted' : 'text-danger'}>{!entry.installed ? 'nicht installiert' : entry.logged_in ? 'angemeldet' : 'nicht angemeldet'}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Up to this many skills stand in the row; more fold into a list that opens. */
+const SKILLS_SHOWN = 4;
+
 /** What the harness offers an agent, read-only: it is set up on the machine (spec 8.7). */
 function Equipment({ runner }: { runner: Runner }) {
   const { mcp_servers, skills, plugins, werkbuch_access } = runner.equipment;
-  const parts = [
-    mcp_servers.length > 0 && `MCP: ${mcp_servers.join(', ')}`,
-    skills.length > 0 && `${skills.length} ${skills.length === 1 ? 'Skill' : 'Skills'}`,
-    plugins.length > 0 && `Plugins: ${plugins.join(', ')}`,
-  ].filter(Boolean);
+  const nothing = mcp_servers.length === 0 && skills.length === 0 && plugins.length === 0;
+  const line = (label: string, names: string[]) =>
+    names.length > 0 && (
+      <span>
+        <span className="text-muted">{label}: </span>
+        <span translate="no">{names.join(', ')}</span>
+      </span>
+    );
   return (
     <span className="flex flex-col gap-0.5">
-      <span translate="no" title={skills.length > 0 ? skills.join(', ') : undefined}>
-        {parts.length > 0 ? parts.join('; ') : <span className="text-muted">Nichts eingerichtet: nur werkbuch</span>}
-      </span>
+      {nothing && <span className="text-muted">Nichts eingerichtet: nur werkbuch</span>}
+      {line('MCP', mcp_servers)}
+      {skills.length > SKILLS_SHOWN ? (
+        <details className="group">
+          <summary className="cursor-pointer rounded-ctl text-muted hover:text-ink">{`Skills: ${skills.length}`}</summary>
+          <span translate="no" className="block">
+            {skills.join(', ')}
+          </span>
+        </details>
+      ) : (
+        line('Skills', skills)
+      )}
+      {line('Plugins', plugins)}
       {werkbuch_access.length > 0 && (
         <span className="flex items-start gap-1.5 text-sm text-danger">
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
@@ -461,6 +500,10 @@ function RunnerCard({ runner, onSlots, onRename, onRevoke, onCancelRun }: { runn
         <dt className="text-muted">Auslastung</dt>
         <dd className="text-ink">
           <Load runner={runner} />
+        </dd>
+        <dt className="text-muted">CLIs</dt>
+        <dd className="text-ink">
+          <Clis runner={runner} />
         </dd>
         <dt className="text-muted">Ausstattung</dt>
         <dd className="text-ink">

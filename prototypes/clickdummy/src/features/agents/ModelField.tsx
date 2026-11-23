@@ -1,71 +1,48 @@
 /*
- * A model is free text per CLI (spec 7.7): the field takes any name or a full id, the known ones stand below it as
- * buttons that fill it in. An empty field takes what the placeholder says ("wie beim Bot: sonnet").
+ * The model of a run (spec 7.7): a select like every other choice, with the fixed list of models of the CLI
+ * (`KNOWN_MODELS`). Where an empty value inherits, the first option says what from: "Wie beim Bot (sonnet)",
+ * "Wie Standard (sonnet)", "Kein Modell". Read only, it is disabled like the other choices of a settings page.
  */
 
-import { useId } from 'react';
-import { cx } from '@/components/ui/cx';
-import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { KNOWN_MODELS } from '@/domain/agents';
-import { readOnlyField } from '@/features/settings/org/parts';
 import type { AgentCli } from '@/types';
+
+/** The value of the option that inherits; the field reports it as an empty string. */
+const INHERIT = '__inherit';
 
 type ModelFieldProps = {
   label: string;
   value: string;
   onChange: (value: string) => void;
   cli: AgentCli;
-  placeholder?: string;
+  /** What an empty value means, as the first option; without it a model has to be chosen. */
+  inherit?: string;
   hint?: string;
   error?: string;
   readOnly?: boolean;
-  /** The suggestions only on the field where they help most; rows of many fields leave them out. */
-  suggestions?: boolean;
-  hideLabel?: boolean;
   className?: string;
 };
 
-export function ModelField({ label, value, onChange, cli, placeholder, hint, error, readOnly = false, suggestions = true, hideLabel = false, className }: ModelFieldProps) {
-  const listId = useId();
+export function ModelField({ label, value, onChange, cli, inherit, hint, error, readOnly = false, className }: ModelFieldProps) {
+  const known = KNOWN_MODELS[cli];
+  const options = [
+    ...(inherit ? [{ value: INHERIT, label: inherit }] : []),
+    ...known.map((model) => ({ value: model, label: model })),
+    // a model saved before the list changed still shows what it is
+    ...(value !== '' && !known.includes(value) ? [{ value, label: `${value} (nicht in der Liste)` }] : []),
+  ];
   return (
-    <div className={cx('min-w-0', className)}>
-      <Input
-        label={hideLabel ? undefined : label}
-        aria-label={hideLabel ? label : undefined}
-        value={value}
-        placeholder={placeholder}
-        hint={hint}
-        error={error}
-        readOnly={readOnly}
-        className={readOnly ? readOnlyField : undefined}
-        autoComplete="off"
-        autoCapitalize="none"
-        spellCheck={false}
-        translate="no"
-        list={listId}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <datalist id={listId}>
-        {KNOWN_MODELS[cli].map((model) => (
-          <option key={model} value={model} />
-        ))}
-      </datalist>
-      {suggestions && !readOnly && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5" role="group" aria-label={`Vorschläge für ${label}`}>
-          {KNOWN_MODELS[cli].map((model) => (
-            <button
-              key={model}
-              type="button"
-              aria-pressed={value === model}
-              onClick={() => onChange(model)}
-              className="inline-flex h-11 cursor-pointer items-center rounded-chip border border-line bg-surface px-2 text-sm text-ink transition-colors duration-120 hover:border-line-input aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-accent-text md:h-6"
-              translate="no"
-            >
-              {model}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <Select
+      label={label}
+      hint={hint}
+      error={error}
+      disabled={readOnly}
+      className={className}
+      value={value === '' ? (inherit ? INHERIT : null) : value}
+      placeholder="Modell wählen …"
+      options={options}
+      onValueChange={(next) => next !== null && onChange(next === INHERIT ? '' : next)}
+    />
   );
 }

@@ -5,8 +5,8 @@
  *   that works as an agent; the others stand greyed with the reason), reviews of PRs by people, the comment on the PR.
  * - Worktree: the setup and teardown commands the runner runs around a worktree (spec 8.4). MCP servers, skills and
  *   plugins are equipment of the machine, not set here (spec 8.7).
- * - Status je Schritt: the status each step of the flow sets; the category is checked at once and by the server.
- *   Without all four, agents are off in the project: an assignment to a bot stays a plain one.
+ * - Status je Schritt: read only. The steps belong to the workflow (spec 7.4) and are set in the workflow editor; a
+ *   link leads there. Without all four, agents are off in the project: an assignment to a bot stays a plain one.
  * - Bremsen: corrections and conflicts per strand before the item goes back to the bot's responsible person.
  * - Modelle: per kind of run. A model label of the item (a label of the organization with a model for agents) goes
  *   first; those are set in Organisation → Labels (spec 7.7).
@@ -31,10 +31,10 @@ import { Tab, Tabs, TabsList, TabsPanel } from '@/components/ui/Tabs';
 import { Textarea } from '@/components/ui/Textarea';
 import { toast } from '@/components/ui/toast';
 import { DEFAULT_RULES } from '@/domain/agentRuleDefaults';
-import { AGENT_STEPS, categoriesText, isModelLabel, mappingComplete, mappingErrors, RUN_TYPE_HINTS, RUN_TYPE_NAMES, RUN_TYPES, STEP_CATEGORIES, STEP_HINTS, STEP_NAMES } from '@/domain/agents';
+import { AGENT_STEPS, categoriesText, isModelLabel, mappingComplete, missingSteps, RUN_TYPE_HINTS, RUN_TYPE_NAMES, RUN_TYPES, STEP_CATEGORIES, STEP_HINTS, STEP_NAMES } from '@/domain/agents';
 import { ModelField } from '@/features/agents/ModelField';
 import { SaveBar } from '@/features/agents/SaveBar';
-import { useAgentBotIds, useGithub, useProjectAgents, useRepoOwners, useSaveProjectAgents } from '@/hooks/agents';
+import { useAgentBotIds, useAgentModels, useGithub, useProjectAgents, useRepoOwners, useSaveProjectAgents } from '@/hooks/agents';
 import { useLabels } from '@/hooks/catalog';
 import { useMembers } from '@/hooks/projects';
 import { useUsers } from '@/hooks/users';
@@ -57,7 +57,6 @@ interface Form {
   setup_command: string;
   teardown_command: string;
   review_bot_id: string;
-  states: Record<AgentStep, string | null>;
   max_corrections: string;
   max_conflicts: string;
   review_human_prs: boolean;
@@ -73,7 +72,6 @@ const formOf = (settings: ProjectAgents): Form => ({
   setup_command: settings.setup_command,
   teardown_command: settings.teardown_command,
   review_bot_id: settings.review_bot_id ?? NO_BOT,
-  states: settings.states,
   max_corrections: String(settings.max_corrections),
   max_conflicts: String(settings.max_conflicts),
   review_human_prs: settings.review_human_prs,
@@ -90,7 +88,6 @@ const toSettings = (project_id: string, form: Form): ProjectAgents => ({
   setup_command: form.setup_command,
   teardown_command: form.teardown_command,
   review_bot_id: form.review_bot_id === NO_BOT ? null : form.review_bot_id,
-  states: form.states,
   max_corrections: Number(form.max_corrections),
   max_conflicts: Number(form.max_conflicts),
   review_human_prs: form.review_human_prs,
@@ -113,21 +110,25 @@ const MERGE_HINTS: Record<MergeMethod, string> = {
 
 /* ----------------------------------------------------------------------- status steps */
 
-function StepRow({ step, workflow, value, error, disabled, onChange }: { step: AgentStep; workflow: Workflow; value: string | null; error?: string; disabled: boolean; onChange: (id: string) => void }) {
-  const options = [...workflow.states]
-    .sort((a, b) => a.position - b.position)
-    .map((state) => ({
-      value: state.id,
-      label: STEP_CATEGORIES[step].includes(state.category) ? state.name : `${state.name} (passt nicht)`,
-      icon: <StatusIcon icon={state.icon} category={state.category} label={state.name} aria-hidden="true" />,
-    }));
+/** A step and the status the workflow gives it, to read: the steps are set in the workflow editor. */
+function StepRow({ step, workflow }: { step: AgentStep; workflow: Workflow }) {
+  const state = workflow.states.find((entry) => entry.id === workflow.agent_states[step]);
   return (
-    <div className="grid items-start gap-x-4 gap-y-1.5 md:grid-cols-[12rem_minmax(0,1fr)]">
-      <div className="min-w-0 md:pt-1.5">
-        <p className="text-ui font-semibold text-ink">{STEP_NAMES[step]}</p>
-        <p className="text-sm text-pretty text-muted">{`${STEP_HINTS[step]} Kategorie ${categoriesText(STEP_CATEGORIES[step])}.`}</p>
-      </div>
-      <Select aria-label={`Status für „${STEP_NAMES[step]}“`} placeholder="Status wählen …" value={value} disabled={disabled} error={error} options={options} onValueChange={(next) => next && onChange(next)} />
+    <div className="grid items-start gap-x-4 gap-y-1 md:grid-cols-[12rem_minmax(0,1fr)]">
+      <dt className="min-w-0">
+        <span className="block text-ui font-semibold text-ink">{STEP_NAMES[step]}</span>
+        <span className="block text-sm text-pretty text-muted">{`${STEP_HINTS[step]} Kategorie ${categoriesText(STEP_CATEGORIES[step])}.`}</span>
+      </dt>
+      <dd className="flex items-center gap-2 text-ui text-ink md:pt-0.5">
+        {state ? (
+          <>
+            <StatusIcon icon={state.icon} category={state.category} label={state.name} aria-hidden="true" />
+            {state.name}
+          </>
+        ) : (
+          <span className="text-muted">Kein Status</span>
+        )}
+      </dd>
     </div>
   );
 }
@@ -243,7 +244,8 @@ export function Agents({ project, canManage }: SectionProps) {
   const users = useUsers();
   const members = useMembers(project.id);
   const agentBots = useAgentBotIds();
-  const queries = [settings, github, owners, workflows, labels, users, members, agentBots];
+  const agentModels = useAgentModels();
+  const queries = [settings, github, owners, workflows, labels, users, members, agentBots, agentModels];
 
   if (queries.some((query) => query.isPending)) return <SettingsSkeleton rows={6} label="Agenten werden geladen …" />;
   const failed = queries.find((query) => query.isError);
@@ -260,12 +262,21 @@ export function Agents({ project, canManage }: SectionProps) {
   }
   const memberIds = new Set(members.data!.items.map((member) => member.user_id));
   const bots = users.data!.items.filter((user) => user.type === 'bot' && !user.is_default_bot && user.disabled_at === null && memberIds.has(user.id));
-  return <AgentsForm project={project} canManage={canManage} settings={settings.data!} workflow={workflow} bots={bots} agentBotIds={new Set(agentBots.data!)} />;
+  // what an empty model per kind of run means here: the model of each agent of the project for that kind
+  const agents = agentModels.data!.filter((config) => bots.some((bot) => bot.id === config.bot_id));
+  const botModelText = (type: RunType) => {
+    const named = agents.map((config) => ({ name: bots.find((bot) => bot.id === config.bot_id)!.name, model: config.models[type] || config.model }));
+    const models = [...new Set(named.map((entry) => entry.model))];
+    if (models.length === 0) return 'Wie beim Bot';
+    if (models.length === 1) return `Wie beim Bot (${models[0]})`;
+    return `Wie beim Bot (${named.map((entry) => `${entry.name}: ${entry.model}`).join(', ')})`;
+  };
+  return <AgentsForm project={project} canManage={canManage} settings={settings.data!} workflow={workflow} bots={bots} agentBotIds={new Set(agentBots.data!)} botModelText={botModelText} />;
 }
 
-type FormProps = SectionProps & { settings: ProjectAgents; workflow: Workflow; bots: User[]; agentBotIds: Set<string> };
+type FormProps = SectionProps & { settings: ProjectAgents; workflow: Workflow; bots: User[]; agentBotIds: Set<string>; botModelText: (type: RunType) => string };
 
-function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds }: FormProps) {
+function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds, botModelText }: FormProps) {
   const form = useRef<HTMLFormElement>(null);
   const save = useSaveProjectAgents();
   const github = useGithub().data!;
@@ -282,22 +293,22 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds 
     problems.clear(...paths);
   };
 
-  const live = mappingErrors(workflow, value.states);
-  const stepError = (step: AgentStep) => live[step] ?? problems.errors[`states.${step}`];
-  const complete = mappingComplete(workflow, value.states);
-  const anySet = AGENT_STEPS.some((step) => value.states[step] !== null);
+  const complete = mappingComplete(workflow, workflow.agent_states);
+  const missing = missingSteps(workflow);
+  const catalog = can('org.manage_catalog');
+  const workflowLink = `/settings/workflows?workflow=${workflow.id}`;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (readOnly || save.isPending) return;
     if (!draft.dirty) return draft.tellNothingToSave();
     try {
-      const saved = await save.mutateAsync(toSettings(project.id, value));
+      await save.mutateAsync(toSettings(project.id, value));
       draft.reset();
       problems.clearAll();
       toast({
         title: 'Agenten gespeichert',
-        description: mappingComplete(workflow, saved.states) ? undefined : 'Ohne Status für alle vier Schritte bleiben die Agenten in diesem Projekt aus.',
+        description: complete ? undefined : `Die Agenten bleiben aus, bis der Workflow „${workflow.name}“ alle Agenten-Schritte hat.`,
         tone: 'success',
       });
     } catch (error) {
@@ -326,11 +337,16 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds 
     <form ref={form} noValidate onSubmit={(event) => void submit(event)} className="flex flex-col gap-6">
       {canManage && <UnsavedGuard dirty={draft.dirty} saving={save.isPending} />}
       {!complete && (
-        <Banner tone="info" role="status" title={`Agenten sind in ${project.identifier} aus`}>
+        <Banner tone="info" title={`Agenten aus: der Workflow „${workflow.name}“ hat noch ${missing.length === AGENT_STEPS.length ? 'keine' : 'nicht alle'} Agenten-Schritte`}>
           <span className="block max-w-[65ch]">
-            {anySet
-              ? 'Eine Status-Zuordnung passt noch nicht. Bis alle vier Schritte einen passenden Status haben, bleibt eine Zuweisung an einen Bot eine normale Zuweisung.'
-              : 'Wähle unten für jeden Schritt einen Status. Bis dahin bleibt eine Zuweisung an einen Bot eine normale Zuweisung, und das Item sagt warum.'}
+            {'Bis dahin bleibt eine Zuweisung an einen Bot eine normale Zuweisung, und das Item sagt warum. '}
+            {catalog ? (
+              <Link to={workflowLink} className="font-medium text-accent-text underline-offset-2 hover:underline">
+                Schritte im Workflow einrichten
+              </Link>
+            ) : (
+              'Die Schritte gehören zum Workflow; ein Org-Admin richtet sie dort ein.'
+            )}
           </span>
         </Banner>
       )}
@@ -447,31 +463,22 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds 
 
       <SettingsCard
         title="Status je Schritt"
-        description={`Diesen Status setzt werkbuch in jedem Schritt, mit der Übergangsprüfung des Workflows „${workflow.name}“. Ist ein Übergang nicht erlaubt, bleibt der Status, und ein Kommentar sagt es.`}
+        description={`Diesen Status setzt werkbuch in jedem Schritt, mit der Übergangsprüfung. Die Schritte gehören zum Workflow „${workflow.name}“ und gelten für jedes Projekt damit.`}
       >
-        <div className="flex flex-col gap-4">
+        <dl className="flex flex-col gap-4">
           {AGENT_STEPS.map((step) => (
-            <StepRow
-              key={step}
-              step={step}
-              workflow={workflow}
-              value={value.states[step]}
-              error={stepError(step)}
-              disabled={readOnly}
-              onChange={(id) => edit({ states: { ...value.states, [step]: id } }, `states.${step}`)}
-            />
+            <StepRow key={step} step={step} workflow={workflow} />
           ))}
-        </div>
-        {!workflow.states.some((state) => /review/i.test(state.name)) && (
-          <p className="max-w-[65ch] text-sm text-pretty text-muted">
-            {`„${workflow.name}“ hat keinen Status „In Review“. „Pending“ geht auch; schöner ist ein eigener Status der Kategorie Started im Workflow.`}{' '}
-            {can('org.manage_catalog') && (
-              <Link to={`/settings/workflows?workflow=${workflow.id}`} className="font-medium text-accent-text underline-offset-2 hover:underline">
-                Workflow bearbeiten
-              </Link>
-            )}
-          </p>
-        )}
+        </dl>
+        <p className="max-w-[65ch] text-sm text-pretty text-muted">
+          {catalog ? (
+            <Link to={workflowLink} className="font-medium text-accent-text underline-offset-2 hover:underline">
+              Im Workflow „{workflow.name}“ bearbeiten
+            </Link>
+          ) : (
+            `Ändern lassen sie sich im Workflow „${workflow.name}“; das tun Org-Admins.`
+          )}
+        </p>
       </SettingsCard>
 
       <SettingsCard title="Bremsen" description="Damit kein Strang ohne Ende Tokens verbrennt: Danach pausiert er, PR und Branch bleiben, und das Item geht mit dem letzten Befund an die verantwortliche Person des Bots.">
@@ -503,18 +510,17 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds 
         <ModelLabels labels={modelLabels} canManage={can('org.manage_catalog')} />
         <div className="flex flex-col gap-2 border-t border-line pt-4">
           <p className={labelClass}>Modell je Auftragstyp</p>
-          <p className="text-sm text-muted">Leer heißt: wie in den Einstellungen des Bots.</p>
           <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
             {RUN_TYPES.map((type) => (
               <ModelField
                 key={type}
                 label={RUN_TYPE_NAMES[type]}
                 cli="claude"
-                suggestions={false}
                 readOnly={readOnly}
-                placeholder="wie beim Bot"
+                inherit={botModelText(type)}
                 value={value.models[type]}
-                onChange={(model) => edit({ models: { ...value.models, [type]: model } })}
+                error={problems.errors[`models.${type}`]}
+                onChange={(model) => edit({ models: { ...value.models, [type]: model } }, `models.${type}`)}
               />
             ))}
           </div>

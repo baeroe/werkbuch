@@ -268,6 +268,7 @@ export function RunLine({ run, runs, item, thread }: { run: AgentRun; runs: read
           </Button>
         </div>
 
+        {run.status === 'waiting' && run.waiting_reason && <p className="mt-2 text-sm text-pretty text-muted">{run.waiting_reason}</p>}
         {run.status === 'waiting' && run.runner_name && (
           <p className="mt-2 text-sm text-pretty text-muted">{`Wartet auf ${run.runner_name}: Korrekturen laufen auf dem Runner ihres Strangs, dort liegen Worktree und Session.`}</p>
         )}

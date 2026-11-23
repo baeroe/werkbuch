@@ -9,9 +9,9 @@
  * pauses the strand. Statuses are set by the agent bot with the reason „Agent: …“.
  */
 
-import { afterFindings, isActive, LIGHT_RUNS, pickModel, RUN_TYPE_NAMES, whyNotHere } from '@/domain/agents';
+import { afterFindings, CLI_NAMES, isActive, LIGHT_RUNS, pickModel, RUN_TYPE_NAMES, whyNotHere } from '@/domain/agents';
 import { now as clockNow } from '@/lib/clock';
-import type { AgentRun, AgentThread, ItemAgentState, RunnerSlots, RunType, User, WorkItemRecord } from '@/types';
+import type { AgentCli, AgentRun, AgentThread, ItemAgentState, RunnerSlots, RunType, User, WorkItemRecord } from '@/types';
 import { canSeeProject, requireWritable } from './access';
 import { conflict, makeCtx, newId, notFound, read, write, type Ctx } from './client';
 import { saveDb, type Db } from './db';
@@ -64,6 +64,15 @@ export function repoOf(db: Db, itemId: string): string {
   return db.project_agents.find((settings) => settings.project_id === item.project_id)?.repo ?? `project:${item.project_id}`;
 }
 
+/** Whether a runner can start runs with this CLI: installed and logged in (spec 8.8). */
+export const hasCli = (runner: Pick<StoredRunner, 'clis'>, cli: AgentCli) => runner.clis.some((entry) => entry.cli === cli && entry.installed && entry.logged_in);
+
+/** Whether any runner of a bot's pool, online or not, has its CLI; without one its runs wait with the reason. */
+function poolHasCli(db: Db, botId: string): boolean {
+  const config = db.agent_configs.find((entry) => entry.bot_id === botId);
+  return Boolean(config && config.runner_ids.some((id) => db.runners.some((runner) => runner.id === id && hasCli(runner, config.cli))));
+}
+
 const busy = (run: StoredRun) => run.status === 'running' || run.status === 'canceling';
 
 /**
@@ -92,7 +101,7 @@ function freeRunner(db: Db, run: StoredRun): StoredRunner | undefined {
   return pool
     .map((id) => db.runners.find((runner) => runner.id === id))
     .find((runner): runner is StoredRunner => {
-      if (!runner?.online) return false;
+      if (!runner?.online || !hasCli(runner, config.cli)) return false;
       const running = db.agent_runs.filter((other) => other.runner_id === runner.id && busy(other));
       if (LIGHT_RUNS.includes(run.type)) return running.filter((other) => LIGHT_RUNS.includes(other.type)).length < runner.slots.light;
       const code = running.filter((other) => !LIGHT_RUNS.includes(other.type));
@@ -108,12 +117,12 @@ function wordsOf(title: string): { word: string; test: string } {
 }
 
 /** The log a run writes: the story of its kind, or of its item when it has one, filled in for the item. */
-function fillLog(run: StoredRun, item: WorkItemRecord, branch: string) {
+function fillLog(run: StoredRun, item: WorkItemRecord, branch: string, cli: string) {
   const { word, test } = wordsOf(item.title);
   const template = run.type === 'task' ? (TASK_LOGS[item.key] ?? LOG_TEMPLATES.task) : LOG_TEMPLATES[run.type];
   return template.map((line) => ({
     ...line,
-    text: line.text.replaceAll('{key}', item.key).replaceAll('{branch}', branch).replaceAll('{model}', run.model).replaceAll('{title}', item.title).replaceAll('{word}', word).replaceAll('{test}', test),
+    text: line.text.replaceAll('{key}', item.key).replaceAll('{branch}', branch).replaceAll('{model}', run.model).replaceAll('{title}', item.title).replaceAll('{word}', word).replaceAll('{test}', test).replaceAll('Claude Code', cli),
   }));
 }
 
@@ -124,23 +133,34 @@ function fillLog(run: StoredRun, item: WorkItemRecord, branch: string) {
 export function advance(db: Db, at: Date = clockNow()): boolean {
   let changed = false;
   for (const run of db.agent_runs) {
-    if (run.status === 'queued' && at.getTime() - Date.parse(run.created_at) >= START_DELAY_MS) {
+    // a run that waits for a CLI (no runner of its own) starts as soon as a runner of the pool has it (spec 8.8)
+    const waitsForCli = run.status === 'waiting' && !run.runner_id;
+    if ((run.status === 'queued' && at.getTime() - Date.parse(run.created_at) >= START_DELAY_MS) || waitsForCli) {
+      if (!poolHasCli(db, run.bot_id)) {
+        if (run.status === 'queued') {
+          run.status = 'waiting';
+          run.runner_id = null;
+          changed = true;
+        }
+        continue;
+      }
       const item = db.items.find((entry) => entry.id === run.item_id);
       const runner = item && freeRunner(db, run);
       if (!item || !runner) continue;
-      const started = new Date(Date.parse(run.created_at) + START_DELAY_MS);
+      const started = waitsForCli ? at : new Date(Date.parse(run.created_at) + START_DELAY_MS);
       const thread = db.agent_threads.find((entry) => entry.id === run.thread_id);
       run.runner_id = runner.id;
       if (thread && thread.runner_id === '') thread.runner_id = runner.id;
       run.started_at = started.toISOString();
       run.status = 'running';
-      run.log = fillLog(run, item, thread?.branch ?? `agent/${item.key}`);
+      run.log = fillLog(run, item, thread?.branch ?? `agent/${item.key}`, CLI_NAMES[db.agent_configs.find((entry) => entry.bot_id === run.bot_id)?.cli ?? 'claude']);
       changed = true;
       const settings = db.project_agents.find((entry) => entry.project_id === item.project_id);
       const bot = agentBot(db, run.bot_id);
-      if (bot && settings?.states.working && CODE_RUNS.includes(run.type) && item.state_id !== settings.states.working) {
+      const working = settings && db.workflows.find((workflow) => workflow.id === db.projects.find((project) => project.id === item.project_id)?.workflow_id)?.agent_states.working;
+      if (bot && working && CODE_RUNS.includes(run.type) && item.state_id !== working) {
         try {
-          moveItem(makeCtx(db, bot, started), bot, item, settings.states.working, null, { reason: `Agent: Auftrag „${RUN_TYPE_NAMES[run.type]}“ gestartet` });
+          moveItem(makeCtx(db, bot, started), bot, item, working, null, { reason: `Agent: Auftrag „${RUN_TYPE_NAMES[run.type]}“ gestartet` });
         } catch {
           // the workflow does not allow it: the status stays (spec 7.2)
         }
@@ -174,7 +194,9 @@ export function runView(db: Db, run: StoredRun, at: Date = clockNow()): AgentRun
   const { cancel_requested_at: _cancel, ...rest } = run;
   const runner = db.runners.find((entry) => entry.id === run.runner_id);
   const shown = run.started_at === null ? [] : run.finished_at !== null ? run.log : run.log.filter((line) => Date.parse(run.started_at!) + line.offset * 1000 <= at.getTime());
-  return { ...rest, log: shown, runner_name: runner?.name ?? null, runner_online: runner?.online ?? false, runner_last_seen_at: runner ? lastSeen(runner, at) : null };
+  const config = db.agent_configs.find((entry) => entry.bot_id === run.bot_id);
+  const waiting_reason = run.status === 'waiting' && !run.runner_id && config && !poolHasCli(db, run.bot_id) ? `Kein Runner im Pool hat ${CLI_NAMES[config.cli]} installiert und angemeldet.` : null;
+  return { ...rest, waiting_reason, log: shown, runner_name: runner?.name ?? null, runner_online: runner?.online ?? false, runner_last_seen_at: runner ? lastSeen(runner, at) : null };
 }
 
 /** Why the assignee of an item does not work as an agent there; null when it does, or the assignee is a person. */

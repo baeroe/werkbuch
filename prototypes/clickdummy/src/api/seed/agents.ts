@@ -16,7 +16,8 @@
  */
 
 import { DEFAULT_RULES } from '@/domain/agentRuleDefaults';
-import type { AgentConfig, AgentRun, AgentThread, Comment, GithubConnection, ItemEvent, ProjectAgents, PullRequestLink, RunLogLine, RunnerEquipment, RunnerLoad, RunnerSlots, RunType } from '@/types';
+import { RUN_TIMEOUTS } from '@/domain/agents';
+import type { AgentConfig, AgentRun, AgentThread, Comment, GithubConnection, ItemEvent, ProjectAgents, PullRequestLink, RunLogLine, RunnerCli, RunnerEquipment, RunnerLoad, RunnerSlots, RunType } from '@/types';
 import { comment, event, state } from './activity';
 import { at, doc, p, ul } from './helpers';
 import { itemId } from './items';
@@ -35,6 +36,8 @@ export interface StoredRunner {
   load: Omit<RunnerLoad, 'measured_at'>;
   /** What the harness offers, as the runner reports it (spec 8.7). */
   equipment: RunnerEquipment;
+  /** The CLIs it found, installed and logged in (spec 8.8). */
+  clis: RunnerCli[];
   update_error: string | null;
   created_at: string;
 }
@@ -48,7 +51,7 @@ export interface StoredPairing {
 }
 
 /** A run as stored: its whole log, of which the API gives out the lines up to now. */
-export type StoredRun = Omit<AgentRun, 'runner_name' | 'runner_online' | 'runner_last_seen_at'> & { cancel_requested_at: string | null };
+export type StoredRun = Omit<AgentRun, 'runner_name' | 'runner_online' | 'runner_last_seen_at' | 'waiting_reason'> & { cancel_requested_at: string | null };
 
 export const RUNNER_VERSION = '0.1.0-dev';
 
@@ -66,10 +69,21 @@ export const runners: StoredRunner[] = [
     // set up on the machine for the runner's own macOS user
     equipment: {
       mcp_servers: ['playwright', 'context7'],
-      skills: ['superpowers:test-driven-development', 'superpowers:systematic-debugging', 'design:web-design-guidelines'],
+      skills: [
+        'superpowers:test-driven-development',
+        'superpowers:systematic-debugging',
+        'superpowers:verification-before-completion',
+        'design:web-design-guidelines',
+        'laravel:pest-testing',
+        'react:accessibility',
+      ],
       plugins: ['superpowers'],
       werkbuch_access: [],
     },
+    clis: [
+      { cli: 'claude', installed: true, version: '2.4.1', logged_in: true },
+      { cli: 'codex', installed: false, version: null, logged_in: false },
+    ],
     update_error: null,
     created_at: at('10-20 16:40'),
   },
@@ -86,6 +100,10 @@ export const runners: StoredRunner[] = [
     load: { cpu: 6, gpu: null, ram_used: 9.1, ram_total: 16, disk_free: 61, disk_total: 256 },
     // nothing set up on the old Mac yet
     equipment: { mcp_servers: [], skills: [], plugins: [], werkbuch_access: [] },
+    clis: [
+      { cli: 'claude', installed: true, version: '2.3.0', logged_in: true },
+      { cli: 'codex', installed: false, version: null, logged_in: false },
+    ],
     update_error: null,
     created_at: at('10-22 10:15'),
   },
@@ -101,12 +119,15 @@ export const runners: StoredRunner[] = [
     load: { cpu: 7, gpu: null, ram_used: 5.8, ram_total: 32, disk_free: 410, disk_total: 500 },
     // runs under the admin's own user: her werkbuch server with a personal token comes along
     equipment: { mcp_servers: ['werkbuch-mara', 'context7'], skills: ['ops:runbook'], plugins: [], werkbuch_access: ['werkbuch-mara'] },
+    // Codex is installed, but nobody ran codex login: Otto's runs wait (spec 8.8)
+    clis: [
+      { cli: 'claude', installed: true, version: '2.4.1', logged_in: true },
+      { cli: 'codex', installed: true, version: '0.40.0', logged_in: false },
+    ],
     update_error: 'Die Prüfsumme des neuen Binarys stimmt nicht. Der Runner läuft mit 0.1.0-alpha weiter und versucht es beim nächsten Kontakt erneut.',
     created_at: at('10-12 11:00'),
   },
 ];
-
-export const TIMEOUTS: Record<RunType, number> = { task: 60, correction: 60, conflict: 30, review: 20, comment: 10 };
 
 export const agentConfigs: AgentConfig[] = [
   {
@@ -117,8 +138,16 @@ export const agentConfigs: AgentConfig[] = [
     model: 'sonnet',
     models: { review: 'opus' },
     instruction: 'Schreib Commits und PR-Texte auf Englisch, Kommentare an Personen auf Deutsch. Frag lieber in einem Kommentar nach, als zu raten.',
-    slots: 2,
-    timeouts: { ...TIMEOUTS },
+  },
+  // Otto works with Codex, which no runner of his pool has logged in: his run on WEB-55 waits (spec 8.8)
+  {
+    bot_id: 'u_otto',
+    enabled: true,
+    runner_ids: ['rn_studio', 'rn_build'],
+    cli: 'codex',
+    model: 'gpt-5-codex',
+    models: {},
+    instruction: 'Kleine, klar umrissene Aufgaben. Frag in einem Kommentar nach, wenn etwas unklar ist.',
   },
 ];
 
@@ -134,7 +163,6 @@ export const projectAgents: ProjectAgents[] = [
     setup_command: 'ddev config --project-name=web-$WORKTREE && ddev start',
     teardown_command: 'ddev delete -Oy web-$WORKTREE',
     review_bot_id: 'u_kira',
-    states: { working: 'std_progress', review: 'std_pending', correction: 'std_todo', merged: 'std_done' },
     max_corrections: 3,
     max_conflicts: 2,
     review_human_prs: true,
@@ -180,6 +208,7 @@ export const agentThreads: AgentThread[] = [
   { id: 'th_web44', item_id: itemId('WEB-44'), bot_id: 'u_kira', runner_id: 'rn_mini', branch: 'agent/WEB-44-alt-texte', status: 'open', corrections: 1, conflicts: 0, pr_number: 214 },
   { id: 'th_web53', item_id: itemId('WEB-53'), bot_id: 'u_kira', runner_id: 'rn_studio', branch: 'agent/WEB-53-robots-sitemap', status: 'open', corrections: 0, conflicts: 0, pr_number: null },
   { id: 'th_web54', item_id: itemId('WEB-54'), bot_id: 'u_kira', runner_id: 'rn_mini', branch: 'agent/WEB-54-browser-test-formulare', status: 'open', corrections: 0, conflicts: 0, pr_number: null },
+  { id: 'th_web55', item_id: itemId('WEB-55'), bot_id: 'u_otto', runner_id: '', branch: 'agent/WEB-55-bildformate-avif', status: 'open', corrections: 0, conflicts: 0, pr_number: null },
   { id: 'th_web49', item_id: itemId('WEB-49'), bot_id: 'u_kira', runner_id: 'rn_studio', branch: 'agent/WEB-49-layout-vorlage', status: 'paused', corrections: 3, conflicts: 1, pr_number: 209 },
 ];
 
@@ -256,6 +285,8 @@ interface RunSeed {
   source: AgentRun['model_source'];
   label?: string;
   attempt?: number;
+  /** Kira unless a run says otherwise. */
+  bot?: string;
   created: string;
   started: string | null;
   finished: string | null;
@@ -270,7 +301,7 @@ function run(seed: RunSeed): StoredRun {
     id: seed.id,
     type: seed.type,
     status: seed.status,
-    bot_id: 'u_kira',
+    bot_id: seed.bot ?? 'u_kira',
     runner_id: seed.runner,
     item_id: itemId(seed.key),
     thread_id: seed.thread,
@@ -315,6 +346,9 @@ const web51Log: RunLogLine[] = [
 ];
 
 export const agentRuns: StoredRun[] = [
+  // WEB-55: Otto's task waits, no runner of his pool has Codex logged in
+  run({ id: 'run_web55_task', type: 'task', status: 'waiting', key: 'WEB-55', thread: 'th_web55', runner: null, bot: 'u_otto', model: 'gpt-5-codex', source: 'bot', created: '10-28 09:40', started: null, finished: null }),
+
   // WEB-51: running now
   run({ id: 'run_web51_task', type: 'task', status: 'running', key: 'WEB-51', thread: 'th_web51', runner: 'rn_studio', model: 'sonnet', source: 'bot', created: '10-28 09:55', started: '10-28 09:56', finished: null, log: web51Log }),
 
@@ -419,7 +453,7 @@ export const agentRuns: StoredRun[] = [
     created: '10-28 08:09',
     started: '10-28 08:10',
     finished: '10-28 09:10',
-    error: 'Zeitlimit von 60 Minuten erreicht. Der Agent hat noch nichts gepusht; Worktree und Session bleiben erhalten.',
+    error: `Zeitlimit von ${RUN_TIMEOUTS.task} Minuten erreicht. Der Agent hat noch nichts gepusht; Worktree und Session bleiben erhalten.`,
     usage: { input: 880_100, output: 31_700 },
     log: [
       line(0, 'system', 'Worktree agent/WEB-53-robots-sitemap wieder aufgenommen'),
@@ -430,7 +464,7 @@ export const agentRuns: StoredRun[] = [
       line(968, 'result', '2 failed: Route [sitemap] not defined'),
       line(2400, 'tool', 'Bash ddev artisan test --filter=SitemapTest'),
       line(2418, 'result', '2 failed: Route [sitemap] not defined'),
-      line(3600, 'error', 'Zeitlimit erreicht (60 Minuten). Der Runner hat Claude Code beendet (SIGTERM).'),
+      line(RUN_TIMEOUTS.task * 60, 'error', `Zeitlimit erreicht (${RUN_TIMEOUTS.task} Minuten). Der Runner hat Claude Code beendet (SIGTERM).`),
     ],
   }),
 

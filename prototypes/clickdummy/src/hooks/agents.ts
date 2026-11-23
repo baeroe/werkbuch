@@ -6,7 +6,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import { getAgentConfig, getProjectAgents, listAgentBotIds, listAgentConfigs, listAgentProjects, listRepoOwners, saveAgentConfig, saveProjectAgents } from '@/api/agents';
+import { getAgentConfig, getProjectAgents, listAgentBotIds, listAgentConfigs, listAgentModels, listAgentProjects, listRepoOwners, saveAgentConfig, saveProjectAgents } from '@/api/agents';
 import { connectGithubApp, disconnectGithub, getGithub } from '@/api/github';
 import { createPairing, expirePairing, getPairing, listRunners, renameRunner, revokeRunner, saveRunnerSlots, simulatePairing } from '@/api/runners';
 import { cancelRun, getItemAgents, resumeThread, retryRun } from '@/api/runs';
@@ -75,6 +75,11 @@ export function useAgentConfigs(enabled = true) {
 /** The bots that work as agents, for every account (the review agent of a project). */
 export function useAgentBotIds() {
   return useQuery({ queryKey: qk.agentConfigs.list({ agents: true }), queryFn: listAgentBotIds });
+}
+
+/** The models of the agents, for "Wie beim Bot (…)" in a project. */
+export function useAgentModels() {
+  return useQuery({ queryKey: qk.agentConfigs.list({ models: true }), queryFn: listAgentModels });
 }
 
 export function useAgentConfig(botId: string | null) {

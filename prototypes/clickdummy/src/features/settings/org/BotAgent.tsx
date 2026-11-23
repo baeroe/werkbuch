@@ -6,21 +6,20 @@
  * works and, where not, why: not a member who may edit items, or the project has not set up agents yet.
  */
 
-import { ArrowLeft, Bot as BotIcon, CircleCheck, CircleMinus, Cpu } from 'lucide-react';
-import { useMemo, useRef, type FormEvent } from 'react';
+import { ArrowLeft, Bot as BotIcon, CircleCheck, CircleMinus, Cpu, TriangleAlert } from 'lucide-react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar';
 import { Banner } from '@/components/ui/Banner';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { cx } from '@/components/ui/cx';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Input } from '@/components/ui/Input';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { labelClass } from '@/components/ui/styles';
 import { Switch } from '@/components/ui/Switch';
 import { Textarea } from '@/components/ui/Textarea';
 import { toast } from '@/components/ui/toast';
-import { RUN_TYPE_HINTS, RUN_TYPE_NAMES, RUN_TYPES, whyNotAgent } from '@/domain/agents';
+import { CLI_NAMES, DEFAULT_MODELS, modelsFor, RUN_TYPE_NAMES, RUN_TYPES, whyNotAgent } from '@/domain/agents';
 import { ModelField } from '@/features/agents/ModelField';
 import { clockTime } from '@/features/agents/runParts';
 import { SaveBar } from '@/features/agents/SaveBar';
@@ -40,8 +39,6 @@ interface Form {
   model: string;
   models: Record<RunType, string>;
   instruction: string;
-  slots: string;
-  timeouts: Record<RunType, string>;
 }
 
 const formOf = (config: AgentConfig): Form => ({
@@ -51,8 +48,6 @@ const formOf = (config: AgentConfig): Form => ({
   model: config.model,
   models: Object.fromEntries(RUN_TYPES.map((type) => [type, config.models[type] ?? ''])) as Record<RunType, string>,
   instruction: config.instruction,
-  slots: String(config.slots),
-  timeouts: Object.fromEntries(RUN_TYPES.map((type) => [type, String(config.timeouts[type])])) as Record<RunType, string>,
 });
 
 const toConfig = (bot_id: string, form: Form): AgentConfig => ({
@@ -63,8 +58,6 @@ const toConfig = (bot_id: string, form: Form): AgentConfig => ({
   model: form.model,
   models: form.models,
   instruction: form.instruction,
-  slots: Number(form.slots),
-  timeouts: Object.fromEntries(RUN_TYPES.map((type) => [type, Number(form.timeouts[type])])) as Record<RunType, number>,
 });
 
 const CLIS = [
@@ -130,6 +123,8 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
   const runners = useRunners();
   const zone = useOrgZone();
   const draft = useDraft(useMemo(() => formOf(config), [config]));
+  // what a change of CLI did to the models, until the change is saved or discarded
+  const [cliNote, setCliNote] = useState<string | null>(null);
   const problems = useFieldErrors(form);
   useSaveShortcut(form, true);
   const { value } = draft;
@@ -154,7 +149,22 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
     }
   }
 
-  const defaultModel = value.model.trim() || 'sonnet';
+  const defaultModel = value.model.trim() || DEFAULT_MODELS[value.cli];
+  // a CLI no runner of the chosen pool reports, installed and logged in (spec 8.8): saving still works
+  const pool = (runners.data?.items ?? []).filter((runner) => value.runner_ids.includes(runner.id));
+  const cliMissing = pool.length > 0 && !pool.some((runner) => runner.clis.some((entry) => entry.cli === value.cli && entry.installed && entry.logged_in));
+
+  /** A change of CLI keeps the models it knows; the others fall back to its standard, and the hint says which. */
+  function chooseCli(cli: AgentCli) {
+    if (cli === value.cli) return;
+    const next = modelsFor(cli, value.model, value.models);
+    edit({ cli, model: next.model, models: Object.fromEntries(RUN_TYPES.map((type) => [type, next.models[type] ?? ''])) as Record<RunType, string> }, 'model');
+    setCliNote(
+      next.dropped.length === 0
+        ? null
+        : `${next.dropped.map((model) => `„${model}“`).join(', ')} gibt es bei ${cli === 'claude' ? 'Claude Code' : 'Codex'} nicht. Standard-Modell ist jetzt ${next.model}${Object.keys(next.models).length < Object.values(value.models).filter(Boolean).length ? ', die Modelle je Auftragstyp sind wieder „Wie Standard“' : ''}.`,
+    );
+  }
 
   return (
     <form ref={form} noValidate onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
@@ -216,26 +226,40 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
         </Loaded>
       </SettingsCard>
 
-      <SettingsCard title="CLI und Modelle" description="Das Modell ist ein freier Text je CLI. Wer gewinnt: das Label des Items (Projekteinstellungen), dann das Projekt je Auftragstyp, dann der Bot je Auftragstyp, dann sein Standard.">
+      <SettingsCard title="CLI und Modelle" description="Die Modelle stehen je CLI fest. Wer gewinnt: das Modell-Label des Items, dann das Projekt je Auftragstyp, dann der Bot je Auftragstyp, dann sein Standard.">
         <div className="flex flex-col gap-1.5">
           <p className={labelClass}>CLI</p>
           <div>
-            <SegmentedControl label="CLI" value={value.cli} onValueChange={(cli) => edit({ cli })} options={CLIS} />
+            <SegmentedControl label="CLI" value={value.cli} onValueChange={chooseCli} options={CLIS} />
           </div>
-          <p className="text-sm text-muted">Der Runner startet es headless und reicht das Modell durch. Es muss auf den Runnern installiert und angemeldet sein; „Doctor“ in der TUI prüft das.</p>
+          {cliMissing ? (
+            <p id="cli-missing" className="flex items-start gap-1.5 text-sm font-medium text-danger">
+              <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              {`${CLI_NAMES[value.cli]}: auf keinem Runner im Pool verfügbar (installiert und angemeldet). Speichern geht; Aufträge warten, bis ein Runner es meldet.`}
+            </p>
+          ) : (
+            <p className="text-sm text-muted">Der Runner startet es headless und reicht das Modell durch. Es muss auf den Runnern installiert und angemeldet sein; „Doctor“ in der TUI prüft das.</p>
+          )}
+        </div>
+        <div aria-live="polite" className="empty:hidden">
+          {cliNote && draft.dirty && (
+            <Banner tone="info" title="Modelle angepasst">
+              {cliNote}
+            </Banner>
+          )}
         </div>
         <ModelField label="Standard-Modell" cli={value.cli} value={value.model} error={problems.errors.model} onChange={(model) => edit({ model }, 'model')} />
-        <FieldGroup legend="Modell je Auftragstyp" hint="Leer heißt: das Standard-Modell.">
+        <FieldGroup legend="Modell je Auftragstyp" hint="„Wie Standard“ nimmt das Standard-Modell.">
           <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
             {RUN_TYPES.map((type) => (
               <ModelField
                 key={type}
                 label={RUN_TYPE_NAMES[type]}
                 cli={value.cli}
-                suggestions={false}
-                placeholder={`wie Standard (${defaultModel})`}
+                inherit={`Wie Standard (${defaultModel})`}
                 value={value.models[type]}
-                onChange={(model) => edit({ models: { ...value.models, [type]: model } })}
+                error={problems.errors[`models.${type}`]}
+                onChange={(model) => edit({ models: { ...value.models, [type]: model } }, `models.${type}`)}
               />
             ))}
           </div>
@@ -251,34 +275,6 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
           hint="Markdown. Was dieser Bot anders macht als andere, etwa Sprache oder Ton."
           onChange={(event) => edit({ instruction: event.target.value })}
         />
-      </SettingsCard>
-
-      <SettingsCard title="Grenzen" description="Was einen Auftrag über sein Zeitlimit hinaus treibt, endet als „Zeitlimit erreicht“; das Ticket geht auf „Korrektur“.">
-        <Input
-          label="Plätze"
-          name="slots"
-          inputMode="numeric"
-          className="max-w-32"
-          value={value.slots}
-          hint="So viele Aufträge dieses Agenten laufen gleichzeitig, über alle Runner. Ein Epic läuft in sich nacheinander."
-          error={problems.errors.slots}
-          onChange={(event) => edit({ slots: event.target.value }, 'slots')}
-        />
-        <FieldGroup legend="Zeitlimit je Auftragstyp (Minuten)">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-5">
-            {RUN_TYPES.map((type) => (
-              <Input
-                key={type}
-                label={RUN_TYPE_NAMES[type]}
-                inputMode="numeric"
-                value={value.timeouts[type]}
-                title={RUN_TYPE_HINTS[type]}
-                error={problems.errors[`timeouts.${type}`]}
-                onChange={(event) => edit({ timeouts: { ...value.timeouts, [type]: event.target.value } }, `timeouts.${type}`)}
-              />
-            ))}
-          </div>
-        </FieldGroup>
       </SettingsCard>
 
       <SaveBar

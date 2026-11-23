@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentStep, User } from '@/types';
-import { afterFindings, followMapping, mappingComplete, mappingErrors, pickModel, suggestMapping, whyNotAgent, whyNotHere } from './agents';
+import { afterFindings, boundStateErrors, mappingComplete, mappingErrors, missingSteps, pickModel, stepsAfterSave, suggestMapping, whyNotAgent, whyNotHere } from './agents';
 import { agency, standard } from './fixtures';
 
 const states = (working: string | null, review: string | null, correction: string | null, merged: string | null): Record<AgentStep, string | null> => ({ working, review, correction, merged });
@@ -30,12 +30,25 @@ describe('the status of each step (spec 7.4)', () => {
     expect(mappingComplete(standard, states('std_progress', null, null, null))).toBe(false);
   });
 
-  it('follows a change of workflow where the mapping fits the category, else the step needs a new status', () => {
-    const mapping = { std_progress: 'app_progress', std_pending: 'app_approval', std_todo: 'app_todo', std_done: 'app_done' };
-    const next = followMapping(states('std_progress', 'std_pending', 'std_todo', 'std_done'), mapping, agency);
-    expect(next).toEqual(states('app_progress', 'app_approval', 'app_todo', 'app_done'));
-    // In Arbeit lands on Done (Completed): no fit; steps without a status or a mapping have none
-    expect(followMapping(states('std_progress', null, 'std_todo', 'std_done'), { std_progress: 'app_done' }, agency)).toEqual(states(null, null, null, null));
+  it('belongs to the workflow: the standard one has all four steps, the agency one none yet', () => {
+    expect(missingSteps(standard)).toEqual([]);
+    expect(missingSteps(agency)).toEqual(['working', 'review', 'correction', 'merged']);
+  });
+
+  it('keeps a step whose status stays, follows the mapping of a removed one where the category fits, else empties it', () => {
+    const kept = standard.states.filter((state) => state.id !== 'std_pending' && state.id !== 'std_todo');
+    const mapping = { std_pending: 'std_progress', std_todo: 'std_done' };
+    // In Review follows to In Progress (Started); Korrektur would land on Done (Completed): no fit, empty
+    expect(stepsAfterSave(standard.agent_states, kept, mapping)).toEqual(states('std_progress', 'std_progress', null, 'std_done'));
+    // without a mapping (no items in the removed status) the step is empty
+    expect(stepsAfterSave(standard.agent_states, kept)).toEqual(states('std_progress', null, null, 'std_done'));
+  });
+
+  it('puts the error at a status that holds a step and changes its category', () => {
+    const changed = standard.states.map((state) => (state.id === 'std_pending' ? { ...state, category: 'completed' as const } : state));
+    const errors = boundStateErrors(changed, standard.agent_states);
+    expect(Object.keys(errors)).toEqual(['std_pending']);
+    expect(errors.std_pending).toContain('Agenten-Schritt „In Review“ und braucht die Kategorie Started');
   });
 
   it('suggests a fitting status per step, "Review" by name where the workflow has one', () => {
@@ -85,6 +98,11 @@ describe('the model of a run: model label, then project, then bot (spec 7.7)', (
     expect(pickModel({ type: 'review', catalog, labelIds: [], project, agent })).toEqual({ model: 'opus', source: 'bot', label_id: null });
     expect(pickModel({ type: 'correction', catalog, labelIds: ['lb_seo'], project: null, agent })).toEqual({ model: 'sonnet', source: 'bot', label_id: null });
   });
+
+  it('passes over a model of a label or the project that the bot\'s CLI does not have', () => {
+    const codex = { cli: 'codex' as const, model: 'gpt-5-codex', models: {} };
+    expect(pickModel({ type: 'comment', catalog: [], labelIds: [], project, agent: codex })).toEqual({ model: 'gpt-5-codex', source: 'bot', label_id: null });
+  });
 });
 
 describe('the brakes (spec 7.2)', () => {
@@ -104,7 +122,7 @@ describe('the brakes (spec 7.2)', () => {
 
 describe('who can be an agent (spec 7.2, 10.4)', () => {
   const kira = { name: 'Kira', type: 'bot', is_default_bot: false, owner_id: 'u_mara', disabled_at: null } as Pick<User, 'name' | 'type' | 'is_default_bot' | 'owner_id' | 'disabled_at'>;
-  const settings = { states: states('std_progress', 'std_pending', 'std_todo', 'std_done') } as Parameters<typeof whyNotHere>[2]['settings'];
+  const settings = { project_id: 'p_web' } as Parameters<typeof whyNotHere>[2]['settings'];
 
   it('never the default bot, a bot without a responsible person, or a person', () => {
     expect(whyNotAgent(kira)).toEqual([]);
@@ -120,5 +138,6 @@ describe('who can be an agent (spec 7.2, 10.4)', () => {
     expect(whyNotHere(kira, { enabled: true }, { identifier: 'APP', role: null, settings, workflow: standard })).toBe('Kira ist in APP kein Mitglied und darf Items nicht bearbeiten.');
     expect(whyNotHere(kira, { enabled: true }, { identifier: 'WEB', role: 'viewer', settings, workflow: standard })).toContain('nur Viewer');
     expect(whyNotHere(kira, { enabled: true }, { identifier: 'OPS', role: 'member', settings: null, workflow: standard })).toContain('In OPS sind die Agenten noch nicht eingerichtet');
+    expect(whyNotHere(kira, { enabled: true }, { identifier: 'APP', role: 'member', settings, workflow: agency })).toBe('In APP sind die Agenten aus: Der Workflow „Agentur-Freigabe“ hat noch keine Agenten-Schritte.');
   });
 });

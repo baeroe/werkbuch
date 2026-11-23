@@ -246,3 +246,41 @@ describe('leaving the editor with unsaved changes', () => {
     expect((await listWorkflows()).items.some((workflow) => workflow.name === 'Wartung')).toBe(true);
   });
 });
+
+describe('the agents\' steps of a workflow', () => {
+  it('proposes a status per step by name and category and saves it only once taken', async () => {
+    const user = userEvent.setup();
+    renderWithData(<WorkflowEditor workflowId="wf_agency" onClose={() => {}} />);
+
+    const panel = (await screen.findByRole('heading', { name: 'Agenten' })).closest('section')!;
+    expect(within(panel).getByText('Vorschlag: „Review“.')).toBeTruthy();
+    expect(within(panel).getByText(/Ohne Status je Schritt sind die Agenten in den Projekten dieses Workflows aus/)).toBeTruthy();
+    expect((await stored('wf_agency')).agent_states.review).toBeNull();
+
+    await user.click(within(panel).getByRole('button', { name: 'Vorschlag übernehmen' }));
+    expect(within(panel).getByRole('combobox', { name: /Status für In Review/ }).textContent).toContain('Review');
+    await user.click(save());
+    await waitFor(async () => expect((await stored('wf_agency')).agent_states).toEqual({ working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: 'app_done' }));
+  });
+
+  it('keeps a status that holds a step in a fitting category: the error stands at the status, nothing is saved', async () => {
+    const user = userEvent.setup();
+    renderWithData(<WorkflowEditor workflowId="wf_standard" onClose={() => {}} />);
+
+    await user.click(await screen.findByRole('combobox', { name: 'Kategorie von Pending' }));
+    await user.click(await screen.findByRole('option', { name: 'Completed' }));
+    expect(await screen.findByText(/„Pending“ ist der Agenten-Schritt „In Review“ und braucht die Kategorie Started/)).toBeTruthy();
+    await user.click(save());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Kategorie von Pending' })));
+    expect((await stored('wf_standard')).states.find((state) => state.id === 'std_pending')?.category).toBe('started');
+  });
+
+  it('says before the save what becomes of the step of a removed status', async () => {
+    const user = userEvent.setup();
+    renderWithData(<WorkflowEditor workflowId="wf_standard" onClose={() => {}} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Todo entfernen' }));
+    const panel = screen.getByRole('heading', { name: 'Agenten' }).closest('section')!;
+    expect(within(panel).getByText(/„Todo“ wird gelöscht\. Liegen dort Items, folgt der Schritt beim Speichern dem Status, der sie übernimmt/)).toBeTruthy();
+  });
+});

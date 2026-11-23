@@ -3,6 +3,7 @@
  * them. Resolutions that items carry are archived instead of deleted.
  */
 
+import { KNOWN_MODELS } from '@/domain/agents';
 import type { Label, RelationType, Resolution } from '@/types';
 import { requireOrgAdmin } from './access';
 import { conflict, FieldErrors, newId, notFound, paginate, read, write, type Page } from './client';
@@ -27,7 +28,7 @@ export function saveLabel(input: SaveInput<Label>): Promise<Label> {
     else if (db.labels.some((label) => label.id !== existing?.id && sameName(label.name, input.name))) errors.add('name', 'Diesen Namen gibt es schon.');
     if (!TONES.includes(input.color)) errors.add('color', 'Diese Farbe gibt es nicht.');
     const model = input.agent_model?.trim() ?? '';
-    if (model !== '' && !/^[A-Za-z0-9._:-]{1,64}$/.test(model)) errors.add('agent_model', 'Ein Modell ist ein Name ohne Leerzeichen, etwa haiku.');
+    if (model !== '' && !KNOWN_MODELS.claude.includes(model)) errors.add('agent_model', `Wähle ein Modell der Liste: ${KNOWN_MODELS.claude.join(', ')}.`);
     errors.throwIfAny();
 
     const label: Label = { id: existing?.id ?? newId('lb'), name: input.name.trim(), color: input.color, agent_model: model === '' ? null : model };

@@ -6,6 +6,10 @@
  * their list. A status that is deleted but still holds items opens `StateMappingDialog` when saving is refused with 409
  * `state_in_use`; a copy of a workflow and a new one start from a draft with fresh status ids. Leaving with unsaved
  * changes asks first (`LeaveGuard`). Members get the same view without any way to change it.
+ *
+ * "Agenten" (WEBU-18, spec 7.4): the status the agents set in each step, a status of this workflow of a category the
+ * step accepts. A proposal by name and category is only a proposal until it is taken. A status that holds a step keeps
+ * a fitting category (the error stands at the status); a removed one says before the save what becomes of its step.
  */
 
 import { ArrowLeft, CircleAlert, CircleCheck, Plus, Trash2 } from 'lucide-react';
@@ -27,13 +31,14 @@ import { Switch } from '@/components/ui/Switch';
 import { toast } from '@/components/ui/toast';
 import { Textarea } from '@/components/ui/Textarea';
 import { CATEGORY_ORDER, statesInOrder, validateWorkflow, type WorkflowIssue } from '@/domain/workflow';
+import { AGENT_STEPS, boundStateErrors, categoriesText, missingSteps, STEP_CATEGORIES, STEP_HINTS, STEP_NAMES, suggestMapping } from '@/domain/agents';
 import { useProjects } from '@/hooks/projects';
 import { useSaveWorkflow, useWorkflows } from '@/hooks/workflows';
 import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
-import type { Project, StateCategory, StateIcon, Transition, Workflow } from '@/types';
+import type { AgentStep, Project, StateCategory, StateIcon, Transition, Workflow } from '@/types';
 import { CATEGORY_NAMES, STATE_ICON_NAMES, STATE_ICONS } from './catalog';
 import { fieldMessage, hasReason } from './errors';
 import { counted } from './format';
@@ -77,7 +82,10 @@ interface Draft {
   initial_state_id: string;
   states: DraftState[];
   transitions: Transition[];
+  agent_states: Record<AgentStep, string | null>;
 }
+
+const NO_STEPS: Record<AgentStep, string | null> = { working: null, review: null, correction: null, merged: null };
 
 const NEW_WORKFLOW_STATES: Omit<DraftState, 'id'>[] = [
   { name: 'Backlog', icon: 'dashed', category: 'backlog' },
@@ -96,6 +104,7 @@ function draftOf(workflow: Workflow): Draft {
     initial_state_id: workflow.initial_state_id,
     states: statesInOrder(workflow).map(({ id, name, icon, category }) => ({ id, name, icon, category })),
     transitions: workflow.transitions.map(([from, to]): Transition => [from, to]),
+    agent_states: { ...workflow.agent_states },
   };
 }
 
@@ -111,12 +120,13 @@ function copyDraftOf(workflow: Workflow): Draft {
     initial_state_id: next(draft.initial_state_id),
     states: draft.states.map((state) => ({ ...state, id: next(state.id) })),
     transitions: draft.transitions.map(([from, to]): Transition => [next(from), next(to)]),
+    agent_states: Object.fromEntries(AGENT_STEPS.map((step) => [step, draft.agent_states[step] && next(draft.agent_states[step])])) as Draft['agent_states'],
   };
 }
 
 function blankDraft(): Draft {
   const states = NEW_WORKFLOW_STATES.map((state) => ({ ...state, id: localId('st') }));
-  return { name: '', description: '', is_default: false, is_free: true, initial_state_id: states[0].id, states, transitions: [] };
+  return { name: '', description: '', is_default: false, is_free: true, initial_state_id: states[0].id, states, transitions: [], agent_states: { ...NO_STEPS } };
 }
 
 /** The draft in a form that does not care for the order of transitions or for spaces around names. */
@@ -143,6 +153,7 @@ function toInput(draft: Draft, id: string | undefined): WorkflowInput {
     initial_state_id: draft.initial_state_id,
     states: draft.states.map((state, position) => ({ id: state.id, name: state.name.trim(), icon: state.icon, category: state.category, position })),
     transitions: draft.transitions,
+    agent_states: draft.agent_states,
   };
 }
 
@@ -237,6 +248,7 @@ function StateRow({ state, index, handle, readOnly, keepReason, error, onChange,
       {/* on a phone the category and the trash button share the second line */}
       <div className="flex basis-full items-center gap-2 sm:basis-auto">
         <Select
+          id={`state-category-${state.id}`}
           aria-label={`Kategorie von ${name}`}
           className="min-w-0 flex-1 sm:w-44 sm:flex-none"
           disabled={readOnly}
@@ -260,6 +272,100 @@ function StateRow({ state, index, handle, readOnly, keepReason, error, onChange,
         )}
       </div>
     </div>
+  );
+}
+
+/* ----------------------------------------------------------------------- agents */
+
+type AgentStepsProps = {
+  draft: Draft;
+  /** The statuses of the saved workflow: a step whose status is not in the draft any more says what becomes of it. */
+  saved: Workflow | null;
+  readOnly: boolean;
+  onChange: (agent_states: Draft['agent_states']) => void;
+};
+
+/** The status per step of the agents (spec 7.4): only statuses of this workflow whose category the step accepts. */
+function AgentSteps({ draft, saved, readOnly, onChange }: AgentStepsProps) {
+  const states = draft.states.map((state, position) => ({ ...state, position }));
+  const proposal = suggestMapping({ ...toWorkflow(draft, 'draft') });
+  // a proposal only fills what is empty; taking it is a change like any other, saved with the workflow
+  const proposed = AGENT_STEPS.filter((step) => !draft.agent_states[step] && proposal[step]);
+  const missing = missingSteps(draft);
+  const nameOf = (id: string) => {
+    const index = draft.states.findIndex((state) => state.id === id);
+    return draft.states[index]?.name.trim() || `Status ${index + 1}`;
+  };
+
+  return (
+    <Panel
+      title="Agenten"
+      description="Den Status setzt werkbuch in jedem Schritt eines Agenten, mit der Übergangsprüfung dieses Workflows. Er gilt für jedes Projekt mit diesem Workflow; erst mit allen vier arbeiten dort Agenten."
+      actions={
+        readOnly || proposed.length === 0 ? null : (
+          <Button variant="secondary" size="sm" onClick={() => onChange({ ...draft.agent_states, ...Object.fromEntries(proposed.map((step) => [step, proposal[step]])) })}>
+            Vorschlag übernehmen
+          </Button>
+        )
+      }
+    >
+      <div className="flex flex-col divide-y divide-line">
+        {AGENT_STEPS.map((step) => {
+          const value = draft.agent_states[step];
+          const removed = value !== null && !draft.states.some((state) => state.id === value);
+          const removedName = removed ? (saved?.states.find((state) => state.id === value)?.name ?? 'Ein gelöschter Status') : null;
+          const fitting = states.filter((state) => STEP_CATEGORIES[step].includes(state.category));
+          return (
+            <div key={step} className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-start">
+              <div>
+                <p className="text-ui font-medium text-ink">{STEP_NAMES[step]}</p>
+                <p className="text-sm text-pretty text-muted">
+                  {STEP_HINTS[step]} Kategorie {categoriesText(STEP_CATEGORIES[step])}.
+                </p>
+              </div>
+              <div className="flex min-w-0 flex-col gap-1">
+                <Select
+                  aria-label={`Status für ${STEP_NAMES[step]}`}
+                  disabled={readOnly}
+                  value={removed ? null : (value ?? 'none')}
+                  placeholder={removed ? `${removedName} (wird gelöscht)` : 'Kein Status'}
+                  onValueChange={(next) => next && onChange({ ...draft.agent_states, [step]: next === 'none' ? null : next })}
+                  error={
+                    removed
+                      ? `„${removedName}“ wird gelöscht. Liegen dort Items, folgt der Schritt beim Speichern dem Status, der sie übernimmt, wenn er die Kategorie hat; sonst ist er danach leer.`
+                      : undefined
+                  }
+                  hint={
+                    removed
+                      ? undefined
+                      : value === null && proposal[step]
+                        ? `Vorschlag: „${nameOf(proposal[step]!)}“.`
+                        : value === null
+                          ? `Der Workflow hat keinen Status der Kategorie ${categoriesText(STEP_CATEGORIES[step])}.`
+                          : undefined
+                  }
+                  options={[
+                    { value: 'none', label: 'Kein Status' },
+                    ...fitting.map((state) => ({
+                      value: state.id,
+                      label: nameOf(state.id),
+                      icon: <StatusIcon icon={state.icon} category={state.category} label={state.name} aria-hidden="true" />,
+                    })),
+                  ]}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {missing.length > 0 && (
+        <p className="max-w-[65ch] border-t border-line px-4 py-3 text-sm text-pretty text-muted">
+          {missing.length === AGENT_STEPS.length
+            ? 'Ohne Status je Schritt sind die Agenten in den Projekten dieses Workflows aus.'
+            : `Ohne ${missing.map((step) => `„${STEP_NAMES[step]}“`).join(', ')} sind die Agenten in den Projekten dieses Workflows aus.`}
+        </p>
+      )}
+    </Panel>
   );
 }
 
@@ -310,6 +416,8 @@ function EditorForm({ initial, existing, projects, readOnlyReason, onClose, clos
   const usedBy = existing ? projects.filter((project) => project.workflow_id === existing.id) : [];
 
   const nameError = attempted && draft.name.trim() === '' ? 'Gib dem Workflow einen Namen.' : fieldMessage(save.error, 'name');
+  // a status that holds a step of the agents keeps a category the step accepts: the error stands at the status
+  const bound = useMemo(() => boundStateErrors(draft.states, draft.agent_states), [draft.states, draft.agent_states]);
   const startError = issues.some((issue) => issue.code === 'no_initial_state') ? 'Wähle den Status, in dem neue Items beginnen.' : undefined;
 
   const patch = (partial: Partial<Draft>) => setDraft((current) => ({ ...current, ...partial }));
@@ -348,6 +456,11 @@ function EditorForm({ initial, existing, projects, readOnlyReason, onClose, clos
     }
     if (blank) {
       document.getElementById(`state-name-${blank.id}`)?.focus();
+      return;
+    }
+    const misfit = draft.states.find((state) => bound[state.id]);
+    if (misfit) {
+      document.getElementById(`state-category-${misfit.id}`)?.focus();
       return;
     }
     if (issues.length > 0) {
@@ -539,7 +652,7 @@ function EditorForm({ initial, existing, projects, readOnlyReason, onClose, clos
               handle={handle}
               readOnly={readOnly}
               keepReason={state.id === draft.initial_state_id ? 'Das ist der Startstatus. Wähle zuerst einen anderen Startstatus.' : null}
-              error={attempted && state.name.trim() === '' ? 'Gib dem Status einen Namen.' : null}
+              error={attempted && state.name.trim() === '' ? 'Gib dem Status einen Namen.' : (bound[state.id] ?? fieldMessage(save.error, `states.${index}.category`) ?? null)}
               onChange={(partial) => patchState(state.id, partial)}
               onRemove={() => removeState(state.id)}
             />
@@ -570,6 +683,8 @@ function EditorForm({ initial, existing, projects, readOnlyReason, onClose, clos
           </div>
         )}
       </Panel>
+
+      <AgentSteps draft={draft} saved={existing} readOnly={readOnly} onChange={(agent_states) => patch({ agent_states })} />
 
       <LeaveGuard dirty={dirty && !readOnly} what={`Deine Änderungen an „${draft.name.trim() || 'diesem Workflow'}“`} bypass={leaving} />
 

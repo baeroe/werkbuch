@@ -84,12 +84,12 @@ function LabelDialog({ open, onOpenChange, label }: { open: boolean; onOpenChang
         <TonePicker label="Farbe des Labels" value={tone} onChange={setTone} />
       </FieldGroup>
       <ModelField
-        label="Modell für Agenten (optional)"
+        label="Modell für Agenten"
         value={model}
         onChange={chooseModel}
         cli="claude"
-        placeholder="kein Modell"
-        hint="Ein Agent nimmt für Items mit diesem Label dieses Modell, vor dem Modell des Projekts und des Bots. Leer: ein gewöhnliches Label."
+        inherit="Kein Modell"
+        hint="Ein Agent nimmt für Items mit diesem Label dieses Modell, vor dem Modell des Projekts und des Bots. Ohne Modell ein gewöhnliches Label."
         error={fieldMessage(save.error, 'agent_model')}
       />
     </FormDialog>

@@ -60,8 +60,10 @@ export const DB_KEY = 'werkbuch:db';
  * 6: model labels, slots and load of runners set in werkbuch, setup commands and MCP servers per project (WEBU-18).
  * 7: the catalog of MCP servers of the organization (WEBU-18).
  * 8: no catalog: the equipment of a runner's harness, reported by the runner (WEBU-18).
+ * 9: the status per step of the agents belongs to the workflow, not to the project (WEBU-18).
+ * 10: runners report their CLIs; Otto works with Codex; agents have no slots or time limits of their own (WEBU-18).
  */
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 10;
 
 /** An earlier identifier of a project: keys like `OLD-12` keep resolving after a rename. */
 export interface ProjectAlias {

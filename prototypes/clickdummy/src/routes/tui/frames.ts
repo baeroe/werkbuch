@@ -170,7 +170,7 @@ const doctor: Frame = {
   id: 'doctor',
   fixed: true,
   title: 'Doctor',
-  caption: 'Prüft, was ein Auftrag braucht: CLIs installiert und angemeldet, die Modelle der Agenten, Git, Schlüsselbund und die Instanz, und zeigt die Ausstattung des Harness (MCP-Server, Skills, Plugins), die man auf der Maschine einrichtet. Hier auf build-01 läuft der Runner unter dem eigenen Benutzer: ein MCP-Server erreicht werkbuch mit einem persönlichen Token, der Agent hätte einen zweiten Zugang.',
+  caption: 'Prüft, was ein Auftrag braucht: die CLIs, installiert und angemeldet (Codex ist hier installiert, aber nicht angemeldet: Aufträge von Agenten mit Codex warten), die Modelle der Agenten, Git, Schlüsselbund und die Instanz, und zeigt die Ausstattung des Harness (MCP-Server, Skills, Plugins), die man auf der Maschine einrichtet. Hier auf build-01 läuft der Runner unter dem eigenen Benutzer: ein MCP-Server erreicht werkbuch mit einem persönlichen Token, der Agent hätte einen zweiten Zugang.',
   window: 'werkbuch-runner, build-01',
   lines: [
     header('Doctor'),
@@ -179,6 +179,7 @@ const doctor: Frame = {
     '  {g:✓} token          in the keychain, accepted',
     '  {y:!} version        0.1.0-alpha, the instance offers 0.1.0-dev {d:(update failed: checksum)}',
     '  {g:✓} claude         2.4.1, logged in',
+    '  {y:!} codex          0.40.0, not logged in {d:(run codex login; runs of agents with Codex wait)}',
     '  {g:✓} models         sonnet, opus, haiku, fable {d:(Kira: default sonnet, review opus; model labels)}',
     '  {g:✓} git            2.47.1',
     blank,
@@ -190,7 +191,7 @@ const doctor: Frame = {
     '                   {d:Turn it off for the runner, or run the runner under its own macOS user.}',
     blank,
     '  {!: 1 problem } {d:Runs stay possible; the agent sees werkbuch twice until it is turned off.}',
-    footer([['r', 'run again'], ['enter', 'details'], ['?', 'help'], ['q', 'quit']], '{r:1 problem}'),
+    footer([['r', 'run again'], ['enter', 'details'], ['?', 'help'], ['q', 'quit']], '{r:1 problem} {y:2 warnings}'),
   ],
 };
 

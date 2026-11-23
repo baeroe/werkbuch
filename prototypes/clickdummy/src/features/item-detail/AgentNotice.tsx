@@ -24,6 +24,7 @@ import { usePermissions } from '@/lib/permissions';
 import type { AgentRun, WorkItem } from '@/types';
 import { canRetry, useGiveBack, useRetry } from './RunLine';
 import { focusNewRun, runIds, showRun } from './runFocus';
+import { focusWhenLost } from './shared';
 
 /** After this long offline, another runner of the pool would take the strand over (spec 9, default 30 minutes). */
 const TAKEOVER_MIN = 30;
@@ -54,7 +55,9 @@ export function AgentNotice({ item }: { item: WorkItem }) {
     settle(resume.mutateAsync(item.id), {
       onSuccess: ({ braked }) => {
         if (braked) {
-          toast({ title: `${item.key}: Bremse gezogen`, description: `${bot?.name ?? 'Der Agent'} hat keine Korrektur mehr frei. Das Item ging an die verantwortliche Person.`, tone: 'success' });
+          // not a success: nothing goes on. The button goes; the focus moves to the way back, else to the title
+          toast({ title: `${item.key}: Bremse gezogen`, description: `${bot?.name ?? 'Der Agent'} hat keine Korrektur mehr frei. Das Item ging an die verantwortliche Person.` });
+          focusWhenLost(() => document.querySelector<HTMLElement>('[data-give-back]') ?? document.querySelector<HTMLElement>('[data-item-title]'), 4000);
           return;
         }
         toast({ title: `${item.key}: ${bot?.name ?? 'Der Agent'} macht weiter`, description: 'Eine Korrektur im selben Strang ist eingereiht.', tone: 'success' });
@@ -88,7 +91,13 @@ export function AgentNotice({ item }: { item: WorkItem }) {
     );
   }
 
-  if (active?.status === 'waiting' && active.runner_name) {
+  if (active?.status === 'waiting' && active.waiting_reason) {
+    parts.push(
+      <Banner key="waiting-cli" tone="info" icon={Hourglass} title={`${runName(active)} wartet: ${active.waiting_reason.replace(/\.$/, '')}`} action={<Button variant="ghost" size="sm" onClick={() => showRun(active.id)}>Auftrag zeigen</Button>}>
+        <span className="block max-w-[65ch]">Der Auftrag startet, sobald ein Runner des Pools das CLI installiert und angemeldet meldet. Die Runner und ihre CLIs stehen unter Organisation → Runner.</span>
+      </Banner>,
+    );
+  } else if (active?.status === 'waiting' && active.runner_name) {
     const since = active.runner_last_seen_at;
     const deadline = since ? Date.parse(since) + TAKEOVER_MIN * 60_000 : null;
     const takeover = deadline ? clockTime(new Date(deadline).toISOString()) : null;
@@ -134,7 +143,7 @@ export function AgentNotice({ item }: { item: WorkItem }) {
               </Button>
             )
           ) : (
-            <Button variant="secondary" size="sm" icon={Bot} pending={givingBack} disabledReason={editReason} onClick={giveBack}>
+            <Button variant="secondary" size="sm" icon={Bot} pending={givingBack} disabledReason={editReason} onClick={giveBack} data-give-back="">
               Wieder {bot.name} zuweisen
             </Button>
           )

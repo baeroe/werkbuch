@@ -93,6 +93,10 @@ export function simulatePairing(code: string, name = 'mac-mini-buero'): Promise<
       slots: { ...DEFAULT_SLOTS },
       load: { cpu: 3, gpu: 1, ram_used: 7.4, ram_total: 24, disk_free: 311, disk_total: 460 },
       equipment: { mcp_servers: [], skills: [], plugins: [], werkbuch_access: [] },
+      clis: [
+        { cli: 'claude', installed: true, version: '2.4.1', logged_in: true },
+        { cli: 'codex', installed: false, version: null, logged_in: false },
+      ],
       update_error: null,
       created_at: stamp,
     };

@@ -111,6 +111,11 @@ export interface Workflow {
   initial_state_id: string;
   states: State[];
   transitions: Transition[];
+  /**
+   * The status the agents set in each step (spec 7.4): part of the workflow, so every project with it works the same
+   * way. Agents work only when all four are set.
+   */
+  agent_states: Record<AgentStep, string | null>;
 }
 
 /* ------------------------------------------------------------- types and properties */
@@ -733,11 +738,21 @@ export interface Runner {
    * hand or with a tool of the person's choice, never in werkbuch. werkbuch adds only its own server with the token of the run.
    */
   equipment: RunnerEquipment;
+  /** The CLIs the runner found on the machine (spec 8.8): a run goes only to a runner with its agent's CLI logged in. */
+  clis: RunnerCli[];
   /** The last self-update failed: why; the old version keeps running. */
   update_error: string | null;
   created_at: string;
   /** What runs on it now or waits for it, with the item. */
   active_runs: { id: string; type: RunType; status: RunStatus; item_id: string; item_key: string; item_title: string; started_at: string | null }[];
+}
+
+/** A CLI on a runner's machine, as the runner reports it. */
+export interface RunnerCli {
+  cli: AgentCli;
+  installed: boolean;
+  version: string | null;
+  logged_in: boolean;
 }
 
 export interface RunnerSlots {
@@ -780,16 +795,12 @@ export interface AgentConfig {
   /** The runners it may run on; the first free one that has the project takes a run. */
   runner_ids: string[];
   cli: AgentCli;
-  /** A free text per CLI (`sonnet`, `opus`, a full id). */
+  /** One of the models the CLI knows (`KNOWN_MODELS`). */
   model: string;
   /** Overrides per kind of run; missing ones take `model`. */
   models: Partial<Record<RunType, string>>;
   /** A free instruction added to every prompt of this bot. */
   instruction: string;
-  /** Runs of this agent at the same time. */
-  slots: number;
-  /** Minutes per kind of run. */
-  timeouts: Record<RunType, number>;
 }
 
 /** The steps of the flow that set a status (spec 7.4). */
@@ -821,8 +832,6 @@ export interface ProjectAgents {
   teardown_command: string;
   /** The bot that reviews PRs of the repo, of agents and of people. */
   review_bot_id: string | null;
-  /** The status each step sets; agents are off in the project until all four are set. */
-  states: Record<AgentStep, string | null>;
   max_corrections: number;
   max_conflicts: number;
   review_human_prs: boolean;
@@ -895,6 +904,8 @@ export interface AgentRun {
   log: RunLogLine[];
   /** Who canceled it. */
   canceled_by: string | null;
+  /** Why a waiting run waits when it is not its runner being offline: no runner of the pool has the agent's CLI. */
+  waiting_reason: string | null;
   /** The runner as the reader may know it (only org admins list runners). */
   runner_name: string | null;
   runner_online: boolean;

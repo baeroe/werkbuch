@@ -4,12 +4,11 @@
  * without settings answers defaults without any status: agents are off there until all four steps have one.
  */
 
-import { AGENT_STEPS, mappingErrors, whyNotAgent, whyNotHere } from '@/domain/agents';
+import { KNOWN_MODELS, RUN_TYPES, whyNotAgent, whyNotHere } from '@/domain/agents';
 import type { AgentConfig, ProjectAgents, ProjectRole, RunType } from '@/types';
 import { canSeeProject, requireOrgAdmin, requireRole, requireWritable } from './access';
 import { FieldErrors, notFound, paginate, read, write, type Page } from './client';
 import type { Db } from './db';
-import { TIMEOUTS } from './seed/agents';
 
 const NO_RULES: Record<RunType, string | null> = { task: null, correction: null, conflict: null, review: null, comment: null };
 
@@ -21,8 +20,6 @@ export const defaultAgentConfig = (bot_id: string): AgentConfig => ({
   model: 'sonnet',
   models: {},
   instruction: '',
-  slots: 2,
-  timeouts: { ...TIMEOUTS },
 });
 
 export const defaultProjectAgents = (project_id: string): ProjectAgents => ({
@@ -33,7 +30,6 @@ export const defaultProjectAgents = (project_id: string): ProjectAgents => ({
   setup_command: '',
   teardown_command: '',
   review_bot_id: null,
-  states: { working: null, review: null, correction: null, merged: null },
   max_corrections: 3,
   max_conflicts: 2,
   review_human_prs: true,
@@ -53,6 +49,11 @@ export function listAgentConfigs(): Promise<Page<AgentConfig>> {
 /** The bots that work as agents (the review agent of a project is one of them); every account may read the list. */
 export function listAgentBotIds(): Promise<string[]> {
   return read(({ db }) => db.agent_configs.filter((config) => config.enabled).map((config) => config.bot_id));
+}
+
+/** The models of the bots that work as agents; every account may read them (what "Wie beim Bot" means in a project). */
+export function listAgentModels(): Promise<Pick<AgentConfig, 'bot_id' | 'cli' | 'model' | 'models'>[]> {
+  return read(({ db }) => db.agent_configs.filter((config) => config.enabled).map(({ bot_id, cli, model, models }) => ({ bot_id, cli, model, models })));
 }
 
 export function getAgentConfig(bot_id: string): Promise<AgentConfig> {
@@ -77,10 +78,12 @@ export function saveAgentConfig(input: AgentConfig): Promise<AgentConfig> {
       if (input.runner_ids.length === 0) errors.add('runner_ids', 'Wähle mindestens einen Runner, auf dem der Agent arbeitet.');
     }
     if (input.runner_ids.some((id) => !db.runners.some((runner) => runner.id === id))) errors.add('runner_ids', 'Mindestens einen dieser Runner gibt es nicht mehr.');
-    if (input.model.trim() === '') errors.add('model', 'Gib ein Standard-Modell an, etwa sonnet.');
-    if (!wholeIn(input.slots, 1, 10)) errors.add('slots', 'Die Plätze sind eine ganze Zahl von 1 bis 10.');
-    for (const [type, minutes] of Object.entries(input.timeouts)) {
-      if (!wholeIn(minutes, 1, 240)) errors.add(`timeouts.${type}`, 'Minuten von 1 bis 240.');
+    // a model is one of the list of the CLI (spec 7.7), no free name
+    const known = KNOWN_MODELS[input.cli];
+    if (!known.includes(input.model)) errors.add('model', `Wähle ein Modell von ${input.cli === 'claude' ? 'Claude Code' : 'Codex'}: ${known.join(', ')}.`);
+    for (const type of RUN_TYPES) {
+      const model = input.models[type];
+      if (model && !known.includes(model)) errors.add(`models.${type}`, `„${model}“ gibt es bei ${input.cli === 'claude' ? 'Claude Code' : 'Codex'} nicht.`);
     }
     errors.throwIfAny();
     const stored: AgentConfig = { ...input, model: input.model.trim(), instruction: input.instruction.trim(), models: trimModels(input.models) };
@@ -109,19 +112,14 @@ export function getProjectAgents(project_id: string): Promise<ProjectAgents> {
 }
 
 /**
- * Saves the agent settings of a project. Checked: a status per step of the right category, a repo both apps are
- * installed on that belongs to no other project (1:1), the brakes, the review bot, labels that exist.
+ * Saves the agent settings of a project. Checked: a repo both apps are installed on that belongs to no other project
+ * (1:1), the brakes, the review bot. The status per step is the workflow's (spec 7.4).
  */
 export function saveProjectAgents(input: ProjectAgents): Promise<ProjectAgents> {
   return write(({ db, me }) => {
     const project = projectOrThrow(db, input.project_id);
     requireWritable(db, me, project, 'admin', 'Die Agenten eines Projekts richten nur Projekt-Admins ein.');
-    const workflow = db.workflows.find((entry) => entry.id === project.workflow_id)!;
     const errors = new FieldErrors();
-    for (const [step, message] of Object.entries(mappingErrors(workflow, input.states))) errors.add(`states.${step}`, message);
-    if (AGENT_STEPS.some((step) => input.states[step] === null) && AGENT_STEPS.some((step) => input.states[step] !== null)) {
-      for (const step of AGENT_STEPS) if (input.states[step] === null) errors.add(`states.${step}`, 'Wähle einen Status. Ohne alle vier bleiben die Agenten im Projekt aus.');
-    }
     if (input.repo !== null) {
       const repo = db.github.repos.find((entry) => entry.full_name === input.repo);
       if (!repo) errors.add('repo', 'Dieses Repo ist nicht freigegeben.');
@@ -130,6 +128,10 @@ export function saveProjectAgents(input: ProjectAgents): Promise<ProjectAgents> 
       if (owner) errors.add('repo', `Das Repo gehört schon zum Projekt ${projectOrThrow(db, owner.project_id).identifier}. Ein Repo gehört höchstens einem Projekt.`);
     }
     if (input.base_branch.trim() === '') errors.add('base_branch', 'Gib den Basis-Branch an, etwa main.');
+    for (const type of RUN_TYPES) {
+      const model = input.models[type];
+      if (model && !KNOWN_MODELS.claude.includes(model)) errors.add(`models.${type}`, `„${model}“ ist kein Modell der Liste.`);
+    }
     if (!wholeIn(input.max_corrections, 1, 10)) errors.add('max_corrections', 'Eine ganze Zahl von 1 bis 10.');
     if (!wholeIn(input.max_conflicts, 1, 10)) errors.add('max_conflicts', 'Eine ganze Zahl von 1 bis 10.');
     if (input.review_bot_id !== null) {

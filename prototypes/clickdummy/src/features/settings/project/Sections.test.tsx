@@ -16,7 +16,7 @@ describe('Members', () => {
 
     const rows = within(list).getAllByRole('listitem');
     // admins first, then members, then viewers; by name within a role
-    expect(rows.map((row) => within(row).getByText(/^@/).textContent)).toEqual(['@ida', '@mara', '@jonas', '@kira', '@lene', '@theo']);
+    expect(rows.map((row) => within(row).getByText(/^@/).textContent)).toEqual(['@ida', '@mara', '@jonas', '@kira', '@lene', '@otto', '@theo']);
     expect(within(rows[0]).getByText('Lead')).toBeTruthy();
     expect(within(rows[3]).getByText('Bot')).toBeTruthy();
     expect(within(rows[1]).getByText('Org-Admin')).toBeTruthy();
@@ -440,6 +440,7 @@ describe('Automations', () => {
       is_default: false,
       is_free: false,
       initial_state_id: 'strict_backlog',
+      agent_states: { working: null, review: null, correction: null, merged: null },
       // only a started item may be canceled
       transitions: [
         ['strict_backlog', 'strict_todo'],
@@ -477,6 +478,7 @@ describe('Automations', () => {
       is_default: false,
       is_free: true,
       initial_state_id: 'lean_todo',
+      agent_states: { working: null, review: null, correction: null, merged: null },
       transitions: [],
       states: [
         { id: 'lean_todo', name: 'Todo', icon: 'circle', category: 'unstarted', position: 0 },

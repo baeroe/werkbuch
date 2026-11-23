@@ -69,6 +69,21 @@ export const users: User[] = [
     locale: 'de',
     timezone: ZONE,
   },
+  {
+    id: 'u_otto',
+    type: 'bot',
+    name: 'Otto',
+    handle: 'otto',
+    email: null,
+    org_role: 'member',
+    is_default_bot: false,
+    owner_id: 'u_jonas',
+    description: 'Bot von Jonas. Arbeitet als Agent mit Codex.',
+    disabled_at: null,
+    avatar_url: null,
+    locale: 'de',
+    timezone: ZONE,
+  },
 ];
 
 export const projects: Project[] = [
@@ -120,6 +135,7 @@ export const projectMembers: ProjectMember[] = [
   { project_id: 'p_web', user_id: 'u_jonas', role: 'member' },
   { project_id: 'p_web', user_id: 'u_lene', role: 'member' },
   { project_id: 'p_web', user_id: 'u_kira', role: 'member' },
+  { project_id: 'p_web', user_id: 'u_otto', role: 'member' },
   { project_id: 'p_web', user_id: 'u_theo', role: 'viewer' },
   { project_id: 'p_app', user_id: 'u_theo', role: 'admin' },
   { project_id: 'p_app', user_id: 'u_mara', role: 'member' },

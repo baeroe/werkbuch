@@ -12,6 +12,7 @@ import { connectGithubApp, disconnectGithub } from './github';
 import { createPairing, expirePairing, listRunners, revokeRunner, saveRunnerSlots, simulatePairing } from './runners';
 import { advance, CANCEL_DELAY_MS, cancelRun, getItemAgents, resumeThread, retryRun, START_DELAY_MS } from './runs';
 import { listActivity, updateWorkItem } from './workItems';
+import { assignWorkflow, listWorkflows, saveWorkflow } from './workflows';
 
 beforeEach(resetApi);
 
@@ -133,18 +134,6 @@ describe('assigning an item to an agent', () => {
 });
 
 describe('the agent settings', () => {
-  it('check the category of each step and refuse half a mapping', async () => {
-    const settings = await getProjectAgents('p_web');
-    const refused = await failure(saveProjectAgents({ ...settings, states: { ...settings.states, working: 'std_todo', merged: 'std_cancelled' } }));
-    expect(refused.status).toBe(422);
-    expect(Object.keys(refused.errors ?? {}).sort()).toEqual(['states.merged', 'states.working']);
-
-    const ops = await getProjectAgents('p_ops');
-    expect(ops.states).toEqual({ working: null, review: null, correction: null, merged: null });
-    const half = await failure(saveProjectAgents({ ...ops, states: { ...ops.states, working: 'std_progress' } }));
-    expect(Object.keys(half.errors ?? {}).sort()).toEqual(['states.correction', 'states.merged', 'states.review']);
-  });
-
   it('give a repo to one project only, and only one with both apps', async () => {
     const ops = await getProjectAgents('p_ops');
     expect((await failure(saveProjectAgents({ ...ops, repo: 'feldwerk/website' }))).errors?.repo?.[0]).toContain('gehört schon zum Projekt WEB');
@@ -270,5 +259,93 @@ describe('the equipment of a runner', () => {
     const [run] = (await getItemAgents('WEB-54')).runs;
     expect(run).toMatchObject({ status: 'failed', runner_name: 'mac-mini-alt' });
     expect(run.error).toContain('Setup-Befehl');
+  });
+});
+
+describe('the agents\' steps of a workflow (spec 7.4)', () => {
+  const standardInput = async () => {
+    const workflow = (await listWorkflows()).items.find((entry) => entry.id === 'wf_standard')!;
+    return { ...workflow, states: workflow.states.map(({ id, name, icon, category, position }) => ({ id, name, icon, category, position })) };
+  };
+
+  it('come with the workflow: WEB has them, APP (Agentur-Freigabe) not, so Kira is no agent there', async () => {
+    const workflows = (await listWorkflows()).items;
+    expect(workflows.find((entry) => entry.id === 'wf_standard')?.agent_states).toEqual({ working: 'std_progress', review: 'std_pending', correction: 'std_todo', merged: 'std_done' });
+    expect(workflows.find((entry) => entry.id === 'wf_agency')?.agent_states.working).toBeNull();
+  });
+
+  it('refuse a category change of a status that holds a step, with the error at the status', async () => {
+    const input = await standardInput();
+    const index = input.states.findIndex((state) => state.id === 'std_pending');
+    input.states[index] = { ...input.states[index], category: 'completed' };
+    const refused = await failure(saveWorkflow(input));
+    expect(refused.status).toBe(422);
+    expect(Object.keys(refused.errors ?? {})).toEqual([`states.${index}.category`]);
+  });
+
+  it('follow the status mapping when a status that holds a step is removed, where the target fits', async () => {
+    const input = await standardInput();
+    input.states = input.states.filter((state) => state.id !== 'std_pending');
+    const saved = await saveWorkflow(input, { state_mapping: { std_pending: 'std_progress' } });
+    expect(saved.agent_states.review).toBe('std_progress');
+    const again = await standardInput();
+    again.states = again.states.filter((state) => state.id !== 'std_todo');
+    const emptied = await saveWorkflow(again, { state_mapping: { std_todo: 'std_done' } });
+    expect(emptied.agent_states.correction).toBeNull();
+  });
+
+  it('switch with the workflow: a project that changes to one without steps has its agents off', async () => {
+    const counts = new Map<string, number>();
+    for (const item of getDb().items.filter((entry) => entry.project_id === 'p_web')) counts.set(item.state_id, (counts.get(item.state_id) ?? 0) + 1);
+    const mapping = Object.fromEntries([...counts.keys()].map((id) => [id, 'app_todo']));
+    await assignWorkflow('p_web', 'wf_agency', mapping);
+    await updateWorkItem('wi_web_50', { assignee_id: 'u_kira' });
+    expect((await getItemAgents('WEB-50')).not_an_agent).toContain('Der Workflow „Agentur-Freigabe“ hat noch keine Agenten-Schritte');
+  });
+});
+
+describe('the CLI of an agent on the runners (spec 8.8)', () => {
+  it('lets Otto\'s run wait with the reason while no runner of his pool has Codex logged in, and starts it once one has', async () => {
+    let [run] = (await getItemAgents('WEB-55')).runs;
+    expect(run).toMatchObject({ status: 'waiting', runner_id: null, waiting_reason: 'Kein Runner im Pool hat Codex installiert und angemeldet.' });
+    // build-01 has Codex installed, but not logged in: that is not enough
+    tick(60_000);
+    expect((await getItemAgents('WEB-55')).runs[0].status).toBe('waiting');
+
+    const db = getDb();
+    db.runners.find((runner) => runner.id === 'rn_build')!.clis.find((entry) => entry.cli === 'codex')!.logged_in = true;
+    saveDb();
+    tick(1000);
+    [run] = (await getItemAgents('WEB-55')).runs;
+    expect(run).toMatchObject({ status: 'running', runner_name: 'build-01', waiting_reason: null });
+    // the stored log names the CLI of the agent
+    expect(getDb().agent_runs.find((entry) => entry.id === run.id)!.log.some((line) => line.text.includes('Codex gestartet'))).toBe(true);
+  });
+
+  it('sends a run only to a runner with the CLI: a new task of Otto waits after the start delay', async () => {
+    await updateWorkItem('wi_web_50', { assignee_id: 'u_otto' });
+    expect((await getItemAgents('WEB-50')).runs[0].status).toBe('queued');
+    tick(START_DELAY_MS + 1000);
+    expect((await getItemAgents('WEB-50')).runs[0]).toMatchObject({ status: 'waiting', runner_id: null });
+  });
+
+  it('reports the CLIs of each runner', async () => {
+    const build = (await listRunners()).items.find((runner) => runner.name === 'build-01')!;
+    expect(build.clis).toEqual([
+      { cli: 'claude', installed: true, version: '2.4.1', logged_in: true },
+      { cli: 'codex', installed: true, version: '0.40.0', logged_in: false },
+    ]);
+  });
+});
+
+describe('agents have no limits of their own (spec 6.4, 9)', () => {
+  it('saves a configuration without slots or time limits, and a model only from the list of the CLI', async () => {
+    const kira = await getAgentConfig('u_kira');
+    expect(kira).not.toHaveProperty('slots');
+    expect(kira).not.toHaveProperty('timeouts');
+    const refused = await failure(saveAgentConfig({ ...kira, model: 'claude-free-name' }));
+    expect(Object.keys(refused.errors ?? {})).toEqual(['model']);
+    const codex = await failure(saveAgentConfig({ ...kira, cli: 'codex' }));
+    expect(Object.keys(codex.errors ?? {}).sort()).toEqual(['model', 'models.review']);
   });
 });

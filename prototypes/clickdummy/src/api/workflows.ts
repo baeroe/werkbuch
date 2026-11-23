@@ -4,7 +4,7 @@
  */
 
 import { resolutionAfterTransition } from '@/domain/resolution';
-import { followMapping } from '@/domain/agents';
+import { AGENT_STEPS, boundStateErrors, stepsAfterSave } from '@/domain/agents';
 import { isClosedCategory, validateWorkflow } from '@/domain/workflow';
 import type { Project, StateIcon, Workflow } from '@/types';
 import { requireOrgAdmin, requireRole } from './access';
@@ -39,6 +39,8 @@ function itemsPerState(db: Db, workflowId: string): Map<string, number> {
  * Creates or changes a workflow. Refused with 422 when it cannot be saved (`errors` has an entry per code of
  * `validateWorkflow`, and `extensions.issues` the issues with their state ids). Removing a state that still holds
  * items needs `state_mapping`, state id → state that takes over (409 `state_in_use` lists the states otherwise).
+ * The agents' status per step (spec 7.4): a step of a removed state follows the mapping where the target fits its
+ * category and is empty otherwise; a state that holds a step keeps a category the step accepts (422 at the state).
  */
 export function saveWorkflow(spec: WorkflowInput, options: { state_mapping?: Record<string, string> } = {}): Promise<Workflow> {
   return write((ctx) => {
@@ -61,6 +63,15 @@ export function saveWorkflow(spec: WorkflowInput, options: { state_mapping?: Rec
       name: state.name.trim(),
       position: index,
     }));
+    const agent_states = stepsAfterSave(
+      Object.fromEntries(AGENT_STEPS.map((step) => [step, spec.agent_states?.[step] ?? null])) as Workflow['agent_states'],
+      states,
+      options.state_mapping,
+    );
+    const bound = boundStateErrors(states, agent_states);
+    if (Object.keys(bound).length > 0) {
+      throw invalid(Object.fromEntries(states.flatMap((state, index) => (bound[state.id] ? [[`states.${index}.category`, [bound[state.id]]]] : []))));
+    }
     // ids of the states a client leaves out are gone; new states have fresh ids that cannot be the start state yet
     const saved: Workflow = {
       id: existing?.id ?? newId('wf'),
@@ -73,6 +84,7 @@ export function saveWorkflow(spec: WorkflowInput, options: { state_mapping?: Rec
       transitions: spec.transitions
         .filter(([from, to]) => from !== to && states.some((s) => s.id === from) && states.some((s) => s.id === to))
         .map(([from, to]): [string, string] => [from, to]),
+      agent_states,
     };
 
     const issues = validateWorkflow(saved);
@@ -192,9 +204,7 @@ export function assignWorkflow(project_id: string, workflow_id: string, mapping:
     }
 
     for (const item of items) rewriteState(ctx, item, previous, next, mapping[item.state_id], 'Workflow gewechselt');
-    // the agents follow the mapping where it fits the category of a step; a step without one turns them off (spec 7.4)
-    const agents = db.project_agents.find((entry) => entry.project_id === project.id);
-    if (agents) agents.states = followMapping(agents.states, mapping, next);
+    // the agents' steps come with the new workflow (spec 7.4): without them, agents are off in the project
     for (const automation of db.automations.filter((entry) => entry.project_id === project.id)) {
       if (automation.settings.state_id) {
         automation.settings = { ...automation.settings, state_id: next.states.find((state) => state.category === 'canceled')?.id };

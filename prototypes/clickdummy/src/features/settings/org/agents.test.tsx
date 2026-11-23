@@ -7,11 +7,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { MemoryRouter } from 'react-router';
+import { createMemoryRouter, MemoryRouter } from 'react-router';
+import { RouterProvider } from 'react-router/dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '@/api/db';
 import { resetToasts } from '@/components/ui/toast';
 import { resetApi } from '@/test/api';
+import { BotAgent } from './BotAgent';
 import Github from './Github';
 import Labels from './Labels';
 import Runners from './Runners';
@@ -40,9 +42,20 @@ describe('Runners', () => {
     expect(within(mini).getByText('nicht verfügbar')).toBeTruthy();
     expect(within(mini).getByText(/Letzter Stand vom/)).toBeTruthy();
     // the equipment of the harness, read only: set up on the machine
-    expect(within(studio).getByText('MCP: playwright, context7; 3 Skills; Plugins: superpowers')).toBeTruthy();
+    expect(within(studio).getByText('playwright, context7')).toBeTruthy();
+    // six skills fold into a list that opens
+    const skills = within(studio).getByText('Skills: 6');
+    expect(skills.closest('details')?.open).toBe(false);
+    await userEvent.setup().click(skills);
+    expect(skills.closest('details')?.open).toBe(true);
+    expect(within(studio).getByText(/superpowers:test-driven-development, .*react:accessibility/)).toBeTruthy();
+    expect(within(studio).getByText('superpowers')).toBeTruthy();
     expect(within(mini).getByText('Nichts eingerichtet: nur werkbuch')).toBeTruthy();
     const build = screen.getByRole('article', { name: 'build-01' });
+    // the CLIs the runner reports: Codex installed but not logged in
+    expect(within(build).getByText('CLIs')).toBeTruthy();
+    expect(within(build).getByText('nicht angemeldet')).toBeTruthy();
+    expect(within(studio).getByText('nicht installiert')).toBeTruthy();
     expect(within(build).getByText(/Agenten hätten hier einen zweiten Zugang/)).toBeTruthy();
   });
 
@@ -111,19 +124,27 @@ describe('GitHub', () => {
 });
 
 describe('Labels', () => {
-  it('suggests „Haiku Agent“ for a model and keeps a name somebody typed', async () => {
+  it('picks the model from the list, suggests „Haiku Agent“ and keeps a name somebody typed', async () => {
     const user = userEvent.setup();
     renderWithData(<Labels readOnlyReason={null} />);
     await user.click((await screen.findAllByRole('button', { name: 'Label anlegen' }))[0]);
     const dialog = await screen.findByRole('dialog', { name: 'Label anlegen' });
     const name = within(dialog).getByRole('textbox', { name: 'Name' });
-    await user.click(within(dialog).getByRole('button', { name: 'haiku' }));
+    // a select like the others, with the fixed list of the CLI and „Kein Modell“ on top
+    const model = within(dialog).getByRole('combobox', { name: /Modell für Agenten/ });
+    expect(model.textContent).toContain('Kein Modell');
+    const choose = async (option: string) => {
+      await user.click(model);
+      await user.click(await screen.findByRole('option', { name: option }));
+    };
+    await choose('haiku');
     expect(name).toHaveProperty('value', 'Haiku Agent');
-    await user.click(within(dialog).getByRole('button', { name: 'opus' }));
+    await choose('opus');
     expect(name).toHaveProperty('value', 'Opus Agent');
+    expect(screen.queryByRole('option', { name: /verwenden/ })).toBeNull();
     await user.clear(name);
     await user.type(name, 'Schnell');
-    await user.click(within(dialog).getByRole('button', { name: 'haiku' }));
+    await choose('haiku');
     expect(name).toHaveProperty('value', 'Schnell');
     await user.click(within(dialog).getByRole('button', { name: 'Anlegen' }));
     await waitFor(() => expect(getDb().labels.find((label) => label.name === 'Schnell')?.agent_model).toBe('haiku'));
@@ -136,3 +157,34 @@ describe('Labels', () => {
   });
 });
 
+
+/** Bot → Agent guards unsaved changes with `useBlocker`, which needs a data router. */
+function renderInDataRouter(node: ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const router = createMemoryRouter([{ path: '*', element: node }]);
+  return render(
+    <QueryClientProvider client={client}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+}
+
+describe('Bot → Agent', () => {
+  it('says when no runner of the pool has the CLI, and saving still works', async () => {
+    renderInDataRouter(<BotAgent botId="u_otto" />);
+    expect(await screen.findByText(/Codex: auf keinem Runner im Pool verfügbar/)).toBeTruthy();
+    expect(screen.queryByText('Grenzen')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Plätze' })).toBeNull();
+  });
+
+  it('puts the models back to the standard of a new CLI and says which ones went', async () => {
+    const user = userEvent.setup();
+    renderInDataRouter(<BotAgent botId="u_kira" />);
+    const model = await screen.findByRole('combobox', { name: /Standard-Modell/ });
+    expect(model.textContent).toContain('sonnet');
+    await user.click(screen.getByRole('button', { name: 'Codex' }));
+    expect(await screen.findByText(/„sonnet“, „opus“ gibt es bei Codex nicht\. Standard-Modell ist jetzt gpt-5-codex/)).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: /Standard-Modell/ }).textContent).toContain('gpt-5-codex');
+    expect(screen.getByText(/Codex: auf keinem Runner im Pool verfügbar/)).toBeTruthy();
+  });
+});

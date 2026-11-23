@@ -10,7 +10,7 @@ const withoutMaraInApp: ProjectMember[] = projectMembers.filter((member) => !(me
 describe('projectPeople (spec 4.8, 4.16, 4.2)', () => {
   it('offers the active members of the project, people first and bots after them, each by name', () => {
     // Sven is deactivated, Theo only reads WEB but is a member there
-    expect(names(projectPeople(users, projectMembers, 'p_web'))).toEqual(['Ida Brenner', 'Jonas Feld', 'Lene Vogt', 'Mara Lindqvist', 'Theo Okafor', 'Kira']);
+    expect(names(projectPeople(users, projectMembers, 'p_web'))).toEqual(['Ida Brenner', 'Jonas Feld', 'Lene Vogt', 'Mara Lindqvist', 'Theo Okafor', 'Kira', 'Otto']);
   });
 
   it('offers an org admin who is no member, since admins have access to every project', () => {

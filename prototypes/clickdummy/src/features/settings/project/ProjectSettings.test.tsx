@@ -392,3 +392,29 @@ describe('DangerZone', () => {
     await waitFor(async () => expect((await getProject('APP')).archived_at).toBeNull());
   });
 });
+
+describe('the agents\' steps in a project', () => {
+  it('shows the steps of the workflow to read, with a way into the workflow editor', async () => {
+    renderSettings('/projects/WEB/settings/agents');
+    const card = (await screen.findByRole('heading', { name: 'Status je Schritt' })).closest('section')!;
+    expect(within(card).getByText('In Progress')).toBeTruthy();
+    expect(within(card).queryByRole('combobox')).toBeNull();
+    expect(within(card).getByRole('link', { name: 'Im Workflow „Standard“ bearbeiten' }).getAttribute('href')).toBe('/settings/workflows?workflow=wf_standard');
+  });
+
+  it('says agents are off while the workflow has no steps, and who sets them up for a project admin', async () => {
+    renderSettings('/projects/APP/settings/agents', 'u_theo');
+    expect(await screen.findByText('Agenten aus: der Workflow „Agentur-Freigabe“ hat noch keine Agenten-Schritte')).toBeTruthy();
+    expect(screen.getByText(/ein Org-Admin richtet sie dort ein/)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Schritte im Workflow einrichten' })).toBeNull();
+  });
+});
+
+describe('the models of a project', () => {
+  it('picks from the list of the CLI, empty means the model of each agent of the project', async () => {
+    renderSettings('/projects/WEB/settings/agents');
+    const task = await screen.findByRole('combobox', { name: /^Umsetzen/ });
+    expect(task.textContent).toContain('Wie beim Bot (Kira: sonnet, Otto: gpt-5-codex)');
+    expect(screen.getByRole('combobox', { name: /^Antwort/ }).textContent).toContain('haiku');
+  });
+});
