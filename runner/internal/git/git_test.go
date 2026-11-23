@@ -2,10 +2,12 @@ package git
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -127,5 +129,65 @@ func TestEnv(t *testing.T) {
 	}
 	if strings.Count(env, "ghs_x") != 2 {
 		t.Fatal("the token only in the two variables")
+	}
+}
+
+func TestNamesAndRefs(t *testing.T) {
+	for in, want := range map[string]string{"01abc": "01abc", "run-01x": "run-01x", "a b/c": "a-b-c"} {
+		if got, err := Name(in); err != nil || got != want {
+			t.Errorf("%q: %q %v", in, got, err)
+		}
+	}
+	for _, bad := range []string{"", ".", "..", "-x", "/x", strings.Repeat("a", 200)} {
+		if _, err := Name(bad); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+	ctx := context.Background()
+	origin := Origin(t)
+	m := &Manager{Data: t.TempDir()}
+	for _, s := range []Spec{
+		{Name: "x", Repo: origin, Branch: "-fdangerous"},
+		{Name: "x", Repo: origin, Branch: "a..b"},
+		{Name: "x", Repo: origin, Base: "--upload-pack=evil"},
+		{Name: "x", Repo: origin, Head: "--output=/tmp/x"},
+		{Name: "..", Repo: origin},
+	} {
+		if _, err := m.Prepare(ctx, s); err == nil {
+			t.Errorf("%+v accepted", s)
+		}
+	}
+	if _, err := m.Prepare(ctx, Spec{Name: "x", Repo: "--upload-pack=touch /tmp/pwned"}); err == nil {
+		t.Error("an option as repository accepted")
+	}
+}
+
+func TestParallelPrepareOnOneMirror(t *testing.T) {
+	ctx := context.Background()
+	origin := Origin(t)
+	m := &Manager{Data: t.TempDir()}
+	var wg sync.WaitGroup
+	errs := make(chan error, 6)
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			spec := Spec{Name: fmt.Sprintf("t-%d", i), Repo: origin, Branch: fmt.Sprintf("b%d", i)}
+			if i%2 == 0 {
+				spec = Spec{Name: fmt.Sprintf("run-%d", i), Repo: origin}
+			}
+			ws, err := m.Prepare(ctx, spec)
+			if err == nil && i%3 == 0 {
+				err = m.Remove(ctx, ws.Dir, nil)
+			}
+			errs <- err
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }

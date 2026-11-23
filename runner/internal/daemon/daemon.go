@@ -66,7 +66,12 @@ type Daemon struct {
 	forceUpdate  bool
 	wake         chan struct{}
 	once         sync.Once
+	report       protocol.Report
+	reportAt     time.Time
 }
+
+// ReportEvery is how often the report is refreshed in the background; claims and heartbeats only read it.
+const ReportEvery = 15 * time.Second
 
 func (d *Daemon) defaults() { d.once.Do(d.setDefaults) }
 
@@ -94,18 +99,40 @@ func (d *Daemon) setDefaults() {
 	d.started = time.Now()
 }
 
-// Report is the report of every claim and heartbeat (spec 8.6–8.8).
+// Report is the report of every claim and heartbeat (spec 8.6–8.8): the last refresh of CLIs and equipment, the last
+// load sample. It never waits for a command (`claude mcp list` can take seconds).
 func (d *Daemon) Report() protocol.Report {
-	ctx := context.Background()
-	r := protocol.Report{CLIs: d.CLIs.All(ctx, false)}
+	d.mu.Lock()
+	r := d.report
+	r.CLIs = append([]protocol.CLI(nil), d.report.CLIs...)
+	d.mu.Unlock()
 	if d.Sampler != nil {
 		r.Load = d.Sampler.Last()
 	}
+	return r
+}
+
+// refreshReport asks the CLIs and the equipment (each with its own cache) and keeps the answer.
+func (d *Daemon) refreshReport(ctx context.Context) {
+	r := protocol.Report{CLIs: d.CLIs.All(ctx, false)}
 	if d.Equipment != nil {
 		eq := d.Equipment.Collect(ctx, false)
 		r.Equipment = &eq
 	}
-	return r
+	d.mu.Lock()
+	d.report, d.reportAt = r, time.Now()
+	d.mu.Unlock()
+}
+
+func (d *Daemon) refreshLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(ReportEvery):
+			d.refreshReport(ctx)
+		}
+	}
 }
 
 // Run polls until ctx ends; it returns after a restart failed or ctx ended, once the runs stopped.
@@ -117,6 +144,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	var wg sync.WaitGroup
 	defer wg.Wait()
+	d.refreshReport(ctx)
+	go d.refreshLoop(ctx)
 
 	idleSince := time.Now()
 	lastSweep := time.Now()
@@ -275,7 +304,7 @@ func (d *Daemon) sweep(ctx context.Context) {
 		}
 	}
 	d.mu.Unlock()
-	for _, dir := range d.Executor.Git.Sweep(ctx, d.Keep, busy, nil) {
+	for _, dir := range d.Executor.Git.Sweep(ctx, d.Keep, busy, d.Executor.Teardown) {
 		d.Log.Info("removed an old worktree", "dir", dir)
 	}
 }

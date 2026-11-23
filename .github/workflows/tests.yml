@@ -580,7 +580,6 @@ jobs:
       - name: llms.txt
         run: test -f docs/.vitepress/dist/llms.txt
 
-  # the clickdummy: domain tests, typecheck, review build and the Playwright flows. Not a required check.
   # the runner in Go (runner/, WEBU-21): format, vet and the tests with the race detector, never the required check
   runner:
     runs-on: ubuntu-24.04
@@ -613,6 +612,7 @@ jobs:
           GOOS=darwin GOARCH=arm64 go build -o /dev/null .
           GOOS=linux GOARCH=amd64 go build -o /dev/null .
 
+  # the clickdummy: domain tests, typecheck, review build and the Playwright flows. Not a required check.
   clickdummy:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

@@ -65,6 +65,7 @@ func gitIn(t *testing.T, dir string, args ...string) string {
 
 func newWorld(t *testing.T) *world {
 	w := &world{t: t, fake: fakewerkbuch.New(), log: &syncBuffer{}}
+	w.fake.Heartbeat = 0 // keep the interval of the test
 	t.Cleanup(w.fake.Close)
 	w.origin = filepath.Join(t.TempDir(), "origin")
 	os.MkdirAll(w.origin, 0o755)
@@ -151,7 +152,7 @@ func TestTaskRun(t *testing.T) {
 		}
 	}
 	args, _ := os.ReadFile(w.args)
-	for _, want := range []string{"--model\nsonnet", "--mcp-config\n", "--append-system-prompt\ncontract", "--permission-mode\nbypassPermissions"} {
+	for _, want := range []string{"--model\nsonnet", "--mcp-config\n", "--append-system-prompt-file\n", "--permission-mode\nbypassPermissions"} {
 		if !strings.Contains(string(args), want) {
 			t.Fatalf("args lack %q:\n%s", want, args)
 		}
@@ -266,9 +267,10 @@ func TestFailedRun(t *testing.T) {
 func TestReview(t *testing.T) {
 	w := newWorld(t)
 	head := gitIn(t, w.origin, "rev-parse", "HEAD")
+	torn := filepath.Join(w.t.TempDir(), "teardown")
 	run := w.run("01rev", protocol.Review, "review", func(r *protocol.Run) {
 		r.HeadSHA = &head
-		r.TeardownCommand = str("touch " + filepath.Join(w.t.TempDir(), "teardown"))
+		r.TeardownCommand = str("touch " + torn)
 	})
 	e, status := w.execute(run)
 	res := w.fake.State(run.ID).Result
@@ -277,6 +279,9 @@ func TestReview(t *testing.T) {
 	}
 	if _, err := os.Stat(e.Summary().Dir); !os.IsNotExist(err) {
 		t.Fatal("the worktree of a review goes after the run")
+	}
+	if _, err := os.Stat(torn); err != nil {
+		t.Fatal("the teardown command did not run")
 	}
 }
 
@@ -309,7 +314,7 @@ func TestSecretsNeverLeave(t *testing.T) {
 		t.Fatal(status)
 	}
 	texts := w.texts(run.ID)
-	if strings.Contains(texts, "runtoken") || !strings.Contains(texts, "my token is [token]") {
+	if strings.Contains(texts, "runtoken") || !strings.Contains(texts, "my token is [token], env unset") {
 		t.Fatalf("events:\n%s", texts)
 	}
 	if strings.Contains(w.log.String(), "runtoken") || strings.Contains(w.log.String(), fakewerkbuch.Token) {
@@ -350,14 +355,84 @@ func TestSubscribe(t *testing.T) {
 
 func TestVerdict(t *testing.T) {
 	for in, want := range map[string]string{
-		"**Verdict:** approve\n\nok":             "approve",
-		"Verdict: changes\n- Important: x":       "changes",
-		"## Changes\nsome":                       "changes",
-		"I looked.\n\napprove":                   "approve",
-		"Nothing to say about approvals in here": "",
+		"**Verdict:** approve\n\nok":                    "approve",
+		"Verdict: changes\n- Important: x":              "changes",
+		"## Changes\nsome":                              "changes",
+		"I looked.\n\napprove":                          "approve",
+		"Nothing to say about approvals in here":        "",
+		"Approved after a careful look":                 "approve",
+		"Changes I looked at:\n- x\n\nVerdict: approve": "approve",
+		"## Approve?\nVerdict: **changes**":             "changes",
 	} {
 		if got := Verdict(in); got != want {
 			t.Errorf("%q: %q", in, got)
 		}
+	}
+}
+
+func TestTheLeaseHoldsThroughALongSetupAndADelayedResult(t *testing.T) {
+	w := newWorld(t)
+	w.fake.Lease = 400 * time.Millisecond
+	w.fake.FailResults = 2
+	run := w.run("01longsetup", protocol.Task, "answer", func(r *protocol.Run) { r.SetupCommand = str("sleep 1.2; echo set up") })
+	if _, status := w.execute(run); status != protocol.Succeeded {
+		t.Fatalf("%q\n%s", status, w.log.String())
+	}
+	st := w.fake.State(run.ID)
+	if st.Lost != 0 || st.Beats < 5 || !strings.Contains(w.texts(run.ID), "setup: set up") {
+		t.Fatalf("lost %d, beats %d\n%s", st.Lost, st.Beats, w.texts(run.ID))
+	}
+}
+
+func TestWithoutHeartbeatsTheLeaseRunsOut(t *testing.T) {
+	// the counter-check of the fake: a setup longer than the lease without heartbeats loses the run
+	w := newWorld(t)
+	w.x.Heartbeat = 5 * time.Second
+	w.fake.Lease = 300 * time.Millisecond
+	run := w.run("01silent", protocol.Task, "answer", func(r *protocol.Run) { r.SetupCommand = str("sleep 0.8") })
+	if _, status := w.execute(run); status != "" || w.fake.State(run.ID).Lost != 1 {
+		t.Fatalf("%q %+v", status, w.fake.State(run.ID))
+	}
+}
+
+func TestCancelAndTimeLimitDuringSetup(t *testing.T) {
+	w := newWorld(t)
+	run := w.run("01cancelsetup", protocol.Task, "answer", func(r *protocol.Run) { r.SetupCommand = str("sleep 30") })
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		w.fake.Cancel(run.ID)
+	}()
+	start := time.Now()
+	if _, status := w.execute(run); status != protocol.Canceled || time.Since(start) > 5*time.Second {
+		t.Fatalf("%q after %v", status, time.Since(start))
+	}
+	run = w.run("01slowsetup", protocol.Task, "answer", func(r *protocol.Run) {
+		r.Thread.ID, r.Thread.Branch = "thread-other", str("agent/other")
+		r.SetupCommand = str("sleep 30")
+		d := time.Now().Add(400 * time.Millisecond)
+		r.DeadlineAt = &d
+	})
+	start = time.Now()
+	if _, status := w.execute(run); status != protocol.TimedOut || time.Since(start) > 5*time.Second {
+		t.Fatalf("%q after %v", status, time.Since(start))
+	}
+}
+
+func TestTwoRunsOfOneStrandTakeTurns(t *testing.T) {
+	w := newWorld(t)
+	a := w.run("01napa", protocol.Correction, "nap", func(r *protocol.Run) { r.Thread.ID = "thread-shared" })
+	b := w.run("01napb", protocol.Comment, "nap", func(r *protocol.Run) { r.Thread.ID = "thread-shared" })
+	var wg sync.WaitGroup
+	statuses := make([]string, 2)
+	for i, run := range []protocol.Run{a, b} {
+		wg.Add(1)
+		go func(i int, run protocol.Run) {
+			defer wg.Done()
+			_, statuses[i] = w.execute(run)
+		}(i, run)
+	}
+	wg.Wait()
+	if statuses[0] != protocol.Succeeded || statuses[1] != protocol.Succeeded {
+		t.Fatalf("%v\n%s\n%s", statuses, w.texts(a.ID), w.texts(b.ID))
 	}
 }

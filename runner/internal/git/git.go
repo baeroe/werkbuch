@@ -13,13 +13,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -29,9 +29,18 @@ const TokenEnv = "WERKBUCH_GIT_TOKEN"
 // KeepFor is how long a worktree stays after its last run (A494).
 const KeepFor = 72 * time.Hour
 
-// Manager lays out the data folder.
+// Manager lays out the data folder. Every git command on a bare clone (clone, fetch, worktree add, remove, prune) runs
+// under the lock of that clone: runs side by side and the sweep never work on one at the same time.
 type Manager struct {
-	Data string
+	Data  string
+	locks sync.Map // mirror path → *sync.Mutex
+}
+
+func (m *Manager) lock(mirror string) func() {
+	l, _ := m.locks.LoadOrStore(mirror, &sync.Mutex{})
+	mu := l.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
 }
 
 // Workspace is where one run works.
@@ -63,7 +72,21 @@ type Spec struct {
 	Teardown string
 }
 
-var safeName = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+var (
+	unsafeChars = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+	nameRe      = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+	shaRe       = regexp.MustCompile(`^[0-9a-fA-F]{7,64}$`)
+)
+
+// Name makes a folder name of a strand or run: only letters, digits, `.`, `_`, `-`, starting with a letter or digit
+// (never `.` or `..`).
+func Name(raw string) (string, error) {
+	name := unsafeChars.ReplaceAllString(raw, "-")
+	if !nameRe.MatchString(name) || len(name) > 128 {
+		return "", fmt.Errorf("unusable name %q for a working folder", raw)
+	}
+	return name, nil
+}
 
 // Env is the environment git and the CLI get for a token: a credential helper reading it, and GH_TOKEN.
 func Env(token string) []string {
@@ -94,33 +117,51 @@ func (m *Manager) run(ctx context.Context, env []string, dir string, args ...str
 
 func (m *Manager) mirror(repo string) string {
 	sum := sha256.Sum256([]byte(repo))
-	base := strings.TrimSuffix(filepath.Base(strings.TrimRight(repo, "/")), ".git")
-	return filepath.Join(m.Data, "repos", safeName.ReplaceAllString(base, "-")+"-"+hex.EncodeToString(sum[:])[:12]+".git")
+	base := strings.Trim(unsafeChars.ReplaceAllString(strings.TrimSuffix(filepath.Base(strings.TrimRight(repo, "/")), ".git"), "-"), ".-")
+	if base == "" {
+		base = "repo"
+	}
+	return filepath.Join(m.Data, "repos", base+"-"+hex.EncodeToString(sum[:])[:12]+".git")
 }
 
 // Mirror clones the repository bare (once) and fetches it.
 func (m *Manager) Mirror(ctx context.Context, repo string, env []string) (string, error) {
 	dir := m.mirror(repo)
+	defer m.lock(dir)()
+	return dir, m.mirrorLocked(ctx, dir, repo, env)
+}
+
+// mirrorLocked clones and fetches under the lock of the clone.
+func (m *Manager) mirrorLocked(ctx context.Context, dir, repo string, env []string) error {
 	if _, err := os.Stat(filepath.Join(dir, "HEAD")); err != nil {
 		if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
-			return "", err
+			return err
 		}
 		tmp := dir + ".tmp"
 		os.RemoveAll(tmp)
-		if _, err := m.run(ctx, env, "", "clone", "--bare", "--quiet", repo, tmp); err != nil {
-			return "", err
+		if _, err := m.run(ctx, env, "", "clone", "--bare", "--quiet", "--", repo, tmp); err != nil {
+			return err
 		}
 		if _, err := m.run(ctx, env, tmp, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"); err != nil {
-			return "", err
+			return err
 		}
 		if err := os.Rename(tmp, dir); err != nil {
-			return "", err
+			return err
 		}
 	}
-	if _, err := m.run(ctx, env, dir, "fetch", "--quiet", "--prune", "origin"); err != nil {
-		return "", err
+	_, err := m.run(ctx, env, dir, "fetch", "--quiet", "--prune", "origin")
+	return err
+}
+
+// ValidBranch checks a branch name as git does (`git check-ref-format --branch`).
+func (m *Manager) ValidBranch(ctx context.Context, branch string) error {
+	if strings.HasPrefix(branch, "-") {
+		return fmt.Errorf("invalid branch %q", branch)
 	}
-	return dir, nil
+	if _, err := m.run(ctx, nil, "", "check-ref-format", "--branch", branch); err != nil {
+		return fmt.Errorf("invalid branch %q", branch)
+	}
+	return nil
 }
 
 // DefaultBranch is the branch HEAD of the remote names.
@@ -133,15 +174,25 @@ func (m *Manager) DefaultBranch(ctx context.Context, mirror string) string {
 }
 
 func (m *Manager) exists(ctx context.Context, mirror, ref string) bool {
-	_, err := m.run(ctx, nil, mirror, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
+	_, err := m.run(ctx, nil, mirror, "rev-parse", "--verify", "--quiet", "--end-of-options", ref+"^{commit}")
 	return err == nil
 }
 
-// Prepare makes or reuses the working folder of a run.
+// Prepare makes or reuses the working folder of a run. Branch, base and head are checked before git sees them.
 func (m *Manager) Prepare(ctx context.Context, s Spec) (*Workspace, error) {
-	name := safeName.ReplaceAllString(s.Name, "-")
-	if name == "" {
-		return nil, errors.New("workspace without a name")
+	name, err := Name(s.Name)
+	if err != nil {
+		return nil, err
+	}
+	for _, b := range []string{s.Branch, s.Base} {
+		if b != "" {
+			if err := m.ValidBranch(ctx, b); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if s.Head != "" && !shaRe.MatchString(s.Head) {
+		return nil, fmt.Errorf("invalid commit %q", s.Head)
 	}
 	env := Env(s.Token)
 	if s.Repo == "" {
@@ -155,8 +206,10 @@ func (m *Manager) Prepare(ctx context.Context, s Spec) (*Workspace, error) {
 		}
 		return ws, m.touch(ws, s)
 	}
-	mirror, err := m.Mirror(ctx, s.Repo, env)
-	if err != nil {
+	mirror := m.mirror(s.Repo)
+	unlock := m.lock(mirror)
+	defer unlock()
+	if err := m.mirrorLocked(ctx, mirror, s.Repo, env); err != nil {
 		return nil, err
 	}
 	dir := filepath.Join(m.Data, "worktrees", name)
@@ -179,7 +232,7 @@ func (m *Manager) Prepare(ctx context.Context, s Spec) (*Workspace, error) {
 			if start == "" {
 				start = "origin/" + base
 			}
-			if _, err := m.run(ctx, nil, mirror, "worktree", "add", "--quiet", "--detach", dir, start); err != nil {
+			if _, err := m.run(ctx, nil, mirror, "worktree", "add", "--quiet", "--detach", "--", dir, start); err != nil {
 				return nil, err
 			}
 			ws.Temporary = true
@@ -188,7 +241,7 @@ func (m *Manager) Prepare(ctx context.Context, s Spec) (*Workspace, error) {
 			if m.exists(ctx, mirror, "origin/"+s.Branch) {
 				start = "origin/" + s.Branch
 			}
-			if _, err := m.run(ctx, nil, mirror, "worktree", "add", "--quiet", "-B", s.Branch, dir, start); err != nil {
+			if _, err := m.run(ctx, nil, mirror, "worktree", "add", "--quiet", "-B", s.Branch, "--", dir, start); err != nil {
 				return nil, err
 			}
 			for _, kv := range [][2]string{{"branch." + s.Branch + ".remote", "origin"}, {"branch." + s.Branch + ".merge", "refs/heads/" + s.Branch}} {
@@ -232,10 +285,11 @@ func (m *Manager) Remove(ctx context.Context, dir string, teardown Teardown) err
 		teardown(ctx, dir, meta.Teardown)
 	}
 	if meta.Repo != "" {
-		if mirror := m.mirror(meta.Repo); mirror != "" {
-			m.run(ctx, nil, mirror, "worktree", "remove", "--force", dir)
-			m.run(ctx, nil, mirror, "worktree", "prune")
-		}
+		mirror := m.mirror(meta.Repo)
+		unlock := m.lock(mirror)
+		m.run(ctx, nil, mirror, "worktree", "remove", "--force", "--", dir)
+		m.run(ctx, nil, mirror, "worktree", "prune")
+		defer unlock()
 	}
 	os.Remove(metaFile)
 	return os.RemoveAll(dir)

@@ -1,5 +1,5 @@
-// Package mcpconfig writes the MCP configuration of one run (spec 8.1): the server `werkbuch-run` (`<APP_URL>/mcp`,
-// bearer the run token) in a private temporary folder (0700, the file 0600), removed when the run ends. The CLI loads
+// Package mcpconfig writes the private files of one run: the MCP configuration (spec 8.1): the server `werkbuch-run` (`<APP_URL>/mcp`,
+// bearer the run token) and the system prompt in a private temporary folder (0700, the file 0600), removed when the run ends. The CLI loads
 // it in addition to the servers of the machine.
 package mcpconfig
 
@@ -43,6 +43,12 @@ func Write(run protocol.Run) (*File, error) {
 		return nil, err
 	}
 	return &File{Dir: dir, Path: path}, nil
+}
+
+// Put writes another private file of the run into the folder (0600), like the system prompt.
+func (f *File) Put(name, content string) (string, error) {
+	path := filepath.Join(f.Dir, name)
+	return path, os.WriteFile(path, []byte(content), 0o600)
 }
 
 // Remove deletes folder and file.

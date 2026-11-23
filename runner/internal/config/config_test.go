@@ -36,7 +36,7 @@ func TestNormalize(t *testing.T) {
 			t.Errorf("%q: %q %v", in, got, err)
 		}
 	}
-	for _, bad := range []string{"", "werkbuch.example.com", "ftp://x", "https://u:p@x", "https://x?a=1", "https://x#f"} {
+	for _, bad := range []string{"", "werkbuch.example.com", "ftp://x", "https://u:p@x", "https://x?a=1", "https://x#f", "http://werkbuch.example.com", "http://10.0.0.5"} {
 		if _, err := NormalizeInstance(bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}

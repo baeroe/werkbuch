@@ -93,3 +93,4 @@ Befehle: `login <url> --code <CODE> [--name]`, `daemon`, `status`, `doctor`, `lo
 - Adapter: statt `Session(events)` ein `Stream` je Lauf (`Feed`, `Outcome`), weil Session, Nutzung und Antwort beim Lesen anfallen.
 - Codex kommt im ersten Wurf mit (Aufruf und Parser getestet, kein echter Lauf).
 - Die Abnahme mit Claude Code selbst ist Teil von WEBU-29; hier lief der Runner gegen das DDEV des Worktrees mit dem falschen CLI und einem lokalen Repo.
+- Nach dem Review von PR #66: Lease ab dem Claim bis zur Antwort auf das Ergebnis (Heartbeat auch während Klon, Setup und Zustellung, Abbruch und Zeitlimit auch dort), leichte Läufe eingeschränkt (A490), Teardown im Sweep, Sperre je Klon und je Ordner, `procs` gegen verwaiste CLIs, `http` nur für Loopback, Update nur über HTTPS, Bericht im Hintergrund, Rückfall-Datei für Linux ohne Secret Service, `gomod` in Dependabot.

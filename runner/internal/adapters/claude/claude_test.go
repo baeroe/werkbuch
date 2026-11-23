@@ -26,6 +26,26 @@ func TestArgs(t *testing.T) {
 			t.Fatalf("%v lacks %v", args, want)
 		}
 	}
+	if args[slices.Index(args, "--permission-mode")+1] != "bypassPermissions" || slices.Contains(args, "--allowedTools") {
+		t.Fatalf("a code run bypasses the prompts: %v", args)
+	}
+	light := Args(job("review", nil))
+	if light[slices.Index(light, "--permission-mode")+1] != "dontAsk" || slices.Contains(light, "bypassPermissions") {
+		t.Fatalf("light %v", light)
+	}
+	allowed := light[slices.Index(light, "--allowedTools")+1]
+	if !strings.Contains(allowed, "Bash(git diff:*)") || !strings.Contains(allowed, "mcp__werkbuch-run__*") || strings.Contains(allowed, "Write") {
+		t.Fatalf("allowed %q", allowed)
+	}
+	if light[slices.Index(light, "--disallowedTools")+1] != "Write,Edit,MultiEdit,NotebookEdit" {
+		t.Fatalf("%v", light)
+	}
+	j := job("task", nil)
+	j.SystemPromptFile = "/tmp/x/system-prompt.md"
+	withFile := Args(j)
+	if withFile[slices.Index(withFile, "--append-system-prompt-file")+1] != "/tmp/x/system-prompt.md" || slices.Contains(withFile, "--append-system-prompt") {
+		t.Fatalf("file %v", withFile)
+	}
 	if slices.Contains(args, "--strict-mcp-config") {
 		t.Fatal("the machine's servers stay (spec 8.1)")
 	}

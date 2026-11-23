@@ -18,9 +18,18 @@ type Job struct {
 	Dir    string // the working folder (worktree or folder of the strand)
 	// MCPConfig is the file with the server `werkbuch-run` (Claude Code); Codex takes the token from TokenEnv.
 	MCPConfig string
-	// TokenEnv is the environment variable holding the run token for CLIs that read it from there.
+	// SystemPromptFile holds the contract of the run (private, 0600), for CLIs that read it from a file.
+	SystemPromptFile string
+	// TokenEnv is the environment variable holding the run token for CLIs that read it from there (Codex only).
 	TokenEnv string
 }
+
+// ReadOnlyTools are what a light run (`review`, `comment`) may use in Claude Code (A490): reading files, reading git,
+// and werkbuch through `werkbuch-run`.
+var ReadOnlyTools = []string{"Read", "Grep", "Glob", "Bash(git log:*)", "Bash(git diff:*)", "Bash(git show:*)", "Bash(git status:*)", "mcp__werkbuch-run__*"}
+
+// WriteTools are what a light run never gets.
+var WriteTools = []string{"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
 // Outcome is what the output of a run told.
 type Outcome struct {

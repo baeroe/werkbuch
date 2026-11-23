@@ -33,6 +33,10 @@ func TestWrite(t *testing.T) {
 	if s.Type != "http" || s.URL != r.Werkbuch.MCPURL || s.Headers["Authorization"] != "Bearer tok" || len(body.MCPServers) != 1 {
 		t.Fatalf("%s", data)
 	}
+	prompt, err := f.Put("system-prompt.md", "contract")
+	if info, _ := os.Stat(prompt); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("prompt %v", err)
+	}
 	f.Remove()
 	if _, err := os.Stat(f.Dir); !os.IsNotExist(err) {
 		t.Fatal("not removed")

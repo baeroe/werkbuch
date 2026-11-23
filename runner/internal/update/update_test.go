@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/baeroe/werkbuch/runner/internal/client"
@@ -19,6 +20,10 @@ func TestApply(t *testing.T) {
 	os.WriteFile(exe, []byte("#!/bin/sh\necho 1.0.0\n"), 0o755)
 	u := &Updater{Client: client.New(fake.URL, "", "1.0.0"), Exe: exe, OS: "darwin", Arch: "arm64"}
 	ctx := context.Background()
+	if err := u.Apply(ctx, "1.1.0"); err == nil || !strings.Contains(err.Error(), "https") {
+		t.Fatalf("http: %v", err)
+	}
+	u.AllowHTTP = true
 
 	if err := u.Apply(ctx, "1.1.0"); err == nil {
 		t.Fatal("no binary to download")
@@ -32,6 +37,9 @@ func TestApply(t *testing.T) {
 	fake.Checksum = hex.EncodeToString(sum[:])
 	if err := u.Apply(ctx, "1.2.0"); err == nil {
 		t.Fatal("a binary of another version accepted")
+	}
+	if err := u.Apply(ctx, "1.1"); err == nil {
+		t.Fatal("a version that only contains the expected one accepted")
 	}
 	if data, _ := os.ReadFile(exe); string(data) != "#!/bin/sh\necho 1.0.0\n" {
 		t.Fatal("a failed update changed the binary")

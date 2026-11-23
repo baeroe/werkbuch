@@ -1,7 +1,9 @@
 // Package executor runs one run of werkbuch on this machine (spec 6.4, 7.8, 8.1): the working folder (worktree of the
-// strand), the setup command, the MCP configuration with `werkbuch-run`, the CLI in a process group of its own, its log
-// in batches (at most about once a second), a heartbeat, cancel and time limit (SIGTERM, after the grace SIGKILL), and
-// the result. A run that werkbuch gave away (409 `run_replaced`, 404) stops at once and reports nothing (A475).
+// strand), the setup command, the private files (MCP configuration with `werkbuch-run`, system prompt), the CLI in a
+// process group of its own, its log in batches (at most about once a second) and the result. From the claim until
+// werkbuch took the result, a lease keeps the heartbeat going and stops the run on cancel, time limit (SIGTERM, after the
+// grace SIGKILL, descendants outside the group included) or when werkbuch gave the attempt away (409 `run_replaced`,
+// 404: the run stops at once and reports nothing, A475). Two runs of one strand never work in its folder at once.
 package executor
 
 import (
@@ -27,12 +29,16 @@ import (
 	"github.com/baeroe/werkbuch/runner/internal/git"
 	"github.com/baeroe/werkbuch/runner/internal/hooks"
 	"github.com/baeroe/werkbuch/runner/internal/mcpconfig"
+	"github.com/baeroe/werkbuch/runner/internal/procs"
 	"github.com/baeroe/werkbuch/runner/internal/protocol"
 	"github.com/baeroe/werkbuch/runner/internal/redact"
 )
 
-// RunTokenEnv carries the run token to CLIs that read their MCP token from the environment (Codex).
+// RunTokenEnv carries the run token to Codex, which reads its MCP token from the environment.
 const RunTokenEnv = "WERKBUCH_RUN_TOKEN"
+
+// Drain is how long the runner reads the output of a CLI that ended while a descendant still holds it.
+const Drain = 2 * time.Second
 
 // Executor holds what every run needs.
 type Executor struct {
@@ -44,6 +50,8 @@ type Executor struct {
 	Log    *slog.Logger
 	// Werkbuch hears of an MCP server other than werkbuch-run that offered werkbuch's tools (A492).
 	Werkbuch func(server string)
+	// Procs is the folder of the records of running CLIs ("" keeps none).
+	Procs string
 	// Grace is the time between SIGTERM and SIGKILL (spec 6.4: 10 s).
 	Grace time.Duration
 	// Flush is how often the log goes to werkbuch (spec 6.4: at most about once a second).
@@ -57,6 +65,7 @@ type Executor struct {
 
 	once  sync.Once
 	pulse atomic.Int64
+	slots sync.Map // working folder name → chan struct{} (one run at a time)
 }
 
 // SetHeartbeat changes the interval of heartbeats (werkbuch names it in every answer).
@@ -113,20 +122,35 @@ func (x *Executor) Run(ctx context.Context, e *Execution) string {
 		defer redact.Release(run.Git.Token)
 	}
 
-	sender := newSender(x, e)
-	result, reason := x.execute(ctx, e, sender, log)
-	sender.close(reason != replaced)
+	l := newLease(ctx, x, e, log)
+	sender := newSender(x, e, l)
+	result, reason := x.execute(l, e, sender, log)
+	sender.close(reason != replaced && reason != shutdown)
 
 	status := ""
-	if reason != replaced && reason != shutdown {
+	switch reason {
+	case replaced, shutdown:
+	case protocol.Canceled, protocol.TimedOut:
+		result = stoppedResult(reason, run, result)
+		fallthrough
+	default:
 		result.Attempt = run.Attempt
 		if x.deliver(ctx, run.ID, result, log) {
 			status = result.Status
 		}
 	}
+	l.stop()
 	log.Info("run ended", "status", result.Status, "reason", reason, "reported", status != "")
 	e.finish(firstNonEmpty(status, reason, result.Status))
 	return status
+}
+
+func stoppedResult(reason string, run protocol.Run, from protocol.Result) protocol.Result {
+	msg := "canceled"
+	if reason == protocol.TimedOut {
+		msg = fmt.Sprintf("time limit of %d minutes", run.TimeoutMinutes)
+	}
+	return protocol.Result{Status: reason, Error: &msg, SessionID: from.SessionID, Usage: from.Usage}
 }
 
 func firstNonEmpty(v ...string) string {
@@ -155,7 +179,8 @@ func (x *Executor) repo(run protocol.Run) (string, string) {
 	return "", ""
 }
 
-func (x *Executor) workspace(ctx context.Context, run protocol.Run) (*git.Workspace, error) {
+// spec says where a run works: the strand's worktree (its name or ID), else a folder of the run.
+func (x *Executor) spec(run protocol.Run) git.Spec {
 	repo, token := x.repo(run)
 	spec := git.Spec{Repo: repo, Token: token, Name: "run-" + run.ID}
 	if run.TeardownCommand != nil {
@@ -177,21 +202,33 @@ func (x *Executor) workspace(ctx context.Context, run protocol.Run) (*git.Worksp
 			spec.Branch = *run.Thread.Branch
 		}
 	}
-	ws, err := x.Git.Prepare(ctx, spec)
-	if err == nil && spec.Name == "run-"+run.ID {
-		ws.Temporary = true
-	}
-	return ws, err
+	return spec
 }
 
-func (x *Executor) teardown(ctx context.Context, dir, command string) {
+// slot takes the working folder of a run for it alone; a second run of the strand waits (its heartbeat goes on).
+func (x *Executor) slot(ctx context.Context, name string) (func(), error) {
+	v, _ := x.slots.LoadOrStore(name, make(chan struct{}, 1))
+	ch := v.(chan struct{})
+	select {
+	case ch <- struct{}{}:
+		return func() { <-ch }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// Teardown runs the teardown command of a folder before it goes (also for the sweep of the daemon).
+func (x *Executor) Teardown(ctx context.Context, dir, command string) {
 	if _, err := hooks.Run(ctx, dir, command, nil); err != nil {
 		x.Log.Warn("teardown failed", "dir", dir, "err", err)
 	}
 }
 
-func (x *Executor) execute(ctx context.Context, e *Execution, s *sender, log *slog.Logger) (protocol.Result, string) {
+// execute runs the CLI; the reason is why the run stopped before the CLI ended by itself ("" when it did: a decision
+// of the lease after that changes nothing).
+func (x *Executor) execute(l *lease, e *Execution, s *sender, log *slog.Logger) (protocol.Result, string) {
 	run := e.Run
+	ctx := l.ctx
 	adapter := adapters.For(run.CLI)
 	if adapter == nil {
 		return failed("the runner does not know the CLI " + run.CLI), ""
@@ -201,15 +238,32 @@ func (x *Executor) execute(ctx context.Context, e *Execution, s *sender, log *sl
 		return failed(run.CLI + " is not installed on the runner"), ""
 	}
 
-	ws, err := x.workspace(ctx, run)
+	spec := x.spec(run)
+	name, err := git.Name(spec.Name)
+	if err != nil {
+		return failed(err.Error()), ""
+	}
+	release, err := x.slot(ctx, name)
+	if err != nil {
+		return protocol.Result{}, l.reason()
+	}
+	defer release()
+
+	ws, err := x.Git.Prepare(ctx, spec)
+	if ctx.Err() != nil {
+		if ws != nil && (ws.Temporary || spec.Name == "run-"+run.ID) {
+			x.Git.Remove(context.WithoutCancel(ctx), ws.Dir, x.Teardown)
+		}
+		return protocol.Result{}, l.reason()
+	}
 	if err != nil {
 		return failed("working folder: " + err.Error()), ""
 	}
 	e.mu.Lock()
 	e.dir = ws.Dir
 	e.mu.Unlock()
-	if ws.Temporary {
-		defer x.Git.Remove(context.WithoutCancel(ctx), ws.Dir, x.teardown)
+	if ws.Temporary || spec.Name == "run-"+run.ID {
+		defer x.Git.Remove(context.WithoutCancel(ctx), ws.Dir, x.Teardown)
 	}
 	s.add(protocol.Event{Kind: protocol.KindSystem, Text: "working in " + ws.Dir, At: time.Now().UTC()})
 	if ws.Created && run.SetupCommand != nil && *run.SetupCommand != "" {
@@ -217,35 +271,64 @@ func (x *Executor) execute(ctx context.Context, e *Execution, s *sender, log *sl
 		if out != "" {
 			s.add(protocol.Event{Kind: protocol.KindSystem, Text: adapters.Cut("setup: "+out, protocol.EventTextMax), At: time.Now().UTC()})
 		}
+		if ctx.Err() != nil {
+			return protocol.Result{}, l.reason()
+		}
 		if err != nil {
 			return failed("setup command: " + err.Error()), ""
 		}
 	}
 
-	mcp, err := mcpconfig.Write(run)
+	private, err := mcpconfig.Write(run)
 	if err != nil {
 		return failed("mcp config: " + err.Error()), ""
 	}
-	defer mcp.Remove()
-
-	cmd := adapter.Command(adapters.Job{Run: run, Binary: binary, Dir: ws.Dir, MCPConfig: mcp.Path, TokenEnv: RunTokenEnv})
+	defer private.Remove()
+	job := adapters.Job{Run: run, Binary: binary, Dir: ws.Dir, MCPConfig: private.Path}
+	if run.SystemPrompt != "" {
+		if job.SystemPromptFile, err = private.Put("system-prompt.md", run.SystemPrompt); err != nil {
+			return failed("system prompt: " + err.Error()), ""
+		}
+	}
+	if run.CLI == "codex" {
+		job.TokenEnv = RunTokenEnv
+	}
+	cmd := adapter.Command(job)
 	cmd.Env = append(os.Environ(), ws.Env...)
 	cmd.Env = append(cmd.Env,
-		RunTokenEnv+"="+run.Werkbuch.Token,
 		"WERKBUCH_RUN_ID="+run.ID,
 		"GIT_AUTHOR_NAME="+run.CommitIdentity.Name, "GIT_AUTHOR_EMAIL="+run.CommitIdentity.Email,
 		"GIT_COMMITTER_NAME="+run.CommitIdentity.Name, "GIT_COMMITTER_EMAIL="+run.CommitIdentity.Email,
 	)
+	if job.TokenEnv != "" {
+		cmd.Env = append(cmd.Env, job.TokenEnv+"="+run.Werkbuch.Token)
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	stdout, err := cmd.StdoutPipe()
+	// stdout is a pipe of its own: Wait never waits for a descendant that keeps it open
+	out, in, err := os.Pipe()
 	if err != nil {
 		return failed(err.Error()), ""
 	}
+	cmd.Stdout = in
 	stderr := &tail{max: 8192}
 	cmd.Stderr = stderr
+	cmd.WaitDelay = Drain
+	if ctx.Err() != nil {
+		out.Close()
+		in.Close()
+		return protocol.Result{}, l.reason()
+	}
 	if err := cmd.Start(); err != nil {
+		out.Close()
+		in.Close()
 		return failed("start " + run.CLI + ": " + err.Error()), ""
 	}
+	in.Close()
+	pid := cmd.Process.Pid
+	if err := procs.Note(x.Procs, run.ID, pid); err != nil {
+		log.Warn("no record of the cli", "err", err)
+	}
+	defer procs.Forget(x.Procs, run.ID)
 	e.set("running")
 	log.Info("cli started", "cli", run.CLI, "model", run.Model, "dir", ws.Dir, "resume", run.SessionID() != "")
 
@@ -253,27 +336,47 @@ func (x *Executor) execute(ctx context.Context, e *Execution, s *sender, log *sl
 	read := make(chan struct{})
 	go func() {
 		defer close(read)
-		sc := bufio.NewScanner(stdout)
+		sc := bufio.NewScanner(out)
 		sc.Buffer(make([]byte, 64*1024), 16*1024*1024)
 		for sc.Scan() {
-			events := stream.Feed(sc.Bytes())
-			for i := range events {
-				events[i].Text = redact.String(events[i].Text)
-			}
-			s.add(events...)
+			s.add(stream.Feed(sc.Bytes())...)
 		}
-		io.Copy(io.Discard, stdout)
 	}()
 	waited := make(chan error, 1)
+	exited := make(chan struct{})
 	go func() {
+		err := cmd.Wait()
+		close(exited)
+		select {
+		case <-read:
+		case <-time.After(Drain):
+		}
+		out.Close()
 		<-read
-		waited <- cmd.Wait()
+		waited <- err
 	}()
 
-	reason := x.watch(ctx, e, s, waited, cmd.Process.Pid, log)
+	select {
+	case <-exited:
+	case <-l.decided:
+		e.set("stopping")
+		procs.Stop(pid, x.Grace, func() bool {
+			select {
+			case <-exited:
+				return true
+			default:
+				return false
+			}
+		})
+	}
 	exitErr := <-waited
-	if reason == replaced || reason == shutdown {
-		return protocol.Result{}, reason
+	if r := l.reason(); r != "" {
+		o := stream.Outcome()
+		res := protocol.Result{Usage: o.Usage}
+		if o.SessionID != "" {
+			res.SessionID = &o.SessionID
+		}
+		return res, r
 	}
 
 	outcome := stream.Outcome()
@@ -282,19 +385,12 @@ func (x *Executor) execute(ctx context.Context, e *Execution, s *sender, log *sl
 			x.Werkbuch(server)
 		}
 	}
-	res := protocol.Result{Status: protocol.Succeeded}
+	res := protocol.Result{Status: protocol.Succeeded, Usage: outcome.Usage}
 	if outcome.SessionID != "" {
 		id := outcome.SessionID
 		res.SessionID = &id
 	}
-	res.Usage = outcome.Usage
-	switch {
-	case reason == protocol.Canceled || reason == protocol.TimedOut:
-		res.Status = reason
-		msg := map[string]string{protocol.Canceled: "canceled", protocol.TimedOut: fmt.Sprintf("time limit of %d minutes", run.TimeoutMinutes)}[reason]
-		res.Error = &msg
-		return res, reason
-	case exitErr != nil || outcome.IsError:
+	if exitErr != nil || outcome.IsError {
 		msg := outcome.Error
 		if msg == "" {
 			msg = strings.TrimSpace(stderr.String())
@@ -306,20 +402,29 @@ func (x *Executor) execute(ctx context.Context, e *Execution, s *sender, log *sl
 		f.SessionID, f.Usage = res.SessionID, res.Usage
 		return f, ""
 	}
-	x.complete(ctx, &res, run, ws, outcome)
+	x.complete(context.WithoutCancel(ctx), &res, run, ws, outcome)
 	return res, ""
 }
 
-var verdictRe = regexp.MustCompile("(?im)^[\\s>*_#`-]*(?:verdict\\b[\\s*_`]*[:=-]?[\\s*_`]*)?(approve|changes)\\b")
+var (
+	verdictLine = regexp.MustCompile("(?im)^[\\s>*_#`-]*verdict\\b[\\s*_`]*[:=-]?[\\s*_`]*(approved?|changes)\\b")
+	verdictLead = regexp.MustCompile("(?im)^[\\s>*_#`-]*(approved?|changes)\\b")
+)
 
-// Verdict reads the verdict of a review out of its answer: the first line that starts with `approve` or `changes`
-// (Markdown marks and a leading "Verdict:" allowed), else none (A495).
+// Verdict reads the verdict of a review out of its answer: an explicit line `Verdict: approve|approved|changes` first,
+// else the first line that starts with one of the words (Markdown marks allowed), else none (A495).
 func Verdict(answer string) string {
-	m := verdictRe.FindStringSubmatch(answer)
+	m := verdictLine.FindStringSubmatch(answer)
+	if m == nil {
+		m = verdictLead.FindStringSubmatch(answer)
+	}
 	if m == nil {
 		return ""
 	}
-	return strings.ToLower(m[1])
+	if v := strings.ToLower(m[1]); v != "changes" {
+		return "approve"
+	}
+	return "changes"
 }
 
 func (x *Executor) complete(ctx context.Context, res *protocol.Result, run protocol.Run, ws *git.Workspace, o adapters.Outcome) {
@@ -347,76 +452,10 @@ func (x *Executor) complete(ctx context.Context, res *protocol.Result, run proto
 	}
 }
 
-// watch waits for the CLI and keeps the heartbeat; it stops the CLI on cancel, time limit, a replaced run or the end
-// of ctx and returns why ("" when the CLI ended by itself).
-func (x *Executor) watch(ctx context.Context, e *Execution, s *sender, waited chan error, pid int, log *slog.Logger) string {
-	run := e.Run
-	deadline := run.Deadline(e.Started)
-	limit := time.NewTimer(time.Until(deadline))
-	defer limit.Stop()
-	interval := x.heartbeat()
-	beat := time.NewTimer(interval)
-	defer beat.Stop()
-
-	stopWith := func(reason string) string {
-		e.set("stopping")
-		log.Info("stopping the cli", "reason", reason)
-		x.terminate(pid, waited)
-		return reason
-	}
-	for {
-		select {
-		case err := <-waited:
-			waited <- err
-			return ""
-		case reason := <-e.stop:
-			return stopWith(reason)
-		case reason := <-s.gone:
-			return stopWith(reason)
-		case <-limit.C:
-			return stopWith(protocol.TimedOut)
-		case <-ctx.Done():
-			return stopWith(shutdown)
-		case <-beat.C:
-			a, err := x.Client.Heartbeat(ctx, run.ID, run.Attempt, x.Report())
-			switch {
-			case client.Replaced(err) || client.Unauthorized(err):
-				return stopWith(replaced)
-			case err != nil:
-				log.Warn("heartbeat failed", "err", err)
-			default:
-				if a.Cancel {
-					return stopWith(protocol.Canceled)
-				}
-				if a.DeadlineAt != nil && !a.DeadlineAt.Equal(deadline) {
-					deadline = *a.DeadlineAt
-					limit.Reset(time.Until(deadline))
-				}
-				if a.HeartbeatSeconds > 0 {
-					interval = time.Duration(a.HeartbeatSeconds) * time.Second
-				}
-			}
-			beat.Reset(interval)
-		}
-	}
-}
-
-// terminate sends SIGTERM to the process group of the CLI and SIGKILL after the grace (spec 6.4).
-func (x *Executor) terminate(pid int, waited chan error) {
-	syscall.Kill(-pid, syscall.SIGTERM)
-	select {
-	case err := <-waited:
-		waited <- err
-		return
-	case <-time.After(x.Grace):
-	}
-	syscall.Kill(-pid, syscall.SIGKILL)
-}
-
-// deliver sends the result until werkbuch takes it, refuses it as replaced, or Retry is spent.
+// deliver sends the result until werkbuch takes it, refuses it, or Retry is spent; the lease beats meanwhile.
 func (x *Executor) deliver(ctx context.Context, id string, res protocol.Result, log *slog.Logger) bool {
 	until := time.Now().Add(x.Retry)
-	wait := time.Second
+	wait := 500 * time.Millisecond
 	for {
 		err := x.Client.Result(context.WithoutCancel(ctx), id, res)
 		if err == nil {

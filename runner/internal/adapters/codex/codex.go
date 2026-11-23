@@ -1,7 +1,8 @@
 // Package codex runs Codex headless (spec 7.8): `codex exec --json`, the prompt on standard input (`-`), `-m`, `resume
 // <session>`, the server `werkbuch-run` through `-c mcp_servers.werkbuch-run.*` with the token in an environment
 // variable (never an argument), in addition to the machine's servers (spec 8.1). Codex has no flag for a system prompt:
-// the contract goes in front of the prompt (A491). Unattended runs bypass approvals and sandbox (A490).
+// the contract goes in front of the prompt (A491). Runs that change code bypass approvals and sandbox, light runs run in
+// the read-only sandbox (A490).
 package codex
 
 import (
@@ -24,11 +25,16 @@ func (Adapter) Name() string { return "codex" }
 
 // Args are the arguments of a run.
 func Args(job adapters.Job) []string {
-	args := []string{"exec", "--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox"}
+	args := []string{"exec", "--json", "--skip-git-repo-check"}
+	if protocol.Light(job.Run.Type) {
+		args = append(args, "--sandbox", "read-only")
+	} else {
+		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
+	}
 	if job.Run.Model != "" {
 		args = append(args, "-m", job.Run.Model)
 	}
-	if job.Run.Werkbuch.MCPURL != "" {
+	if job.Run.Werkbuch.MCPURL != "" && job.TokenEnv != "" {
 		args = append(args,
 			"-c", "mcp_servers.werkbuch-run.url="+strconv.Quote(job.Run.Werkbuch.MCPURL),
 			"-c", "mcp_servers.werkbuch-run.bearer_token_env_var="+strconv.Quote(job.TokenEnv))

@@ -1,7 +1,8 @@
 // Package claude runs Claude Code headless (spec 7.8): `claude -p --output-format stream-json --verbose`, the prompt on
-// standard input, the contract appended to the system prompt, `--model`, `--resume <session>`, the server
-// `werkbuch-run` through `--mcp-config` in addition to the machine's own servers (no `--strict-mcp-config`, spec 8.1,
-// 8.7), and `--permission-mode bypassPermissions` for an unattended run (A490).
+// standard input, the contract appended to the system prompt from a private file, `--model`, `--resume <session>`, the
+// server `werkbuch-run` through `--mcp-config` in addition to the machine's own servers (no `--strict-mcp-config`, spec
+// 8.1, 8.7). Runs that change code bypass the permission prompts; light runs (`review`, `comment`) only get reading
+// tools (A490).
 package claude
 
 import (
@@ -23,14 +24,24 @@ func (Adapter) Name() string { return "claude" }
 
 // Args are the arguments of a run.
 func Args(job adapters.Job) []string {
-	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions"}
+	args := []string{"-p", "--output-format", "stream-json", "--verbose"}
+	if protocol.Light(job.Run.Type) {
+		args = append(args, "--permission-mode", "dontAsk",
+			"--allowedTools", strings.Join(adapters.ReadOnlyTools, ","),
+			"--disallowedTools", strings.Join(adapters.WriteTools, ","))
+	} else {
+		args = append(args, "--permission-mode", "bypassPermissions")
+	}
 	if job.Run.Model != "" {
 		args = append(args, "--model", job.Run.Model)
 	}
 	if job.MCPConfig != "" {
 		args = append(args, "--mcp-config", job.MCPConfig)
 	}
-	if job.Run.SystemPrompt != "" {
+	switch {
+	case job.SystemPromptFile != "":
+		args = append(args, "--append-system-prompt-file", job.SystemPromptFile)
+	case job.Run.SystemPrompt != "":
 		args = append(args, "--append-system-prompt", job.Run.SystemPrompt)
 	}
 	if id := job.Run.SessionID(); id != "" {

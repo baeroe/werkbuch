@@ -29,6 +29,7 @@ type RunState struct {
 	Events   []protocol.Event
 	Result   *protocol.Result
 	Beats    int
+	Lost     int
 }
 
 // Server is the fake.
@@ -46,11 +47,16 @@ type Server struct {
 	Binary    []byte
 	Checksum  string
 	Heartbeat int
+	// Lease gives a run away when the runner stays silent longer (0: never), as werkbuch's reaper does (A475).
+	Lease time.Duration
+	// FailResults answers this many results with 503 first.
+	FailResults int
+	seen        map[string]time.Time
 }
 
 // New starts the fake.
 func New() *Server {
-	s := &Server{Version: "1.0.0", runs: map[string]*RunState{}, Heartbeat: 15}
+	s := &Server{Version: "1.0.0", runs: map[string]*RunState{}, Heartbeat: 15, seen: map[string]time.Time{}}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.handle))
 	return s
 }
@@ -201,6 +207,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			s.queue = s.queue[1:]
 			st := s.runs[id]
 			st.Status = "running"
+			s.seen[id] = time.Now()
 			run := st.Run
 			a["run"] = run
 		}
@@ -220,10 +227,16 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	var attempt int
 	json.Unmarshal(body["attempt"], &attempt)
+	if s.Lease > 0 && st.Status == "running" && time.Since(s.seen[st.Run.ID]) > s.Lease {
+		st.Run.Attempt++
+		st.Status = "queued"
+		st.Lost++
+	}
 	if attempt != st.Run.Attempt || st.Status != "running" {
 		problem(w, 409, "run_replaced", "")
 		return
 	}
+	s.seen[st.Run.ID] = time.Now()
 	switch parts[2] {
 	case "heartbeat":
 		report()
@@ -240,6 +253,11 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		st.Events = append(st.Events, events...)
 		json.NewEncoder(w).Encode(map[string]int{"stored": len(events), "dropped": 0})
 	case "result":
+		if s.FailResults > 0 {
+			s.FailResults--
+			problem(w, 503, "server_error", "")
+			return
+		}
 		var res protocol.Result
 		raw, _ := json.Marshal(body)
 		json.Unmarshal(raw, &res)

@@ -6,6 +6,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -66,7 +67,7 @@ func Save(path string, c Config) error {
 	return os.Rename(tmp, path)
 }
 
-// NormalizeInstance checks a base URL: http or https, a host, no credentials, query or fragment; the path without
+// NormalizeInstance checks a base URL: https (http only on loopback, spec 6.1), a host, no credentials, query or fragment; the path without
 // a trailing slash.
 func NormalizeInstance(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
@@ -76,7 +77,19 @@ func NormalizeInstance(raw string) (string, error) {
 	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return "", fmt.Errorf("instance %q: no user, query or fragment", raw)
 	}
+	if u.Scheme == "http" && !Loopback(u.Hostname()) {
+		return "", fmt.Errorf("instance %q: werkbuch is reached over https (http only on this machine)", raw)
+	}
 	return strings.TrimRight(u.Scheme+"://"+u.Host+u.Path, "/"), nil
+}
+
+// Loopback says whether a host is this machine (`localhost`, 127.0.0.0/8, ::1).
+func Loopback(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // Host is the host of the instance (without port), to recognize other ways to werkbuch on the machine.

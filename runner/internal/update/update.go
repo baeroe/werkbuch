@@ -30,6 +30,8 @@ type Updater struct {
 	Exe  string
 	OS   string
 	Arch string
+	// AllowHTTP lets tests update from a server on loopback.
+	AllowHTTP bool
 }
 
 // New updates the running binary.
@@ -44,8 +46,12 @@ func New(c *client.Client) (*Updater, error) {
 	return &Updater{Client: c, Exe: exe, OS: runtime.GOOS, Arch: runtime.GOARCH}, nil
 }
 
-// Apply downloads, checks and swaps in the binary of version.
+// Apply downloads, checks and swaps in the binary of version. Only over HTTPS (or loopback in tests): the checksum comes
+// from the same server and protects nothing against someone in between.
 func (u *Updater) Apply(ctx context.Context, version string) error {
+	if !strings.HasPrefix(u.Client.Instance, "https://") && !u.AllowHTTP {
+		return fmt.Errorf("no update over http: the instance has to speak https")
+	}
 	base := "/runner/download/" + u.OS + "/" + u.Arch
 	bin, err := u.Client.Download(ctx, base, MaxBinary)
 	if err != nil {
@@ -79,7 +85,7 @@ func (u *Updater) Apply(ctx context.Context, version string) error {
 	if err != nil {
 		return fmt.Errorf("the new binary does not start: %v", err)
 	}
-	if got := strings.TrimSpace(string(out)); !strings.Contains(got, version) {
+	if got := strings.TrimSpace(string(out)); got != strings.TrimPrefix(version, "v") {
 		return fmt.Errorf("the new binary is %q, not %s", got, version)
 	}
 	return os.Rename(tmp.Name(), u.Exe)

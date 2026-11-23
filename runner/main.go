@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -28,6 +29,7 @@ import (
 	"github.com/baeroe/werkbuch/runner/internal/keyring"
 	"github.com/baeroe/werkbuch/runner/internal/load"
 	"github.com/baeroe/werkbuch/runner/internal/paths"
+	"github.com/baeroe/werkbuch/runner/internal/procs"
 	"github.com/baeroe/werkbuch/runner/internal/protocol"
 	"github.com/baeroe/werkbuch/runner/internal/redact"
 	"github.com/baeroe/werkbuch/runner/internal/socket"
@@ -179,6 +181,15 @@ func serve(stderr io.Writer) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// only one daemon holds the socket: what an earlier one left (it crashed or was killed) goes now
+	runs := filepath.Join(paths.StateDir(), "runs")
+	for _, pid := range procs.Reap(runs, 10*time.Second) {
+		log.Warn("ended a cli left by an earlier runner", "pid", pid)
+	}
+	for _, dir := range procs.CleanTemp(os.TempDir()) {
+		log.Info("removed a left-over private folder of a run", "dir", dir)
+	}
+
 	c := client.New(cfg.Instance, token, version)
 	sampler := &load.Sampler{Dir: paths.DataDir(), Run: sysexec.Run}
 	sampler.Start(ctx)
@@ -190,7 +201,7 @@ func serve(stderr io.Writer) error {
 	d := &daemon.Daemon{
 		Instance: cfg.Instance, Version: version, Client: c,
 		Executor: &executor.Executor{
-			Client: c, Git: &git.Manager{Data: paths.DataDir()}, Log: log,
+			Client: c, Git: &git.Manager{Data: paths.DataDir()}, Log: log, Procs: runs,
 			// read on every run: a change of config.yaml needs no restart
 			Repos: func() map[string]string {
 				now, err := config.Load(configFile)

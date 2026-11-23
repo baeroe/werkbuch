@@ -163,3 +163,32 @@ func TestUnauthorized(t *testing.T) {
 		t.Fatal("token in the status")
 	}
 }
+
+func TestSweepRunsTheTeardown(t *testing.T) {
+	fake := fakewerkbuch.New()
+	defer fake.Close()
+	d := newDaemon(t, fake)
+	d.defaults()
+	d.Keep = -time.Second
+	torn := filepath.Join(t.TempDir(), "torn")
+	if _, err := d.Executor.Git.Prepare(context.Background(), git.Spec{Name: "old-strand", Teardown: "touch " + torn}); err != nil {
+		t.Fatal(err)
+	}
+	d.sweep(context.Background())
+	if _, err := os.Stat(torn); err != nil {
+		t.Fatal("the sweep did not run the teardown")
+	}
+}
+
+func TestReportReadsTheCache(t *testing.T) {
+	fake := fakewerkbuch.New()
+	defer fake.Close()
+	d := newDaemon(t, fake)
+	if r := d.Report(); len(r.CLIs) != 0 {
+		t.Fatal("no report before the first refresh")
+	}
+	d.refreshReport(context.Background())
+	if r := d.Report(); len(r.CLIs) != 2 {
+		t.Fatalf("%+v", r)
+	}
+}

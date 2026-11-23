@@ -22,6 +22,14 @@ func TestArgsAndPrompt(t *testing.T) {
 	if !strings.Contains(joined, "-m gpt-5-codex") || !strings.Contains(joined, `bearer_token_env_var="WERKBUCH_RUN_TOKEN"`) || !strings.HasSuffix(joined, "resume th-1 -") {
 		t.Fatalf("args %v", args)
 	}
+	if !strings.Contains(joined, "--sandbox read-only") || strings.Contains(joined, "dangerously") {
+		t.Fatalf("a comment runs read-only: %v", args)
+	}
+	r.Type = "task"
+	if task := strings.Join(Args(adapters.Job{Run: r, TokenEnv: "T"}), " "); !strings.Contains(task, "dangerously-bypass") || strings.Contains(task, "read-only") {
+		t.Fatalf("task %v", task)
+	}
+	r.Type = "comment"
 	if strings.Contains(joined, "secret") {
 		t.Fatal("token in the arguments")
 	}
