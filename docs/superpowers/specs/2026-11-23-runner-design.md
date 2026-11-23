@@ -274,11 +274,11 @@ Ohne Einstellung sind die Agenten im Projekt aus (kein Auftrag startet, die Zuwe
 
 ### 8.7 Ausstattung der Maschine: MCP-Server, Skills, Plugins
 
-*(Rafael, 2026-11-23: kein Katalog in werkbuch; Einrichtung auf dem Runner, von Hand oder mit skilltri)*
+*(Rafael, 2026-11-23: kein Katalog in werkbuch; Einrichtung auf dem Runner, wie der Betreiber will; werkbuch setzt kein bestimmtes Tool voraus)*
 
-- MCP-Server, Skills, Plugins und Hooks des Agenten sind Ausstattung der Maschine, wie der Login des CLI: eingerichtet für den Benutzer, unter dem der Runner läuft, von Hand oder mit skilltri (Server mit Geheimnissen im Keychain, Ordner-Regeln). Empfohlen ist ein eigener macOS-Benutzer für den Runner (11.1); dann gehört alles, was dort eingerichtet ist, dem Runner, und nichts Persönliches (Hooks der Zeiterfassung, die eigene `~/.claude/CLAUDE.md`) läuft mit.
+- MCP-Server, Skills, Plugins und Hooks des Agenten sind Ausstattung der Maschine, wie der Login des CLI: eingerichtet für den Benutzer, unter dem der Runner läuft, so, wie der Betreiber seine Harnesses einrichtet (von Hand oder mit einem Werkzeug seiner Wahl; werkbuch setzt keins voraus). Empfohlen ist ein eigener macOS-Benutzer für den Runner (11.1); dann gehört alles, was dort eingerichtet ist, dem Runner, und nichts Persönliches (Hooks der Zeiterfassung, die eigene `~/.claude/CLAUDE.md`) läuft mit.
 - Skills und Regeln, die zum Code gehören, kommen aus dem Repo (`CLAUDE.md`/`AGENTS.md`, `.claude/skills`), wie 7.3.
-- werkbuch selbst hängt der Runner je Auftrag dazu (8.1). Hat die Maschine einen weiteren Zugang zu werkbuch (etwa skilltri mit einem persönlichen Token), handelte ein Agent damit an Run-Token und Sperre (11.2) vorbei: „Doctor“ warnt davor (der Runner fragt die MCP-Liste des CLI ab und sucht Server, die die Instanz erreichen) und nennt den Weg (in skilltri den Server für den Datenordner des Runners abschalten, `not-tree`). Merges schützt das Ruleset ohnehin (11.3).
+- werkbuch selbst hängt der Runner je Auftrag dazu (8.1). Hat die Maschine einen weiteren Zugang zu werkbuch (etwa ein MCP-Server mit einem persönlichen Token), handelte ein Agent damit an Run-Token und Sperre (11.2) vorbei: „Doctor“ warnt davor (der Runner fragt die MCP-Liste des CLI ab und sucht Server, die die Instanz erreichen) und nennt den Server, den der Betreiber für den Runner abschalten sollte. Merges schützt das Ruleset ohnehin (11.3).
 - Der Runner meldet mit dem Heartbeat die Namen der MCP-Server, Skills und Plugins seines Harness; die Runner-Seite in werkbuch zeigt sie nur zum Lesen (10.1), „Doctor“ in der TUI ebenso.
 
 ## 9. Parallelität
@@ -381,7 +381,7 @@ Vorbild sind itsaplan (feste Wörter, Checks je Link) und Plane (Status je PR-Zu
 ## 13. REST, MCP, Doku
 
 - Unter `/api/v1` (mit OpenAPI-Dokument, Vertrag, Rechte-Matrix, MCP-Parität): Runner lesen, umbenennen, widerrufen; Aufträge lesen (je Item, je Runner), abbrechen; Agenten-Konfiguration eines Bots; Agenten-Einstellungen eines Projekts; Verknüpfungen eines Items. Pairing-Code erzeugen und die GitHub-Verbindung nur aus der Sitzung (`EnsureSession`), nicht über MCP (Eintrag in A397).
-- VitePress `docs/en` und `docs/de`: „Runner“ (Installation, Config, TUI, Sicherheit, eigener macOS-Benutzer, skilltri-Regel), „GitHub“ (zwei Apps, Ruleset ohne Bypass, Repos), „Agenten“ (Aufträge, Ablauf, Status, Epics, Parallelität); `operations.md` (Downloads, Drosseln), `bots.md`.
+- VitePress `docs/en` und `docs/de`: „Runner“ (Installation, Config, TUI, Sicherheit, eigener macOS-Benutzer, Ausstattung der Maschine), „GitHub“ (zwei Apps, Ruleset ohne Bypass, Repos), „Agenten“ (Aufträge, Ablauf, Status, Epics, Parallelität); `operations.md` (Downloads, Drosseln), `bots.md`.
 - `CLAUDE.md` bekommt die Abschnitte im gewohnten Stil, Rulings ab A472 in der Rulings-Datei.
 
 ## 14. Qualität
