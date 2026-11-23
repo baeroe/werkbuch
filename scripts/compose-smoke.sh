@@ -79,8 +79,10 @@ if [ -z "$code" ]; then
     echo "smoke: no one-time code for the runner" >&2
     exit 1
 fi
+# the label of the project: the check at the start finds a box a crashed run left
+docker rm -f "$RUNNER_BOX" >/dev/null 2>&1 || true
 # shellcheck disable=SC2016 # evaluated by sh in the container
-docker run --name "$RUNNER_BOX" --network host --entrypoint sh -e HOME=/tmp/runner -e PATH=/tmp/runner/.local/bin:/usr/local/bin:/usr/bin:/bin \
+docker run --name "$RUNNER_BOX" --label "com.docker.compose.project=$PROJECT" --network host --entrypoint sh -e HOME=/tmp/runner -e PATH=/tmp/runner/.local/bin:/usr/local/bin:/usr/bin:/bin \
     -e SMOKE_URL="http://localhost:${PORT}" -e CODE="$code" -e NAME="smoke-${SMOKE_PROBE}" "$WERKBUCH_IMAGE" -c '
         set -e
         mkdir -p "$HOME" && cd "$HOME"
