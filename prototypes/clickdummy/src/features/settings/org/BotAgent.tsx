@@ -180,7 +180,7 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
 
       <Projects bot={bot} />
 
-      <SettingsCard title="Runner-Pool" description="Auf diesen Runnern arbeitet der Agent. Einen Auftrag nimmt der erste freie, der das Projekt kann; Korrekturen gehen an den Runner ihres Strangs.">
+      <SettingsCard title="Runner-Pool" description="Auf diesen Runnern arbeitet der Agent. Einen Auftrag nimmt der erste freie Runner; Korrekturen gehen an den Runner ihres Strangs.">
         <Loaded queries={[runners]} failure="Die Runner konnten nicht geladen werden" skeleton={<p className="text-ui text-muted">Wird geladen …</p>}>
           {() =>
             runners.data!.items.length === 0 ? (

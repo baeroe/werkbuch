@@ -14,6 +14,7 @@ import { resetToasts } from '@/components/ui/toast';
 import { resetApi } from '@/test/api';
 import Github from './Github';
 import Labels from './Labels';
+import McpServers from './McpServers';
 import Runners from './Runners';
 
 beforeEach(resetApi);
@@ -128,5 +129,37 @@ describe('Labels', () => {
     renderWithData(<Labels readOnlyReason={null} />);
     expect(await screen.findByText('Haiku Agent')).toBeTruthy();
     expect(screen.getAllByText('Modell für Agenten:')).toHaveLength(3);
+  });
+});
+
+describe('MCP-Server', () => {
+  it('shows a set value as „gesetzt“ with „Ersetzen“, never the value itself', async () => {
+    const user = userEvent.setup();
+    renderWithData(<McpServers readOnlyReason={null} />);
+    const list = await screen.findByRole('list', { name: 'MCP-Server' });
+    expect(within(list).getAllByText(/mac-mini-alt: Befehl nicht gefunden/, { selector: 'span' })).toHaveLength(3);
+    await user.click(within(list).getByRole('button', { name: '„context7“ bearbeiten' }));
+    const dialog = await screen.findByRole('dialog', { name: '„context7“ bearbeiten' });
+    expect(within(dialog).getByText('gesetzt')).toBeTruthy();
+    expect(document.body.innerHTML).not.toContain('ctx7sk-demo');
+    await user.click(within(dialog).getByRole('button', { name: 'Ersetzen CONTEXT7_API_KEY' }));
+    const value = await within(dialog).findByLabelText('Wert von CONTEXT7_API_KEY');
+    await waitFor(() => expect(document.activeElement).toBe(value));
+    expect(value).toHaveProperty('value', '');
+    await user.type(value, 'neu-und-geheim');
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(getDb().mcp_servers.find((server) => server.name === 'context7')?.env[0].value).toBe('neu-und-geheim'));
+  });
+
+  it('names the projects that use a server before it is deleted', async () => {
+    const user = userEvent.setup();
+    renderWithData(<McpServers readOnlyReason={null} />);
+    await user.click(await screen.findByRole('button', { name: '„playwright“ löschen' }));
+    const question = await screen.findByRole('alertdialog', { name: '„playwright“ löschen?' });
+    expect(within(question).getByText(/WEB nutzt ihn; die Agenten dort bekommen ihn danach nicht mehr/)).toBeTruthy();
+    await user.click(within(question).getByRole('button', { name: 'Löschen' }));
+    await waitFor(() => expect(getDb().mcp_servers.some((server) => server.name === 'playwright')).toBe(false));
+    // the focus goes to the next row, not to the page
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: '„sequential-thinking“ bearbeiten' })));
   });
 });

@@ -728,6 +728,8 @@ export interface Runner {
   slots_used: RunnerSlots;
   /** The last load the runner sent (spec 8.6); of an offline runner, from its last contact. */
   load: RunnerLoad;
+  /** MCP servers of the catalog whose command the runner did not find on its machine (spec 8.7). */
+  missing_mcp: { id: string; name: string }[];
   /** The last self-update failed: why; the old version keeps running. */
   update_error: string | null;
   created_at: string;
@@ -793,10 +795,31 @@ export type AgentStep = 'working' | 'review' | 'correction' | 'merged';
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
 /** The agent settings of a project (spec 10.3). */
-/** An MCP server an agent gets: a name and the command (with its arguments) that starts it over stdio. */
+/**
+ * An MCP server of the organization's catalog (WEBU-18, spec 8.7): a stdio server that projects can give their agents.
+ * The values of its environment are write-only: a reader learns only which names are set.
+ */
 export interface McpServer {
+  id: string;
+  /** Unique; small letters, digits and `-`; never `werkbuch` (every agent has werkbuch already). */
   name: string;
   command: string;
+  args: string[];
+  env: { name: string; set: boolean }[];
+  /** The projects that give it to their agents, by identifier. */
+  projects: { id: string; identifier: string }[];
+  /** Runners on which its command was not found (spec 8.7). */
+  missing_on: { id: string; name: string }[];
+  created_at: string;
+}
+
+/** What a save sends: an env value of null or undefined keeps the stored one, a text replaces it. */
+export interface McpServerInput {
+  id?: string;
+  name: string;
+  command: string;
+  args: string[];
+  env: { name: string; value?: string | null }[];
 }
 
 export interface ProjectAgents {
@@ -811,8 +834,8 @@ export interface ProjectAgents {
    */
   setup_command: string;
   teardown_command: string;
-  /** Further MCP servers the agents of the project get, besides werkbuch's (spec 8.4). */
-  mcp_servers: McpServer[];
+  /** The MCP servers of the organization's catalog the agents of the project get, besides werkbuch's (spec 8.7). */
+  mcp_server_ids: string[];
   /** The bot that reviews PRs of the repo, of agents and of people. */
   review_bot_id: string | null;
   /** The status each step sets; agents are off in the project until all four are set. */

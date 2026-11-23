@@ -35,7 +35,7 @@ const endedBadly = (run: AgentRun, runs: readonly AgentRun[]) => FAILED.includes
 const stillWithBot = (run: AgentRun, item: Pick<WorkItem, 'assignee_id'>, thread: Pick<AgentThread, 'status'> | null) => item.assignee_id === run.bot_id && thread?.status !== 'paused';
 
 /** Whether "Erneut starten" belongs to a run: it ended badly, nothing else runs, and the item is with the bot. */
-export const canRetry = (run: AgentRun, runs: readonly AgentRun[], item: Pick<WorkItem, 'assignee_id'>, thread: Pick<AgentThread, 'status'> | null) =>
+export const canRetry = (run: AgentRun, runs: readonly AgentRun[], item: Pick<WorkItem, 'assignee_id'>, thread: Pick<AgentThread, 'status' | 'pause_reason'> | null) =>
   endedBadly(run, runs) && stillWithBot(run, item, thread);
 
 /** Whether the run's line shows the way back instead: it ended badly, but somebody took the item over. */
@@ -147,8 +147,18 @@ export function RunLine({ run, runs, item, thread }: { run: AgentRun; runs: read
   const at = useNow(run.status === 'running' || run.status === 'canceling');
   const duration = runDuration(run, at);
   const retryable = canRetry(run, runs, item, thread);
-  // the way back is a new assignment; with the item still at the bot (GitHub was disconnected) the notice explains
+  // the way back is a new assignment; with the item still at the bot (GitHub was disconnected) it is „Weitermachen“
   const backWay = needsGiveBack(run, runs, item, thread) && item.assignee_id !== run.bot_id;
+  const githubPaused = needsGiveBack(run, runs, item, thread) && item.assignee_id === run.bot_id && thread?.pause_reason === 'github';
+
+  // a click elsewhere puts the person somewhere else: the card does not pull the focus back later
+  useEffect(() => {
+    const away = (event: PointerEvent) => {
+      if (!(event.target instanceof Node) || !card.current?.contains(event.target)) focusInside.current = false;
+    };
+    document.addEventListener('pointerdown', away, true);
+    return () => document.removeEventListener('pointerdown', away, true);
+  }, []);
 
   // a control in the card that goes with the run's state (Abbrechen once the run ended) takes the focus along: it
   // goes to the card itself instead of the page. A button that starts a new run hands the focus to that run instead.
@@ -270,6 +280,9 @@ export function RunLine({ run, runs, item, thread }: { run: AgentRun; runs: read
           </p>
         )}
         {run.status === 'canceled' && run.canceled_by && <p className="mt-2 text-sm text-muted">{`Abgebrochen von ${users.get(run.canceled_by)?.name ?? 'jemandem'}${run.finished_at ? ` um ${clockTime(run.finished_at)}` : ''}.`}</p>}
+        {githubPaused && (
+          <p className="mt-2 max-w-[65ch] text-sm text-pretty text-muted">GitHub ist getrennt, der Strang pausiert. Sobald das Projekt wieder ein Repo hat, geht es mit „Weitermachen“ oben am Item weiter.</p>
+        )}
         {backWay && bot && (
           <p className="mt-2 max-w-[65ch] text-sm text-pretty text-muted">{`${item.key} ist nicht mehr bei ${bot.name}. Ein neuer Auftrag startet erst, wenn das Item wieder ${bot.name} zugewiesen wird: dann mit einer Korrektur im selben Strang.`}</p>
         )}

@@ -436,6 +436,20 @@ function RunnerCard({ runner, onSlots, onRename, onRevoke, onCancelRun }: { runn
         <dd className="text-ink">
           <Load runner={runner} />
         </dd>
+        <dt className="text-muted">MCP-Server</dt>
+        <dd className="text-ink">
+          {runner.missing_mcp.length === 0 ? (
+            <span className="text-muted">Alle aus dem Katalog gefunden</span>
+          ) : (
+            <span className="flex items-start gap-1.5 text-danger">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>
+                <span translate="no">{runner.missing_mcp.map((server) => server.name).join(', ')}</span>
+                {` fehlt auf dieser Maschine: Befehl nicht gefunden. Aufträge, deren Projekt ${runner.missing_mcp.length === 1 ? 'ihn' : 'sie'} nutzt, scheitern hier sofort.`}
+              </span>
+            </span>
+          )}
+        </dd>
         <dt className="text-muted">Aufträge</dt>
         <dd className="min-w-0 text-ink">
           {runner.active_runs.length === 0 ? (

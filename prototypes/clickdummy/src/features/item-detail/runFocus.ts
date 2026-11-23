@@ -4,8 +4,6 @@
  * control that had the focus went away with the change.
  */
 
-import { focusWhenLost } from './shared';
-
 /** Asks the activity to show runs: a filter without them (Kommentare, Änderungen) goes back to „Alles“. */
 export const SHOW_RUNS_EVENT = 'werkbuch:show-runs';
 
@@ -26,7 +24,30 @@ export function showRun(id: string): void {
 /** The run lines in the activity now, to find the one a call adds. */
 export const runIds = () => new Set([...document.querySelectorAll('article[id^="run-"]')].map((element) => element.id));
 
-/** Puts a lost focus on the run line a call added, once the reloaded runs are drawn. */
-export function focusNewRun(before: Set<string>): void {
-  focusWhenLost(() => [...document.querySelectorAll<HTMLElement>('article[id^="run-"]')].find((element) => !before.has(element.id)), 4000);
+/**
+ * Puts a lost focus on the run line a call added, once the reloaded runs are drawn. Without one by the end (the run
+ * is not in the filter, or none came), on the item's title. A click in the meantime ends the watch.
+ */
+export function focusNewRun(before: Set<string>, watchMs = 4000): void {
+  const until = performance.now() + watchMs;
+  let clicked = false;
+  const onPointer = () => (clicked = true);
+  document.addEventListener('pointerdown', onPointer, { capture: true, once: true });
+  const stop = () => document.removeEventListener('pointerdown', onPointer, { capture: true });
+  const lost = () => {
+    const active = document.activeElement;
+    return !active || active === document.body || !active.isConnected;
+  };
+  const look = () => {
+    if (clicked) return stop();
+    const added = [...document.querySelectorAll<HTMLElement>('article[id^="run-"]')].find((element) => !before.has(element.id));
+    if (added && lost()) {
+      stop();
+      return added.focus();
+    }
+    if (performance.now() < until) return void requestAnimationFrame(look);
+    stop();
+    if (lost()) document.querySelector<HTMLElement>('[data-item-title]')?.focus();
+  };
+  requestAnimationFrame(look);
 }

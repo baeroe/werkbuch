@@ -8,19 +8,22 @@
  * - the assignee is a bot that does not work as an agent here: why, and where to change it.
  */
 
-import { Bot, CircleDot, Hourglass, OctagonPause, RotateCw, TriangleAlert, UserRound } from 'lucide-react';
+import { Bot, CircleDot, Hourglass, OctagonPause, Play, RotateCw, TriangleAlert, UserRound } from 'lucide-react';
 import { Link } from 'react-router';
 import { useEditReason, useUserMap } from '@/components/fields/itemData';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { isActive } from '@/domain/agents';
 import { clockTime, runName, useNow } from '@/features/agents/runParts';
-import { useItemAgents, useProjectAgents } from '@/hooks/agents';
+import { toast } from '@/components/ui/toast';
+import { useItemAgents, useProjectAgents, useResumeThread } from '@/hooks/agents';
+import { useSettle } from '@/hooks/mutation';
+import { notifyError } from '@/lib/errors';
 import { useProjects } from '@/hooks/projects';
 import { usePermissions } from '@/lib/permissions';
 import type { AgentRun, WorkItem } from '@/types';
 import { canRetry, useGiveBack, useRetry } from './RunLine';
-import { showRun } from './runFocus';
+import { focusNewRun, runIds, showRun } from './runFocus';
 
 /** After this long offline, another runner of the pool would take the strand over (spec 9, default 30 minutes). */
 const TAKEOVER_MIN = 30;
@@ -38,11 +41,24 @@ export function AgentNotice({ item }: { item: WorkItem }) {
   const bot = users.get(thread?.bot_id ?? last?.bot_id ?? '');
   const { runRetry, pending: retrying } = useRetry(item);
   const { giveBack, pending: givingBack } = useGiveBack(item, bot);
+  const resume = useResumeThread();
+  const settle = useSettle();
   const active = runs.find(isActive);
   // the clock moves on while a run waits for its runner: past the deadline the notice says what would have happened
   const at = useNow(active?.status === 'waiting');
   if (!agents.data) return null;
   const { not_an_agent } = agents.data;
+
+  function runResume() {
+    const before = runIds();
+    settle(resume.mutateAsync(item.id), {
+      onSuccess: () => {
+        toast({ title: `${item.key}: ${bot?.name ?? 'Der Agent'} macht weiter`, description: 'Eine Korrektur im selben Strang ist eingereiht.', tone: 'success' });
+        focusNewRun(before);
+      },
+      onError: (error) => notifyError('Nicht weitergemacht', error, runResume),
+    });
+  }
   const assignee = users.get(item.assignee_id ?? '');
 
   const parts = [];
@@ -107,7 +123,13 @@ export function AgentNotice({ item }: { item: WorkItem }) {
         icon={OctagonPause}
         title={github ? `${bot.name} hat aufgehört: GitHub ist getrennt` : brake ? `Bremse gezogen: ${bot.name} hat ${brake} aufgehört` : `${bot.name} arbeitet nicht mehr daran`}
         action={
-          withBot ? undefined : (
+          withBot ? (
+            github && (
+              <Button variant="secondary" size="sm" icon={Play} pending={resume.isPending} disabledReason={editReason ?? (settings.data?.repo ? null : `${project?.identifier ?? 'Das Projekt'} hat noch kein Repo. Verbinde GitHub und wähle unter Agenten ein Repo.`)} onClick={runResume}>
+                Weitermachen
+              </Button>
+            )
+          ) : (
             <Button variant="secondary" size="sm" icon={Bot} pending={givingBack} disabledReason={editReason} onClick={giveBack}>
               Wieder {bot.name} zuweisen
             </Button>
@@ -116,7 +138,7 @@ export function AgentNotice({ item }: { item: WorkItem }) {
       >
         <span className="block max-w-[65ch]">
           {github
-            ? `Der Strang ist pausiert; PR${thread.pr_number ? ` #${thread.pr_number}` : ''} und Branch bleiben bei GitHub. Sobald GitHub wieder verbunden ist und das Projekt sein Repo hat, geht es weiter, wenn das Item ${bot.name} neu zugewiesen wird.`
+            ? `Der Strang ist pausiert; PR${thread.pr_number ? ` #${thread.pr_number}` : ''} und Branch bleiben bei GitHub. Sobald GitHub wieder verbunden ist und das Projekt sein Repo hat, macht ${bot.name} mit „Weitermachen“ als Korrektur weiter; die Bremse zählt weiter.`
             : brake
               ? `Der Strang ist pausiert: PR${thread.pr_number ? ` #${thread.pr_number}` : ''}, Branch und Session bleiben. Das Item ging an ${owner?.name ?? 'die verantwortliche Person'}, die Befunde stehen im letzten Kommentar. Weist du es wieder ${bot.name} zu, beginnt eine Korrektur mit den Kommentaren seit dem letzten Auftrag, und die Bremse zählt von vorn.`
               : `Das Item wurde ${assignee?.name ?? 'jemand anderem'} zugewiesen; der Strang ist pausiert${thread.pr_number ? `, PR #${thread.pr_number} bleibt` : ', Branch und Worktree bleiben'}. Weist du es wieder ${bot.name} zu, macht ${bot.name} mit einer Korrektur weiter.`}

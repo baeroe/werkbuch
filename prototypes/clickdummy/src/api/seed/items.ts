@@ -200,7 +200,7 @@ const rows: Row[] = [
   { key: 'WEB-51', type: 'task', title: 'Cookie-Banner auf Consent v2 umstellen', state: 'progress', p: 'low', a: 'kira', by: 'mara', created: '10-23', started: '10-28 09:56', updated: '10-28 09:56' },
   { key: 'WEB-52', type: 'task', title: 'Wartung KW 44', state: 'progress', p: 'medium', a: 'jonas', l: ['backend'], by: 'automation', tpl: 'tpl_web_maintenance', due: '10-28', created: '10-26 09:00', started: '10-27 09:00' },
   { key: 'WEB-53', type: 'task', title: 'robots.txt und Sitemap.xml ergänzen', state: 'todo', p: 'low', a: 'kira', l: ['seo', 'agent_haiku'], due: '11-01', by: 'mara', created: '10-26', started: '10-28 08:05', updated: '10-28 09:10', desc: 'Die Sitemap aus den Seiten erzeugen und in der robots.txt verlinken.' },
-  { key: 'WEB-54', type: 'task', title: 'Browser-Test Formulare (Safari, Firefox)', state: 'todo', p: 'medium', a: 'lene', l: ['forms'], created: '10-26' },
+  { key: 'WEB-54', type: 'task', title: 'Browser-Test Formulare (Safari, Firefox)', state: 'todo', p: 'medium', a: 'kira', l: ['forms'], created: '10-26', updated: '10-28 09:35' },
   { key: 'WEB-55', type: 'task', title: 'Bildformate auf AVIF prüfen', state: 'backlog', created: '10-27' },
   {
     key: 'WEB-56',

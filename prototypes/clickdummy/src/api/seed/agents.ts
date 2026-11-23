@@ -33,6 +33,8 @@ export interface StoredRunner {
   slots: RunnerSlots;
   /** The last load the runner sent; `measured_at` follows its last contact. */
   load: Omit<RunnerLoad, 'measured_at'>;
+  /** Ids of catalog MCP servers whose command the runner did not find (spec 8.7). */
+  missing_mcp: string[];
   update_error: string | null;
   created_at: string;
 }
@@ -61,6 +63,7 @@ export const runners: StoredRunner[] = [
     last_seen_at: at('10-28 09:59'),
     slots: { total: 2, per_repo: 1, light: 2 },
     load: { cpu: 31, gpu: 12, ram_used: 38.2, ram_total: 64, disk_free: 182, disk_total: 994 },
+    missing_mcp: [],
     update_error: null,
     created_at: at('10-20 16:40'),
   },
@@ -75,6 +78,8 @@ export const runners: StoredRunner[] = [
     slots: { total: 1, per_repo: 1, light: 1 },
     // an Intel Mac: no GPU load without root
     load: { cpu: 6, gpu: null, ram_used: 9.1, ram_total: 16, disk_free: 61, disk_total: 256 },
+    // no Node on the old Mac: npx is missing, so are the servers that need it (WEB-54 failed on it)
+    missing_mcp: ['mcp_playwright', 'mcp_context7', 'mcp_sequential'],
     update_error: null,
     created_at: at('10-22 10:15'),
   },
@@ -88,9 +93,27 @@ export const runners: StoredRunner[] = [
     last_seen_at: at('10-28 09:59'),
     slots: { total: 4, per_repo: 1, light: 2 },
     load: { cpu: 7, gpu: null, ram_used: 5.8, ram_total: 32, disk_free: 410, disk_total: 500 },
+    missing_mcp: [],
     update_error: 'Die Prüfsumme des neuen Binarys stimmt nicht. Der Runner läuft mit 0.1.0-alpha weiter und versucht es beim nächsten Kontakt erneut.',
     created_at: at('10-12 11:00'),
   },
+];
+
+/** An MCP server as stored: the values of its environment, which no answer gives out. */
+export interface StoredMcpServer {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  env: { name: string; value: string }[];
+  created_at: string;
+}
+
+/** The catalog of MCP servers (spec 8.7); the API key is made up. */
+export const mcpServers: StoredMcpServer[] = [
+  { id: 'mcp_playwright', name: 'playwright', command: 'npx', args: ['@playwright/mcp', '--headless'], env: [], created_at: at('10-20 17:05') },
+  { id: 'mcp_context7', name: 'context7', command: 'npx', args: ['-y', '@upstash/context7-mcp'], env: [{ name: 'CONTEXT7_API_KEY', value: 'ctx7sk-demo-0000-feldwerk' }], created_at: at('10-21 09:30') },
+  { id: 'mcp_sequential', name: 'sequential-thinking', command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'], env: [], created_at: at('10-24 14:12') },
 ];
 
 export const TIMEOUTS: Record<RunType, number> = { task: 60, correction: 60, conflict: 30, review: 20, comment: 10 };
@@ -120,7 +143,7 @@ export const projectAgents: ProjectAgents[] = [
     // a DDEV project per worktree, so two worktrees of the website do not share one (spec 8.4)
     setup_command: 'ddev config --project-name=web-$WORKTREE && ddev start',
     teardown_command: 'ddev delete -Oy web-$WORKTREE',
-    mcp_servers: [{ name: 'playwright', command: 'pnpm dlx @playwright/mcp --headless' }],
+    mcp_server_ids: ['mcp_playwright', 'mcp_context7'],
     review_bot_id: 'u_kira',
     states: { working: 'std_progress', review: 'std_pending', correction: 'std_todo', merged: 'std_done' },
     max_corrections: 3,
@@ -167,6 +190,7 @@ export const agentThreads: AgentThread[] = [
   { id: 'th_web51', item_id: itemId('WEB-51'), bot_id: 'u_kira', runner_id: 'rn_studio', branch: 'agent/WEB-51-cookie-banner-consent-v2', status: 'open', corrections: 0, conflicts: 0, pr_number: null },
   { id: 'th_web44', item_id: itemId('WEB-44'), bot_id: 'u_kira', runner_id: 'rn_mini', branch: 'agent/WEB-44-alt-texte', status: 'open', corrections: 1, conflicts: 0, pr_number: 214 },
   { id: 'th_web53', item_id: itemId('WEB-53'), bot_id: 'u_kira', runner_id: 'rn_studio', branch: 'agent/WEB-53-robots-sitemap', status: 'open', corrections: 0, conflicts: 0, pr_number: null },
+  { id: 'th_web54', item_id: itemId('WEB-54'), bot_id: 'u_kira', runner_id: 'rn_mini', branch: 'agent/WEB-54-browser-test-formulare', status: 'open', corrections: 0, conflicts: 0, pr_number: null },
   { id: 'th_web49', item_id: itemId('WEB-49'), bot_id: 'u_kira', runner_id: 'rn_studio', branch: 'agent/WEB-49-layout-vorlage', status: 'paused', corrections: 3, conflicts: 1, pr_number: 209 },
 ];
 
@@ -353,6 +377,23 @@ export const agentRuns: StoredRun[] = [
     ],
   }),
   run({ id: 'run_web44_correction', type: 'correction', status: 'waiting', key: 'WEB-44', thread: 'th_web44', runner: 'rn_mini', model: 'opus', source: 'label', label: 'lb_agent_opus', created: '10-28 09:50', started: null, finished: null }),
+
+  // WEB-54: on mac-mini-alt the Playwright server is missing: the task failed at once, before Claude Code started
+  run({
+    id: 'run_web54_task',
+    type: 'task',
+    status: 'failed',
+    key: 'WEB-54',
+    thread: 'th_web54',
+    runner: 'rn_mini',
+    model: 'sonnet',
+    source: 'bot',
+    created: '10-28 09:34',
+    started: '10-28 09:35',
+    finished: '10-28 09:35',
+    error: 'Die MCP-Server „playwright“, „context7“ fehlen auf mac-mini-alt. Der Auftrag ist gescheitert, bevor Claude Code startete; nichts wurde geändert.',
+    log: [line(0, 'system', 'Worktree agent/WEB-54-browser-test-formulare angelegt'), line(1, 'error', 'MCP-Server playwright, context7: npx nicht gefunden (PATH /usr/bin:/bin:/usr/sbin:/sbin)')],
+  }),
 
   // WEB-53: the first attempt got lost (the Mac lost its network), the second ran into the time limit
   run({
@@ -567,6 +608,8 @@ export const agentEvents: ItemEvent[] = [
   event('ev_web44_started', 'work_item.state_changed', 'WEB-44', 'kira', '10-28 08:52', state('std_todo', 'std_progress'), `${AGENT}: Auftrag „Umsetzen“ gestartet`),
   event('ev_web44_review', 'work_item.state_changed', 'WEB-44', 'kira', '10-28 09:21', state('std_progress', 'std_pending'), `${AGENT}: PR #214 geöffnet`),
   event('ev_web44_back', 'work_item.state_changed', 'WEB-44', 'kira', '10-28 09:49', state('std_pending', 'std_todo'), `${AGENT}: Review mit Befunden`, 5),
+  // WEB-54: Mara assigns Kira, the task fails at once
+  event('ev_web54_assigned', 'work_item.assigned', 'WEB-54', 'mara', '10-28 09:34', { assignee_id: { old: 'u_lene', new: 'u_kira' } }),
   // WEB-53: started, timed out
   event('ev_web53_started', 'work_item.state_changed', 'WEB-53', 'kira', '10-28 08:05', state('std_todo', 'std_progress'), `${AGENT}: Auftrag „Umsetzen“ gestartet`),
   event('ev_web53_back', 'work_item.state_changed', 'WEB-53', 'kira', '10-28 09:10', state('std_progress', 'std_todo'), `${AGENT}: Auftrag gescheitert`, 5),

@@ -19,6 +19,7 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { NotForMembers, useOrgRight } from './access';
 import Bots from './Bots';
 import Github from './Github';
+import McpServers from './McpServers';
 import General from './General';
 import Labels from './Labels';
 import { FormSkeleton, SectionHeader } from './parts';
@@ -46,6 +47,7 @@ const COMPONENTS: Record<SectionSlug, ComponentType<SectionProps>> = {
   webhooks: Webhooks,
   runners: Runners,
   github: Github,
+  mcp: McpServers,
   system: System,
 };
 

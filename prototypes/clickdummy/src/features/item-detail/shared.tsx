@@ -110,13 +110,23 @@ export function Section({ title, actions, aside, children, className }: SectionP
  */
 export function focusWhenLost(next: () => HTMLElement | null | undefined, watchMs = 0): void {
   const until = performance.now() + watchMs;
+  // a click while it watches: a focus the pointer left on the page is the person's, not a loss
+  let clicked = false;
+  const onPointer = () => (clicked = true);
+  if (watchMs > 0) document.addEventListener('pointerdown', onPointer, { capture: true, once: true });
+  const stop = () => document.removeEventListener('pointerdown', onPointer, { capture: true });
   const look = () => {
+    if (clicked) return stop();
     const active = document.activeElement;
     if (!active || active === document.body || !active.isConnected) {
       const target = next();
-      if (target) return target.focus();
+      if (target) {
+        stop();
+        return target.focus();
+      }
     }
     if (performance.now() < until) requestAnimationFrame(look);
+    else stop();
   };
   requestAnimationFrame(look);
 }

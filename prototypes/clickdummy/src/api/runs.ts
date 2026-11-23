@@ -57,6 +57,14 @@ function agentBot(db: Db, botId: string): User | undefined {
   return db.users.find((user) => user.id === botId);
 }
 
+const CLI_NAMES = { claude: 'Claude Code', codex: 'Codex' } as const;
+
+/** The names of the project's MCP servers whose command the runner did not find. */
+export function missingServers(db: Db, runner: StoredRunner, projectId: string): string[] {
+  const chosen = db.project_agents.find((settings) => settings.project_id === projectId)?.mcp_server_ids ?? [];
+  return db.mcp_servers.filter((server) => chosen.includes(server.id) && runner.missing_mcp.includes(server.id)).map((server) => server.name);
+}
+
 /** The repo a run works in: the project's, or the project itself when it has none (a folder per strand). */
 export function repoOf(db: Db, itemId: string): string {
   const item = db.items.find((entry) => entry.id === itemId);
@@ -130,10 +138,20 @@ export function advance(db: Db, at: Date = clockNow()): boolean {
       if (!item || !runner) continue;
       const started = new Date(Date.parse(run.created_at) + START_DELAY_MS);
       const thread = db.agent_threads.find((entry) => entry.id === run.thread_id);
-      run.status = 'running';
       run.runner_id = runner.id;
       if (thread && thread.runner_id === '') thread.runner_id = runner.id;
       run.started_at = started.toISOString();
+      // a server of the project the runner cannot start: the run fails at once, before the CLI (spec 8.7)
+      const missing = missingServers(db, runner, item.project_id);
+      if (missing.length > 0) {
+        run.status = 'failed';
+        run.finished_at = started.toISOString();
+        run.error = `${missing.length === 1 ? 'Der MCP-Server' : 'Die MCP-Server'} ${missing.map((name) => `„${name}“`).join(', ')} ${missing.length === 1 ? 'fehlt' : 'fehlen'} auf ${runner.name}. Der Auftrag ist gescheitert, bevor ${CLI_NAMES[db.agent_configs.find((config) => config.bot_id === run.bot_id)?.cli ?? 'claude']} startete; nichts wurde geändert.`;
+        run.log = [{ offset: 0, kind: 'error', text: `MCP-Server ${missing.join(', ')}: Befehl nicht gefunden` }];
+        changed = true;
+        continue;
+      }
+      run.status = 'running';
       run.log = fillLog(run, item, thread?.branch ?? `agent/${item.key}`);
       changed = true;
       const settings = db.project_agents.find((entry) => entry.project_id === item.project_id);
@@ -345,6 +363,29 @@ export function retryRun(id: string): Promise<AgentRun> {
     if (thread) thread.status = 'open';
     const attempts = ctx.db.agent_runs.filter((other) => other.thread_id === run.thread_id && other.type === run.type).length;
     return runView(ctx.db, queueRun(ctx, bot, item, thread, run.type, attempts + 1), ctx.now);
+  });
+}
+
+/**
+ * Goes on with a strand that paused when GitHub was disconnected while the item stayed with the bot: a correction on
+ * the strand, the brake counts on. Only once the project has a repo again (spec 7.2, 10.2).
+ */
+export function resumeThread(itemRef: string): Promise<AgentRun> {
+  return write((ctx) => {
+    advance(ctx.db, ctx.now);
+    const { item, project } = requireItem(ctx.db, ctx.me, itemRef);
+    requireWritable(ctx.db, ctx.me, project, 'member', 'Weitermachen lassen darf, wer das Item bearbeiten darf.');
+    const thread = ctx.db.agent_threads.find((entry) => entry.item_id === item.id && entry.status === 'paused' && entry.pause_reason === 'github');
+    if (!thread || item.assignee_id !== thread.bot_id) throw conflict('nothing_to_resume', `${item.key} hat keinen Strang, der wegen GitHub pausiert.`);
+    if (!ctx.db.project_agents.find((settings) => settings.project_id === item.project_id)?.repo) {
+      throw conflict('no_repo', `${project.identifier} hat noch kein Repo. Verbinde GitHub und wähle unter Agenten ein Repo, dann geht es weiter.`);
+    }
+    const why = whyAssigneeIsNoAgent(ctx.db, item);
+    if (why) throw conflict('not_an_agent', why);
+    thread.status = 'open';
+    delete thread.pause_reason;
+    thread.corrections += 1;
+    return runView(ctx.db, queueRun(ctx, agentBot(ctx.db, thread.bot_id)!, item, thread, 'correction'), ctx.now);
   });
 }
 

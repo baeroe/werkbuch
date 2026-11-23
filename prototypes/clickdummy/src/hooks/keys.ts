@@ -61,6 +61,7 @@ export const qk = {
   agentConfigs: resource('agent-configs'),
   projectAgents: resource('project-agents'),
   itemAgents: resource('item-agents'),
+  mcpServers: resource('mcp-servers'),
 } as const;
 
 /** What every query hook takes besides its arguments. */

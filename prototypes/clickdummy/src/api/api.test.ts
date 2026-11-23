@@ -647,7 +647,7 @@ describe('seed: the moodboard demo content', () => {
     expect(result.pages.map((page) => page.title)).toEqual(['Kontaktformular – Technik']);
   });
 
-  it('has the sizes of the brief: about 70 items, 3 archived, 19 with history (4 more from the agent demo of WEBU-18), 3 with attachments', async () => {
+  it('has the sizes of the brief: about 70 items, 3 archived, 20 with history (5 more from the agent demo of WEBU-18), 3 with attachments', async () => {
     const db = getDb();
     expect(db.items.length).toBeGreaterThanOrEqual(65);
     expect(db.items.length).toBeLessThanOrEqual(80);
@@ -660,7 +660,7 @@ describe('seed: the moodboard demo content', () => {
       ...db.comments.map((comment) => comment.work_item_id),
       ...db.events.filter((event) => event.subject.type === 'work_item').map((event) => event.subject.id),
     ]);
-    expect(withHistory.size).toBe(19);
+    expect(withHistory.size).toBe(20);
     expect(new Set(db.attachments.map((attachment) => attachment.owner?.id)).size).toBe(3);
   });
 
