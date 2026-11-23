@@ -8,6 +8,7 @@ package daemon
 import (
 	"context"
 	"log/slog"
+	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -44,6 +45,8 @@ type Daemon struct {
 	Equipment *equipment.Collector
 	Updater   Updater
 	Log       *slog.Logger
+	// Checks runs the checks of `doctor` in the environment of the daemon (`GET /doctor`, A500).
+	Checks func(ctx context.Context) []socket.Check
 
 	// Fast and Slow are the intervals of polling without work, Slow after SlowAfter without any.
 	Fast, Slow, SlowAfter time.Duration
@@ -317,12 +320,34 @@ func (d *Daemon) sweep(ctx context.Context) {
 func (d *Daemon) Status() socket.Status {
 	d.defaults()
 	d.mu.Lock()
-	s := socket.Status{Instance: d.Instance, Version: d.Version, ExpectedVersion: d.expected, Connected: d.connected, LastContact: d.lastContact,
+	s := socket.Status{Instance: d.Instance, System: runtime.GOOS + "/" + runtime.GOARCH, Version: d.Version, ExpectedVersion: d.expected, Connected: d.connected, LastContact: d.lastContact,
 		LastError: d.lastError, Unauthorized: d.unauthorized, Places: d.places, Update: d.update, Running: len(d.running), Started: d.started}
 	d.mu.Unlock()
 	r := d.Report()
 	s.Load, s.CLIs, s.Equipment = r.Load, r.CLIs, r.Equipment
 	return s
+}
+
+// Doctor is the answer of `GET /doctor`: the version of the daemon against the one werkbuch expects, then the checks.
+func (d *Daemon) Doctor(ctx context.Context) []socket.Check {
+	d.mu.Lock()
+	expected, upd := d.expected, d.update
+	d.mu.Unlock()
+	version := socket.Check{Name: "version", Level: "ok", Detail: d.Version}
+	switch {
+	case d.Version == "dev":
+		version.Detail = "dev (a build without a version never updates itself)"
+	case expected != "" && expected != d.Version:
+		version.Level, version.Detail = "warn", d.Version+", werkbuch expects "+expected
+		if upd != "" {
+			version.Detail += " (update " + upd + ")"
+		}
+	}
+	out := []socket.Check{version}
+	if d.Checks != nil {
+		out = append(out, d.Checks(ctx)...)
+	}
+	return out
 }
 
 // Runs lists the running runs, then the recent ones.

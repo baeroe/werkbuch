@@ -6,6 +6,7 @@
 //	GET  /runs/{id}/events   the log of a run as NDJSON, live until it ends
 //	POST /runs/{id}/cancel   stops a run (werkbuch hears `canceled`)
 //	GET  /load               the last load and the samples of the last minutes
+//	GET  /doctor             the checks of `doctor`, made by the daemon with its own environment (A500)
 //	POST /update             updates now when no run is left (else when the last ends)
 package socket
 
@@ -27,6 +28,7 @@ import (
 // Status is what `GET /status` answers.
 type Status struct {
 	Instance        string              `json:"instance"`
+	System          string              `json:"system"`
 	Version         string              `json:"version"`
 	ExpectedVersion string              `json:"expected_version,omitempty"`
 	Connected       bool                `json:"connected"`
@@ -48,6 +50,13 @@ type LoadAnswer struct {
 	History []protocol.Load `json:"history"`
 }
 
+// Check is one finding of `GET /doctor` (the form of doctor.Check, which imports this package).
+type Check struct {
+	Name   string `json:"name"`
+	Level  string `json:"level"`
+	Detail string `json:"detail"`
+}
+
 // Backend is the daemon as the socket sees it.
 type Backend interface {
 	Status() Status
@@ -55,6 +64,7 @@ type Backend interface {
 	Execution(id string) *executor.Execution
 	Load() LoadAnswer
 	RequestUpdate() string
+	Doctor(ctx context.Context) []Check
 }
 
 // ErrRunning says another daemon listens on the socket.
@@ -93,6 +103,7 @@ func Handler(b Backend) http.Handler {
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) { write(w, 200, b.Status()) })
 	mux.HandleFunc("GET /runs", func(w http.ResponseWriter, r *http.Request) { write(w, 200, b.Runs()) })
 	mux.HandleFunc("GET /load", func(w http.ResponseWriter, r *http.Request) { write(w, 200, b.Load()) })
+	mux.HandleFunc("GET /doctor", func(w http.ResponseWriter, r *http.Request) { write(w, 200, b.Doctor(r.Context())) })
 	mux.HandleFunc("POST /update", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 202, map[string]string{"update": b.RequestUpdate()})
 	})

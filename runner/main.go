@@ -1,6 +1,6 @@
 // werkbuch-runner runs agents of a werkbuch instance on this machine (docs/superpowers/specs/2026-11-23-runner-design.md):
 // it pairs with a one-time code, polls the instance, runs Claude Code or Codex in a worktree per strand and reports
-// back. The TUI comes with WEBU-22; until then `status` shows what the daemon does.
+// back. Without arguments it opens the TUI (internal/tui) in a terminal.
 package main
 
 import (
@@ -18,6 +18,9 @@ import (
 	"syscall"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/term"
+
 	"github.com/baeroe/werkbuch/runner/internal/client"
 	"github.com/baeroe/werkbuch/runner/internal/clis"
 	"github.com/baeroe/werkbuch/runner/internal/config"
@@ -34,6 +37,7 @@ import (
 	"github.com/baeroe/werkbuch/runner/internal/redact"
 	"github.com/baeroe/werkbuch/runner/internal/socket"
 	"github.com/baeroe/werkbuch/runner/internal/sysexec"
+	"github.com/baeroe/werkbuch/runner/internal/tui"
 	"github.com/baeroe/werkbuch/runner/internal/update"
 )
 
@@ -43,6 +47,7 @@ var version = "dev"
 const usage = `werkbuch-runner runs agents of a werkbuch instance on this machine.
 
 Commands:
+  (none)                                     the TUI: status, runs with their logs, doctor (in a terminal)
   login <url> --code <CODE> [--name <name>]   pair with an instance (the code comes from Settings → Runners)
   daemon                                     poll the instance and run what it hands out
   status                                     what the daemon does now
@@ -58,9 +63,16 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stdout, "The TUI of the runner comes with a later release; until then:")
-		fmt.Fprintln(stdout)
-		fmt.Fprint(stdout, usage)
+		if f, ok := stdout.(*os.File); !ok || !term.IsTerminal(f.Fd()) || !term.IsTerminal(os.Stdin.Fd()) {
+			fmt.Fprintln(stdout, "The TUI of the runner needs a terminal; the commands work anywhere:")
+			fmt.Fprintln(stdout)
+			fmt.Fprint(stdout, usage)
+			return 0
+		}
+		if err := openTUI(); err != nil {
+			fmt.Fprintln(stderr, "werkbuch-runner: "+redact.String(err.Error()))
+			return 1
+		}
 		return 0
 	}
 	ctx := context.Background()
@@ -93,6 +105,20 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// openTUI runs the TUI against the socket of the daemon; doctor runs here when no daemon answers (A500).
+func openTUI() error {
+	m := tui.New(tui.Options{
+		Source: tui.NewSocketSource(paths.Socket()), Socket: paths.Socket(), LocalDoctor: checks,
+		Logout: func() (string, error) {
+			var out strings.Builder
+			err := logout(&out)
+			return out.String(), err
+		},
+	})
+	_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
+	return err
 }
 
 func login(ctx context.Context, args []string, stdout io.Writer) error {
@@ -214,6 +240,9 @@ func serve(stderr io.Writer) error {
 		Sampler: sampler, CLIs: &clis.Detector{Run: sysexec.Run},
 		Equipment: &equipment.Collector{Run: sysexec.Run, Host: cfg.Host()},
 		Updater:   upd, Log: log,
+		Checks: func(ctx context.Context) []socket.Check {
+			return checks(ctx)
+		},
 	}
 	go socket.Serve(ctx, l, d)
 	defer os.Remove(paths.Socket())
@@ -310,6 +339,15 @@ func join(v []string) string {
 		return "none"
 	}
 	return strings.Join(v, ", ")
+}
+
+// checks runs `doctor` in the environment of this process, redacted, in the form of the socket.
+func checks(ctx context.Context) []socket.Check {
+	var out []socket.Check
+	for _, c := range doctor.Checks(ctx, doctor.Env{ConfigFile: paths.ConfigFile(), DataDir: paths.DataDir(), Socket: paths.Socket(), Version: version, Run: sysexec.Run}) {
+		out = append(out, socket.Check{Name: c.Name, Level: c.Level, Detail: redact.String(c.Detail)})
+	}
+	return out
 }
 
 func doc(ctx context.Context, stdout io.Writer) int {

@@ -23,6 +23,9 @@ func (b backend) Execution(id string) *executor.Execution {
 }
 func (b backend) Load() LoadAnswer      { return LoadAnswer{Last: &protocol.Load{CPU: 5}} }
 func (b backend) RequestUpdate() string { return "none" }
+func (b backend) Doctor(ctx context.Context) []Check {
+	return []Check{{Name: "git", Level: "ok", Detail: "git version 2.47.1"}, {Name: "codex", Level: "warn", Detail: "not signed in"}}
+}
 
 func TestSocket(t *testing.T) {
 	dir, err := filepath.Abs(t.TempDir())
@@ -58,6 +61,10 @@ func TestSocket(t *testing.T) {
 	var load LoadAnswer
 	if err := c.Get(ctx, "/load", &load); err != nil || load.Last.CPU != 5 {
 		t.Fatal(err)
+	}
+	var checks []Check
+	if err := c.Get(ctx, "/doctor", &checks); err != nil || len(checks) != 2 || checks[1] != (Check{Name: "codex", Level: "warn", Detail: "not signed in"}) {
+		t.Fatalf("%+v %v", checks, err)
 	}
 	var upd map[string]string
 	if err := c.Post(ctx, "/update", &upd); err != nil || upd["update"] != "none" {

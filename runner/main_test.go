@@ -68,7 +68,7 @@ func TestSimpleCommands(t *testing.T) {
 	if code, out, _ := cmd("version"); code != 0 || out != "dev\n" {
 		t.Fatal(out)
 	}
-	if code, out, _ := cmd(); code != 0 || !strings.Contains(out, "TUI") {
+	if code, out, _ := cmd(); code != 0 || !strings.Contains(out, "needs a terminal") || !strings.Contains(out, "login <url>") {
 		t.Fatal(out)
 	}
 	if code, _, _ := cmd("nope"); code != 2 {

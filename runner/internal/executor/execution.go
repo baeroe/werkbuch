@@ -100,6 +100,8 @@ type Summary struct {
 	Project  string    `json:"project"`
 	Item     string    `json:"item,omitempty"`
 	Title    string    `json:"title,omitempty"`
+	Branch   string    `json:"branch,omitempty"`
+	Session  string    `json:"session,omitempty"`
 	Status   string    `json:"status"`
 	Result   string    `json:"result,omitempty"`
 	Dir      string    `json:"dir,omitempty"`
@@ -118,6 +120,14 @@ func (e *Execution) Summary() Summary {
 	if e.Run.Item != nil {
 		s.Item, s.Title = e.Run.Item.Key, e.Run.Item.Title
 	}
+	if t := e.Run.Thread; t != nil {
+		if t.Branch != nil {
+			s.Branch = *t.Branch
+		}
+		if t.SessionID != nil {
+			s.Session = *t.SessionID
+		}
+	}
 	return s
 }
 
@@ -130,3 +140,18 @@ func (e *Execution) Finished() bool {
 
 // Feed adds lines to the log of an execution as a run would (tests of the socket).
 func Feed(e *Execution, events ...protocol.Event) { e.add(events) }
+
+// Fake builds an execution in a given state for tests and the demo daemon of the screenshots (runner/docs/demo): with a
+// result it is finished at ended, else it has the status (`starting`, `running`, `stopping`).
+func Fake(run protocol.Run, started time.Time, status, result, dir string, ended time.Time, events ...protocol.Event) *Execution {
+	e := NewExecution(run)
+	e.Started, e.dir = started, dir
+	e.add(events)
+	if result != "" {
+		e.finish(result)
+		e.ended = ended
+		return e
+	}
+	e.set(status)
+	return e
+}
