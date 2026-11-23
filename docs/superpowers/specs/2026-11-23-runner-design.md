@@ -219,12 +219,12 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 
 *(Rafael: nicht jeder Auftrag braucht das stärkste Modell; Claude: über Labels)*. werkbuch wählt das Modell beim Einreihen, das erste passende gewinnt:
 
-1. **Modell-Label des Items:** systemweit *(Rafael, 2026-11-23, ersetzt die Zuordnung je Projekt)*. Ein Label des Katalogs der Organisation kann ein Modell tragen (optionales Feld „Modell für Agenten“, etwa `haiku`); wer im Label-Dialog ein Modell wählt, bekommt den Namen `<Modell> Agent` vorgeschlagen („Haiku Agent“, „Opus Agent“, „Fable Agent“). Erkannt wird über das Feld, nie über den Namen (umbenennen oder übersetzen bricht nichts). Trägt ein Item mehrere Modell-Labels, gewinnt das erste in Katalog-Reihenfolge. Ein Kind eines Epics ohne Modell-Label nimmt das des Epics.
+1. **Modell-Label des Items:** systemweit *(Rafael, 2026-11-23, ersetzt die Zuordnung je Projekt)*. Ein Label des Katalogs der Organisation kann ein Modell tragen (optionales Feld „Modell für Agenten“, eine Wahl aus der Liste, etwa `haiku`); wer im Label-Dialog ein Modell wählt, bekommt den Namen `<Modell> Agent` vorgeschlagen („Haiku Agent“, „Opus Agent“, „Fable Agent“). Erkannt wird über das Feld, nie über den Namen (umbenennen oder übersetzen bricht nichts). Trägt ein Item mehrere Modell-Labels, gewinnt das erste in Katalog-Reihenfolge. Ein Kind eines Epics ohne Modell-Label nimmt das des Epics.
 2. **Projekt je Auftragstyp** (etwa `review` → `opus`, `comment` → `haiku`).
 3. **Bot je Auftragstyp**, dann der Standard des Bots.
 
 - Labels statt eines eigenen Felds am Item: sie gelten in allen Projekten, lassen sich schon beim Anlegen, aus Vorlagen, per Mehrfachbearbeitung und per MCP setzen und filtern; ein neues Item-Feld liefe durch Resource, REST, Vorlagen und das ausgeschöpfte MCP-Budget von `work-items`.
-- Das Modell ist ein freier Text je CLI (Claude Code: Kurzformen `haiku`, `sonnet`, `opus`, `fable` oder volle IDs; Codex: dessen Namen). Die UI schlägt bekannte vor; der Runner reicht es durch (`--model` bzw. `-m`); „Doctor“ und ein abgelehnter Lauf melden ein Modell, das das CLI nicht kennt (Auftrag `failed` mit Grund).
+- Das Modell kommt aus einer **festen Liste je CLI** *(Rafael: keine freien Namen)*, gepflegt im Code und mit Releases von werkbuch erweitert (Claude Code etwa `haiku`, `sonnet`, `opus`, `fable`; Codex dessen Namen). Alle Modellfelder sind Selects; wechselt das CLI und gibt es das gewählte Modell dort nicht, gilt der Standard des CLI (mit Hinweis). Der Runner reicht es durch (`--model` bzw. `-m`); lehnt das CLI es ab, scheitert der Auftrag mit dem Grund.
 - Am Auftrag stehen das gewählte Modell und woher es kam (Label, Projekt, Bot) und, falls gemeldet, der Verbrauch.
 - Eine automatische Wahl (ein kleines Modell schätzt das Ticket ein) ist ein Nicht-Ziel von v1.
 
