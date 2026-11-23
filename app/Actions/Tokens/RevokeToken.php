@@ -5,6 +5,7 @@ namespace App\Actions\Tokens;
 use App\Access\Authorize;
 use App\Events\EventRecorder;
 use App\Events\EventType;
+use App\Exceptions\Problem;
 use App\Models\PersonalAccessToken;
 use App\Models\User;
 use App\Support\Actor;
@@ -21,6 +22,11 @@ final class RevokeToken
 
     public function handle(Actor $actor, PersonalAccessToken $token): void
     {
+        // the token of a run is no token of the list: it ends with its run (spec 11.2)
+        if ($token->agent_run_id !== null) {
+            throw Problem::notFound();
+        }
+
         Authorize::check($actor, 'revokeToken', User::query()->findOrFail($token->tokenable_id));
 
         DB::transaction(function () use ($actor, $token): void {

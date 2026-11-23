@@ -4,14 +4,19 @@ namespace Tests\Feature\Access;
 
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
+use App\Models\AgentConfig;
+use App\Models\AgentRun;
 use App\Models\Organization;
 use App\Models\Page;
+use App\Models\PersonalAccessToken;
 use App\Models\Project;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
 use App\Models\Webhook;
 use App\Models\WorkItem;
+use App\Support\Actor;
+use App\Support\RunTokens;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -27,6 +32,7 @@ final class MatrixWorld
     /** The columns of the matrix, one kind of account each. */
     public const COLUMNS = [
         'org_admin', 'project_admin', 'project_member', 'project_viewer', 'outsider_public', 'outsider_private', 'default_bot',
+        'run_token',
     ];
 
     public const PASSWORD = 'matrix-password';
@@ -70,6 +76,11 @@ final class MatrixWorld
 
         $roles->setProjectRole($target, $web, ProjectRole::Member);
 
+        // the agent of the column `run_token` (spec 11.2): a bot of the project admin, member of WEB, acting through the
+        // token of a run of its own
+        $agent = AgentConfig::factory()->create(['bot_id' => User::factory()->bot($projectAdmin)->create(['name' => 'Matrix Agent'])])->bot;
+        $roles->setProjectRole($agent, $web, ProjectRole::Member);
+
         return new self(
             [
                 'org_admin' => $orgAdmin,
@@ -79,6 +90,7 @@ final class MatrixWorld
                 'outsider_public' => $person('Outsider Public'),
                 'outsider_private' => $person('Outsider Private'),
                 'default_bot' => User::defaultBot(),
+                'run_token' => $agent,
             ],
             $web,
             $ops,
@@ -91,6 +103,23 @@ final class MatrixWorld
     public function account(string $column): User
     {
         return $this->accounts[$column] ?? throw new InvalidArgumentException("Unknown matrix column [{$column}].");
+    }
+
+    /**
+     * How the column acts: as its account, the column `run_token` through the token of a `task` of the agent in WEB.
+     */
+    public function actor(string $column): Actor
+    {
+        $account = $this->account($column);
+
+        if ($column !== 'run_token') {
+            return actor($account);
+        }
+
+        $run = AgentRun::factory()->create(['bot_id' => $account->id, 'work_item_id' => $this->item($column)->id]);
+        RunTokens::issue($run);
+
+        return new Actor($account, Actor::VIA_API, token: PersonalAccessToken::query()->where('agent_run_id', $run->id)->sole());
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Actions\Attachments;
 
 use App\Access\Authorize;
+use App\Access\RunTokenGuard;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
@@ -36,6 +37,8 @@ final class DeleteAttachment
      */
     public function handle(Actor $actor, Attachment $attachment): void
     {
+        // werkbuch keeps this to itself, an agent never does it (spec 11.2)
+        RunTokenGuard::refuse($actor);
         Authorize::check($actor, 'view', $attachment);
 
         if ($attachment->attachable_id === null) {

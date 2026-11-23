@@ -22,6 +22,7 @@ final class Problem extends RuntimeException implements HttpExceptionInterface
         'invalid_workflow', 'default_workflow', 'default_type', 'built_in', 'is_default', 'state_in_use', 'search_unavailable', 'pdf_unavailable',
         'attachment_inline', 'mail_not_configured', 'mail_failed', 'template_changed',
         'webhook_not_logged', 'token_required', 'unsupported_media_type',
+        'agent_forbidden', 'agent_off', 'run_finished', 'run_not_retryable', 'run_replaced',
     ];
 
     /**

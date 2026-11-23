@@ -215,7 +215,7 @@ use Tests\Support\WorkflowFixtures;
 $everyone = MatrixWorld::COLUMNS;
 
 // password and second factor are the own account's, and only people sign in
-$people = array_values(array_diff($everyone, ['default_bot']));
+$people = array_values(array_diff($everyone, ['default_bot', 'run_token']));
 $peopleButAdmin = array_values(array_diff($people, ['org_admin']));
 
 // the settings of a project: its admins (org admins are admins in every project); the outsider of the private project
@@ -228,6 +228,12 @@ $catalogAdmins = ['org_admin', 'default_bot'];
 // work items: members and admins of the project (`item.create`, `item.edit`); viewers read, outsiders of the private
 // project do not see it
 $itemWriters = ['org_admin', 'project_admin', 'project_member', 'default_bot'];
+
+// the token of a run (spec 11.2, A477): the agent bot is a member of WEB and reads what members read; it writes only its
+// proof (description and values), comments, reactions, uploads, relations it adds and wiki pages: everything else is a
+// 403 agent_forbidden before any policy
+$agentWriters = [...$itemWriters, 'run_token'];
+$notThroughRuns = fn (array $columns): array => array_values(array_diff($columns, ['run_token']));
 
 /** Starts a two-factor setup for the account past the action (a bot as well, so its refusal is the action's own); returns the secret. */
 $startTwoFactor = function (User $user): string {
@@ -261,7 +267,7 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => UploadAttachment::run($a, [
             'project_id' => $w->project($column)->id, 'kind' => 'file', 'work_item_id' => $w->item($column)->id,
         ], UploadedFile::fake()->createWithContent('matrix.txt', 'Matrix')),
-        'allowed' => $itemWriters,
+        'allowed' => $agentWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::WorkItemUpdated,
     ],
@@ -273,7 +279,7 @@ return [
             new Actor($a->user, Actor::VIA_MCP, token: $a->user->createToken('matrix', ['write', 'mcp'])->accessToken),
             ['project_id' => $w->project($column)->id, 'kind' => 'file', 'work_item_id' => $w->item($column)->id],
         ),
-        'allowed' => $itemWriters,
+        'allowed' => $agentWriters,
         'hidden' => ['outsider_private'],
     ],
     // a file of the file list (`item.edit`); an unowned upload (its uploader) and a picture of a text (409 for all) are
@@ -339,7 +345,7 @@ return [
         'action' => CreateProject::class,
         // the lead named: by default it is the actor, and the default bot is no person
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreateProject::run($a, ['name' => 'Neu', 'identifier' => 'NEU', 'lead_id' => $w->target->id]),
-        'allowed' => $everyone,
+        'allowed' => $notThroughRuns($everyone),
         'event' => EventType::ProjectCreated,
     ],
     'UpdateProject' => [
@@ -395,7 +401,7 @@ return [
 
             return JoinProject::run($a, $w->project($column));
         },
-        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'allowed' => $notThroughRuns(array_values(array_diff($everyone, ['outsider_private']))),
         'hidden' => ['outsider_private'],
         'event' => EventType::ProjectMemberAdded,
     ],
@@ -504,7 +510,7 @@ return [
         'action' => BulkUpdateWorkItems::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => BulkUpdateWorkItems::run($a, ['ids' => [$w->item($column)->id], 'patch' => ['priority' => 'high']]),
         // every account may send one: a refused item is a line of the answer, never a 403 or 404 (P10)
-        'allowed' => $everyone,
+        'allowed' => $notThroughRuns($everyone),
     ],
     'RedistributeRanks' => [
         'action' => RedistributeRanks::class,
@@ -627,7 +633,7 @@ return [
             'type_id' => RelationType::query()->where('built_in', 'relates')->value('id'),
             'target_id' => $w->item($column)->id,
         ]),
-        'allowed' => $itemWriters,
+        'allowed' => $agentWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::WorkItemRelationAdded,
         // one at each end
@@ -972,14 +978,14 @@ return [
     'CreatePage' => [
         'action' => CreatePage::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreatePage::run($a, $w->project($column), ['title' => 'Matrix']),
-        'allowed' => $itemWriters,
+        'allowed' => $agentWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::PageCreated,
     ],
     'UpdatePage' => [
         'action' => UpdatePage::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdatePage::run($a, $w->page($column), ['title' => 'Matrix']),
-        'allowed' => $itemWriters,
+        'allowed' => $agentWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::PageUpdated,
     ],
@@ -990,7 +996,7 @@ return [
 
             return MovePage::run($a, $page, ['parent_id' => $w->page($column)->id, 'before_id' => null]);
         },
-        'allowed' => $itemWriters,
+        'allowed' => $agentWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::PageMoved,
     ],
@@ -1025,7 +1031,7 @@ return [
 
             return RestorePageVersion::run($a, $page, PageVersion::factory()->create(['page_id' => $page->id]));
         },
-        'allowed' => $itemWriters,
+        'allowed' => $agentWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::PageUpdated,
     ],
@@ -1202,7 +1208,7 @@ return [
     'DeleteNotification' => [
         'action' => DeleteNotification::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => DeleteNotification::run($a, Notification::factory()->forItem($w->item($column))->create(['user_id' => $a->user->id])),
-        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'allowed' => $notThroughRuns(array_values(array_diff($everyone, ['outsider_private']))),
         'hidden' => ['outsider_private'],
     ],
     // a bot gets no notifications: it reads an empty matrix and may not change one (K6)

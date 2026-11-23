@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Access\RoleIndex;
 use App\Access\Visibility;
 use App\Http\Api\RateKey;
+use App\Models\AgentConfig;
+use App\Models\AgentRun;
 use App\Models\Attachment;
 use App\Models\Automation;
 use App\Models\Comment;
@@ -19,6 +21,7 @@ use App\Models\Project;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
+use App\Models\Runner;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
@@ -122,6 +125,9 @@ class AppServiceProvider extends ServiceProvider
             'template' => Template::class,
             'automation' => Automation::class,
             'webhook' => Webhook::class,
+            'runner' => Runner::class,
+            'agent_config' => AgentConfig::class,
+            'agent_run' => AgentRun::class,
         ]);
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);

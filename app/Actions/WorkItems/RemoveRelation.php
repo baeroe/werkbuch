@@ -3,6 +3,7 @@
 namespace App\Actions\WorkItems;
 
 use App\Access\Authorize;
+use App\Access\RunTokenGuard;
 use App\Access\Visibility;
 use App\Events\EventRecorder;
 use App\Events\EventType;
@@ -34,6 +35,8 @@ final class RemoveRelation
      */
     public function handle(Actor $actor, WorkItemRelation $relation): void
     {
+        // werkbuch keeps this to itself, an agent never does it (spec 11.2)
+        RunTokenGuard::refuse($actor);
         // both ends afresh: one deleted since the relation was bound took the relation with it
         $ends = WorkItem::query()->whereKey([$relation->source_id, $relation->target_id])->with('project')->get()->keyBy('id');
         $source = $ends->get($relation->source_id) ?? throw Problem::notFound();

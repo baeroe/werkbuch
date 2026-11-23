@@ -26,6 +26,9 @@ final readonly class Actor
 
     public const VIA_SYSTEM = 'system';
 
+    /** The reason of the flow of an agent (`Actor::agent`). */
+    public const AGENT = 'agent';
+
     /** The form of a socket ID of Pusher and Reverb: `<number>.<number>` (A282). */
     public const SOCKET_PATTERN = '/^\d+\.\d+\z/';
 
@@ -140,6 +143,16 @@ final readonly class Actor
     public static function template(Template $template): self
     {
         return new self(User::defaultBot(), self::VIA_TEMPLATE, 'template');
+    }
+
+    /**
+     * The flow of an agent (spec 7.2): what werkbuch does around its runs (statuses, assignments, the start and end of a
+     * run) as the agent bot, through `automation` with the reason `agent` and for nobody (`on_behalf_of` would leave the
+     * person who assigned it out of the notifications). Events of this actor never start a run.
+     */
+    public static function agent(User $bot): self
+    {
+        return new self($bot, self::VIA_AUTOMATION, self::AGENT);
     }
 
     /**
