@@ -331,3 +331,21 @@ func TestDoctorRunsOnceAtATime(t *testing.T) {
 		t.Fatal("no clock in the status")
 	}
 }
+
+func TestDoctorRecoversFromAPanic(t *testing.T) {
+	d := &Daemon{Version: "0.4.0", Checks: func(ctx context.Context) []socket.Check { panic("checks broke") }}
+	func() {
+		defer func() { recover() }()
+		d.Doctor(context.Background())
+	}()
+	d.doctorMu.Lock()
+	left := d.doctorRun
+	d.doctorMu.Unlock()
+	if left != nil {
+		t.Fatal("a dead run stays")
+	}
+	d.Checks = func(ctx context.Context) []socket.Check { return []socket.Check{{Name: "git", Level: "ok"}} }
+	if r := d.Doctor(context.Background()); len(r) != 2 {
+		t.Fatalf("%+v", r)
+	}
+}

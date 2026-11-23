@@ -366,14 +366,17 @@ func (d *Daemon) checks(ctx context.Context) []socket.Check {
 		run = &doctorRun{done: make(chan struct{})}
 		d.doctorRun = run
 		d.doctorMu.Unlock()
+		// even after a panic in Checks the run leaves the table and its waiters go on
+		defer func() {
+			d.doctorMu.Lock()
+			d.doctorRun = nil
+			d.doctorMu.Unlock()
+			close(run.done)
+		}()
 		// the run outlives a caller that gives up, the others still wait for it
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+		defer cancel()
 		run.checks = d.Checks(rctx)
-		cancel()
-		d.doctorMu.Lock()
-		d.doctorRun = nil
-		d.doctorMu.Unlock()
-		close(run.done)
 		return run.checks
 	}
 	d.doctorMu.Unlock()
