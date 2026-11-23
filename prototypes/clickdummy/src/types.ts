@@ -248,6 +248,8 @@ export interface Comment {
   created_at: string;
   edited_at: string | null;
   reactions: { emoji: string; user_ids: string[] }[];
+  /** A bot's answer to a run (`review`, `comment`, a failed run): the run it came from (WEBU-18). */
+  run_id?: string;
 }
 
 export interface Attachment {
@@ -694,4 +696,212 @@ export type PageNode = Omit<Page, 'content' | 'simulate_conflict_once'> & { chil
 export interface WebhookSaved {
   webhook: Webhook;
   secret: string | null;
+}
+
+/* ------------------------------------------------------------- runner and agents (WEBU-18) */
+
+/**
+ * Spec `2026-11-23-runner-design.md`. A runner is a machine with the daemon `werkbuch-runner`, bound to the
+ * organisation. It polls for runs; online means it called in during the last minute.
+ */
+export interface Runner {
+  id: string;
+  /** The host name at pairing; can be renamed. */
+  name: string;
+  os: 'darwin' | 'linux';
+  arch: 'arm64' | 'amd64';
+  version: string;
+  /** When it last called in; the fake API keeps it close to the clock while the runner is online. */
+  last_seen_at: string;
+  online: boolean;
+  /** Slots from the runner's config: in all, per repo, and the pot of light runs (`review`, `comment`). */
+  slots: { total: number; per_repo: number; light: number };
+  /** Projects the runner has an environment for (identifiers, from its config). */
+  projects: string[];
+  /** The last self-update failed: why; the old version keeps running. */
+  update_error: string | null;
+  created_at: string;
+  /** What runs on it now or waits for it, with the item. */
+  active_runs: { id: string; type: RunType; status: RunStatus; item_id: string; item_key: string; item_title: string; started_at: string | null }[];
+}
+
+/** A one-time code to pair a runner: valid for ten minutes, redeemed once. */
+export interface RunnerPairing {
+  code: string;
+  /** `curl -fsSL <APP_URL>/runner/install.sh | sh -s -- --code <CODE>`. */
+  command: string;
+  expires_at: string;
+  /** Set once a runner redeemed the code: the new runner. */
+  runner_id: string | null;
+}
+
+export type AgentCli = 'claude' | 'codex';
+
+/** The kinds of run (spec 7.1). */
+export type RunType = 'task' | 'correction' | 'conflict' | 'review' | 'comment';
+
+/** The agent configuration of a bot (spec 10.4); a bot without one, or with `enabled` false, stays a plain API bot. */
+export interface AgentConfig {
+  bot_id: string;
+  enabled: boolean;
+  /** The runners it may run on; the first free one that has the project takes a run. */
+  runner_ids: string[];
+  cli: AgentCli;
+  /** A free text per CLI (`sonnet`, `opus`, a full id). */
+  model: string;
+  /** Overrides per kind of run; missing ones take `model`. */
+  models: Partial<Record<RunType, string>>;
+  /** A free instruction added to every prompt of this bot. */
+  instruction: string;
+  /** Runs of this agent at the same time. */
+  slots: number;
+  /** Minutes per kind of run. */
+  timeouts: Record<RunType, number>;
+}
+
+/** The steps of the flow that set a status (spec 7.4). */
+export type AgentStep = 'working' | 'review' | 'correction' | 'merged';
+
+export type MergeMethod = 'squash' | 'merge' | 'rebase';
+
+/** The agent settings of a project (spec 10.3). */
+export interface ProjectAgents {
+  project_id: string;
+  /** `owner/name` of a repo both apps are installed on; null: the project has no repo (runs end with a summary). */
+  repo: string | null;
+  base_branch: string;
+  merge_method: MergeMethod;
+  /** The bot that reviews PRs of the repo, of agents and of people. */
+  review_bot_id: string | null;
+  /** The status each step sets; agents are off in the project until all four are set. */
+  states: Record<AgentStep, string | null>;
+  max_corrections: number;
+  max_conflicts: number;
+  review_human_prs: boolean;
+  comment_on_pr: boolean;
+  models: Partial<Record<RunType, string>>;
+  /** Label → model, in order: the first row an item's labels match wins. */
+  label_models: { label_id: string; model: string }[];
+  /** The working rules per kind of run as Markdown; null takes the standard werkbuch ships. */
+  rules: Record<RunType, string | null>;
+}
+
+/** The two GitHub apps of the instance (spec 11.3). */
+export interface GithubApp {
+  /** "Feldwerk werkbuch", "Feldwerk werkbuch review": global names at GitHub. */
+  name: string;
+  slug: string;
+  /** What the app may do, in words. */
+  permissions: string[];
+  webhooks: boolean;
+  installed: boolean;
+  created_at: string;
+}
+
+export interface GithubRepo {
+  full_name: string;
+  private: boolean;
+  default_branch: string;
+  agent_app: boolean;
+  review_app: boolean;
+}
+
+export interface GithubConnection {
+  agent_app: GithubApp | null;
+  review_app: GithubApp | null;
+  repos: GithubRepo[];
+}
+
+export type RunStatus = 'queued' | 'waiting' | 'running' | 'canceling' | 'succeeded' | 'failed' | 'canceled' | 'timed_out' | 'lost';
+
+export type ModelSource = 'label' | 'project' | 'bot';
+
+export interface RunLogLine {
+  /** Seconds after the start of the run. */
+  offset: number;
+  kind: 'system' | 'text' | 'tool' | 'result' | 'error';
+  text: string;
+}
+
+/** A run of an agent on a runner (`agent_runs`, spec 7.5). */
+export interface AgentRun {
+  id: string;
+  type: RunType;
+  status: RunStatus;
+  bot_id: string;
+  runner_id: string | null;
+  item_id: string;
+  thread_id: string | null;
+  model: string;
+  model_source: ModelSource;
+  /** With `model_source` label: the label that chose it. */
+  model_label_id: string | null;
+  attempt: number;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  /** `review`: the verdict; `task`/`correction`/`conflict`: the commit it pushed; a short summary. */
+  result: { verdict?: 'approve' | 'changes'; commit?: string; summary?: string } | null;
+  error: string | null;
+  /** Tokens, when the CLI reports them. */
+  usage: { input: number; output: number } | null;
+  /** The log of the CLI as far as it has come; only lines up to now. */
+  log: RunLogLine[];
+  /** Who canceled it. */
+  canceled_by: string | null;
+  /** The runner as the reader may know it (only org admins list runners). */
+  runner_name: string | null;
+  runner_online: boolean;
+  /** When the runner last called in; while it is offline, the time a waiting run counts from. */
+  runner_last_seen_at: string | null;
+}
+
+/** The work on one item or epic: runner, branch, worktree, session, PR (`agent_threads`). */
+export interface AgentThread {
+  id: string;
+  item_id: string;
+  bot_id: string;
+  runner_id: string;
+  branch: string;
+  status: 'open' | 'paused' | 'merged' | 'closed';
+  corrections: number;
+  conflicts: number;
+  pr_number: number | null;
+}
+
+export interface PullRequestCheck {
+  name: string;
+  status: 'queued' | 'in_progress' | 'completed';
+  conclusion: 'success' | 'failure' | 'cancelled' | 'skipped' | null;
+}
+
+/** A PR at an item (`work_item_links`, spec 12). */
+export interface PullRequestLink {
+  id: string;
+  item_id: string;
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  state: 'open' | 'merged' | 'closed';
+  draft: boolean;
+  head_branch: string;
+  base_branch: string;
+  head_sha: string;
+  /** `Fixes KEY` in the PR: closes the item on merge; otherwise only linked. */
+  closes: boolean;
+  /** Who opened it: an agent (bot id) or a person (GitHub login). */
+  author: { kind: 'agent'; bot_id: string } | { kind: 'person'; login: string };
+  review: 'approve' | 'changes' | null;
+  checks: PullRequestCheck[];
+  updated_at: string;
+}
+
+/** What the item detail shows about agents: the open thread, the runs, the PRs, and why no agent works here. */
+export interface ItemAgentState {
+  thread: AgentThread | null;
+  runs: AgentRun[];
+  pull_requests: PullRequestLink[];
+  /** The assignee is a bot that does not work as an agent here: why (null otherwise). */
+  not_an_agent: string | null;
 }

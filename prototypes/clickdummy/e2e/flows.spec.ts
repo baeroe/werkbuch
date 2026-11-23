@@ -1,5 +1,6 @@
 /*
- * The seven flows of the clickdummy (plan, Task 13, step 1; spec 1, success criteria 2–6). Every step runs on the
+ * The seven flows of the clickdummy (plan, Task 13, step 1; spec 1, success criteria 2–6), and an eighth for the runner and
+ * the agents (WEBU-18). Every step runs on the
  * keyboard, only the board drag uses the mouse (dnd-kit listens to pointer events). A flow may start on a route
  * opened by its address; everything after that is typed. Beside them, checks on a phone measure the table's targets,
  * the path of an item with and without a parent and the epic on a narrow board card, and a check in both themes looks
@@ -281,6 +282,66 @@ async function calendarToday(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: /^Due-Date:/ }).first().click();
   return page.getByRole('grid').getByRole('button', { name: /, heute$/ }).locator('span');
 }
+
+test('Flow 8 (WEBU-18): connect a runner, set up the agent, assign an item to the bot, watch the run, cancel it', async ({ page }) => {
+  // connect a runner: the command with a one-time code, and the demo stands in for the machine
+  await page.goto('/settings/runners');
+  await expect(page.getByRole('heading', { level: 2, name: 'Runner' })).toBeVisible();
+  await tabTo(page, page.getByRole('button', { name: 'Runner verbinden' }));
+  await page.keyboard.press('Enter');
+  const pairing = page.getByRole('dialog', { name: 'Runner verbinden' });
+  await expect(pairing.getByRole('code')).toContainText(/install\.sh \| sh -s -- --code [A-Z0-9]{4}-[A-Z0-9]{4}/);
+  await expect(pairing.getByText(/gültig bis \d\d:\d\d/)).toBeVisible();
+  await tabTo(page, pairing.getByRole('button', { name: 'Verbindung simulieren' }));
+  await page.keyboard.press('Enter');
+  const connected = page.getByRole('dialog', { name: '„mac-mini-buero“ ist verbunden' });
+  await expect(connected.getByRole('button', { name: 'Fertig' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('article', { name: 'mac-mini-buero' })).toBeVisible();
+
+  // the new runner joins Kira's pool
+  await page.goto('/settings/bots?agent=u_kira');
+  await expect(page.getByRole('heading', { level: 2, name: 'Kira als Agent' })).toBeVisible();
+  const runner = page.getByRole('checkbox', { name: 'mac-mini-buero' });
+  await tabTo(page, runner);
+  await page.keyboard.press('Space');
+  await expect(runner).toBeChecked();
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(page.getByText('Kira: Agent gespeichert')).toBeVisible();
+
+  // WEB-50 goes to Kira: a task is queued and starts on a runner of the pool
+  await page.goto('/items/WEB-50');
+  await expect(page.getByRole('heading', { level: 1, name: 'Fehlerseite 404 gestalten' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Felder' }).getByRole('combobox', { name: /^Assignee: / })).toBeVisible();
+  // a waits until the people of the project are there ("Einen Moment" otherwise)
+  await expect(async () => {
+    await page.keyboard.press('a');
+    await expect(page.getByRole('combobox', { name: 'Zuweisen …' })).toBeFocused({ timeout: 1_000 });
+  }).toPass();
+  await page.keyboard.type('kira');
+  await expect(page.getByRole('option', { name: /^Kira/ })).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Enter');
+
+  const run = page.getByRole('article', { name: 'Auftrag „Umsetzen“ von Kira' });
+  await expect(run.getByText('Läuft')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: /Kira arbeitet: Umsetzen/ })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Felder' }).getByRole('combobox', { name: 'Status: In Progress' })).toBeVisible();
+
+  // the log of the CLI, live while it runs
+  await tabTo(page, run.getByRole('button', { name: /^Protokoll/ }));
+  await page.keyboard.press('Enter');
+  await expect(run.getByRole('log', { name: 'Protokoll: Umsetzen' })).toContainText('werkbuch_work-items get WEB-50', { timeout: 15_000 });
+
+  // cancel, after the question
+  await tabTo(page, run.getByRole('button', { name: 'Abbrechen' }));
+  await page.keyboard.press('Enter');
+  const question = page.getByRole('alertdialog', { name: 'Auftrag „Umsetzen“ abbrechen?' });
+  await tabTo(page, question.getByRole('button', { name: 'Auftrag abbrechen' }));
+  await page.keyboard.press('Enter');
+  await expect(run.getByText('Abgebrochen', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Auftrag abgebrochen: Umsetzen')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Erneut starten' }).first()).toBeVisible();
+});
 
 test.describe('the highlighter marks today (DESIGN.md: at night yellow text with a glow instead of a yellow area)', () => {
   test('by day the label on the timeline is a yellow chip, and the calendar marks today in yellow', async ({ page }) => {

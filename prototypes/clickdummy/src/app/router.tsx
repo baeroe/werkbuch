@@ -15,6 +15,7 @@ import { closePeekOnNavigation } from './PeekHost';
 import { Shell } from './Shell';
 
 const Gallery = lazy(() => import('@/routes/components-gallery').then((module) => ({ default: module.ComponentsGallery })));
+const Tui = lazy(() => import('@/routes/tui/TuiPage').then((module) => ({ default: module.TuiPage })));
 const Login = lazy(() => import('@/features/auth/Login'));
 const Invitation = lazy(() => import('@/features/auth/Invitation'));
 const ForgotPassword = lazy(() => import('@/features/auth/ForgotPassword'));
@@ -67,6 +68,7 @@ export const routes: RouteObject[] = [
     errorElement: <StandaloneError />,
     children: [
       { path: '_components', element: <Gallery /> },
+      { path: '_tui', element: <Tui /> },
       { path: 'login', element: <Login /> },
       { path: 'invitations/:token', element: <Invitation /> },
       { path: 'forgot-password', element: <ForgotPassword /> },

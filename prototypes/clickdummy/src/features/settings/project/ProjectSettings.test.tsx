@@ -50,15 +50,15 @@ describe('the frame', () => {
     await screen.findByRole('navigation', { name: 'Bereiche der Projekteinstellungen' });
 
     const commands = listCommands().filter((command) => command.id.startsWith('settings.project.'));
-    expect(commands.map((command) => command.label)).toEqual(['Allgemein öffnen', 'Mitglieder öffnen', 'Workflow öffnen', 'Typen öffnen', 'Automatisierungen öffnen']);
+    expect(commands.map((command) => command.label)).toEqual(['Allgemein öffnen', 'Mitglieder öffnen', 'Workflow öffnen', 'Typen öffnen', 'Automatisierungen öffnen', 'Agenten öffnen']);
     expect(commands.every((command) => command.group === 'Einstellungen WEB')).toBe(true);
   });
 
-  it('links the five sections and marks the open one', async () => {
+  it('links the six sections and marks the open one', async () => {
     renderSettings('/projects/WEB/settings/workflow');
     const nav = await screen.findByRole('navigation', { name: 'Bereiche der Projekteinstellungen' });
 
-    expect(within(nav).getAllByRole('link').map((link) => link.textContent)).toEqual(['Allgemein', 'Mitglieder', 'Workflow', 'Typen', 'Automatisierungen']);
+    expect(within(nav).getAllByRole('link').map((link) => link.textContent)).toEqual(['Allgemein', 'Mitglieder', 'Workflow', 'Typen', 'Automatisierungen', 'Agenten']);
     expect(within(nav).getByRole('link', { name: 'Workflow' }).getAttribute('aria-current')).toBe('page');
     expect(within(nav).getByRole('link', { name: 'Typen' }).getAttribute('href')).toBe('/projects/WEB/settings/types');
   });

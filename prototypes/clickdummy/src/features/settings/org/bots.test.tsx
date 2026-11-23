@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { listTokens } from '@/api/tokens';
 import { listUsers } from '@/api/users';
@@ -20,7 +21,7 @@ afterEach(() => {
 
 function renderWithData(node: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return { ...render(<QueryClientProvider client={client}>{node}</QueryClientProvider>), client };
+  return { ...render(<MemoryRouter><QueryClientProvider client={client}>{node}</QueryClientProvider></MemoryRouter>), client };
 }
 
 /** The card of a bot, by its name. */

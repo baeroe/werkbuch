@@ -13,10 +13,13 @@
  */
 
 import type {
+  AgentConfig,
+  AgentThread,
   Attachment,
   Automation,
   Comment,
   Favorite,
+  GithubConnection,
   Invitation,
   ItemEvent,
   Label,
@@ -26,8 +29,10 @@ import type {
   Page,
   PageVersion,
   Project,
+  ProjectAgents,
   ProjectMember,
   Property,
+  PullRequestLink,
   Relation,
   RelationType,
   Resolution,
@@ -44,14 +49,16 @@ import type {
   WorkItemType,
 } from '@/types';
 import { createSeed } from './seed';
+import type { StoredPairing, StoredRun, StoredRunner } from './seed/agents';
 
 export const DB_KEY = 'werkbuch:db';
 /**
  * 2: relation events name the other item by id (`{ label, item_id }`), not by key.
  * 3: two levels of items (correction round 2026-10-29): only epics are parents, epics have none.
  * 4: bots are called „Bot“ (correction round 2026-10-29): Kira's description, its token „MCP“ and its webhook „Kira“.
+ * 5: runners, GitHub and agents (WEBU-18).
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /** An earlier identifier of a project: keys like `OLD-12` keep resolving after a rename. */
 export interface ProjectAlias {
@@ -102,6 +109,15 @@ export interface Db {
   webhooks: StoredWebhook[];
   webhook_deliveries: WebhookDelivery[];
   system: SystemStatus;
+  /* runner and agents (WEBU-18) */
+  runners: StoredRunner[];
+  runner_pairings: StoredPairing[];
+  github: GithubConnection;
+  agent_configs: AgentConfig[];
+  project_agents: ProjectAgents[];
+  agent_threads: AgentThread[];
+  agent_runs: StoredRun[];
+  pull_requests: PullRequestLink[];
 }
 
 /** The collections a stored document must have to be usable. */
@@ -134,8 +150,15 @@ const ARRAY_KEYS = [
   'notification_preferences',
   'webhooks',
   'webhook_deliveries',
+  'runners',
+  'runner_pairings',
+  'agent_configs',
+  'project_agents',
+  'agent_threads',
+  'agent_runs',
+  'pull_requests',
 ] as const;
-const OBJECT_KEYS = ['organization', 'counters', 'unsubscribed', 'system'] as const;
+const OBJECT_KEYS = ['organization', 'counters', 'unsubscribed', 'system', 'github'] as const;
 
 let cache: Db | null = null;
 /** What is in storage (or would be, when storage is blocked): the state a rollback returns to. */

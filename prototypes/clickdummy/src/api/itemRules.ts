@@ -20,6 +20,7 @@ import { ApiError, clone, conflict, FieldErrors, invalid, reasonText, sameJson, 
 import type { Db } from './db';
 import { addSubscriber, notifyPeople, recordEvent } from './events';
 import { itemResource, projectOf, stateOf, userName, workflowOf } from './lookup';
+import { onAssigneeChanged } from './runs';
 import { checkValues } from './values';
 
 export const PRIORITIES: readonly Priority[] = ['urgent', 'high', 'medium', 'low', 'none'];
@@ -540,6 +541,8 @@ export function patchItem(
         recordEvent(ctx, { type: 'bot.assigned', actor_id: actor.id, subject: { type: 'work_item', id: item.id }, project_id: item.project_id, bot_id: assignee.id });
       }
     }
+    // an agent gets a run, one that is given the item away stops (WEBU-18)
+    onAssigneeChanged(ctx, actor, item, previous);
   }
 
   if (patch.state_id !== undefined || patch.resolution_id !== undefined) {

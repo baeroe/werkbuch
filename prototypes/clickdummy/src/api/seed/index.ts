@@ -4,11 +4,12 @@
  *
  * `createSeed` builds a fresh document each time, so the stored data can be changed without touching the seed.
  * The pieces live in this folder, one file per topic, so each stays readable:
- * people · config · items · activity · workspace · pages · inbox · files · helpers
+ * people · config · items · activity · workspace · pages · inbox · files · helpers · agents (WEBU-18)
  */
 
 import type { Db } from '../db';
 import { attachments, comments, events, watchers } from './activity';
+import { agentComments, agentConfigs, agentEvents, agentRuns, agentThreads, github, projectAgents, pullRequests, runners } from './agents';
 import { labels, projectAutomations, properties, relationTypes, resolutions, types, workflows } from './config';
 import { notifications, system, webhookDeliveries, webhooks } from './inbox';
 import { buildItems, relations } from './items';
@@ -39,9 +40,9 @@ export function createSeed(): Omit<Db, 'schema_version'> {
     resolutions,
     items,
     relations,
-    comments,
+    comments: [...comments, ...agentComments],
     attachments,
-    events,
+    events: [...events, ...agentEvents],
     unsubscribed: {},
     views,
     favorites,
@@ -55,6 +56,14 @@ export function createSeed(): Omit<Db, 'schema_version'> {
     webhooks,
     webhook_deliveries: webhookDeliveries,
     system,
+    runners,
+    runner_pairings: [],
+    github,
+    agent_configs: agentConfigs,
+    project_agents: projectAgents,
+    agent_threads: agentThreads,
+    agent_runs: agentRuns,
+    pull_requests: pullRequests,
   };
   // the modules export plain data; a copy keeps stored changes away from them (and from the next `createSeed`)
   return structuredClone(db);

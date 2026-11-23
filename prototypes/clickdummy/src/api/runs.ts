@@ -1,0 +1,302 @@
+/*
+ * Runs of agents at an item (WEBU-18, spec 6 and 7). The fake API plays the runner as well: a queued run starts four
+ * seconds after it was queued on a free runner of the agent's pool, its log streams in line by line (a line shows once
+ * the clock has passed its offset), and a cancel takes three seconds until the runner has stopped the CLI. These steps
+ * happen when somebody reads (`advance`), so the screens see them by polling.
+ *
+ * What werkbuch does around a run follows the spec: assigning an item to an agent queues a `task` (or a `correction`
+ * when the item has a strand already, and the brake starts over); assigning it to somebody else cancels what runs and
+ * pauses the strand. Statuses are set by the agent bot with the reason „Agent: …“.
+ */
+
+import { isActive, pickModel, RUN_TYPE_NAMES, whyNotHere } from '@/domain/agents';
+import { now as clockNow } from '@/lib/clock';
+import type { AgentRun, AgentThread, ItemAgentState, RunType, User, WorkItemRecord } from '@/types';
+import { canSeeProject, requireWritable } from './access';
+import { conflict, makeCtx, newId, notFound, read, write, type Ctx } from './client';
+import { saveDb, type Db } from './db';
+import { moveItem } from './itemRules';
+import { LOG_TEMPLATES, type StoredRun, type StoredRunner } from './seed/agents';
+import { requireItem } from './workItems';
+
+/** A queued run starts this long after it was queued, when a runner is free. */
+export const START_DELAY_MS = 4_000;
+/** How long a runner takes to stop the CLI after a cancel. */
+export const CANCEL_DELAY_MS = 3_000;
+/** After this long offline, another runner of the pool may take over a strand (spec 9). */
+export const TAKEOVER_MS = 30 * 60_000;
+
+const CODE_RUNS: readonly RunType[] = ['task', 'correction', 'conflict'];
+
+export { isActive };
+
+/** An online runner calls in every few seconds; its last contact is close to the clock. */
+export function lastSeen(runner: StoredRunner, at: Date): string {
+  return runner.online ? new Date(at.getTime() - 3_000).toISOString() : runner.last_seen_at;
+}
+
+const elapsed = (from: string, at: Date) => (at.getTime() - Date.parse(from)) / 1000;
+
+function slug(title: string): string {
+  return title
+    .toLowerCase()
+    .replaceAll('ä', 'ae')
+    .replaceAll('ö', 'oe')
+    .replaceAll('ü', 'ue')
+    .replaceAll('ß', 'ss')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .split('-')
+    .slice(0, 4)
+    .join('-');
+}
+
+/* ------------------------------------------------------------------------- the runner */
+
+function agentBot(db: Db, botId: string): User | undefined {
+  return db.users.find((user) => user.id === botId);
+}
+
+/** A runner of the pool that is online, has the project and a free repo slot. */
+function freeRunner(db: Db, run: StoredRun, item: WorkItemRecord): StoredRunner | undefined {
+  const config = db.agent_configs.find((entry) => entry.bot_id === run.bot_id);
+  const project = db.projects.find((entry) => entry.id === item.project_id);
+  if (!config || !project) return undefined;
+  const thread = db.agent_threads.find((entry) => entry.id === run.thread_id);
+  // a correction or comment at a strand goes to the strand's runner (spec 9)
+  const pool = thread?.runner_id && run.type !== 'review' ? config.runner_ids.filter((id) => id === thread.runner_id) : config.runner_ids;
+  return pool
+    .map((id) => db.runners.find((runner) => runner.id === id))
+    .find((runner): runner is StoredRunner => {
+      if (!runner?.online || !runner.projects.includes(project.identifier)) return false;
+      const busy = db.agent_runs.filter((other) => other.runner_id === runner.id && (other.status === 'running' || other.status === 'canceling'));
+      return busy.length < runner.slots.total;
+    });
+}
+
+function fillLog(run: StoredRun, item: WorkItemRecord, branch: string) {
+  return LOG_TEMPLATES[run.type].map((line) => ({ ...line, text: line.text.replaceAll('{key}', item.key).replaceAll('{branch}', branch).replaceAll('{model}', run.model) }));
+}
+
+/**
+ * Plays the runners up to now: queued runs start, cancels finish. Returns whether anything changed. Sets the status
+ * of an item when a code run starts (the agent bot, with the transition check; a forbidden move is left out).
+ */
+export function advance(db: Db, at: Date = clockNow()): boolean {
+  let changed = false;
+  for (const run of db.agent_runs) {
+    if (run.status === 'queued' && at.getTime() - Date.parse(run.created_at) >= START_DELAY_MS) {
+      const item = db.items.find((entry) => entry.id === run.item_id);
+      const runner = item && freeRunner(db, run, item);
+      if (!item || !runner) continue;
+      const started = new Date(Date.parse(run.created_at) + START_DELAY_MS);
+      const thread = db.agent_threads.find((entry) => entry.id === run.thread_id);
+      run.status = 'running';
+      run.runner_id = runner.id;
+      if (thread && thread.runner_id === '') thread.runner_id = runner.id;
+      run.started_at = started.toISOString();
+      run.log = fillLog(run, item, thread?.branch ?? `agent/${item.key}`);
+      changed = true;
+      const settings = db.project_agents.find((entry) => entry.project_id === item.project_id);
+      const bot = agentBot(db, run.bot_id);
+      if (bot && settings?.states.working && CODE_RUNS.includes(run.type) && item.state_id !== settings.states.working) {
+        try {
+          moveItem(makeCtx(db, bot, started), bot, item, settings.states.working, null, { reason: `Agent: Auftrag „${RUN_TYPE_NAMES[run.type]}“ gestartet` });
+        } catch {
+          // the workflow does not allow it: the status stays (spec 7.2)
+        }
+      }
+    }
+    if (run.status === 'canceling' && run.cancel_requested_at && at.getTime() - Date.parse(run.cancel_requested_at) >= CANCEL_DELAY_MS) {
+      run.status = 'canceled';
+      run.finished_at = new Date(Date.parse(run.cancel_requested_at) + CANCEL_DELAY_MS).toISOString();
+      const who = run.canceled_by ? (db.users.find((user) => user.id === run.canceled_by)?.name ?? 'jemandem') : 'werkbuch';
+      if (run.started_at) run.log.push({ offset: elapsed(run.started_at, new Date(run.finished_at)), kind: 'system', text: `Abgebrochen von ${who}. Der Runner hat Claude Code beendet (SIGTERM).` });
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/** Plays the runners and keeps what changed; reading the runs of an item is where the demo moves on. */
+function advanceAndStore(db: Db): void {
+  if (!advance(db)) return;
+  try {
+    saveDb();
+  } catch {
+    // storage full or blocked: the demo moves on in memory
+  }
+}
+
+/* ------------------------------------------------------------------------- the views */
+
+/** A run as the reader gets it: the log up to now and the runner's name. */
+export function runView(db: Db, run: StoredRun, at: Date = clockNow()): AgentRun {
+  const { cancel_requested_at: _cancel, ...rest } = run;
+  const runner = db.runners.find((entry) => entry.id === run.runner_id);
+  const shown = run.started_at === null ? [] : run.finished_at !== null ? run.log : run.log.filter((line) => Date.parse(run.started_at!) + line.offset * 1000 <= at.getTime());
+  return { ...rest, log: shown, runner_name: runner?.name ?? null, runner_online: runner?.online ?? false, runner_last_seen_at: runner ? lastSeen(runner, at) : null };
+}
+
+/** Why the assignee of an item does not work as an agent there; null when it does, or the assignee is a person. */
+export function whyAssigneeIsNoAgent(db: Db, item: WorkItemRecord): string | null {
+  const bot = db.users.find((user) => user.id === item.assignee_id);
+  if (bot?.type !== 'bot') return null;
+  const project = db.projects.find((entry) => entry.id === item.project_id)!;
+  return whyNotHere(bot, db.agent_configs.find((entry) => entry.bot_id === bot.id) ?? null, {
+    identifier: project.identifier,
+    // a bot works where it is a member, never as a reader of a public project
+    role: db.project_members.find((member) => member.project_id === project.id && member.user_id === bot.id)?.role ?? null,
+    settings: db.project_agents.find((entry) => entry.project_id === project.id) ?? null,
+    workflow: db.workflows.find((workflow) => workflow.id === project.workflow_id),
+  });
+}
+
+/** Everything about agents at an item: strand, runs (oldest first), PRs, and why the assigned bot does no work here. */
+export function getItemAgents(itemRef: string): Promise<ItemAgentState> {
+  return read(({ db, me }) => {
+    advanceAndStore(db);
+    const { item } = requireItem(db, me, itemRef);
+    const threads = db.agent_threads.filter((thread) => thread.item_id === item.id);
+    const thread = threads.find((entry) => entry.status === 'open' || entry.status === 'paused') ?? threads.at(-1) ?? null;
+    return {
+      thread,
+      runs: db.agent_runs.filter((run) => run.item_id === item.id).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)).map((run) => runView(db, run)),
+      pull_requests: db.pull_requests.filter((pr) => pr.item_id === item.id).sort((a, b) => b.number - a.number),
+      not_an_agent: whyAssigneeIsNoAgent(db, item),
+    };
+  });
+}
+
+/* ---------------------------------------------------------------------- what werkbuch does */
+
+function queueRun(ctx: Ctx, bot: User, item: WorkItemRecord, thread: AgentThread | null, type: RunType, attempt = 1): StoredRun {
+  const { db, stamp } = ctx;
+  const settings = db.project_agents.find((entry) => entry.project_id === item.project_id) ?? null;
+  const config = db.agent_configs.find((entry) => entry.bot_id === bot.id)!;
+  const parent = item.parent_id ? db.items.find((entry) => entry.id === item.parent_id) : undefined;
+  const model = pickModel({ type, labelIds: item.label_ids, epicLabelIds: parent?.label_ids ?? [], project: settings, agent: config });
+  const offline = thread ? db.runners.find((runner) => runner.id === thread.runner_id && !runner.online) : undefined;
+  const run: StoredRun = {
+    id: newId('run'),
+    type,
+    status: offline ? 'waiting' : 'queued',
+    bot_id: bot.id,
+    runner_id: thread?.runner_id ?? null,
+    item_id: item.id,
+    thread_id: thread?.id ?? null,
+    model: model.model,
+    model_source: model.source,
+    model_label_id: model.label_id,
+    attempt,
+    created_at: stamp,
+    started_at: null,
+    finished_at: null,
+    result: null,
+    error: null,
+    usage: null,
+    log: [],
+    canceled_by: null,
+    cancel_requested_at: null,
+  };
+  db.agent_runs.push(run);
+  return run;
+}
+
+function cancelActive(ctx: Ctx, item: WorkItemRecord, by: string | null): void {
+  for (const run of ctx.db.agent_runs) {
+    if (run.item_id !== item.id || !isActive(run) || run.status === 'canceling') continue;
+    if (run.status === 'running') {
+      run.status = 'canceling';
+      run.cancel_requested_at = ctx.stamp;
+      run.canceled_by = by;
+    } else {
+      run.status = 'canceled';
+      run.finished_at = ctx.stamp;
+      run.canceled_by = by;
+    }
+  }
+}
+
+/**
+ * The assignee of an item changed (from `patchItem`). To an agent that works in the project: a `task` on a new strand,
+ * or a `correction` on the strand the item has, and its brake starts over. Away from the agent to somebody else: what
+ * runs is canceled and the strand pauses; the PR stays (spec 7.2, „Mensch greift ein“).
+ */
+export function onAssigneeChanged(ctx: Ctx, actor: User, item: WorkItemRecord, previous: string | null): void {
+  const { db } = ctx;
+  const thread = db.agent_threads.find((entry) => entry.item_id === item.id && (entry.status === 'open' || entry.status === 'paused')) ?? null;
+  const left = db.users.find((user) => user.id === previous);
+  if (left?.type === 'bot' && thread && thread.bot_id === left.id && actor.id !== left.id) {
+    cancelActive(ctx, item, actor.id);
+    thread.status = 'paused';
+  }
+  const bot = db.users.find((user) => user.id === item.assignee_id);
+  if (bot?.type !== 'bot' || whyAssigneeIsNoAgent(db, item) !== null) return;
+  if (thread && thread.bot_id === bot.id) {
+    thread.status = 'open';
+    thread.corrections = 1;
+    thread.conflicts = 0;
+    queueRun(ctx, bot, item, thread, 'correction');
+    return;
+  }
+  // the strand gets its runner when its first run starts
+  const created: AgentThread = { id: newId('th'), item_id: item.id, bot_id: bot.id, runner_id: '', branch: `agent/${item.key}-${slug(item.title)}`, status: 'open', corrections: 0, conflicts: 0, pr_number: null };
+  db.agent_threads.push(created);
+  queueRun(ctx, bot, item, created, 'task');
+}
+
+function findRun(db: Db, id: string): StoredRun {
+  const run = db.agent_runs.find((entry) => entry.id === id);
+  if (!run) throw notFound('Der Auftrag');
+  return run;
+}
+
+/** Cancels a run (whoever may change the item): a running one stops within seconds, a waiting one at once. */
+export function cancelRun(id: string): Promise<AgentRun> {
+  return write((ctx) => {
+    advance(ctx.db, ctx.now);
+    const run = findRun(ctx.db, id);
+    const { project } = requireItem(ctx.db, ctx.me, run.item_id);
+    requireWritable(ctx.db, ctx.me, project, 'member', 'Aufträge abbrechen darf, wer das Item bearbeiten darf.');
+    if (!isActive(run)) throw conflict('run_finished', 'Der Auftrag ist schon beendet.');
+    if (run.status !== 'canceling') {
+      if (run.status === 'running') {
+        run.status = 'canceling';
+        run.cancel_requested_at = ctx.stamp;
+      } else {
+        run.status = 'canceled';
+        run.finished_at = ctx.stamp;
+      }
+      run.canceled_by = ctx.me.id;
+    }
+    return runView(ctx.db, run, ctx.now);
+  });
+}
+
+/**
+ * Starts a run again that failed, ran out of time, got lost or was canceled: the same kind on the same strand, as the
+ * next attempt. The brake is not reset (spec 7.2).
+ */
+export function retryRun(id: string): Promise<AgentRun> {
+  return write((ctx) => {
+    advance(ctx.db, ctx.now);
+    const run = findRun(ctx.db, id);
+    const { item, project } = requireItem(ctx.db, ctx.me, run.item_id);
+    requireWritable(ctx.db, ctx.me, project, 'member', 'Aufträge erneut starten darf, wer das Item bearbeiten darf.');
+    if (isActive(run) || run.status === 'succeeded') throw conflict('run_not_failed', 'Nur gescheiterte oder abgebrochene Aufträge lassen sich erneut starten.');
+    if (ctx.db.agent_runs.some((other) => other.item_id === item.id && isActive(other))) throw conflict('run_active', `An ${item.key} läuft schon ein Auftrag.`);
+    const bot = agentBot(ctx.db, run.bot_id)!;
+    const thread = ctx.db.agent_threads.find((entry) => entry.id === run.thread_id) ?? null;
+    if (thread) thread.status = 'open';
+    const attempts = ctx.db.agent_runs.filter((other) => other.thread_id === run.thread_id && other.type === run.type).length;
+    return runView(ctx.db, queueRun(ctx, bot, item, thread, run.type, attempts + 1), ctx.now);
+  });
+}
+
+/** Whether the reader may see the item of a run; runs are listed per item only. */
+export function runVisible(db: Db, me: User, run: StoredRun): boolean {
+  const item = db.items.find((entry) => entry.id === run.item_id);
+  const project = item && db.projects.find((entry) => entry.id === item.project_id);
+  return Boolean(project && canSeeProject(db, me, project));
+}

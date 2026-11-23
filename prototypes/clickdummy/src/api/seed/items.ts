@@ -160,6 +160,8 @@ const rows: Row[] = [
     due: '11-03',
     by: 'mara',
     created: '10-16',
+    started: '10-28 08:52',
+    updated: '10-28 09:49',
     desc: 'Alle Bilder der Startseite und der Leistungsseiten brauchen aussagekräftige Alt-Texte.',
   },
   {
@@ -192,11 +194,12 @@ const rows: Row[] = [
     updated: '10-27 10:20',
   },
   { key: 'WEB-48', type: 'task', title: 'Navigation für Mobilgeräte überarbeiten', state: 'todo', p: 'high', a: 'lene', l: ['ux'], parent: 'WEB-30', created: '10-21', desc: 'Aktuell läuft das Menü auf Smartphones über einen Burger-Button. Zu prüfen ist eine Tab-Leiste am unteren Rand.', updated: '10-27 16:30' },
-  { key: 'WEB-49', type: 'task', title: 'Leistungsseiten: Layout-Vorlage', state: 'backlog', p: 'medium', parent: 'WEB-30', v: { customer: NORD }, created: '10-22' },
+  // WEB-49 and WEB-51: the agent demo (WEBU-18): Kira gave WEB-49 back after three corrections, it works on WEB-51
+  { key: 'WEB-49', type: 'task', title: 'Leistungsseiten: Layout-Vorlage', state: 'todo', p: 'medium', a: 'mara', parent: 'WEB-30', v: { customer: NORD }, created: '10-22', started: '10-27 09:10', updated: '10-27 12:58' },
   { key: 'WEB-50', type: 'task', title: 'Fehlerseite 404 gestalten', state: 'todo', p: 'medium', created: '10-22' },
-  { key: 'WEB-51', type: 'task', title: 'Cookie-Banner auf Consent v2 umstellen', state: 'backlog', p: 'low', created: '10-23' },
+  { key: 'WEB-51', type: 'task', title: 'Cookie-Banner auf Consent v2 umstellen', state: 'progress', p: 'low', a: 'kira', by: 'mara', created: '10-23', started: '10-28 09:56', updated: '10-28 09:56' },
   { key: 'WEB-52', type: 'task', title: 'Wartung KW 44', state: 'progress', p: 'medium', a: 'jonas', l: ['backend'], by: 'automation', tpl: 'tpl_web_maintenance', due: '10-28', created: '10-26 09:00', started: '10-27 09:00' },
-  { key: 'WEB-53', type: 'task', title: 'robots.txt und Sitemap.xml ergänzen', state: 'todo', p: 'low', a: 'kira', l: ['seo'], due: '11-01', by: 'mara', created: '10-26', desc: 'Die Sitemap aus den Seiten erzeugen und in der robots.txt verlinken.' },
+  { key: 'WEB-53', type: 'task', title: 'robots.txt und Sitemap.xml ergänzen', state: 'todo', p: 'low', a: 'kira', l: ['seo'], due: '11-01', by: 'mara', created: '10-26', started: '10-28 08:05', updated: '10-28 09:10', desc: 'Die Sitemap aus den Seiten erzeugen und in der robots.txt verlinken.' },
   { key: 'WEB-54', type: 'task', title: 'Browser-Test Formulare (Safari, Firefox)', state: 'todo', p: 'medium', a: 'lene', l: ['forms'], created: '10-26' },
   { key: 'WEB-55', type: 'task', title: 'Bildformate auf AVIF prüfen', state: 'backlog', created: '10-27' },
   {

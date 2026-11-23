@@ -539,7 +539,8 @@ describe('simulated failures', () => {
 describe('seed: the moodboard demo content', () => {
   it('has the board cards with key, type, title, state and priority', async () => {
     const expected: [key: string, type: string, title: string, state: string | null, priority: string | null][] = [
-      ['WEB-51', 't_task', 'Cookie-Banner auf Consent v2 umstellen', 'std_backlog', 'low'],
+      // WEBU-18: Kira works on WEB-51 (the agent demo)
+      ['WEB-51', 't_task', 'Cookie-Banner auf Consent v2 umstellen', 'std_progress', 'low'],
       ['WEB-55', 't_task', 'Bildformate auf AVIF prüfen', 'std_backlog', 'none'],
       ['WEB-48', 't_task', 'Navigation für Mobilgeräte überarbeiten', 'std_todo', 'high'],
       ['WEB-50', 't_task', 'Fehlerseite 404 gestalten', 'std_todo', 'medium'],
@@ -646,7 +647,7 @@ describe('seed: the moodboard demo content', () => {
     expect(result.pages.map((page) => page.title)).toEqual(['Kontaktformular – Technik']);
   });
 
-  it('has the sizes of the brief: about 70 items, 3 archived, 15 with history, 3 with attachments', async () => {
+  it('has the sizes of the brief: about 70 items, 3 archived, 19 with history (4 more from the agent demo of WEBU-18), 3 with attachments', async () => {
     const db = getDb();
     expect(db.items.length).toBeGreaterThanOrEqual(65);
     expect(db.items.length).toBeLessThanOrEqual(80);
@@ -659,7 +660,7 @@ describe('seed: the moodboard demo content', () => {
       ...db.comments.map((comment) => comment.work_item_id),
       ...db.events.filter((event) => event.subject.type === 'work_item').map((event) => event.subject.id),
     ]);
-    expect(withHistory.size).toBe(15);
+    expect(withHistory.size).toBe(19);
     expect(new Set(db.attachments.map((attachment) => attachment.owner?.id)).size).toBe(3);
   });
 

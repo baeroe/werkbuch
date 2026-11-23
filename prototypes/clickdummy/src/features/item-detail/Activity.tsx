@@ -42,11 +42,14 @@ import type { ActivityEntry, Attachment, Comment, ItemEvent, Priority, Property,
 import { UploadOwnerContext } from '@/features/editor/pasteImages';
 import { isEmptyDoc, RichTextEditor, RichTextView } from '@/features/editor/RichTextEditor';
 import { CommentComposer } from './CommentComposer';
+import { RunLine } from './RunLine';
+import { useItemAgents } from '@/hooks/agents';
+import type { AgentRun } from '@/types';
 import { focusWhenLost, Section, useDetail } from './shared';
 
 /* ------------------------------------------------------------------------- timeline */
 
-export type ActivityFilter = 'all' | 'comments' | 'changes';
+export type ActivityFilter = 'all' | 'comments' | 'changes' | 'runs';
 
 export type TimelineEntry =
   | { kind: 'comment'; key: string; at: string; comment: Comment }
@@ -305,7 +308,7 @@ export function formatWhen(iso: string, today: string, timeZone = ZONE): string 
   return new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone }).format(date);
 }
 
-function When({ iso }: { iso: string }) {
+export function When({ iso }: { iso: string }) {
   const { today } = useToday();
   const timeZone = useOrganization().data?.timezone ?? ZONE;
   const full = new Intl.DateTimeFormat('de-DE', { dateStyle: 'full', timeStyle: 'short', timeZone }).format(new Date(iso));
@@ -318,7 +321,7 @@ function When({ iso }: { iso: string }) {
 
 /* ---------------------------------------------------------------------------- lines */
 
-function Actor({ user }: { user: User | undefined }) {
+export function Actor({ user }: { user: User | undefined }) {
   const word = user && botWord(user);
   return (
     <>
@@ -513,6 +516,23 @@ function CommentEditor({ comment, projectId, onDone }: { comment: Comment; proje
   );
 }
 
+/** "aus einem Auftrag": a bot's comment that answers a run; jumps to the run in the timeline. */
+function RunLink({ runId }: { runId: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        const target = document.getElementById(`run-${runId}`);
+        target?.scrollIntoView({ block: 'center' });
+        target?.focus();
+      }}
+      className="inline-flex min-h-11 cursor-pointer items-center rounded-chip text-sm text-muted underline-offset-2 hover:text-ink hover:underline md:min-h-0"
+    >
+      Ergebnis eines Auftrags
+    </button>
+  );
+}
+
 function CommentCard({ comment, item, users, onDelete }: { comment: Comment; item: WorkItem; users: Map<string, User>; onDelete: (comment: Comment) => void }) {
   const me = useSession((state) => state.userId);
   const { reason } = usePermissions();
@@ -540,6 +560,7 @@ function CommentCard({ comment, item, users, onDelete }: { comment: Comment; ite
           </span>
           <When iso={comment.created_at} />
           {comment.edited_at && <span className="text-sm text-muted">bearbeitet</span>}
+          {comment.run_id && <RunLink runId={comment.run_id} />}
           {(canEdit || canDelete) && !editing && (
             <span className="ml-auto self-center">
               <Menu>
@@ -579,17 +600,33 @@ const FILTERS: { value: ActivityFilter; label: string }[] = [
   { value: 'all', label: 'Alles' },
   { value: 'comments', label: 'Kommentare' },
   { value: 'changes', label: 'Änderungen' },
+  { value: 'runs', label: 'Aufträge' },
 ];
+
+/** A line of the timeline, or a run of an agent (WEBU-18), placed at the time it was queued. */
+type Line = TimelineEntry | { kind: 'run'; key: string; at: string; run: AgentRun };
+
+/** Puts the runs between the lines by time; „Kommentare“ and „Änderungen“ leave them out, „Aufträge“ shows only them. */
+export function withRuns(lines: readonly TimelineEntry[], runs: readonly AgentRun[], filter: ActivityFilter): Line[] {
+  const runLines: Line[] = filter === 'all' || filter === 'runs' ? runs.map((run) => ({ kind: 'run', key: run.id, at: run.created_at, run })) : [];
+  if (filter === 'runs') return runLines;
+  return [...lines, ...runLines].map((line, index) => ({ line, index })).sort((a, b) => (a.line.at < b.line.at ? -1 : a.line.at > b.line.at ? 1 : a.index - b.index)).map(({ line }) => line);
+}
 
 const EMPTY_TEXT: Record<ActivityFilter, string> = {
   all: 'Noch keine Aktivität. Schreib den ersten Kommentar.',
   comments: 'Noch keine Kommentare.',
   changes: 'Noch keine Änderungen.',
+  runs: 'Noch keine Aufträge.',
 };
 
 export function Activity({ detail }: { detail: WorkItemDetail }) {
   const { item } = detail;
   const activity = useActivity(item.id);
+  const agents = useItemAgents(item.id);
+  const runs = agents.data?.runs ?? [];
+  // the filter „Aufträge“ only where there are runs
+  const filters = runs.length > 0 ? FILTERS : FILTERS.filter((entry) => entry.value !== 'runs');
   const users = useUserMap();
   const labels = useLabels().data?.items;
   const resolutions = useResolutions().data?.items;
@@ -601,7 +638,8 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
   const [params, setParams] = useSearchParams();
   const [ownFilter, setOwnFilter] = useState<ActivityFilter>('all');
   const linked = params.get('activity');
-  const filter: ActivityFilter = surface === 'page' ? (FILTERS.some((entry) => entry.value === linked) ? (linked as ActivityFilter) : 'all') : ownFilter;
+  const chosen: ActivityFilter = surface === 'page' ? (FILTERS.some((entry) => entry.value === linked) ? (linked as ActivityFilter) : 'all') : ownFilter;
+  const filter: ActivityFilter = filters.some((entry) => entry.value === chosen) ? chosen : 'all';
   const setFilter = (next: ActivityFilter) => {
     if (surface !== 'page') return setOwnFilter(next);
     setParams(
@@ -648,12 +686,12 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
   }
 
   const entries = (activity.data?.items ?? []).filter((entry) => !(entry.kind === 'comment' && gone.includes(entry.id)));
-  const lines = buildTimeline(entries, filter);
+  const lines = withRuns(buildTimeline(entries, filter === 'runs' ? 'all' : filter), runs, filter);
 
   return (
     <Section
       title="Aktivität"
-      actions={<SegmentedControl label="Aktivität filtern" size="sm" value={filter} onValueChange={setFilter} options={FILTERS} />}
+      actions={<SegmentedControl label="Aktivität filtern" size="sm" value={filter} onValueChange={setFilter} options={filters} />}
     >
       <div ref={timeline}>
         {activity.isError ? (
@@ -682,6 +720,8 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
             {lines.map((line) =>
               line.kind === 'comment' ? (
                 <CommentCard key={line.key} comment={line.comment} item={item} users={users} onDelete={deleteComment} />
+              ) : line.kind === 'run' ? (
+                <RunLine key={line.key} run={line.run} runs={runs} item={item} />
               ) : (
                 <EventLine key={line.key} line={line} ctx={ctx} />
               ),

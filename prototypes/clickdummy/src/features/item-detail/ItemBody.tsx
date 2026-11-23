@@ -21,11 +21,13 @@ import type { Attachment, WorkItem, WorkItemDetail } from '@/types';
 import { UploadOwnerContext } from '@/features/editor/pasteImages';
 import { usePrimeAttachments } from '@/hooks/attachments';
 import { Activity } from './Activity';
+import { AgentNotice } from './AgentNotice';
 import { Attachments } from './Attachments';
 import { Children } from './Children';
 import { Description } from './Description';
 import { FieldsPanel } from './FieldsPanel';
 import { ArchivedNote, ItemTitle } from './ItemHeader';
+import { PullRequests } from './PullRequests';
 import { Relations } from './Relations';
 import { DetailContext, type DetailActions, type DetailContextValue, type DetailSurface } from './shared';
 
@@ -98,6 +100,7 @@ export function ItemBody({ detail, surface }: { detail: WorkItemDetail; surface:
       <ItemTitle item={item} />
       <ArchivedNote item={item} />
       <BlockedHint item={item} variant="banner" onOpen={surface === 'peek' ? (id) => useUiStore.getState().openPeek(id) : undefined} className="mt-3" />
+      <AgentNotice item={item} />
     </>
   );
   const main: ReactNode = (
@@ -105,6 +108,7 @@ export function ItemBody({ detail, surface }: { detail: WorkItemDetail; surface:
       <Description detail={detail} />
       <Children detail={detail} />
       <Relations detail={detail} />
+      <PullRequests item={item} />
       <Attachments detail={detail} />
       <Activity detail={detail} />
     </>

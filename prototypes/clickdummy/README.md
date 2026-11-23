@@ -68,6 +68,7 @@ Es starten nur die Server der Projekte, die laufen: Das Projekt `flows` (`e2e/fl
 5. „Seitenstruktur“ bearbeiten: Konfliktbanner; „Meine Fassung übernehmen“ hält eine Version mehr (4 statt 3).
 6. Vorlage „Monatsbericht“: Die Vorschau zeigt 02.11.2026, 07.12.2026, 04.01.2027, 01.02.2027 und 01.03.2027.
 7. Workflow „Agentur-Freigabe“ ohne den letzten Übergang nach Review: „Review ist vom Startstatus aus nicht erreichbar“, Speichern wird abgelehnt.
+8. (WEBU-18) Runner verbinden (Befehl mit Code, „Verbindung simulieren“), den neuen Runner in Kiras Pool aufnehmen (⌘⏎), WEB-50 mit `a` Kira zuweisen: Der Auftrag „Umsetzen“ läuft, das Protokoll wächst, „Abbrechen“ nach Rückfrage, danach „Auftrag abgebrochen“ mit „Erneut starten“.
 
 Neben den Flows prüft das Projekt `flows` am Handy (390 px), dass Zeilen, Gruppenzeilen und ihre Schalter in der Tabelle mindestens 44 px hoch sind, dass sich im Pfad eines Kind-Items (WEB-42 unter WEB-30) die Keys nicht überlappen, dass ein Item ohne Eltern-Item den Namen seines Projekts zeigt und dass auf einer schmalen Karte im Board das Epic zuerst gekürzt wird, der Key nie. In beiden Themes prüft es, wie der Textmarker „Heute“ markiert, auf der Timeline und im Kalender: hell als gelbe Fläche, im Nachtheft als gelbe Schrift mit Schein. Das Projekt `review` (`e2e/review.spec.ts`) prüft den Review-Build (siehe unten). In der CI läuft `pnpm e2e`, also beides, im Job `clickdummy`; er ist kein Pflicht-Check.
 
@@ -95,12 +96,13 @@ Der Build für Reviews läuft als claude.ai-Artifact, also als eine statische Se
 | `/projects`, `/projects/:identifier` | alle Projekte, die Items eines Projekts (`WEB`, `APP`, `OPS`); `?layout=board`, `table`, `timeline` |
 | `/projects/:identifier/wiki/:pageId?` | Wiki, z. B. `/projects/WEB/wiki/pg_web_structure` |
 | `/projects/:identifier/templates/:templateId?` | Vorlagen, z. B. `/projects/APP/templates/tpl_app_report` |
-| `/projects/:identifier/settings/:section?` | Projekt: `general`, `members`, `workflow`, `types`, `automations` |
+| `/projects/:identifier/settings/:section?` | Projekt: `general`, `members`, `workflow`, `types`, `automations`, `agents` |
 | `/items/:key` | ein Item als Seite, z. B. `/items/WEB-47` |
-| `/settings/:section?` | Organisation: `general`, `people`, `bots`, `workflows` (`?workflow=wf_agency`), `types`, `properties`, `labels`, `relation-types`, `resolutions`, `webhooks`, `system` |
+| `/settings/:section?` | Organisation: `general`, `people`, `bots` (`?agent=u_kira`: der Bot als Agent), `workflows` (`?workflow=wf_agency`), `types`, `properties`, `labels`, `relation-types`, `resolutions`, `webhooks`, `runners`, `github`, `system` |
 | `/me/:section?` | Persönlich: `profile`, `security`, `notifications`, `api` |
 | `/login`, `/forgot-password`, `/invitations/:token` | Bildschirme vor der Anmeldung |
 | `/_components` | Komponenten-Galerie |
+| `/_tui` | Bilder des Runners im Terminal: Ausgabe von `install.sh` und die fünf Reiter der TUI (WEBU-18) |
 
 Eine unbekannte Route zeigt „Diese Seite gibt es nicht“ in der Shell. Im Review-Build steht vor jeder Route ein `#`.
 
@@ -172,6 +174,7 @@ Werkzeuge, die es nur im Klickdummy gibt:
 - Profilmenü: „Als … ansehen“, „Live-Ereignis simulieren“ (Ida ändert Status oder Priorität eines WEB-Items), „Live-Verbindung trennen“ und „Demo zurücksetzen …“.
 - Item-Menü („Weitere Aktionen“): „Beschreibungskonflikt simulieren“ spielt einen Konflikt in der Beschreibung.
 - Die Wiki-Seite „Seitenstruktur“ meldet beim ersten Speichern einen Konflikt, als hätte Jonas kurz vorher gespeichert.
+- Dialog „Runner verbinden“: „Verbindung simulieren“ (der Runner löst den Code ein) und „Ablauf simulieren“ (zehn Minuten vergehen). Die Fake-API spielt auch den Runner: Ein Auftrag startet vier Sekunden nach dem Einreihen, sein Protokoll wächst Zeile für Zeile mit der Demo-Uhr, ein Abbruch dauert drei Sekunden.
 
 ## Ordner
 
@@ -206,6 +209,25 @@ scripts/
   artifact.mjs       macht aus dist-review/index.html das Fragment für ein Artifact (Test: artifact.test.mjs)
   serve.mjs          statischer Server für den Review-Build, wie ein Host ihn ausliefert
 ```
+
+## Runner, GitHub, Agenten und Aufträge (WEBU-18)
+
+Der Klickdummy ist eingefroren; dieser Teil erweitert ihn bewusst, damit Rafael die Oberfläche von Runner und GitHub-Integration freigibt, bevor sie gebaut wird (Spec `docs/superpowers/specs/2026-11-23-runner-design.md`, Plan `docs/superpowers/plans/2026-11-23-runner.md`, Task 1).
+
+**Bildschirme**
+- Organisation → Betrieb → **Runner** (`/settings/runners`): Karten mit online/offline, System, Version, Plätzen, Projekten und laufenden Aufträgen; Update gescheitert (build-01); „Runner verbinden“ mit Befehl, Kopieren und Ablauf des Codes; Umbenennen; Widerrufen mit Rückfrage.
+- Organisation → Betrieb → **GitHub** (`/settings/github`): verbunden mit beiden Apps, Repos (eins ohne Review-App) und Hinweis zum Ruleset; „GitHub trennen“ führt zu den zwei Schritten Agenten-App und Review-App.
+- Organisation → Bots → **Agent** (`/settings/bots?agent=u_kira`): an/aus, Projekte mit Grund, Runner-Pool, CLI, Modelle, Anweisung, Plätze, Zeitlimits. Der Standard-Bot sagt, warum er kein Agent sein kann.
+- Projekt → **Agenten** (`/projects/WEB/settings/agents`): Repo (1:1), Basis-Branch, Merge-Methode, Review-Agent, PRs von Personen, Kommentar am PR, Status je Schritt mit Prüfung der Kategorie, Bremsen, Modelle (Label → Modell sortierbar), Arbeitsregeln je Typ mit Standard und „Standard wiederherstellen“. OPS hat keine Einstellungen: Agenten sind dort aus.
+- **Item**: Aufträge als Zeilen der Aktivität (Filter „Aufträge“) mit Modell und Herkunft, Runner, Dauer, Protokoll, Abbrechen und Erneut starten; Abschnitt „Pull Requests“; Chip „Kira arbeitet“ und Hinweise unter dem Titel.
+
+**Demo-Zustände**: WEB-51 (Auftrag läuft), WEB-44 (Korrektur wartet auf den Runner mac-mini-alt, offline), WEB-53 (Zeitlimit erreicht), WEB-49 (Bremse nach drei Korrekturen, bei Mara), WEB-47 (zwei PRs von Jonas, CI läuft), WEB-42 (Entwurf, Antwort von Kira), WEB-40 (gemergt, Review freigegeben), OPS-15 (Kira zugewiesen, Agenten im Projekt nicht eingerichtet). Seeds in `src/api/seed/agents.ts`, Regeln in `src/domain/agents.ts` (Tests `agents.test.ts`), Fake-API in `src/api/runners.ts`, `github.ts`, `agents.ts`, `runs.ts` (Tests `runs.test.ts`).
+
+**Abweichungen und Vereinfachungen**
+- Der Befehl nennt die erfundene Adresse `https://werkbuch.example.com`, nicht die Adresse der Seite.
+- Der Fake-Runner prüft nur „gesamt“ der Plätze, nicht „je Repo“ und „leicht“; der Umzug eines Strangs nach 30 Minuten offline wird nur angekündigt, nicht gespielt.
+- Die TUI und `install.sh` sind Englisch wie skilltri und tussh; sie stehen in Mono-Schrift, nur auf `/_tui` (DESIGN.md, Entscheidungen 2026-11-23).
+- Arbeitsregeln speichert das Formular als Ganzes mit dem Rest des Abschnitts; „Standard wiederherstellen“ gilt nach dem Speichern.
 
 ## Wo die echte API andockt
 

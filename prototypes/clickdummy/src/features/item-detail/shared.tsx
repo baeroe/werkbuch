@@ -91,7 +91,8 @@ export function Section({ title, actions, aside, children, className }: SectionP
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className={cx('mt-4 border-t border-edge pt-3', className)}>
-      <div className="flex min-h-7 items-center gap-2">
+      {/* actions that do not fit beside the heading (the four filters of the activity on a phone) wrap below it */}
+      <div className="flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
         <SectionHeading id={headingId}>{title}</SectionHeading>
         {aside && <div className="min-w-0 text-sm text-muted">{aside}</div>}
         {actions && <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div>}
