@@ -56,7 +56,7 @@ it('says the ability of every route like the route matrix', function () use ($ma
 it('offers only the session for session routes', function () use ($matrix) {
     $sessionOnly = ['POST /tokens', 'PUT /me/password', 'GET /me/two-factor', 'POST /me/two-factor',
         'POST /me/two-factor/confirm', 'DELETE /me/two-factor', 'POST /me/two-factor/recovery-codes',
-        'POST /runner-pairings', 'GET /runner-pairings/{pairing}'];
+        'POST /runner-pairings', 'GET /runner-pairings/{pairing}', 'POST /github/manifest', 'DELETE /github'];
 
     expect(array_keys(array_filter($matrix(), fn (array $route) => $route['session'])))->toEqualCanonicalizing($sessionOnly);
 

@@ -56,6 +56,9 @@ use Meilisearch\Client;
 class AppServiceProvider extends ServiceProvider
 {
     /** The requests of one runner a minute (A487). */
+    /** Webhook deliveries of GitHub per minute and address. */
+    public const GITHUB_WEBHOOKS_PER_MINUTE = 1200;
+
     public const RUNNER_PER_MINUTE = 3000;
 
     /** The downloads of the installer and the runner a minute and address (A520). */
@@ -160,6 +163,9 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('runner-pair', fn (Request $request) => Limit::perMinute(10)->by(RateKey::IP.$request->ip()));
         // the installer and the binaries (A520): an install takes three requests, an update two; a binary is ~10 MB
         RateLimiter::for('runner-download', fn (Request $request) => Limit::perMinute(self::RUNNER_DOWNLOADS_PER_MINUTE)->by(RateKey::IP.$request->ip()));
+
+        // the webhooks of GitHub (WEBU-24) per address, before the signature: a flood of unsigned requests stays bounded
+        RateLimiter::for('github-webhook', fn (Request $request) => Limit::perMinute(self::GITHUB_WEBHOOKS_PER_MINUTE)->by(RateKey::IP.$request->ip()));
 
         // the index is written by the search consumer only, never when a model is saved (P1)
         WorkItem::disableSearchSyncing();

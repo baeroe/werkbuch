@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AttachmentFileController;
 use App\Http\Controllers\ChannelBatchController;
+use App\Http\Controllers\GitHubPageController;
 use App\Http\Controllers\ItemPageController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\PagePdfController;
@@ -55,6 +56,11 @@ Route::middleware('auth')->group(function () {
         ->name('views');
     // the items of a saved view; never `{view}`: the binding of routes/api.php would answer an unknown id before the page
     Route::get('/views/{viewId}', ViewPageController::class)->name('views.show');
+    // the one GitHub app (WEBU-24): a plain page for the manifest flow and its state until the settings show it
+    // (WEBU-27), and the two ways back from GitHub (after registering, after installing)
+    Route::get('/github', [GitHubPageController::class, 'show'])->name('github');
+    Route::get('/github/manifest', [GitHubPageController::class, 'manifest'])->name('github.manifest');
+    Route::get('/github/setup', [GitHubPageController::class, 'setup'])->name('github.setup');
     // the live channels of a tab in one request (A305), next to Laravel's /broadcasting/auth for one channel
     Route::post('/broadcasting/batch', ChannelBatchController::class)->name('broadcasting.batch');
 });

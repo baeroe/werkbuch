@@ -40,18 +40,28 @@ final class CancelRun
                 return $locked;
             }
 
-            $old = $locked->status;
-            if ($old->pending()) {
-                $locked->forceFill(['status' => RunStatus::Canceled, 'waiting_reason' => null, 'finished_at' => now(), 'canceled_by' => $actor->user->id])->save();
-            } else {
-                $locked->forceFill(['status' => RunStatus::Canceling, 'canceled_by' => $actor->user->id])->save();
-            }
-
-            EventRecorder::record(EventType::AgentRunCanceled, $actor, $locked, $locked->project, [
-                'status' => ['old' => $old->value, 'new' => $locked->status->value],
-            ], ['item_id' => $locked->work_item_id]);
+            self::stop($actor, $locked);
 
             return $locked;
         }, 3);
+    }
+
+    /**
+     * Stops a run read `for update` that is neither finished nor being canceled: a waiting one ends as `canceled`, one
+     * on a runner becomes `canceling`; `agent_run.canceled` names the actor. Also for the actions that stop the runs of
+     * a project at once (an unauthorized merge, GitHub disconnected).
+     */
+    public static function stop(Actor $actor, AgentRun $locked): void
+    {
+        $old = $locked->status;
+        if ($old->pending()) {
+            $locked->forceFill(['status' => RunStatus::Canceled, 'waiting_reason' => null, 'finished_at' => now(), 'canceled_by' => $actor->user->id])->save();
+        } else {
+            $locked->forceFill(['status' => RunStatus::Canceling, 'canceled_by' => $actor->user->id])->save();
+        }
+
+        EventRecorder::record(EventType::AgentRunCanceled, $actor, $locked, $locked->project, [
+            'status' => ['old' => $old->value, 'new' => $locked->status->value],
+        ], ['item_id' => $locked->work_item_id]);
     }
 }

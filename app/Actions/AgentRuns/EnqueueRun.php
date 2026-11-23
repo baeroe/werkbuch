@@ -73,7 +73,7 @@ final class EnqueueRun
                 'events_dropped' => 0,
             ]);
 
-            $reason = RunQueue::waitingReason($run, $config, Runner::query()->whereNull('revoked_at')->get());
+            $reason = RunQueue::waitingReason($run, $config, Runner::query()->whereNull('revoked_at')->get(), RunQueue::guarded());
             if ($reason !== null) {
                 $run->forceFill(['status' => RunStatus::Waiting, 'waiting_reason' => $reason])->save();
             }

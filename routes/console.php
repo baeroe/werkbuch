@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\PruneGitHubDeliveriesJob;
 use App\Jobs\PruneNotificationsJob;
 use App\Jobs\PruneRunEventsJob;
 use App\Jobs\PruneUnownedAttachmentsJob;
@@ -47,3 +48,6 @@ Schedule::job(new PruneWebhookDeliveriesJob)->hourly()->withoutOverlapping(60);
 // the runs of agents (WEBU-20): leases, time limits and the reasons of waiting runs every minute; their logs after 30 days
 Schedule::job(new ReapLostRunsJob)->everyMinute()->withoutOverlapping(5);
 Schedule::job(new PruneRunEventsJob)->hourly()->withoutOverlapping(60);
+
+// forget old webhook deliveries of GitHub (WEBU-24)
+Schedule::job(new PruneGitHubDeliveriesJob)->hourly()->withoutOverlapping(60);

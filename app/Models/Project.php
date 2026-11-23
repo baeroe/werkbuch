@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Laravel\Scout\Searchable;
@@ -36,6 +37,7 @@ use Spatie\MediaLibrary\InteractsWithMedia;
  * @property Carbon|null $deleting_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property-read ProjectRepository|null $repository
  */
 #[Fillable([
     'identifier', 'name', 'description', 'lead_id', 'visibility', 'workflow_id', 'default_type_id',
@@ -133,6 +135,16 @@ final class Project extends Model implements HasMedia
     public function lead(): BelongsTo
     {
         return $this->belongsTo(User::class, 'lead_id');
+    }
+
+    /**
+     * The repo of the project (spec 4: 1:1), if it has one.
+     *
+     * @return HasOne<ProjectRepository, $this>
+     */
+    public function repository(): HasOne
+    {
+        return $this->hasOne(ProjectRepository::class);
     }
 
     /**

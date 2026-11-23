@@ -288,4 +288,29 @@ return [
     'manage-agents:save-config' => ['arguments' => fn (MatrixWorld $w) => ['bot' => $w->bot->id, 'input' => [
         'enabled' => true, 'runner_ids' => [], 'cli' => 'claude', 'model' => 'opus', 'models' => ['review' => 'haiku'],
     ]]],
+    'agents:get-github' => ['arguments' => function (MatrixWorld $w) {
+        $w->github('org_admin');
+
+        return [];
+    }],
+    'agents:get-repository' => ['arguments' => function (MatrixWorld $w) {
+        $w->github('org_admin');
+
+        return ['project' => 'WEB'];
+    }],
+    'manage-agents:sync-github' => ['arguments' => function (MatrixWorld $w) {
+        $w->github();
+
+        return [];
+    }],
+    'manage-agents:set-repository' => ['arguments' => function (MatrixWorld $w) {
+        $w->github();
+
+        return ['project' => 'WEB', 'input' => ['repository_id' => 'feldwerk/website', 'base_branch' => 'main']];
+    }],
+    'manage-agents:confirm-merge-guard' => ['arguments' => function (MatrixWorld $w) {
+        $w->github('org_admin')?->forceFill(['guard_detected_at' => now(), 'guard_sha' => str_repeat('a', 40), 'guard_branch' => 'main'])->save();
+
+        return ['project' => 'WEB'];
+    }],
 ];

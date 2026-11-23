@@ -422,7 +422,7 @@ Schreibt Webhooks; nur Org-Admins. `create` und `rotate-secret` nennen das Gehei
 
 ### `agents`
 
-Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins) und die Aufträge der Agenten mit ihrem Protokoll (wer das Projekt sieht). (Braucht `read`.)
+Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins), die Aufträge der Agenten mit ihrem Protokoll (wer das Projekt sieht), die GitHub-App und das Repo eines Projekts. (Braucht `read`.)
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
@@ -432,10 +432,12 @@ Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins) und die Aufträ
 | `get-run` | Ein Auftrag. | `run` | `GET /runs/{run}` |
 | `run-events` | Das Protokoll eines Auftrags in seiner Reihenfolge. | `run` | `GET /runs/{run}/events` |
 | `get-config` | Die Agenten-Konfiguration eines Bots. | `bot` | `GET /bots/{user}/agent` |
+| `get-github` | Die GitHub-App der Instanz, ihre Installationen und Repos mit ihrem Projekt; nie ein Schlüssel. | – | `GET /github` |
+| `get-repository` | Das Repo eines Projekts mit Basis-Branch, Ruleset-Hinweis und dem Wächter gegen einen eigenmächtigen Merge; `data` null ohne Repo. | `project` | `GET /projects/{project}/repository` |
 
 ### `manage-agents`
 
-Ändert Runner und die Agenten-Konfiguration von Bots (Org-Admins) und steuert Aufträge (wer das Item ändern darf). Einen Runner verbinden geht nur in der Oberfläche. Ein Agent steuert Aufträge nie mit dem Token seines eigenen Auftrags (403 `agent_forbidden`). (Braucht `write`.)
+Ändert Runner und die Agenten-Konfiguration von Bots (Org-Admins), steuert Aufträge (wer das Item ändern darf), liest die GitHub-App neu und setzt das Repo eines Projekts. Einen Runner verbinden und GitHub verbinden oder trennen geht nur in der Oberfläche. Ein Agent steuert Aufträge nie mit dem Token seines eigenen Auftrags (403 `agent_forbidden`). (Braucht `write`.)
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
@@ -444,6 +446,9 @@ Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins) und die Aufträ
 | `cancel-run` | Bricht einen Auftrag ab; einer auf einem Runner endet, sobald der Runner ihn gestoppt hat. | `run` | `POST /runs/{run}/cancel` |
 | `retry-run` | Startet einen ohne Erfolg beendeten Auftrag erneut; antwortet den neuen Auftrag. | `run` | `POST /runs/{run}/retry` |
 | `save-config` | Setzt die Agenten-Konfiguration eines Bots ganz. | `bot`, `input` | `PUT /bots/{user}/agent` |
+| `sync-github` | Liest die Installationen der GitHub-App und ihre Repos neu von GitHub (Org-Admins). | – | `POST /github/sync` |
+| `set-repository` | Gibt einem Projekt sein Repo (eines, das die App erreicht, höchstens ein Projekt je Repo) und den Basis-Branch, oder keins; Admins des Projekts. | `project`, `input` | `PUT /projects/{project}/repository` |
+| `confirm-merge-guard` | Bestätigt einen eigenmächtigen Merge: der Wächter geht, die pausierten Stränge des Projekts sind wieder offen; Admins des Projekts. | `project` | `POST /projects/{project}/repository/confirm-guard` |
 
 <!-- tools:end -->
 

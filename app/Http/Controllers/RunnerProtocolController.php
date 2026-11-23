@@ -6,6 +6,7 @@ use App\Actions\AgentRuns\ClaimRun;
 use App\Actions\AgentRuns\FinishRun;
 use App\Actions\AgentRuns\RecordHeartbeat;
 use App\Actions\AgentRuns\RecordRunEvents;
+use App\Actions\AgentRuns\RenewGitToken;
 use App\Actions\Auth\PairRunner;
 use App\Http\Api\RunnerKey;
 use App\Models\Runner;
@@ -55,6 +56,12 @@ final class RunnerProtocolController extends Controller
         $run = FinishRun::run(self::actor(), self::runner($request), $runId, [...$request->all(), ...self::headers($request)]);
 
         return response()->json(['run' => ['id' => $run->id, 'status' => $run->status->value]]);
+    }
+
+    /** A new installation token for a running run: `{git: {repo_url, token, expires_at}, places, …}`. */
+    public function gitToken(Request $request, string $runId): JsonResponse
+    {
+        return response()->json(RenewGitToken::run(self::actor(), self::runner($request), $runId, [...$request->all(), ...self::headers($request)]));
     }
 
     /**

@@ -48,8 +48,11 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: 'api/v1',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
-        // the runner protocol (WEBU-20): outside the groups web and api, under /api/runner
-        then: fn () => Route::group([], base_path('routes/runner.php')),
+        // the runner protocol (WEBU-20) under /api/runner and the webhook of GitHub (WEBU-24): outside the groups web and api
+        then: function (): void {
+            Route::group([], base_path('routes/runner.php'));
+            Route::group([], base_path('routes/github.php'));
+        },
     )
     // the channels (routes/channels.php) authorize through /broadcasting/auth: a signed-in, active account (spec 7.2)
     ->withBroadcasting(__DIR__.'/../routes/channels.php', ['middleware' => ['web', 'auth', EnsureAccountIsActive::class, GuardChannelAuthorization::class]])
