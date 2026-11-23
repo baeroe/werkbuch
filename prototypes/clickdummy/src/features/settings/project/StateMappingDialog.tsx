@@ -18,6 +18,7 @@ import { statesInOrder } from '@/domain/workflow';
 import { useAssignWorkflow } from '@/hooks/workflows';
 import { notifyError } from '@/lib/errors';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
+import { AGENT_STEPS, mappingComplete, STEP_NAMES } from '@/domain/agents';
 import type { Automation, Project, State, Workflow } from '@/types';
 import { cancelTargets } from './automationRules';
 import { fieldErrors } from './form';
@@ -54,6 +55,27 @@ function StateLabel({ state }: { state: State }) {
       <StatusIcon icon={state.icon} category={state.category} label={state.name} aria-hidden="true" />
       <span className="min-w-0 truncate">{state.name}</span>
     </span>
+  );
+}
+
+/**
+ * What the switch means for the agents (spec 7.4): the steps belong to the workflow, so the project takes those of the
+ * new one. Without them, agents are off afterwards; the dialog says so before anything happens.
+ */
+function AgentsAfter({ from, to, identifier }: { from: Workflow; to: Workflow; identifier: string }) {
+  if (mappingComplete(to, to.agent_states)) {
+    const named = AGENT_STEPS.map((step) => `${STEP_NAMES[step]} „${to.states.find((state) => state.id === to.agent_states[step])?.name}“`);
+    return (
+      <Banner role="status" tone="neutral" title="Agenten">
+        {`Die Status je Schritt kommen aus „${to.name}“: ${named.join(', ')}.`}
+      </Banner>
+    );
+  }
+  if (!mappingComplete(from, from.agent_states)) return null;
+  return (
+    <Banner role="status" tone="danger" title={`Agenten sind danach in ${identifier} aus`}>
+      {`Der Workflow „${to.name}“ hat noch ${AGENT_STEPS.every((step) => to.agent_states[step] === null) ? 'keine' : 'nicht alle'} Agenten-Schritte. Ein Org-Admin richtet sie im Workflow ein; bis dahin bleibt eine Zuweisung an einen Bot eine normale Zuweisung.`}
+    </Banner>
   );
 }
 
@@ -163,6 +185,7 @@ export function StateMappingDialog({ open, onOpenChange, project, plan, finalFoc
             Sie bekommen die Standard-Resolution ihrer Kategorie.
           </Banner>
         )}
+        <AgentsAfter from={from} to={to} identifier={project.identifier} />
         {autoClose?.enabled && (
           <Banner role="status" tone={nextCancel ? 'neutral' : 'danger'} title="Auto-Close">
             {nextCancel ? `Auto-Close setzt Items danach auf „${nextCancel.name}“.` : `„${to.name}“ hat keinen Status der Kategorie Canceled. Auto-Close lässt sich dort nicht nutzen.`}

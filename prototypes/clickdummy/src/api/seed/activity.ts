@@ -12,7 +12,7 @@ import { itemId } from './items';
 
 const PROJECT_OF: Record<string, string> = { WEB: 'p_web', APP: 'p_app', OPS: 'p_ops' };
 
-function comment(id: string, itemKey: string, author: UserShort, when: string, text: string, reactions: { emoji: string; users: UserShort[] }[] = []): Comment {
+export function comment(id: string, itemKey: string, author: UserShort, when: string, text: string, reactions: { emoji: string; users: UserShort[] }[] = []): Comment {
   return {
     id,
     work_item_id: itemId(itemKey),
@@ -24,9 +24,9 @@ function comment(id: string, itemKey: string, author: UserShort, when: string, t
   };
 }
 
-type Changes = Record<string, { old: unknown; new: unknown }>;
+export type Changes = Record<string, { old: unknown; new: unknown }>;
 
-function event(id: string, type: string, itemKey: string, actor: UserShort, when: string, changes: Changes, reason: string | null = null, seconds = 0): ItemEvent {
+export function event(id: string, type: string, itemKey: string, actor: UserShort, when: string, changes: Changes, reason: string | null = null, seconds = 0): ItemEvent {
   return {
     id,
     type,
@@ -39,7 +39,7 @@ function event(id: string, type: string, itemKey: string, actor: UserShort, when
   };
 }
 
-const state = (from: string, to: string): Changes => ({ state_id: { old: from, new: to } });
+export const state = (from: string, to: string): Changes => ({ state_id: { old: from, new: to } });
 const closing = (from: string, to: string): Changes => ({ ...state(from, to), resolution_id: { old: null, new: 'res_done' } });
 
 export const comments: Comment[] = [

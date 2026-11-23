@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { archiveProject, getProject, updateProject } from '@/api/projects';
 import { dismissToast, runToastAction } from '@/components/ui/toast';
 import { listCommands } from '@/lib/commands';
+import { getProjectAgents } from '@/api/agents';
+import { simulateUnauthorizedMerge } from '@/api/runs';
 import { failure } from '@/test/api';
 import { renderSettings, textbox, toastTitled, useSettingsTestSetup } from './testing';
 
@@ -50,15 +52,15 @@ describe('the frame', () => {
     await screen.findByRole('navigation', { name: 'Bereiche der Projekteinstellungen' });
 
     const commands = listCommands().filter((command) => command.id.startsWith('settings.project.'));
-    expect(commands.map((command) => command.label)).toEqual(['Allgemein öffnen', 'Mitglieder öffnen', 'Workflow öffnen', 'Typen öffnen', 'Automatisierungen öffnen']);
+    expect(commands.map((command) => command.label)).toEqual(['Allgemein öffnen', 'Mitglieder öffnen', 'Workflow öffnen', 'Typen öffnen', 'Automatisierungen öffnen', 'Agenten öffnen']);
     expect(commands.every((command) => command.group === 'Einstellungen WEB')).toBe(true);
   });
 
-  it('links the five sections and marks the open one', async () => {
+  it('links the six sections and marks the open one', async () => {
     renderSettings('/projects/WEB/settings/workflow');
     const nav = await screen.findByRole('navigation', { name: 'Bereiche der Projekteinstellungen' });
 
-    expect(within(nav).getAllByRole('link').map((link) => link.textContent)).toEqual(['Allgemein', 'Mitglieder', 'Workflow', 'Typen', 'Automatisierungen']);
+    expect(within(nav).getAllByRole('link').map((link) => link.textContent)).toEqual(['Allgemein', 'Mitglieder', 'Workflow', 'Typen', 'Automatisierungen', 'Agenten']);
     expect(within(nav).getByRole('link', { name: 'Workflow' }).getAttribute('aria-current')).toBe('page');
     expect(within(nav).getByRole('link', { name: 'Typen' }).getAttribute('href')).toBe('/projects/WEB/settings/types');
   });
@@ -390,5 +392,86 @@ describe('DangerZone', () => {
     expect(await screen.findByText('Dieses Projekt ist archiviert')).toBeTruthy();
     await user.click(await screen.findByRole('button', { name: 'Wiederherstellen' }));
     await waitFor(async () => expect((await getProject('APP')).archived_at).toBeNull());
+  });
+});
+
+describe('the agents\' steps in a project', () => {
+  it('shows the steps of the workflow to read, with a way into the workflow editor', async () => {
+    renderSettings('/projects/WEB/settings/agents');
+    const card = (await screen.findByRole('heading', { name: 'Status je Schritt' })).closest('section')!;
+    expect(within(card).getByText('In Progress')).toBeTruthy();
+    expect(within(card).queryByRole('combobox')).toBeNull();
+    expect(within(card).getByRole('link', { name: 'Im Workflow „Standard“ bearbeiten' }).getAttribute('href')).toBe('/settings/workflows?workflow=wf_standard');
+  });
+
+  it('says agents are off while the workflow has no steps, and who sets them up for a project admin', async () => {
+    renderSettings('/projects/APP/settings/agents', 'u_theo');
+    expect(await screen.findByText('Agenten aus: der Workflow „Agentur-Freigabe“ hat noch keine Agenten-Schritte')).toBeTruthy();
+    expect(screen.getByText(/ein Org-Admin richtet sie dort ein/)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Schritte im Workflow einrichten' })).toBeNull();
+  });
+});
+
+describe('the models of a project', () => {
+  it('picks from the list of the CLI, empty means the model of each agent of the project', async () => {
+    renderSettings('/projects/WEB/settings/agents');
+    const task = await screen.findByRole('combobox', { name: /^Umsetzen/ });
+    expect(task.textContent).toContain('Wie beim Bot (Kira: sonnet, Otto: gpt-5-codex)');
+    const answer = screen.getByRole('combobox', { name: /^Antwort/ });
+    expect(answer.textContent).toContain('haiku');
+    expect(screen.getByText('Gilt nur für Agenten mit Claude Code.')).toBeTruthy();
+  });
+
+  it('groups the models by CLI and stores a choice with its CLI', async () => {
+    const user = userEvent.setup();
+    renderSettings('/projects/WEB/settings/agents');
+    await user.click(await screen.findByRole('combobox', { name: /^Umsetzen/ }));
+    const codex = await screen.findByRole('group', { name: 'Codex' });
+    expect(within(screen.getByRole('group', { name: 'Claude Code' })).getByRole('option', { name: 'opus' })).toBeTruthy();
+    await user.click(within(codex).getByRole('option', { name: 'gpt-5-codex' }));
+    expect(await screen.findByText('Gilt nur für Agenten mit Codex.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /^Speichern/ }));
+    await waitFor(async () => expect((await getProjectAgents('p_web')).models.task).toEqual({ cli: 'codex', model: 'gpt-5-codex' }));
+  });
+
+  it('says that a project without saved settings has its agents off, and saving once sets them up', async () => {
+    const user = userEvent.setup();
+    renderSettings('/projects/OPS/settings/agents', 'u_jonas');
+    expect(await screen.findByText('Agenten in OPS noch nicht eingerichtet')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /^Speichern/ }));
+    await waitFor(async () => expect((await getProjectAgents('p_ops')).configured).toBe(true));
+  });
+});
+
+describe('an unauthorized merge in a project', () => {
+  it('shows the banner, and a project admin confirms and goes on', async () => {
+    const user = userEvent.setup();
+    await simulateUnauthorizedMerge('p_web');
+    renderSettings('/projects/WEB/settings/agents');
+    expect(await screen.findByText('Eigenmächtiger Merge erkannt: WEB pausiert')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'WEB-51' })).toBeTruthy();
+    expect(screen.getByRole('alert', { name: /Eigenmächtiger Merge/ }).textContent).toContain('Eigenmächtiger Merge erkannt: WEB pausiert');
+    const confirm = screen.getByRole('button', { name: 'Bestätigen und fortsetzen' });
+    expect(confirm.getAttribute('aria-describedby')).toBe('merge-guard-title');
+    await user.click(confirm);
+    await waitFor(async () => expect((await getProjectAgents('p_web')).guard).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Eigenmächtiger Merge erkannt: WEB pausiert')).toBeNull());
+    // the banner went: the focus goes to the heading of the first sheet under it
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Repository' })));
+  });
+
+  it('lets readers see it without the button', async () => {
+    await simulateUnauthorizedMerge('p_web');
+    renderSettings('/projects/WEB/settings/agents', 'u_theo');
+    expect(await screen.findByText('Eigenmächtiger Merge erkannt: WEB pausiert')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Bestätigen und fortsetzen' })).toBeNull();
+  });
+
+  it('offers the demo only in the click dummy, for project admins of a project with a repo', async () => {
+    const user = userEvent.setup();
+    renderSettings('/projects/WEB/settings/agents');
+    await user.click(await screen.findByRole('button', { name: 'Eigenmächtigen Merge auslösen' }));
+    expect(await screen.findByText('Eigenmächtiger Merge erkannt: WEB pausiert')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Bestätigen und fortsetzen' })));
   });
 });

@@ -23,6 +23,7 @@ export const USER_IDS = {
   sven: 'u_sven',
   automation: 'u_automation',
   kira: 'u_kira',
+  otto: 'u_otto',
 } as const;
 export type UserShort = keyof typeof USER_IDS;
 

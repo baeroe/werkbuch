@@ -1,0 +1,59 @@
+/*
+ * The terminal pictures of /_tui (WEBU-18): the 16 ANSI colours of a terminal, light and dark like the page. The runner
+ * TUI (Lip Gloss, like skilltri) uses only these, so it follows the theme of the terminal. Monospace only here: these
+ * are pictures of a terminal (DESIGN.md, Entscheidungen 2026-11-23).
+ */
+
+.tui {
+  --t-bg: oklch(0.985 0.004 250);
+  --t-fg: oklch(0.27 0.035 262);
+  --t-dim: oklch(0.55 0.02 258);
+  --t-red: oklch(0.53 0.19 25);
+  --t-green: oklch(0.5 0.13 150);
+  --t-yellow: oklch(0.56 0.12 80);
+  --t-blue: oklch(0.47 0.165 266);
+  --t-magenta: oklch(0.5 0.16 330);
+  --t-cyan: oklch(0.5 0.1 215);
+  --t-white: oklch(0.2 0.03 262);
+  --t-sel: oklch(0.92 0.012 258);
+  --t-bar: oklch(0.94 0.006 250);
+}
+
+/* the page maps code and pre to the UI font (DESIGN.md); a terminal needs cells of one width */
+.tui pre,
+.tui pre * {
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-variant-ligatures: none;
+}
+
+:root[data-theme='dark'] .tui {
+  --t-bg: oklch(0.2 0.018 258);
+  --t-fg: oklch(0.92 0.01 250);
+  --t-dim: oklch(0.65 0.02 255);
+  --t-red: oklch(0.72 0.15 25);
+  --t-green: oklch(0.76 0.14 150);
+  --t-yellow: oklch(0.83 0.13 90);
+  --t-blue: oklch(0.75 0.12 266);
+  --t-magenta: oklch(0.76 0.13 330);
+  --t-cyan: oklch(0.8 0.1 210);
+  --t-white: oklch(0.98 0.005 250);
+  --t-sel: oklch(0.33 0.02 258);
+  --t-bar: oklch(0.25 0.02 258);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tui {
+    --t-bg: oklch(0.2 0.018 258);
+    --t-fg: oklch(0.92 0.01 250);
+    --t-dim: oklch(0.65 0.02 255);
+    --t-red: oklch(0.72 0.15 25);
+    --t-green: oklch(0.76 0.14 150);
+    --t-yellow: oklch(0.83 0.13 90);
+    --t-blue: oklch(0.75 0.12 266);
+    --t-magenta: oklch(0.76 0.13 330);
+    --t-cyan: oklch(0.8 0.1 210);
+    --t-white: oklch(0.98 0.005 250);
+    --t-sel: oklch(0.33 0.02 258);
+    --t-bar: oklch(0.25 0.02 258);
+  }
+}

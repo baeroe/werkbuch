@@ -1,5 +1,5 @@
 /*
- * The settings of a project (spec 5.2): General, Members, Workflow, Types and Automations, one address each
+ * The settings of a project (spec 5.2): General, Members, Workflow, Types, Automations and Agents (WEBU-18), one address each
  * (`/projects/:identifier/settings/:section?`, General without a section). Project admins and org admins change them;
  * everybody else reads, with the reason from `usePermissions` (spec 4.3).
  *
@@ -19,6 +19,7 @@ import { useMembers, useProject, useProjects } from '@/hooks/projects';
 import { useUsers } from '@/hooks/users';
 import { usePermissions } from '@/lib/permissions';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
+import { Agents } from './Agents';
 import { Automations } from './Automations';
 import { General } from './General';
 import { Members } from './Members';
@@ -32,6 +33,7 @@ const SECTIONS = [
   { slug: 'workflow', label: 'Workflow' },
   { slug: 'types', label: 'Typen' },
   { slug: 'automations', label: 'Automatisierungen' },
+  { slug: 'agents', label: 'Agenten' },
 ] as const satisfies readonly SectionItem[];
 
 const NO_SECTIONS: readonly SectionItem[] = [];
@@ -103,7 +105,7 @@ export default function ProjectSettings() {
     return (
       <NotFound
         title="Diesen Bereich gibt es nicht"
-        description={`Die Einstellungen von ${known.identifier} haben die Bereiche Allgemein, Mitglieder, Workflow, Typen und Automatisierungen.`}
+        description={`Die Einstellungen von ${known.identifier} haben die Bereiche Allgemein, Mitglieder, Workflow, Typen, Automatisierungen und Agenten.`}
       />
     );
   }
@@ -141,6 +143,7 @@ export default function ProjectSettings() {
         {current === 'workflow' && <Workflow {...props} />}
         {current === 'types' && <Types {...props} />}
         {current === 'automations' && <Automations {...props} />}
+        {current === 'agents' && <Agents {...props} />}
       </Fragment>
     </SettingsFrame>
   );

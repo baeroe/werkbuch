@@ -83,7 +83,7 @@ describe('projects and members', () => {
     expect((await failure(removeMember('p_web', 'u_ida'))).reason).toBe('lead_cannot_leave');
 
     // listMembers: one project, or all projects the person sees
-    expect((await listMembers('p_web')).total).toBe(6);
+    expect((await listMembers('p_web')).total).toBe(7);
     expect((await listMembers()).items.some((member) => member.project_id === 'p_ops')).toBe(false);
   });
 

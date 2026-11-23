@@ -3,7 +3,7 @@
  * of a 422 (shown at the field, spec 6.1), the cause of a failed load, and the shortcut that saves.
  */
 
-import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { ApiError } from '@/api/client';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 
@@ -42,6 +42,8 @@ export interface Draft<T> {
   changed: (keyof T)[];
   dirty: boolean;
   set: (patch: Partial<T>) => void;
+  /** An edit computed from the form as it is when it applies, for a change that comes later (the undo of a toast). */
+  update: (change: (current: T) => Partial<T>) => void;
   /** Drops all edits: the form shows the server's data again. */
   reset: () => void;
   /** "Speichern" was pressed with nothing to save: true for a few seconds, so the form can say so. */
@@ -60,6 +62,9 @@ export function useDraft<T extends object>(source: T): Draft<T> {
   const changed = useMemo(() => (Object.keys(edits) as (keyof T)[]).filter((key) => !same(edits[key], source[key])), [source, edits]);
   const dirty = changed.length > 0;
   const set = useCallback((patch: Partial<T>) => setEdits((current) => ({ ...current, ...patch })), []);
+  const latestSource = useRef(source);
+  latestSource.current = source;
+  const update = useCallback((change: (current: T) => Partial<T>) => setEdits((current) => ({ ...current, ...change({ ...latestSource.current, ...current }) })), []);
   const reset = useCallback(() => setEdits({}), []);
   const tellNothingToSave = useCallback(() => setQuiet(true), []);
 
@@ -73,7 +78,7 @@ export function useDraft<T extends object>(source: T): Draft<T> {
     if (dirty) setQuiet(false);
   }, [dirty]);
 
-  return { value, changed, dirty, set, reset, quiet, tellNothingToSave };
+  return { value, changed, dirty, set, update, reset, quiet, tellNothingToSave };
 }
 
 export interface FieldErrorState {

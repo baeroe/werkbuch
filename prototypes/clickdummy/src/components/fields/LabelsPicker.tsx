@@ -45,7 +45,7 @@ export function LabelsPicker({ item, look = 'field', shortcut, ...extras }: Labe
     <Picker
       {...extras}
       look={inRow ? 'bare' : look}
-      className={look === 'field' ? 'h-auto min-h-11 flex-wrap py-1 md:min-h-7' : undefined}
+      className={look === 'field' ? 'h-auto min-h-11 flex-wrap py-1 md:h-auto md:min-h-7' : undefined}
       shortcut={shortcut ?? (look === 'field' ? 'l' : undefined)}
       label="Labels"
       display={display}

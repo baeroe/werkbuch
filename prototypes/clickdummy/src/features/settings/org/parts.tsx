@@ -29,15 +29,17 @@ type SectionHeaderProps = {
   actions?: ReactNode;
   /** A link back to the list, above the title. */
   back?: ReactNode;
+  /** An id for the title, which then takes the focus by script (the view under it changed). */
+  titleId?: string;
 };
 
 /** Title, one sentence about what the section is for, and its main actions. */
-export function SectionHeader({ title, description, actions, back }: SectionHeaderProps) {
+export function SectionHeader({ title, description, actions, back, titleId }: SectionHeaderProps) {
   return (
     <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
       <div className="min-w-0">
         {back && <div className="mb-2">{back}</div>}
-        <h2 className="scroll-mt-20 font-display text-xl font-bold tracking-title text-balance break-words text-ink">{title}</h2>
+        <h2 id={titleId} tabIndex={titleId ? -1 : undefined} className="scroll-mt-20 font-display text-xl font-bold tracking-title text-balance break-words text-ink">{title}</h2>
         {description && <p className="mt-1 max-w-[65ch] text-ui text-pretty text-muted">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

@@ -3,6 +3,7 @@
  * them. Resolutions that items carry are archived instead of deleted.
  */
 
+import { KNOWN_MODELS } from '@/domain/agents';
 import type { Label, RelationType, Resolution } from '@/types';
 import { requireOrgAdmin } from './access';
 import { conflict, FieldErrors, newId, notFound, paginate, read, write, type Page } from './client';
@@ -26,9 +27,13 @@ export function saveLabel(input: SaveInput<Label>): Promise<Label> {
     if (input.name.trim() === '') errors.add('name', 'Der Name darf nicht leer sein.');
     else if (db.labels.some((label) => label.id !== existing?.id && sameName(label.name, input.name))) errors.add('name', 'Diesen Namen gibt es schon.');
     if (!TONES.includes(input.color)) errors.add('color', 'Diese Farbe gibt es nicht.');
+    const model = input.agent_model?.trim() ?? '';
+    // a model of a CLI's list, stored with its CLI: the label counts only for agents with that CLI
+    const cli = input.agent_cli ?? 'claude';
+    if (model !== '' && !(KNOWN_MODELS[cli] ?? []).includes(model)) errors.add('agent_model', `Wähle ein Modell der Liste: ${(KNOWN_MODELS[cli] ?? []).join(', ')}.`);
     errors.throwIfAny();
 
-    const label: Label = { id: existing?.id ?? newId('lb'), name: input.name.trim(), color: input.color };
+    const label: Label = { id: existing?.id ?? newId('lb'), name: input.name.trim(), color: input.color, agent_model: model === '' ? null : model, agent_cli: model === '' ? null : cli };
     if (existing) db.labels[db.labels.indexOf(existing)] = label;
     else db.labels.push(label);
     return label;

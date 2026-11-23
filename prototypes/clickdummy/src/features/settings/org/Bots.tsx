@@ -6,11 +6,12 @@
  * they come up. Admins manage the tokens of all bots; people manage their own under "Persönlich".
  */
 
-import { Bot as BotIcon, Pencil, Plus, ShieldAlert, Trash2, UserRoundCheck, UserRoundX } from 'lucide-react';
+import { Bot as BotIcon, BotMessageSquare, Pencil, Plus, ShieldAlert, Trash2, UserRoundCheck, UserRoundX } from 'lucide-react';
 import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar';
 import { Banner } from '@/components/ui/Banner';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IconButton } from '@/components/ui/IconButton';
@@ -22,12 +23,15 @@ import { createZone } from '@/domain/tz';
 import { DatePopover } from '@/components/fields/DateField';
 import { botWord, formatDay } from '@/components/fields/format';
 import { useToday } from '@/components/fields/itemData';
+import { whyNotAgent } from '@/domain/agents';
+import { useAgentConfigs, useRunners } from '@/hooks/agents';
 import { useCreateToken, useRevokeToken, useTokens } from '@/hooks/tokens';
 import { useCreateBot, useCurrentUser, useDeactivateUser, useReactivateUser, useUpdateUser, useUsers } from '@/hooks/users';
 import { useSettle } from '@/hooks/mutation';
 import { now } from '@/lib/clock';
 import { notifyError } from '@/lib/errors';
-import type { Token, TokenAbility, User } from '@/types';
+import type { AgentConfig, Token, TokenAbility, User } from '@/types';
+import { agentSummary, BotAgent } from './BotAgent';
 import { ABILITIES, ABILITY_NAMES } from './catalog';
 import { fieldMessage, noticeOf } from './errors';
 import { formatDate, relativeTime, useOrgZone } from './format';
@@ -367,9 +371,11 @@ type BotCardProps = {
   bot: User;
   owner: User | undefined;
   onEdit: () => void;
+  agent: AgentConfig | undefined;
+  runnerNames: Map<string, string>;
 };
 
-function BotCard({ bot, owner, onEdit }: BotCardProps) {
+function BotCard({ bot, owner, onEdit, agent, runnerNames }: BotCardProps) {
   const settle = useSettle();
   const deactivate = useDeactivateUser();
   const reactivate = useReactivateUser();
@@ -417,11 +423,18 @@ function BotCard({ bot, owner, onEdit }: BotCardProps) {
               <dd className="text-ink">{bot.is_default_bot ? 'Die Organisation' : (owner?.name ?? 'Niemand')}</dd>
               <dt className="text-muted">Rolle</dt>
               <dd className="text-ink">{bot.org_role === 'admin' ? 'Admin' : 'Member'}</dd>
+              <dt className="text-muted">Agent</dt>
+              <dd className="text-ink">{whyNotAgent(bot).length > 0 ? <span className="text-muted">Kann kein Agent sein</span> : agentSummary(agent, runnerNames)}</dd>
             </dl>
             {bot.is_default_bot && <p className="mt-2 text-sm text-pretty text-muted">Er lässt sich weder deaktivieren noch löschen, nur umbenennen.</p>}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link to={{ search: `?agent=${bot.id}` }} className={buttonClass({ variant: 'secondary' })}>
+            <BotMessageSquare className="size-4 text-muted" aria-hidden="true" />
+            {agent?.enabled ? 'Agent bearbeiten' : 'Agent einrichten'}
+            <span className="sr-only"> für {bot.name}</span>
+          </Link>
           <Button variant="secondary" icon={Pencil} onClick={onEdit}>
             Bearbeiten{' '}
             <span className="sr-only">{bot.name}</span>
@@ -445,8 +458,18 @@ function BotCard({ bot, owner, onEdit }: BotCardProps) {
   );
 }
 
-export default function Bots(_props: SectionProps) {
+export default function Bots(props: SectionProps) {
+  const [params] = useSearchParams();
+  const agent = params.get('agent');
+  if (agent) return <BotAgent botId={agent} />;
+  return <BotList {...props} />;
+}
+
+function BotList(_props: SectionProps) {
   const users = useUsers();
+  const agents = useAgentConfigs();
+  const runners = useRunners();
+  const runnerNames = new Map((runners.data?.items ?? []).map((runner) => [runner.id, runner.name]));
   const me = useCurrentUser();
   const dialog = useDialogRound<User>();
   const all = users.data?.items ?? [];
@@ -482,7 +505,13 @@ export default function Bots(_props: SectionProps) {
             <ul className="flex flex-col gap-3">
               {bots.map((bot) => (
                 <li key={bot.id}>
-                  <BotCard bot={bot} owner={all.find((user) => user.id === bot.owner_id)} onEdit={() => dialog.show(bot)} />
+                  <BotCard
+                    bot={bot}
+                    owner={all.find((user) => user.id === bot.owner_id)}
+                    onEdit={() => dialog.show(bot)}
+                    agent={agents.data?.items.find((config) => config.bot_id === bot.id)}
+                    runnerNames={runnerNames}
+                  />
                 </li>
               ))}
             </ul>

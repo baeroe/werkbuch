@@ -54,6 +54,13 @@ export const qk = {
   deliveries: resource('deliveries'),
   system: resource('system'),
   search: resource('search'),
+  // runner and agents (WEBU-18)
+  runners: resource('runners'),
+  pairings: resource('pairings'),
+  github: resource('github'),
+  agentConfigs: resource('agent-configs'),
+  projectAgents: resource('project-agents'),
+  itemAgents: resource('item-agents'),
 } as const;
 
 /** What every query hook takes besides its arguments. */

@@ -24,6 +24,8 @@ export const standard: Workflow = {
     { id: 'std_cancelled', name: 'Cancelled', icon: 'cross', category: 'canceled', position: 5 },
   ],
   transitions: [],
+  // the steps of the agents (WEBU-18): "Pending" stands in for "In Review", which the workflow does not have
+  agent_states: { working: 'std_progress', review: 'std_pending', correction: 'std_todo', merged: 'std_done' },
 };
 
 /** An agency workflow with an internal review and a customer approval; only listed transitions are allowed. */
@@ -61,6 +63,8 @@ export const agency: Workflow = {
     ['app_done', 'app_todo'],
     ['app_cancelled', 'app_backlog'],
   ],
+  // no steps for agents yet: agents are off in the projects of this workflow (WEBU-18)
+  agent_states: { working: null, review: null, correction: null, merged: null },
 };
 
 /* ----------------------------------------------------------------- resolutions */

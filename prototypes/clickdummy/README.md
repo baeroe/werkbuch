@@ -68,6 +68,7 @@ Es starten nur die Server der Projekte, die laufen: Das Projekt `flows` (`e2e/fl
 5. „Seitenstruktur“ bearbeiten: Konfliktbanner; „Meine Fassung übernehmen“ hält eine Version mehr (4 statt 3).
 6. Vorlage „Monatsbericht“: Die Vorschau zeigt 02.11.2026, 07.12.2026, 04.01.2027, 01.02.2027 und 01.03.2027.
 7. Workflow „Agentur-Freigabe“ ohne den letzten Übergang nach Review: „Review ist vom Startstatus aus nicht erreichbar“, Speichern wird abgelehnt.
+8. (WEBU-18) Runner verbinden (Befehl mit Code, „Verbindung simulieren“), den neuen Runner in Kiras Pool aufnehmen (⌘⏎), WEB-50 mit `a` Kira zuweisen: Der Auftrag „Umsetzen“ läuft auf dem neuen Runner (mac-studio hat den Platz für das Repo schon belegt), der Chip zeigt ihn auch unter dem Filter „Kommentare“, das Protokoll wächst, „Abbrechen“ nach Rückfrage, der Fokus bleibt am Auftrag, „Erneut starten“ setzt ihn auf den neuen Versuch.
 
 Neben den Flows prüft das Projekt `flows` am Handy (390 px), dass Zeilen, Gruppenzeilen und ihre Schalter in der Tabelle mindestens 44 px hoch sind, dass sich im Pfad eines Kind-Items (WEB-42 unter WEB-30) die Keys nicht überlappen, dass ein Item ohne Eltern-Item den Namen seines Projekts zeigt und dass auf einer schmalen Karte im Board das Epic zuerst gekürzt wird, der Key nie. In beiden Themes prüft es, wie der Textmarker „Heute“ markiert, auf der Timeline und im Kalender: hell als gelbe Fläche, im Nachtheft als gelbe Schrift mit Schein. Das Projekt `review` (`e2e/review.spec.ts`) prüft den Review-Build (siehe unten). In der CI läuft `pnpm e2e`, also beides, im Job `clickdummy`; er ist kein Pflicht-Check.
 
@@ -95,12 +96,13 @@ Der Build für Reviews läuft als claude.ai-Artifact, also als eine statische Se
 | `/projects`, `/projects/:identifier` | alle Projekte, die Items eines Projekts (`WEB`, `APP`, `OPS`); `?layout=board`, `table`, `timeline` |
 | `/projects/:identifier/wiki/:pageId?` | Wiki, z. B. `/projects/WEB/wiki/pg_web_structure` |
 | `/projects/:identifier/templates/:templateId?` | Vorlagen, z. B. `/projects/APP/templates/tpl_app_report` |
-| `/projects/:identifier/settings/:section?` | Projekt: `general`, `members`, `workflow`, `types`, `automations` |
+| `/projects/:identifier/settings/:section?` | Projekt: `general`, `members`, `workflow`, `types`, `automations`, `agents` |
 | `/items/:key` | ein Item als Seite, z. B. `/items/WEB-47` |
-| `/settings/:section?` | Organisation: `general`, `people`, `bots`, `workflows` (`?workflow=wf_agency`), `types`, `properties`, `labels`, `relation-types`, `resolutions`, `webhooks`, `system` |
+| `/settings/:section?` | Organisation: `general`, `people`, `bots` (`?agent=u_kira`: der Bot als Agent), `workflows` (`?workflow=wf_agency`), `types`, `properties`, `labels`, `relation-types`, `resolutions`, `webhooks`, `runners`, `github`, `agents`, `system` |
 | `/me/:section?` | Persönlich: `profile`, `security`, `notifications`, `api` |
 | `/login`, `/forgot-password`, `/invitations/:token` | Bildschirme vor der Anmeldung |
 | `/_components` | Komponenten-Galerie |
+| `/_tui` | Bilder des Runners im Terminal: Ausgabe von `install.sh` und die drei Reiter der TUI (WEBU-18) |
 
 Eine unbekannte Route zeigt „Diese Seite gibt es nicht“ in der Shell. Im Review-Build steht vor jeder Route ein `#`.
 
@@ -172,6 +174,7 @@ Werkzeuge, die es nur im Klickdummy gibt:
 - Profilmenü: „Als … ansehen“, „Live-Ereignis simulieren“ (Ida ändert Status oder Priorität eines WEB-Items), „Live-Verbindung trennen“ und „Demo zurücksetzen …“.
 - Item-Menü („Weitere Aktionen“): „Beschreibungskonflikt simulieren“ spielt einen Konflikt in der Beschreibung.
 - Die Wiki-Seite „Seitenstruktur“ meldet beim ersten Speichern einen Konflikt, als hätte Jonas kurz vorher gespeichert.
+- Dialog „Runner verbinden“: „Verbindung simulieren“ (der Runner löst den Code ein) und „Ablauf simulieren“ (zehn Minuten vergehen). Die Fake-API spielt auch den Runner: Ein Auftrag startet vier Sekunden nach dem Einreihen, sein Protokoll wächst Zeile für Zeile mit der Demo-Uhr, ein Abbruch dauert drei Sekunden.
 
 ## Ordner
 
@@ -199,13 +202,41 @@ src/
   app/               Router (Browser- oder Hash-Router), Shell mit Seitenleiste und Profilmenü, Live-Banner, Hosts für
                      Vorschau und Anlegen-Dialog
   features/<name>/   die Bildschirme, je Bereich ein Ordner
-e2e/                 Playwright: flows.spec.ts (die sieben Flows und die Handy-Prüfungen), review.spec.ts (der
+e2e/                 Playwright: flows.spec.ts (die acht Flows und die Handy-Prüfungen), review.spec.ts (der
                      Review-Build), fixtures.ts (Fehlerprüfung und Palette für beide)
 scripts/
   shots.mjs          Screenshots mit Prüfung
   artifact.mjs       macht aus dist-review/index.html das Fragment für ein Artifact (Test: artifact.test.mjs)
   serve.mjs          statischer Server für den Review-Build, wie ein Host ihn ausliefert
 ```
+
+## Runner, GitHub, Agenten und Aufträge (WEBU-18)
+
+Der Klickdummy ist eingefroren; dieser Teil erweitert ihn bewusst, damit Rafael die Oberfläche von Runner und GitHub-Integration freigibt, bevor sie gebaut wird (Spec `docs/superpowers/specs/2026-11-23-runner-design.md`, Plan `docs/superpowers/plans/2026-11-23-runner.md`, Task 1).
+
+**Bildschirme**
+- Organisation → Betrieb → **Runner** (`/settings/runners`): Karten mit online/offline, System, Version, CLIs (installiert, Version, angemeldet), Ausstattung des Harness (MCP-Server, Skills, Plugins, nur lesend, mit Warnung bei einem zweiten Zugang zu werkbuch), den drei Töpfen der Plätze (gesamt, je Repo, Reviews und Antworten, belegt/gesamt), der Auslastung (CPU, GPU oder „nicht verfügbar“, RAM, Speicher; offline mit dem Zeitpunkt des letzten Stands) und laufenden Aufträgen mit „Abbrechen“; Update gescheitert (build-01); „Plätze“ als Dialog an der Karte (konfiguriert wird in werkbuch, nicht auf der Maschine); „Runner verbinden“ mit Befehl, Kopieren und Ablauf des Codes; Umbenennen; Widerrufen mit Rückfrage. Ein Runner nimmt Aufträge aller Projekte.
+- Organisation → Betrieb → **GitHub** (`/settings/github`): eine GitHub-App (pusht, öffnet PRs, schreibt Reviews, mergt), Repos mit dem Hinweis, ob ein Ruleset den Basis-Branch schützt (nur Info; website und infrastruktur ja, kunden-app und design-tokens nein); „GitHub trennen“ führt zu dem einen Schritt „Mit GitHub verbinden“. Reviews: bei PRs der Agenten steht das Urteil als Kommentar am PR und werkbuch mergt, bei PRs von Personen gibt die App ein GitHub-Review „Approve“ oder einen Kommentar.
+- **Eigenmächtiger Merge**: pusht die App auf den Basis-Branch, ohne dass werkbuch gemergt hat, pausieren alle Stränge des Projekts. Projekt → Agenten zeigt einen Banner mit „Bestätigen und fortsetzen“ (nur Projekt-Admins; danach eine Korrektur je Strang, dessen Item beim Bot ist), das betroffene Item einen Hinweis. Im Klickdummy löst ein Knopf „Nur im Klickdummy: Eigenmächtigen Merge auslösen“ in Projekt → Agenten von WEB den Zustand aus.
+- Organisation → Bots → **Agent** (`/settings/bots?agent=u_kira`, `?agent=u_otto`): an/aus, Projekte mit Grund, Runner-Pool, CLI (meldet kein Runner des Pools es installiert und angemeldet, steht „auf keinem Runner im Pool verfügbar“ darunter; speichern geht), Modelle als Select mit fester Liste je CLI (Standard ohne Leer-Option, je Typ „Wie Standard (sonnet)“; ein Wechsel des CLI setzt unbekannte Modelle auf den Standard und sagt welche). Keine Anweisung je Bot, keine Plätze und keine Zeitlimits je Agent: Plätze stehen am Runner, Zeitlimits sind fest (Umsetzen und Korrektur 60 min, Konflikt 30, Review 20, Antwort 10). Der Standard-Bot sagt, warum er kein Agent sein kann.
+- Organisation → Betrieb → **Agenten** (`/settings/agents`): „So entsteht der Prompt“ (Vertrag → Arbeitsregeln je Auftragstyp → Vorgehen des Item-Typs → Projektinformationen → CLAUDE.md im Repo) und die Arbeitsregeln je Auftragstyp für die ganze Organisation, vorbelegt mit dem Standard, „Standard wiederherstellen“ je Typ; darüber je Typ aufklappbar „Gibt werkbuch immer vor“ mit dem englischen Vertrag (Platzhalter, was nie erlaubt ist, Ausgabeformat). Wer Kataloge verwaltet, ändert; Mitglieder lesen.
+- Organisation → **Typen** (`/settings/types`): im Typ-Dialog neben der Beschreibung „Vorgehen für Agenten“ (optional; Bug: „Beginne mit einem fehlschlagenden Test, wenn möglich.“).
+- Organisation → **Workflows** (`/settings/workflows?workflow=wf_standard`): Abschnitt „Agenten“ mit den vier Schritten (In Arbeit, In Review, Korrektur, Gemergt), je ein Status des Workflows der passenden Kategorie; „Vorschlag übernehmen“ nach Name und Kategorie (gespeichert erst mit dem Workflow). Ein Status, der einen Schritt hält, behält eine passende Kategorie (Fehler am Status); wird er gelöscht, sagt der Schritt vorher, dass er der Status-Zuordnung folgt, wenn deren Ziel passt, sonst leer wird. Standard hat Schritte, Agentur-Freigabe (APP) keine.
+- Projekt → **Agenten** (`/projects/WEB/settings/agents`): Repo (1:1), Basis-Branch, Merge-Methode, Review-Agent (nur Bots, die als Agent arbeiten; die anderen ausgegraut mit Grund), PRs von Personen, Kommentar am PR, Setup- und Teardown-Befehl des Worktrees (Karte „Worktree“; MCP-Server, Skills und Plugins richtet man auf der Maschine ein, werkbuch gibt nur seinen eigenen Server dazu), Status je Schritt nur zum Lesen mit Link in den Workflow-Editor (ohne Schritte: „Agenten aus: der Workflow … hat noch keine Agenten-Schritte“, für Projekt-Admins ohne Katalogrecht mit Hinweis auf Org-Admins), Bremsen, Modell je Auftragstyp als Select mit „Wie beim Bot (…)“ und den Modellen nach CLI gruppiert (gespeichert mit CLI, gilt nur für Agenten mit diesem CLI) (darüber die Modell-Labels der Organisation), ein Textfeld „Projektinformationen und Regeln für Agenten“ für alle Auftragstypen (die Arbeitsregeln je Typ stehen in der Organisation). OPS hat keine gespeicherten Einstellungen: ein Hinweis sagt, dass Agenten dort aus sind, bis einmal gespeichert ist. Ein Workflow-Wechsel bringt die Schritte des neuen Workflows mit; fehlen sie, sagt der Dialog vorher, dass die Agenten danach aus sind.
+- Organisation → **Labels** (`/settings/labels`): ein Label kann ein „Modell für Agenten“ tragen (Modell-Label, Select mit „Kein Modell“ und den Modellen nach CLI gruppiert; gilt nur für Agenten mit diesem CLI); wer ein Modell wählt, bekommt den Namen „Haiku Agent“ vorgeschlagen. Erkannt wird über das Feld, nie über den Namen. Seeds: „Haiku Agent“, „Opus Agent“, „Fable Agent“; WEB-44 läuft mit opus vom Label „Opus Agent“, WEB-53 mit haiku vom Label „Haiku Agent“.
+- **Item**: Aufträge als Zeilen der Aktivität (Filter „Aufträge“) mit Modell und Herkunft („vom Label Opus Agent“, „aus dem Projekt“, „vom Bot“), Runner, Dauer, Protokoll, Abbrechen und Erneut starten (nur solange das Item beim Bot ist; sonst „Wieder Kira zuweisen“, nach „GitHub trennen“ mit dem Item noch bei Kira „Weitermachen“, gesperrt bis das Projekt wieder ein Repo hat); Abschnitt „Pull Requests“; Chip „Kira arbeitet“ und Hinweise unter dem Titel (Bremse nach Korrekturen oder Konflikten, GitHub getrennt, gescheitert, Runner offline, kein Runner mit dem CLI, Bot ohne Agent).
+- **`/_tui`**: `install.sh` und drei Reiter (Status mit Auslastung und Verläufen der letzten Minuten, Aufträge, Doctor auf build-01 mit den CLIs (Codex installiert, nicht angemeldet), der Ausstattung des Harness und einer Warnung, weil dort ein MCP-Server werkbuch mit einem persönlichen Token erreicht); Plätze und Setup-Befehle stehen in werkbuch.
+
+**Demo-Zustände**: WEB-51 (Auftrag läuft), WEB-44 (Korrektur wartet auf den Runner mac-mini-alt, offline), WEB-53 (Zeitlimit erreicht), WEB-54 (sofort gescheitert: der Setup-Befehl des Projekts braucht Docker, das auf mac-mini-alt nicht läuft), WEB-55 (Otto mit Codex wartet: kein Runner seines Pools hat Codex angemeldet), WEB-49 (Bremse nach drei Korrekturen, bei Mara), WEB-47 (zwei PRs von Jonas, CI läuft), WEB-42 (Entwurf, Antwort von Kira), WEB-40 (gemergt, Review „Approve“ bei GitHub), OPS-15 (Kira zugewiesen, Agenten im Projekt nicht eingerichtet). Seeds in `src/api/seed/agents.ts`, Regeln in `src/domain/agents.ts` (Tests `agents.test.ts`), Fake-API in `src/api/runners.ts`, `github.ts`, `agents.ts`, `runs.ts` (Tests `runs.test.ts`).
+
+**Abweichungen und Vereinfachungen**
+- Der Befehl nennt die erfundene Adresse `https://werkbuch.example.com`, nicht die Adresse der Seite.
+- Der Fake-Runner gibt einen Auftrag nur an einen Runner, der das CLI des Agenten installiert und angemeldet hat, und prüft die drei Töpfe der Plätze (Aufträge, die Code ändern, gesamt und je Repo; Reviews und Antworten im eigenen Topf). Den Umzug eines Strangs nach 30 Minuten offline spielt er nicht: der Auftrag wartet weiter, und das Item sagt ab der Frist, dass ein anderer Runner übernommen hätte. Die Reihenfolge der Vergabe (Korrekturen und Reviews zuerst) spielt er auch nicht.
+- Die Auslastung ist ein fester Stand je Runner aus dem Seed.
+- Die TUI und `install.sh` sind Englisch wie skilltri und tussh; sie stehen in Mono-Schrift, nur auf `/_tui` (DESIGN.md, Entscheidungen 2026-11-23).
+- Arbeitsregeln speichert das Formular als Ganzes mit dem Rest des Abschnitts; „Standard wiederherstellen“ gilt nach dem Speichern.
+- Die Agenten-Demo (Otto, die Modell-Labels, das Vorgehen je Typ und die Zustände von WEB-44, -49, -51, -53, -54, -55) liegt in `src/api/seed/agents.ts` und wird beim Erzeugen auf den Grund-Seed gelegt. `people.ts`, `config.ts` und `items.ts` bleiben wie vorher: die Demo-Seeder der App vergleichen sich mit ihnen.
+- Ein eigenmächtiger Merge kommt nur über den Knopf „Nur im Klickdummy“: er schreibt am Item des Auftrags einen Kommentar von Automation und benachrichtigt die Org-Admins (Spec 11.3); kam der Push aus keinem laufenden Auftrag, entfallen Kommentar und Benachrichtigung. Der Zustand überlebt einen Wechsel von Repo oder Basis-Branch (nur Bestätigen hebt ihn auf); „GitHub trennen“ hebt ihn auf, die Stränge warten dann wie nach jedem Trennen auf GitHub. Ist beim Bestätigen kein Repo mehr gewählt, warten die pausierten Stränge ebenso auf GitHub; was während der Pause einem Agenten zugewiesen wurde, startet wie ohne Repo in einem Ordner.
 
 ## Wo die echte API andockt
 

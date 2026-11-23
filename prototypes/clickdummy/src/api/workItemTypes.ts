@@ -12,7 +12,7 @@ import type { Db } from './db';
 
 export const TONES: readonly TypeTone[] = ['sky', 'ochre', 'moss', 'plum', 'sand', 'slate'];
 
-export type WorkItemTypeInput = Omit<WorkItemType, 'id' | 'archived_at'> & { id?: string; archived_at?: string | null };
+export type WorkItemTypeInput = Omit<WorkItemType, 'id' | 'archived_at' | 'agent_guidance'> & { id?: string; archived_at?: string | null; agent_guidance?: string };
 
 export function listWorkItemTypes(): Promise<Page<WorkItemType>> {
   return read(({ db }) => paginate(db.types));
@@ -65,6 +65,7 @@ export function saveWorkItemType(input: WorkItemTypeInput): Promise<WorkItemType
       icon: input.icon.trim(),
       tone: input.tone,
       description: input.description,
+      agent_guidance: input.agent_guidance === undefined ? (existing?.agent_guidance ?? '') : input.agent_guidance.trim(),
       is_epic: input.is_epic,
       properties: input.properties.map((entry, position) => ({ property_id: entry.property_id, required: entry.required, position })),
       archived_at: input.archived_at === undefined ? (existing?.archived_at ?? null) : input.archived_at === null ? null : (existing?.archived_at ?? stamp),

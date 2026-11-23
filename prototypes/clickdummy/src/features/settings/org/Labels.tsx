@@ -2,9 +2,13 @@
  * Labels (spec 4.7): the organisation's list of tags, each with a name and one of the six muted tones. Items carry any
  * number of them. Deleting a label takes it off all items; the five seconds of undo come first, and the count of the
  * items that had it is told afterwards. Members see the list, admins change it.
+ *
+ * A label can name a model for agents (WEBU-18, spec 7.7): an item with it runs its agent on that model, before the
+ * project's and the bot's. werkbuch reads the field, never the name; choosing a model suggests the name „Haiku Agent“
+ * until somebody types one of their own.
  */
 
-import { Pencil, Plus, Tags, Trash2 } from 'lucide-react';
+import { Bot, Pencil, Plus, Tags, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ToneDot } from '@/components/ui/Chip';
@@ -13,26 +17,42 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/toast';
+import { isModelLabel } from '@/domain/agents';
+import { CLI_NAMES } from '@/domain/agents';
+import { ModelChoice } from '@/features/agents/ModelField';
 import { useDeleteLabel, useLabels, useSaveLabel } from '@/hooks/catalog';
 import { useSettle } from '@/hooks/mutation';
-import type { Label, TypeTone } from '@/types';
+import type { Label, ModelRef, TypeTone } from '@/types';
 import { ReadOnlyNotice } from './access';
 import { TONE_NAMES } from './catalog';
 import { fieldMessage, noticeOf } from './errors';
 import { counted } from './format';
 import { FormDialog } from './FormDialog';
-import { FieldGroup, Loaded, Panel, Row, Rows, RowsSkeleton, SectionHeader, TonePicker } from './parts';
+import { Badge, FieldGroup, Loaded, Panel, Row, Rows, RowsSkeleton, SectionHeader, TonePicker } from './parts';
 import type { SectionProps } from './sections';
 import { useDialogRound } from './useDialogRound';
 import { useItemCount } from './usage';
 import { useRemoval } from './useRemoval';
+
+/** The name a model label is suggested: „Haiku Agent“ for `haiku`. */
+export function modelLabelName(model: string): string {
+  const trimmed = model.trim();
+  return trimmed === '' ? '' : `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)} Agent`;
+}
 
 function LabelDialog({ open, onOpenChange, label }: { open: boolean; onOpenChange: (open: boolean) => void; label: Label | null }) {
   const settle = useSettle();
   const save = useSaveLabel();
   const [name, setName] = useState(label?.name ?? '');
   const [tone, setTone] = useState<TypeTone>(label?.color ?? 'sky');
+  const [model, setModel] = useState<ModelRef | null>(label?.agent_model ? { cli: label.agent_cli ?? 'claude', model: label.agent_model } : null);
   const [attempted, setAttempted] = useState(false);
+
+  // the name follows the model while it is empty or still the suggestion of the model before
+  function chooseModel(next: ModelRef | null) {
+    if (name.trim() === '' || name === modelLabelName(model?.model ?? '')) setName(modelLabelName(next?.model ?? ''));
+    setModel(next);
+  }
   const nameError = attempted && name.trim() === '' ? 'Gib dem Label einen Namen.' : fieldMessage(save.error, 'name');
 
   function submit() {
@@ -41,7 +61,7 @@ function LabelDialog({ open, onOpenChange, label }: { open: boolean; onOpenChang
       document.getElementById('label-name')?.focus();
       return;
     }
-    settle(save.mutateAsync({ id: label?.id, name, color: tone }), {
+    settle(save.mutateAsync({ id: label?.id, name, color: tone, agent_model: model?.model ?? null, agent_cli: model?.cli ?? null }), {
       onSuccess: (saved) => {
         onOpenChange(false);
         toast({ title: label ? `Label „${saved.name}“ gespeichert` : `Label „${saved.name}“ ist angelegt`, tone: 'success' });
@@ -57,13 +77,21 @@ function LabelDialog({ open, onOpenChange, label }: { open: boolean; onOpenChang
       title={label ? `Label „${label.name}“ bearbeiten` : 'Label anlegen'}
       submitLabel={label ? 'Speichern' : 'Anlegen'}
       pending={save.isPending}
-      notice={noticeOf(save.error, ['name', 'color'])}
+      notice={noticeOf(save.error, ['name', 'color', 'agent_model'])}
       onSubmit={submit}
     >
       <Input id="label-name" name="name" label="Name" autoComplete="off" value={name} error={nameError} onChange={(event) => setName(event.target.value)} />
       <FieldGroup legend="Farbe" hint="Die Farbe hilft beim Überfliegen. Der Name steht immer dabei.">
         <TonePicker label="Farbe des Labels" value={tone} onChange={setTone} />
       </FieldGroup>
+      <ModelChoice
+        label="Modell für Agenten"
+        value={model}
+        onChange={chooseModel}
+        inherit="Kein Modell"
+        hint="Ein Agent nimmt für Items mit diesem Label dieses Modell, vor dem Modell des Projekts und des Bots. Ohne Modell ein gewöhnliches Label."
+        error={fieldMessage(save.error, 'agent_model')}
+      />
     </FormDialog>
   );
 }
@@ -124,6 +152,14 @@ export default function Labels({ readOnlyReason }: SectionProps) {
                       <ToneDot tone={label.color} className="size-2.5" />
                       <h3 className="min-w-0 truncate text-ui font-medium text-ink">{label.name}</h3>
                     </div>
+                    {isModelLabel(label) && (
+                      <Badge tone="quiet" icon={Bot}>
+                        <span>
+                          Modell für Agenten: <span translate="no">{label.agent_model}</span>
+                          {label.agent_cli && label.agent_cli !== 'claude' ? ` (${CLI_NAMES[label.agent_cli]})` : ''}
+                        </span>
+                      </Badge>
+                    )}
                     <span className="w-24 text-sm text-muted">{TONE_NAMES[label.color]}</span>
                     <span className="min-w-28 text-sm text-muted">
                       <Usage id={label.id} />

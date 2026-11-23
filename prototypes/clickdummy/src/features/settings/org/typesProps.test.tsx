@@ -40,6 +40,19 @@ describe('Types', () => {
     expect(within(await rowOf('Task')).queryByText('In der Timeline')).toBeNull();
   });
 
+  it('gives a type an optional guidance for agents next to its description', async () => {
+    const user = userEvent.setup();
+    renderWithData(<Types readOnlyReason={null} />);
+    await user.click(within(await rowOf('Bug')).getByRole('button', { name: 'Typ „Bug“ bearbeiten' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Typ „Bug“ bearbeiten' });
+    const guidance = within(dialog).getByRole('textbox', { name: /Vorgehen für Agenten/ });
+    expect(guidance).toHaveProperty('value', 'Beginne mit einem fehlschlagenden Test, wenn möglich.');
+    await user.clear(guidance);
+    await user.type(guidance, 'Reproduziere zuerst.');
+    await user.click(within(dialog).getByRole('button', { name: /^Speichern/ }));
+    await waitFor(async () => expect((await listWorkItemTypes()).items.find((type) => type.id === 't_bug')?.agent_guidance).toBe('Reproduziere zuerst.'));
+  });
+
   it('keeps the Epic mark while items of the type have children, and says so in the dialog', async () => {
     const user = userEvent.setup();
     renderWithData(<Types readOnlyReason={null} />);

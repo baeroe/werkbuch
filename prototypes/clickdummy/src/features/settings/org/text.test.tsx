@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resetApi } from '@/test/api';
 import OrgSettingsRoute from './OrgSettings';
@@ -21,13 +21,11 @@ const PLACES = [...SECTIONS.map((section) => `/settings/${section.slug}`), '/set
 
 function renderSettings(location: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  // a data router: the sections with a save bar hold a leave with `useBlocker`, which needs one
+  const router = createMemoryRouter([{ path: 'settings/:section?', element: <OrgSettingsRoute /> }], { initialEntries: [location] });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[location]}>
-        <Routes>
-          <Route path="settings/:section?" element={<OrgSettingsRoute />} />
-        </Routes>
-      </MemoryRouter>
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   );
 }

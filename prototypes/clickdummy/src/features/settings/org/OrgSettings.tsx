@@ -17,7 +17,9 @@ import { useCurrentUser } from '@/hooks/users';
 import { useCommand } from '@/lib/commands';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { NotForMembers, useOrgRight } from './access';
+import AgentRules from './AgentRules';
 import Bots from './Bots';
+import Github from './Github';
 import General from './General';
 import Labels from './Labels';
 import { FormSkeleton, SectionHeader } from './parts';
@@ -25,6 +27,7 @@ import People from './People';
 import Properties from './Properties';
 import RelationTypes from './RelationTypes';
 import Resolutions from './Resolutions';
+import Runners from './Runners';
 import { findSection, GROUP_NAMES, SECTIONS, type SectionDef, type SectionGroup, type SectionProps, type SectionSlug } from './sections';
 import System from './System';
 import Types from './Types';
@@ -42,6 +45,9 @@ const COMPONENTS: Record<SectionSlug, ComponentType<SectionProps>> = {
   'relation-types': RelationTypes,
   resolutions: Resolutions,
   webhooks: Webhooks,
+  runners: Runners,
+  github: Github,
+  agents: AgentRules,
   system: System,
 };
 

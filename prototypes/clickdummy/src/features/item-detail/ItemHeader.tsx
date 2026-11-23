@@ -156,7 +156,7 @@ export function ItemTitle({ item }: { item: WorkItem }) {
   }
 
   return (
-    <Heading className={cx('font-display font-bold text-balance break-words text-ink', look)}>
+    <Heading data-item-title="" tabIndex={-1} className={cx('font-display font-bold text-balance break-words text-ink', look)}>
       {reason ? (
         item.title
       ) : (
