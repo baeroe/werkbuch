@@ -21,7 +21,7 @@ Ein späterer „Hub“ über alle Instanzen (openbill, prevju, werkbuch) ist ei
 - Jeder PR eines verknüpften Repos bekommt ein Review, auch PRs von Menschen.
 - PRs stehen am Item (verknüpft über den Key).
 - Runner installieren mit einem kopierten `curl`, verbinden per Einmal-Code, Updates kommen von selbst.
-- Parallelität ist je Runner, je Repo und je Agent einstellbar.
+- Parallelität ist je Runner und je Repo einstellbar.
 - Eine TUI im Stil von skilltri und tussh.
 
 **Nicht-Ziele (v1)**
@@ -114,7 +114,7 @@ Ohne passenden Auftrag: `204`. Zwei Runner, die gleichzeitig abholen, bekommen n
 - **Ereignisse:** der Runner schickt das Protokoll des CLI (bei Claude die Zeilen von `--output-format stream-json`, gekürzt auf das Lesbare) gebündelt, höchstens etwa einmal je Sekunde. werkbuch speichert sie (Grenzen siehe 7.5) und stößt das Neuladen im Browser über den vorhandenen Live-Kanal des Items an, gedrosselt.
 - **Ergebnis:** `status` (`succeeded`, `failed`), Session-ID, bei `review` das Urteil (`approve`/`changes`) mit Befunden als Markdown, bei `comment` die Antwort als Markdown, bei `task`/`correction` der gepushte Commit (SHA) und eine kurze Zusammenfassung, Nutzung (Tokens, falls das CLI sie meldet). werkbuch handelt danach (7.2), nicht der Agent.
 - **Abbruch** in der Oberfläche (Item oder Runner-Seite) oder per API: der Auftrag wird `canceling`, der nächste Heartbeat sagt es dem Runner. Ein Auftrag ohne Heartbeat über das Lease hinaus wird `lost` und neu eingereiht (höchstens einmal, danach `failed`) *(Claude)*.
-- **Zeitlimit:** je Agent einstellbar (Standard 60 Minuten für `task`/`correction`, 20 für `review`, 10 für `comment`, Builder darf ändern). Darüber `timed_out`, wie `failed` behandelt.
+- **Zeitlimit:** fest im Code, nicht einstellbar *(Rafael: keine Grenzen in der Bot-Konfiguration)*: 60 Minuten für `task`/`correction`, 30 für `conflict`, 20 für `review`, 10 für `comment`. Darüber `timed_out`, wie `failed` behandelt, mit Grund am Item.
 - **Token-Erneuerung:** GitHub-Tokens gelten eine Stunde; der Runner holt für einen laufenden Auftrag ein neues über `POST /api/runner/runs/{id}/git-token`, bevor es abläuft.
 
 ## 7. Aufträge und Ablauf eines Tickets
@@ -299,7 +299,6 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 | Runner gesamt | werkbuch, Runner-Seite | 2 |
 | je Repo auf dem Runner | werkbuch, Runner-Seite | 1 (DDEV teilt die Test-Datenbank) |
 | leichte Aufträge (`comment`, `review`) | werkbuch, Runner-Seite, eigener Topf | 2 |
-| je Agent | Agenten-Konfiguration des Bots | 2 |
 
 - Ein Epic läuft in sich nacheinander.
 - `review` gilt als leicht, solange es keine Tests gegen die Datenbank fährt (Prompt). *(Claude)*
@@ -322,7 +321,7 @@ Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem
 
 ### 10.4 Organisation → Bots → Agent
 
-Je Bot: Agent an/aus, Runner-Pool (Mehrfachauswahl), CLI, Standard-Modell und Modell je Auftragstyp (7.7), Anweisung (Text), Plätze, Zeitlimits je Typ. Org-Admins.
+Je Bot: Agent an/aus, Runner-Pool (Mehrfachauswahl), CLI, Standard-Modell und Modell je Auftragstyp (7.7), Anweisung (Text). Keine eigenen Plätze oder Zeitlimits je Bot (9, 6.4). Org-Admins.
 
 ### 10.5 Item
 
