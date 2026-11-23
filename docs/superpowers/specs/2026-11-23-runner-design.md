@@ -2,7 +2,7 @@
 
 Stand: 2026-11-23 · Status: von Rafael abgenommen am 2026-11-23 · Plan: `docs/superpowers/plans/2026-11-23-runner.md`
 
-Dieses Dokument beschreibt den **werkbuch-Runner** (ein Go-Daemon mit TUI, der Aufträge aus werkbuch auf einer eigenen Maschine mit Claude Code oder Codex ausführt) und die **GitHub-Integration** (GitHub-App je Instanz: Repo je Projekt, Tokens je Auftrag, PR-Verknüpfung, CI und Merge). Beides ist ein Vorhaben: Der Runner braucht die App für Git, und der Ablauf eines Tickets (PR, CI, Review, Merge) hängt an beiden. Markierungen: *(Rafael)* hat Rafael entschieden, *(Claude)* ist ein Vorschlag aus dem Gespräch, den Rafael mit der Abnahme bestätigt, *(Builder)* entscheidet, wer umsetzt.
+Dieses Dokument beschreibt den **werkbuch-Runner** (ein Go-Daemon mit TUI, der Aufträge aus werkbuch auf einer eigenen Maschine mit Claude Code oder Codex ausführt) und die **GitHub-Integration** (zwei GitHub-Apps je Instanz, Agenten-App und Review-App: Repo je Projekt, Tokens je Auftrag, PR-Verknüpfung, CI und Merge). Beides ist ein Vorhaben: Der Runner braucht die App für Git, und der Ablauf eines Tickets (PR, CI, Review, Merge) hängt an beiden. Markierungen: *(Rafael)* hat Rafael entschieden, *(Claude)* ist ein Vorschlag aus dem Gespräch, den Rafael mit der Abnahme bestätigt, *(Builder)* entscheidet, wer umsetzt.
 
 Die fachliche Grundlage bleibt `docs/superpowers/specs/2026-10-28-werkbuch-design.md`; nach der Abnahme bekommt sie einen Abschnitt „Änderungen vom 2026-11-23“, der auf dieses Dokument verweist.
 
@@ -67,7 +67,7 @@ Ein späterer „Hub“ über alle Instanzen (openbill, prevju, werkbuch) ist ei
 
 **Schutz vor einem Agenten, der mehr tut als erlaubt.** (a) Nur der Prompt verbietet Statuswechsel und Merge; (b) harte Sperren: werkbuch lehnt Statuswechsel über Run-Tokens ab, und auf GitHub gibt es zwei Apps, eine Agenten-App ohne Bypass und eine Review-App, die freigibt; das Ruleset (PR, Check `tests`, ein Approve) bleibt und erzwingt, dass nichts ohne grüne CI und Freigabe auf den Standard-Branch kommt; (c) eine App als Bypass-Akteur im Ruleset. *Gewählt (b)* *(Rafael)*: mit (a) und (c) könnte ein überlisteter Agent mit seinem eigenen Token mergen oder auf `main` pushen. Die zwei Manifest-Flows laufen nur einmal beim Einrichten.
 
-**Regeln für die Agenten.** (a) Fest im Code; (b) frei in der UI; (c) drei Schichten: Vertrag im Code, Arbeitsregeln je Projekt und Typ in der UI mit mitgelieferten Standards, Code-Regeln im Repo (`CLAUDE.md`/`AGENTS.md`). *Gewählt (c)* *(Rafael)*: Ausgabeformat und Verbote müssen fest sein, weil der Ablauf daran hängt; was ein Projekt anders will (Nachweis, Testregeln, Schwerpunkte des Reviews), ändert ein Projekt-Admin ohne Release. Wiki-Seiten als Regelquelle fallen raus: jedes Mitglied mit `wiki.edit` könnte die Regeln ändern.
+**Regeln für die Agenten.** (a) Fest im Code; (b) frei in der UI; (c) Schichten: Vertrag im Code (in der UI nur lesbar), Arbeitsregeln je Auftragstyp in der Organisation mit mitgelieferten Standards, „Vorgehen für Agenten“ je Item-Typ, ein Projekttext, Code-Regeln im Repo (`CLAUDE.md`/`AGENTS.md`). *Gewählt (c)* *(Rafael)*: Ausgabeformat und Verbote müssen fest sein, weil der Ablauf daran hängt; was eine Organisation oder ein Projekt anders will (Nachweis, Testregeln, Schwerpunkte des Reviews), ändern Org- bzw. Projekt-Admins ohne Release. Wiki-Seiten als Regelquelle fallen raus: jedes Mitglied mit `wiki.edit` könnte die Regeln ändern.
 
 **Repo und Projekt.** *1:1* *(Rafael)*: je Projekt ein Monorepo, damit der Agent das ganze Projekt kennt; ein Repo gehört höchstens einem Projekt.
 
@@ -84,7 +84,7 @@ Ein späterer „Hub“ über alle Instanzen (openbill, prevju, werkbuch) ist ei
 
 ### 6.1 Verbindung und Authentifizierung
 
-- Der Runner pollt. Ohne freien Platz fragt er nicht; ohne Auftrag wartet er 3 s, nach einer Minute ohne Auftrag 10 s (Builder darf die Werte setzen). Nur ausgehende HTTPS-Verbindungen.
+- Der Runner pollt: ohne Auftrag alle 3 s, nach einer Minute ohne Auftrag alle 10 s (Builder darf die Werte setzen), auch ohne freien Platz (dann meldet er nur Auslastung, CLIs und Ausstattung und bekommt Plätze und Version zurück). Nur ausgehende HTTPS-Verbindungen.
 - Die Routen liegen unter `/api/runner/*`, **nicht** unter `/api/v1` *(Claude)*: kein Teil der öffentlichen API, nicht im OpenAPI-Dokument, nicht in der MCP-Parität, nicht in der Routen-Matrix der Tokens. Fehler kommen als Problem Details (liegt unter `api/*`).
 - **Runner-Token:** ein eigenes Geheimnis je Runner (gehasht gespeichert, widerrufbar), kein persönliches Token einer Person und kein Sanctum-Token eines Kontos *(Claude; Umsetzung Builder)*. Es darf nur das Runner-Protokoll. Eigene Drossel.
 - **Protokollversion:** jede Anfrage schickt Runner-Version und Protokollversion; werkbuch antwortet bei abweichender Version mit der erwarteten (Selbst-Update, 8.3). Ein Runner mit zu altem Protokoll bekommt keine Aufträge.
@@ -99,22 +99,24 @@ Ein abgelaufener oder benutzter Code ist eine klare Meldung im Terminal. Ein Run
 
 ### 6.3 Abholen
 
-`POST /api/runner/claim` mit dem freien Platz des Runners (gesamt, je Repo, leichte Aufträge; Plätze aus werkbuch, siehe 9) und seiner Auslastung (8.6). Ein Runner nimmt Aufträge aller Projekte *(Rafael: keine Einschränkung)*, aber nur für CLIs, die er installiert und angemeldet hat (8.8). werkbuch wählt in einer Transaktion den nächsten passenden Auftrag (Reihenfolge und Regeln 9), setzt ihn auf `running` mit Lease (Ablauf = jetzt + Heartbeat-Fenster) und antwortet mit allem, was der Runner braucht:
+`POST /api/runner/claim` mit dem Bericht des Runners: Auslastung (8.6), CLIs (8.8), Ausstattung (8.7). Freie Plätze rechnet werkbuch aus den eigenen laufenden Aufträgen des Runners und den Plätzen, die in werkbuch eingestellt sind (9) *(Claude)*. Ein Runner nimmt Aufträge aller Projekte *(Rafael: keine Einschränkung)*, aber nur für CLIs, die er installiert und angemeldet hat (8.8). werkbuch wählt in einer Transaktion den nächsten passenden Auftrag (Reihenfolge und Regeln 9), setzt ihn auf `running` mit Lease (Ablauf = jetzt + Heartbeat-Fenster) und antwortet mit allem, was der Runner braucht:
 
-- Auftrag: ID, Typ, Item (ID, Key, Titel), Projekt (Kennung), Strang (ID, Branch, Basis-Branch, Session-ID falls vorhanden), Zeitlimit.
+- Auftrag: ID, Typ, Item (ID, Key, Titel; bei einem Review ohne verknüpftes Item keins), Projekt (Kennung), Strang (ID, Branch, Basis-Branch, Session-ID falls vorhanden), bei `review` der PR und sein Head-Commit, Zeitlimit.
+- Setup- und Teardown-Befehle des Projekts (8.4), Commit-Identität des Bots.
 - Prompt und System-Prompt, fertig gebaut von werkbuch (7.3).
 - Run-Token für werkbuch-MCP (11.2) und, bei Projekten mit Repo, das GitHub-Installations-Token mit Repo-URL (11.3).
-- CLI des Agenten und das Modell des Auftrags (7.7).
+- CLI des Agenten, Modell des Auftrags und dessen Herkunft (7.7).
+- Plätze des Runners und erwartete Version (9, 8.3).
 
-Ohne passenden Auftrag: `204`. Zwei Runner, die gleichzeitig abholen, bekommen nie denselben Auftrag (Zeilensperre, ein Test mit zwei Verbindungen).
+Ohne passenden Auftrag: `200` mit `{"run": null, "places": …, "version": …}`. Zwei Runner, die gleichzeitig abholen, bekommen nie denselben Auftrag (Zeilensperre, ein Test mit zwei Verbindungen).
 
 ### 6.4 Heartbeat, Ereignisse, Ergebnis, Abbruch
 
 - **Heartbeat** etwa alle 15 s je laufendem Auftrag; verlängert das Lease. Die Antwort sagt, ob der Auftrag abgebrochen wurde; dann beendet der Runner den Prozess (SIGTERM, nach 10 s SIGKILL) und meldet `canceled`.
 - **Ereignisse:** der Runner schickt das Protokoll des CLI (bei Claude die Zeilen von `--output-format stream-json`, gekürzt auf das Lesbare) gebündelt, höchstens etwa einmal je Sekunde. werkbuch speichert sie (Grenzen siehe 7.5) und stößt das Neuladen im Browser über den vorhandenen Live-Kanal des Items an, gedrosselt.
-- **Ergebnis:** `status` (`succeeded`, `failed`), Session-ID, bei `review` das Urteil (`approve`/`changes`) mit Befunden als Markdown, bei `comment` die Antwort als Markdown, bei `task`/`correction` der gepushte Commit (SHA) und eine kurze Zusammenfassung, Nutzung (Tokens, falls das CLI sie meldet). werkbuch handelt danach (7.2), nicht der Agent.
+- **Ergebnis:** `status` (`succeeded`, `failed`), Session-ID, bei `review` das Urteil (`approve`/`changes`) mit Befunden als Markdown, bei `comment` die Antwort als Markdown, bei `task`/`correction`/`conflict` der gepushte Commit (SHA) und eine kurze Zusammenfassung, Nutzung (Tokens, falls das CLI sie meldet). werkbuch handelt danach (7.2), nicht der Agent.
 - **Abbruch** in der Oberfläche (Item oder Runner-Seite) oder per API: der Auftrag wird `canceling`, der nächste Heartbeat sagt es dem Runner. Ein Auftrag ohne Heartbeat über das Lease hinaus wird `lost` und neu eingereiht (höchstens einmal, danach `failed`) *(Claude)*.
-- **Zeitlimit:** fest im Code, nicht einstellbar *(Rafael: keine Grenzen in der Bot-Konfiguration)*: 60 Minuten für `task`/`correction`, 30 für `conflict`, 20 für `review`, 10 für `comment`. Darüber `timed_out`, wie `failed` behandelt, mit Grund am Item.
+- **Zeitlimit:** fest im Code, nicht einstellbar *(Rafael: keine Grenzen in der Bot-Konfiguration)*: 60 Minuten für `task`/`correction`, 30 für `conflict`, 20 für `review`, 10 für `comment`. Am Zeitlimit beendet der Runner den Prozess (SIGTERM, nach 10 s SIGKILL) und meldet `timed_out`; kommt bis Zeitlimit plus Lease kein Ergebnis, setzt werkbuch `timed_out` selbst. `timed_out` wird wie `failed` behandelt, mit Grund am Item.
 - **Token-Erneuerung:** GitHub-Tokens gelten eine Stunde; der Runner holt für einen laufenden Auftrag ein neues über `POST /api/runner/runs/{id}/git-token`, bevor es abläuft.
 
 ## 7. Aufträge und Ablauf eines Tickets
@@ -124,7 +126,7 @@ Ohne passenden Auftrag: `204`. Zwei Runner, die gleichzeitig abholen, bekommen n
 | Typ | Auslöser | Darf | Ergebnis |
 |---|---|---|---|
 | `task` | Item bzw. Epic dem Bot zugewiesen | Worktree, Commits, Push, PR öffnen, werkbuch lesen und schreiben | PR offen; kein Kommentar |
-| `correction` | CI rot oder Review mit Befunden am PR des Bots; oder ein Mensch stellt das Ticket mit offenem Bot-PR auf einen Unstarted-Status; oder ein Mensch weist ein Ticket mit offenem Strang wieder dem Bot zu | wie `task`, gleicher Strang, Session fortgesetzt | neuer Push auf denselben PR |
+| `correction` | CI rot oder Review mit Befunden am PR des Bots; oder ein Mensch stellt das Ticket mit offenem Bot-PR auf einen Backlog- oder Unstarted-Status; oder ein Mensch weist ein Ticket mit offenem Strang wieder dem Bot zu | wie `task`, gleicher Strang, Session fortgesetzt | neuer Push auf denselben PR |
 | `conflict` | PR des Bots hat Konflikte mit seiner Basis (`mergeable_state: dirty`) | wie `correction` | Basis in den Branch gemergt, Konflikte gelöst, Push |
 | `review` | alle Checks auf dem letzten Commit eines PRs des Repos eines Projekts grün | nur lesen (werkbuch und Repo) | Urteil; werkbuch kommentiert am Ticket und am PR und gibt bei `approve` über die Review-App frei |
 | `comment` | eine Person erwähnt den Bot in einem Kommentar | nur lesen (Wiki, Items, Repo) | Antwort; werkbuch postet sie als Kommentar des Bots |
@@ -132,7 +134,7 @@ Ohne passenden Auftrag: `204`. Zwei Runner, die gleichzeitig abholen, bekommen n
 - Typen *(Rafael)*, Rechte *(Claude)*. Was ein Auftrag tun darf, erzwingen werkbuch und GitHub (11.2, 11.3), nicht nur der Prompt.
 - **Was nie einen Auftrag auslöst** *(Claude, gegen Schleifen)*: Änderungen, die werkbuch im Ablauf selbst macht (Status, Zuweisung, die Selbstzuweisung der Epic-Kinder; erkannt am Actor `agent`, 7.2), Kommentare von Bots, Erwähnungen in Beschreibung oder Feldern (`bot.mentioned` mit `source` `description`/`values`), bearbeitete Kommentare, PRs und Pushes der Agenten-App selbst außer über die Regeln dieses Abschnitts.
 - `conflict` *(Rafael: eigener Typ; Claude: Ausgestaltung)*: werkbuch prüft offene Bot-PRs nach jedem Push auf deren Basis-Branch (GitHub rechnet `mergeable` verzögert, werkbuch fragt nach) und vor jedem Merge-Versuch. Ein Konflikt geht vor CI und Review. Der Agent mergt die Basis in den Branch (kein Rebase, kein Force-Push; beim Squash-Merge stört der Merge-Commit nicht), löst die Konflikte, lässt die betroffenen Tests laufen und pusht; danach laufen CI und Review neu. Eigene Bremse: höchstens 2 `conflict` je Strang, zählen nicht zur Korrektur-Bremse. Bei PRs von Menschen kein Auftrag, nur ein Hinweis am PR und am Item.
-- `review` startet immer mit frischer Session ohne Kontext der Umsetzung *(Claude)*.
+- `review` startet immer mit frischer Session ohne Kontext der Umsetzung *(Claude)*. Den Review führt der Review-Agent des Projekts (10.3); hat das Projekt keinen, reviewt der Bot des Strangs selbst mit frischer Session, und PRs von Personen werden nicht reviewt *(Claude)*.
 - **PRs von Personen werden ebenso reviewt** *(Rafael)*, standardmäßig an (je Projekt abschaltbar), mit demselben Review-Agenten und denselben Arbeitsregeln, sobald CI auf dem Head-Commit grün ist; ein Entwurf nicht. Ergebnis *(Claude)*: `approve` → Freigabe über die Review-App (die Person kann danach ohne `--admin` mergen) und Kommentar am PR und an verknüpften Items; `changes` → GitHub-Review als Kommentar mit den Befunden (kein „Request changes“, das den Merge sperren würde) und Kommentar an verknüpften Items. werkbuch startet bei PRs von Personen keine Korrektur, keinen `conflict` und mergt nicht; den Status schaltet nur die PR-Zuordnung aus 12.
 - `comment`: eine Erwähnung startet immer einen `comment`, nie Code-Änderungen. Wer Änderungen will, stellt das Ticket zurück (löst `correction` aus) *(Claude)*. Hat das Item einen offenen Strang, setzt der `comment` dessen Session fort (Kontext), sonst frisch.
 - Projekte ohne Repo: `task` läuft in einem Arbeitsordner ohne Git, endet mit einer Zusammenfassung als Kommentar und dem Status „Nach Abschluss“ (7.4); kein PR, kein CI, kein Review *(Claude)*.
@@ -161,7 +163,7 @@ Bot zugewiesen ─► task (Status „In Arbeit“)
 - **Mensch greift ein** *(Claude)*:
   - Weist eine Person das Ticket einer anderen Person zu, wird ein laufender Auftrag abgebrochen und der Strang pausiert; der PR bleibt.
   - Weist eine Person das Ticket wieder dem Bot zu: mit pausiertem oder offenem Strang eine `correction` mit den Kommentaren seit dem letzten Auftrag als Befund (die Bremse beginnt von vorn), ohne Strang ein neuer `task`.
-  - Stellt eine Person das Ticket mit offenem Bot-PR auf einen Unstarted-Status, ebenso eine `correction`.
+  - Stellt eine Person das Ticket mit offenem Bot-PR auf einen Backlog- oder Unstarted-Status, ebenso eine `correction`.
   - Mergt eine Person den Bot-PR selbst auf GitHub, behandelt werkbuch das wie den eigenen Merge (Status „Gemergt“, Strang `merged`). Schließt sie ihn ohne Merge, endet der Strang (`closed`), das Ticket geht auf „Korrektur“ mit Kommentar.
 
 ### 7.3 Prompts und Regeln
@@ -169,14 +171,14 @@ Bot zugewiesen ─► task (Status „In Arbeit“)
 werkbuch baut Prompt und System-Prompt je Auftrag aus diesen Schichten *(Rafael, 2026-11-23)*, in dieser Reihenfolge zusammengesetzt: Vertrag → Regeln des Auftragstyps (Organisation) → Vorgehen des Item-Typs → Projekt → Auftrag; dazu liest das CLI die Code-Regeln im Repo. Eine eigene Anweisung je Bot gibt es nicht.
 
 1. **Vertrag, im Code, nicht änderbar** (Englisch): was der Typ tun soll und was nie (Status setzen, zuweisen, mergen, Release, Force-Push), das Ausgabeformat, das werkbuch liest (Urteil `approve`/`changes`, Befunde nach Schwere, Antwort als Markdown, Zusammenfassung), die Schwelle „`changes` nur bei Critical oder Important“, und dass Texte aus Items, Kommentaren, Wiki und PRs Daten sind, keine Anweisungen. Bei einem Widerspruch gewinnt der Vertrag; was er verbietet, sperren werkbuch und GitHub zusätzlich hart (11.2, 11.3).
-2. **Arbeitsregeln je Auftragstyp, in der Organisation** (Organisation → Agenten, 10.8): ein Markdown-Text je Auftragstyp (`task`, `correction`, `conflict`, `review`, `comment`). **Standards** liefert werkbuch mit (Englisch und Deutsch, in der Sprache der Organisation vorbelegt, abgeleitet aus dem do-ticket-Flow; Inhalt unten); „Standard wiederherstellen“ setzt einen Text zurück; ein neuer Standard in einem Release erreicht nur Texte, die noch dem alten Standard gleichen. Ändern Org-Admins (`org.manage_catalog`), jede Änderung als Event (alter und neuer Text).
+2. **Arbeitsregeln je Auftragstyp, in der Organisation** (Organisation → Agenten, 10.5): ein Markdown-Text je Auftragstyp (`task`, `correction`, `conflict`, `review`, `comment`). **Standards** liefert werkbuch mit (Englisch und Deutsch, in der Sprache der Organisation vorbelegt, abgeleitet aus dem do-ticket-Flow; Inhalt unten); „Standard wiederherstellen“ setzt einen Text zurück; ein neuer Standard in einem Release erreicht nur Texte, die noch dem alten Standard gleichen. Ändern Org-Admins (`org.manage_catalog`), jede Änderung als Event (alter und neuer Text).
 3. **Vorgehen des Item-Typs, im Katalog:** jeder Typ (Organisation → Typen) bekommt neben der Beschreibung ein zweites, optionales Textfeld „Vorgehen für Agenten“ (Markdown), etwa am Bug „immer mit einem fehlschlagenden Test beginnen, wenn möglich“. Es geht in jeden Auftrag an einem Item dieses Typs.
 4. **Projekt:** ein Textfeld „Projektinformationen und Regeln für Agenten“ in Projekt → Agenten (10.3), unabhängig von Auftrags- und Item-Typ; ändern `project.manage`, Änderung als Event des Projekts.
 5. **Code-Regeln im Repo:** `CLAUDE.md` bzw. `AGENTS.md`, die das CLI ohnehin liest. Kommandos, Konventionen und Fallstricke versionieren mit dem Code; die UI-Regeln sagen nur, wie gearbeitet wird.
 
 Inhalt der Standards *(Claude, der Builder schreibt die Texte)*:
 
-- `task`: das Item per MCP lesen (`werkbuch_work-items get`), im gegebenen Worktree umsetzen, die Regeln des Repos befolgen, testen, committen, pushen, PR öffnen (Titel mit Key, Body mit `Fixes KEY-n` und der Attribution), den Nachweis in der Property `resolution_proof` setzen, falls das Projekt sie hat (Text, Vorher/Nachher, mindestens ein Bild über `get-upload-url`). Der Implementierungs-Brief von do-ticket ist die Vorlage, ohne Review-Subagent, Merge und Statuswechsel.
+- `task`: das Item über den MCP-Server `werkbuch-run` lesen (Tool `work-items`, Aktion `get`), im gegebenen Worktree umsetzen, die Regeln des Repos befolgen, testen, committen, pushen, PR öffnen (Titel mit Key, Body mit `Fixes KEY-n` und der Attribution), den Nachweis in der Property `resolution_proof` setzen, falls das Projekt sie hat (Text, Vorher/Nachher, mindestens ein Bild über `get-upload-url`). Der Implementierungs-Brief von do-ticket ist die Vorlage, ohne Review-Subagent, Merge und Statuswechsel.
 - `correction`: die Befunde (CI-Log-Auszug, Review-Befunde oder Kommentare) abarbeiten, auf denselben Branch pushen, den Nachweis an den neuen Stand anpassen.
 - `conflict`: Basis hineinmergen, Konflikte im Sinn beider Seiten lösen, betroffene Tests laufen lassen, pushen.
 - `review`: unvoreingenommen, nur Ticket-Ziel und PR; gründlich auf Regressionen, Tests, die nur die Umsetzung spiegeln, Barrierefreiheit, Doku, Abnahme des Tickets; Befunde mit `datei:zeile`, Problem und Vorschlag; keine Tests gegen die Datenbank.
@@ -202,10 +204,10 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 
 ### 7.5 Aufträge in werkbuch
 
-- Tabelle `agent_runs`: Typ, Status (`queued`, `waiting`, `running`, `canceling`, `succeeded`, `failed`, `canceled`, `timed_out`, `lost`), Agent (Bot), Runner, Item, Strang, Head-Commit (bei `review`), Auslöser (Event), Versuch, Lease, Start, Ende, Ergebnis (Urteil, Text), Session-ID, Nutzung (falls gemeldet), Fehler.
+- Tabelle `agent_runs`: Typ, Status (`queued`, `waiting`, `running`, `canceling`, `succeeded`, `failed`, `canceled`, `timed_out`, `lost`), Grund bei `waiting`, Agent (Bot), CLI, Modell und Herkunft (`label`, `project`, `bot`, `default`), Runner, Projekt (Pflicht), Item (nullable: ein Review eines PRs ohne verknüpftes Item steht nur auf der Runner-Seite und als Kommentar am PR), Strang, Head-Commit (bei `review`), Auslöser (Event), Versuch, Lease, Start, Ende, Ergebnis (Urteil, Text), Session-ID, Nutzung (falls gemeldet), Fehler.
 - Ereignisse eines Auftrags in einer eigenen Tabelle, höchstens 2 000 Zeilen oder 1 MB je Auftrag (darüber werden die ältesten verdichtet, Builder), aufgeräumt nach 30 Tagen (stündlicher Job, wie Zustellungen).
 - Events in der Outbox (History, Live, Webhooks): `agent_run.queued`, `agent_run.started`, `agent_run.finished` (mit Status) am Item; der Verlauf zeigt sie. Ob sie Webhooks auslösen, entscheidet der Builder (Standard nein, wie die Katalog-Events). Ereignisse des Protokolls (6.4) gehen **nicht** durch die Outbox.
-- `agent_threads`: Item (bzw. Epic), Runner, Branch, Basis-Branch, Worktree-Name, Session-ID, PR, Korrekturen, Status (`open`, `paused`, `merged`, `closed`), Zähler der Korrekturen und Konflikte.
+- `agent_threads`: Agent (Bot), Item (bzw. Epic), Runner, Branch, Basis-Branch, Worktree-Name, Session-ID, PR, Status (`open`, `paused`, `merged`, `closed`) mit Grund der Pause, Zähler der Korrekturen und Konflikte.
 
 ### 7.6 Epics (Regel A)
 
@@ -213,7 +215,7 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 - Kinder, die einer Person gehören, bleiben ihre; diese Person pusht ihre Arbeit selbst auf den Epic-Branch. Der PR wird bereit, wenn kein Kind mehr offen ist: Kinder des Bots stehen dann auf „In Review“, Kinder von Personen sind Completed oder Canceled. Weil die Kinder des Bots bis zum Merge auf „In Review“ (Started) stehen, schließt „Eltern schließen“ das Epic nicht vor dem Merge.
 - Je Kind darf der Agent einen Teil-Branch nutzen, der lokal in den Epic-Branch gemergt wird; gepusht wird nur der Epic-Branch *(Rafael)*. Nach dem ersten Kind öffnet der Agent einen **Entwurfs-PR** auf den Standard-Branch.
 - CI und Review laufen erst, wenn alle Kinder fertig sind und werkbuch den PR auf bereit stellt; Ergebnisse vorher zählen nicht. Kinder stehen bis dahin auf „In Review“.
-- Merge: Epic und alle Kinder (ohne Canceled) werden „Gemergt“.
+- Merge: das Epic und die Kinder des Bots werden „Gemergt“; Kinder, die schon Completed oder Canceled sind, bleiben.
 - Ein einzeln zugewiesener Task in einem Epic ist ein normaler Task mit eigenem Branch und PR *(Rafael)*.
 - Ein Epic läuft in sich immer nacheinander (ein Branch, ein Worktree).
 
@@ -228,13 +230,13 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 - Labels statt eines eigenen Felds am Item: sie gelten in allen Projekten, lassen sich schon beim Anlegen, aus Vorlagen, per Mehrfachbearbeitung und per MCP setzen und filtern; ein neues Item-Feld liefe durch Resource, REST, Vorlagen und das ausgeschöpfte MCP-Budget von `work-items`.
 - Das Modell kommt aus einer **festen Liste je CLI** *(Rafael: keine freien Namen)*, gepflegt im Code und mit Releases von werkbuch erweitert (Claude Code etwa `haiku`, `sonnet`, `opus`, `fable`; Codex dessen Namen). Alle Modellfelder sind Selects; wechselt das CLI und gibt es das gewählte Modell dort nicht, gilt der Standard des CLI (mit Hinweis). Der Runner reicht es durch (`--model` bzw. `-m`); lehnt das CLI es ab, scheitert der Auftrag mit dem Grund.
 - Modelle in Projekt und Label nennen CLI und Modell (die Selects gruppieren nach CLI); sie gelten nur für Agenten mit diesem CLI, für andere wird die Stufe übergangen *(Claude)*. Die Oberfläche sagt es unter dem Feld.
-- Am Auftrag stehen das gewählte Modell und woher es kam (Label, Projekt, Bot) und, falls gemeldet, der Verbrauch.
+- Am Auftrag stehen das gewählte Modell und woher es kam (Label, Projekt, Bot, Standard) und, falls gemeldet, der Verbrauch.
 - Eine automatische Wahl (ein kleines Modell schätzt das Ticket ein) ist ein Nicht-Ziel von v1.
 
 ### 7.8 Session
 
 - Claude Code headless: `claude -p --output-format stream-json --verbose`, Session fortsetzen mit `--resume <session-id>`; Codex: `codex exec` bzw. `codex exec resume <id>`. Sessions liegen auf der Maschine und hängen am Arbeitsordner: der Worktree lebt je Strang bis zu dessen Ende.
-- `correction` und `comment` an einem offenen Strang setzen dessen Session fort; `review` nie.
+- `correction`, `conflict` und `comment` an einem offenen Strang setzen dessen Session fort; `review` nie.
 
 ## 8. Der Runner
 
@@ -265,18 +267,18 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 *(Rafael: alles einfach halten; konfiguriert wird in werkbuch)*
 
 - **Auf dem Runner** liegt nur, was an der Maschine hängt: Instanz-URL und Runner-Token (aus `login`, Token im Keychain). `claude`/`codex` findet er über `PATH`; „Doctor“ meldet, wenn eins fehlt oder nicht angemeldet ist.
-- **In werkbuch** (Runner-Seite, 10.1): Name, Plätze (gesamt Standard 2, je Repo Standard 1, leichte Aufträge Standard 2). Der Runner bekommt sie mit jeder Antwort auf Abholen bzw. Heartbeat; Änderungen gelten ohne Neustart.
+- **In werkbuch** (Runner-Seite, 10.1): Name, Plätze (gesamt Standard 2, je Repo Standard 1, leichte Aufträge Standard 2). Der Runner bekommt sie mit jeder Antwort auf Abholen bzw. Heartbeat (auch ohne Auftrag, 6.3); Änderungen gelten ohne Neustart.
 - **In werkbuch je Projekt** (10.3): optionale Setup- und Teardown-Befehle, die der Runner nach dem Anlegen bzw. vor dem Entfernen eines Worktrees ausführt (für werkbuch etwa ein eigener DDEV-Projektname je Worktree, `ddev start`, `ddev delete -Oy`). Projekte ohne Repo laufen in einem Ordner je Strang.
 - Keine Einschränkung auf Projekte: jeder Runner nimmt Aufträge aller Projekte.
 
 ### 8.5 TUI
 
 - Bubble Tea, Bubbles, Lip Gloss wie skilltri und tussh; dieselbe 16-Farben-Palette (`styles.go` als Vorbild), Tabs, Tastenhilfe *(Rafael: einheitlich; Claude: Lesart „gleicher Stil“)*. Kein gemeinsames Go-Modul der drei Tools in v1.
-- Tabs (Vorschlag): **Status** (Verbindung, Instanz, Version, Plätze aus werkbuch, laufende Aufträge, **Auslastung** 8.6 mit kleinen Verläufen der letzten Minuten), **Aufträge** (laufende und letzte, Protokoll live, Abbrechen), **Doctor** (Claude/Codex installiert und angemeldet, Git, Keychain, Erreichbarkeit der Instanz). Keine Einstellungen in der TUI außer Abmelden; ein Hinweis zeigt, wo in werkbuch konfiguriert wird.
+- Tabs (Vorschlag): **Status** (Verbindung, Instanz, Version, Plätze aus werkbuch, laufende Aufträge, **Auslastung** 8.6 mit kleinen Verläufen der letzten Minuten), **Aufträge** (laufende und letzte, Protokoll live, Abbrechen), **Doctor** (CLIs installiert und angemeldet (8.8), Git, Keychain, Erreichbarkeit der Instanz, Ausstattung (8.7) mit Warnung vor einem weiteren werkbuch-Zugang). Keine Einstellungen in der TUI außer Abmelden; ein Hinweis zeigt, wo in werkbuch konfiguriert wird.
 
 ### 8.6 Auslastung
 
-*(Rafael)* Der Runner misst CPU (gesamt in Prozent), GPU (Auslastung in Prozent, wo das System sie ohne Root liefert, auf Apple Silicon über IOKit; sonst „nicht verfügbar“), RAM (belegt/gesamt) und Speicher (frei/gesamt des Datenträgers seines Datenordners), alle 5 s. Er zeigt sie in der TUI und schickt den letzten Stand mit jedem Heartbeat bzw. Abholen an werkbuch, das ihn auf der Runner-Seite zeigt (10.1). werkbuch speichert nur den letzten Stand, keinen Verlauf. Messung ohne cgo (Builder wählt die Bibliothek, etwa gopsutil, oder Systembefehle). *(Claude: auch in werkbuch, weil es dort ohne Zugriff auf die Maschine nützt.)*
+*(Rafael)* Der Runner misst CPU (gesamt in Prozent), GPU (Auslastung in Prozent, wo das System sie ohne Root liefert, auf Apple Silicon über `ioreg` (IOAccelerator, „Device Utilization %“), ohne cgo; sonst „nicht verfügbar“), RAM (belegt/gesamt) und Speicher (frei/gesamt des Datenträgers seines Datenordners), alle 5 s. Er zeigt sie in der TUI und schickt den letzten Stand mit jedem Heartbeat bzw. Abholen an werkbuch, das ihn auf der Runner-Seite zeigt (10.1). werkbuch speichert nur den letzten Stand, keinen Verlauf. Messung ohne cgo (Builder wählt die Bibliothek, etwa gopsutil, oder Systembefehle). *(Claude: auch in werkbuch, weil es dort ohne Zugriff auf die Maschine nützt.)*
 
 ### 8.7 Ausstattung der Maschine: MCP-Server, Skills, Plugins
 
@@ -285,7 +287,7 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 - MCP-Server, Skills, Plugins und Hooks des Agenten sind Ausstattung der Maschine, wie der Login des CLI: eingerichtet für den Benutzer, unter dem der Runner läuft, so, wie der Betreiber seine Harnesses einrichtet (von Hand oder mit einem Werkzeug seiner Wahl; werkbuch setzt keins voraus). Empfohlen ist ein eigener macOS-Benutzer für den Runner (11.1); dann gehört alles, was dort eingerichtet ist, dem Runner, und nichts Persönliches (Hooks der Zeiterfassung, die eigene `~/.claude/CLAUDE.md`) läuft mit.
 - Skills und Regeln, die zum Code gehören, kommen aus dem Repo (`CLAUDE.md`/`AGENTS.md`, `.claude/skills`), wie 7.3.
 - werkbuch selbst hängt der Runner je Auftrag dazu (8.1). Hat die Maschine einen weiteren Zugang zu werkbuch (etwa ein MCP-Server mit einem persönlichen Token), handelte ein Agent damit an Run-Token und Sperre (11.2) vorbei: „Doctor“ warnt davor (der Runner fragt die MCP-Liste des CLI ab und sucht Server, die die Instanz erreichen) und nennt den Server, den der Betreiber für den Runner abschalten sollte. Merges schützt das Ruleset ohnehin (11.3).
-- Der Runner meldet mit dem Heartbeat die Namen der MCP-Server, Skills und Plugins seines Harness; die Runner-Seite in werkbuch zeigt sie nur zum Lesen (10.1), „Doctor“ in der TUI ebenso.
+- Der Runner meldet mit jedem Heartbeat bzw. Abholen die Namen der MCP-Server, Skills und Plugins seines Harness; die Runner-Seite in werkbuch zeigt sie nur zum Lesen (10.1), „Doctor“ in der TUI ebenso.
 
 ### 8.8 CLIs des Runners
 
@@ -304,9 +306,9 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 | leichte Aufträge (`comment`, `review`) | werkbuch, Runner-Seite, eigener Topf | 2 |
 
 - Ein Epic läuft in sich nacheinander.
-- `review` gilt als leicht, solange es keine Tests gegen die Datenbank fährt (Prompt). *(Claude)*
-- Reihenfolge der Vergabe: `correction` und `review` vor `task` und `comment`, dann Priorität des Items, dann Alter *(Claude)*.
-- **Mehrere Runner je Agent:** ein Pool. `task`, `review` und `comment` an einem Item ohne offenen Strang nimmt der erste freie Runner; `correction` und `comment` an einem offenen Strang gehen an dessen Runner. Ist er länger als eine einstellbare Frist offline (Standard 30 Minuten), übernimmt ein anderer mit frischer Session auf dem Branch, der Strang zieht um *(Claude)*. Solange wartet der Auftrag (`waiting`).
+- `review` gilt als leicht, solange es keine Tests gegen die Datenbank fährt (Prompt). Leichte Aufträge zählen nur in ihrem eigenen Topf, nicht gegen „gesamt“ und „je Repo“ *(Claude)*.
+- Reihenfolge der Vergabe: `conflict`, `correction` und `review` vor `task` und `comment`, dann Priorität des Items, dann Alter *(Claude)*.
+- **Mehrere Runner je Agent:** ein Pool. `task` und `comment` an einem Item ohne offenen Strang nimmt der erste freie Runner; `review` immer der erste freie (eigener Worktree am Head-Commit); `correction`, `conflict` und `comment` an einem offenen Strang gehen an dessen Runner. Ist er länger als 30 Minuten offline (fest), übernimmt ein anderer mit frischer Session auf dem Branch, der Strang zieht um *(Claude)*. Solange wartet der Auftrag (`waiting`).
 
 ## 10. Oberfläche in werkbuch
 
@@ -324,20 +326,20 @@ Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem
 
 ### 10.4 Organisation → Bots → Agent
 
-Je Bot: Agent an/aus, Runner-Pool (Mehrfachauswahl), CLI, Standard-Modell und Modell je Auftragstyp (7.7). Keine Anweisung je Bot (7.3), keine eigenen Plätze oder Zeitlimits je Bot (9, 6.4). Org-Admins.
+Je Bot: Agent an/aus, Runner-Pool (Mehrfachauswahl; leer heißt alle Runner der Organisation *(Claude)*), CLI, Standard-Modell und Modell je Auftragstyp (7.7). Keine Anweisung je Bot (7.3), keine eigenen Plätze oder Zeitlimits je Bot (9, 6.4). Org-Admins.
 
-### 10.8 Organisation → „Agenten“
+### 10.5 Organisation → „Agenten“ und Kataloge
 
-Die Arbeitsregeln je Auftragstyp (7.3) als Reiter oder Liste mit Markdown-Editor, „Standard wiederherstellen“ je Typ, Hinweis auf die Reihenfolge im Prompt. Über den Regeln jedes Typs steht der Vertrag dieses Typs (7.3, Schicht 1) nur zum Lesen und aufklappbar („Gibt werkbuch immer vor“): der echte Text aus dem Code, so wie er in den Prompt geht (Englisch), damit niemand ihn in den Regeln wiederholt *(Rafael)*. REST liefert ihn mit den Regeln aus (Lesezugriff). Org-Admins ändern, Mitglieder lesen. Das Vorgehen je Item-Typ steht im Typ-Dialog (Organisation → Typen).
+Die Arbeitsregeln je Auftragstyp (7.3) als Reiter oder Liste mit Markdown-Editor, „Standard wiederherstellen“ je Typ, Hinweis auf die Reihenfolge im Prompt. Über den Regeln jedes Typs steht der Vertrag dieses Typs (7.3, Schicht 1) nur zum Lesen und aufklappbar („Gibt werkbuch immer vor“): der echte Text aus dem Code, so wie er in den Prompt geht (Englisch), damit niemand ihn in den Regeln wiederholt *(Rafael)*. REST liefert ihn mit den Regeln aus (Lesezugriff). Org-Admins ändern, Mitglieder lesen. Dazu in den Katalogen *(Claude, gesammelt aus 7.3, 7.4, 7.7)*: der Abschnitt „Agenten“ im Workflow-Editor (Schritte, 7.4), das Feld „Vorgehen für Agenten“ im Typ-Dialog (7.3), das Feld „Modell für Agenten“ im Label-Dialog (7.7).
 
-### 10.5 Item
+### 10.6 Item
 
-- **Aktivität:** jeder Auftrag ist eine Zeile (Typ, Agent, Runner, Status, Dauer); aufgeklappt das Protokoll, live während des Laufs; „Abbrechen“ für wer das Item ändern darf. Ergebnisse von `review` und `comment` sind Kommentare des Bots (normale Kommentare, mit Hinweis „Auftrag …“).
+- **Aktivität:** jeder Auftrag ist eine Zeile (Typ, Agent, Modell und Herkunft, Runner, Status mit Grund bei `waiting`, Dauer); aufgeklappt das Protokoll, live während des Laufs; „Abbrechen“ für wer das Item ändern darf. Ergebnisse von `review` und `comment` sind Kommentare des Bots (normale Kommentare, mit Hinweis „Auftrag …“).
 - **Abschnitt „Pull Requests“** (neben Relationen): verknüpfte PRs mit Nummer, Titel, Zustand (offen, Entwurf, gemergt, geschlossen), CI-Zustand, Review-Urteil, Link zu GitHub.
 - Ein Chip „Agent arbeitet“ am Kopf, solange ein Auftrag läuft.
 - Was ein Agent am Item ändert, sieht und hört man wie bei einer Person (History, Benachrichtigungen, Live).
 
-### 10.6 Bereits vorhandenes
+### 10.7 Bereits vorhandenes
 
 Tastatur (jede neue Aktion mit Kürzel bzw. Weg im Tastatur-Manifest), axe für jede neue Seite und jeden Dialog, beide Sprachen, Doku-Screenshots wo die Konzeptseiten sie zeigen.
 
@@ -356,13 +358,13 @@ Der Agent läuft unbeaufsichtigt mit den Rechten des Nutzers, unter dem der Runn
 
 ### 11.3 GitHub-Tokens
 
-- **Zwei Apps** *(Rafael)*: Die **Agenten-App** (`contents: write`, `pull_requests: write`, `checks: read`, `actions: read`, `metadata`; Webhooks für PRs, Pushes, Checks) pusht, öffnet PRs und mergt. Die **Review-App** (`pull_requests: write`, `contents: read`, `metadata`; keine Webhooks) gibt nur frei und kommentiert Reviews. Keine der beiden steht als Bypass im Ruleset.
+- **Zwei Apps** *(Rafael)*: Die **Agenten-App** (`contents: write`, `pull_requests: write`, `checks: read`, `actions: read`, `metadata`; Webhooks für PRs, Pushes, Checks und Installationen (`installation`, `installation_repositories`)) pusht, öffnet PRs und mergt. Die **Review-App** (`pull_requests: write`, `contents: read`, `metadata`; keine Webhooks) gibt nur frei und kommentiert Reviews. Keine der beiden steht als Bypass im Ruleset.
 - Installations-Tokens der Agenten-App je Auftrag, beschränkt auf das eine Repo und die Rechte des Typs: `task`/`correction`/`conflict` `contents: write`, `pull_requests: write`, `checks: read`; `review`/`comment` `contents: read`, `pull_requests: read`. Das Token des Agenten kann zwar mergen, aber das Ruleset verlangt grüne Checks und eine Freigabe, die nur die Review-App gibt, und die gibt nur werkbuch nach einem `approve` auf genau dem Head-Commit. Merge, Freigabe, Kommentare am PR und Statusabfragen macht werkbuch mit eigenen kurzlebigen Tokens. `workflows: write` nur, falls Agenten Workflow-Dateien ändern sollen (Standard nein, Builder klärt).
 - **Zu prüfen, bevor gebaut wird** (erstes Ticket, Spike): ob GitHub die Freigabe einer App für „ein Approve nötig“ im Ruleset zählt, und ob „Dismiss stale approvals“ sie bei neuem Push verwirft (gewünscht). **Fallback**, falls sie nicht zählt: eine dritte, nur von werkbuch genutzte Merge-App als Bypass-Akteur des Rulesets; Agenten-Tokens kommen nie von ihr.
 
 ### 11.4 Eingehende Webhooks
 
-`POST /github/webhook` (außerhalb von `/api/v1`), Signatur `X-Hub-Signature-256` mit dem Secret der App, sonst 401; idempotent über die Delivery-ID; verarbeitet in der Queue (eigener Konsument bzw. Job, Builder), Antwort sofort.
+`POST /github/webhook` (außerhalb von `/api/v1`, ohne Middleware-Gruppe: keine Sitzung, kein CSRF, wie `routes/ai.php`), Signatur `X-Hub-Signature-256` mit dem Secret der App, sonst 401; idempotent über die Delivery-ID; verarbeitet in der Queue (eigener Konsument bzw. Job, Builder), Antwort sofort.
 
 ## 12. PR-Verknüpfung
 
@@ -382,23 +384,24 @@ Vorbild sind itsaplan (feste Wörter, Checks je Link) und Plane (Status je PR-Zu
 - Eine Verknüpfung, deren Key aus Titel, Body und Branch verschwindet, bleibt (wie bei Relationen), außer `skip` hebt sie auf.
 
 **Wirkung und Status** *(Rafael: auch für PRs von Personen)*:
+- PRs eines Strangs (Agenten-PRs) folgen 7.2; die Regeln dieses Abschnitts gelten für alle anderen PRs.
 - **Entwürfe lösen nichts aus** (weder Status noch Review), sie werden nur verknüpft und angezeigt.
 - **PR geöffnet bzw. aus dem Entwurf bereit:** jedes verknüpfte Item in einem Backlog- oder Unstarted-Status geht auf „In Review“ (7.4). Items in Started bleiben (wer schon arbeitet, verliert nichts), Completed/Canceled bleiben.
 - **PR in den Basis-Branch des Projekts gemergt:** Items, die der PR **schließt**, gehen auf „Gemergt“, aber nur, wenn am Item kein anderer offener (auch Entwurfs-)PR hängt; Completed/Canceled bleiben. Items, die er nur verknüpft, bleiben.
 - **PR ohne Merge geschlossen:** bei PRs von Personen keine Statusänderung; bei PRs des Agenten 7.2.
-- Statuswechsel mit Actor `agent` des Review-Agenten des Projekts (7.2) bzw. eines eigenen Systems-Actors, wenn das Projekt keinen hat (Builder); mit Übergangsprüfung wie 7.2. Ohne Agenten-Schritte am Workflow (7.4) wird nur verknüpft.
+- Statuswechsel mit Actor `agent` des Review-Agenten des Projekts (7.2) bzw. eines System-Actors, wenn das Projekt keinen hat (etwa der Standard-Bot über `Actor::automation('pr_link')`, Builder; er braucht `item.edit`); mit Übergangsprüfung wie 7.2. Ohne Agenten-Schritte am Workflow (7.4) wird nur verknüpft.
 - **Kommentar am PR** *(Rafael)*: bei einer neuen Verknüpfung schreibt die Agenten-App einen Kommentar mit Link auf die Items (einer je PR, wird aktualisiert), je Projekt abschaltbar, standardmäßig an.
 
 **Daten** *(Rafael: Checks als eigene Tabelle)*:
 - `work_item_links`: Item, Art (`pull_request`), Repo, Nummer, Titel, URL, Zustand (`open`, `merged`, `closed`), Entwurf, Head- und Basis-Branch, Head-Commit, `closes`, Review-Urteil (je Head-Commit), Stempel; eindeutig je Item, Repo und Nummer. Aktualisiert durch die Webhooks.
-- `work_item_link_checks`: je Verknüpfung und Check-Run Name, App, Status, Ergebnis, URL, Head-Commit; daraus der CI-Zustand für 7.2 und die Anzeige am Item (10.5).
+- `work_item_link_checks`: je Verknüpfung und Check-Run Name, App, Status, Ergebnis, URL, Head-Commit; daraus der CI-Zustand für 7.2 und die Anzeige am Item (10.6).
 - Ein Event am Item bei neuer Verknüpfung und bei Merge (History); Benachrichtigungen folgen den bestehenden Regeln (`item_changed`) *(Builder: neue Art nötig?)*.
 - REST: Verknüpfungen samt Checks am Item lesen (`include=links` o. ä.) und über MCP (A397-Regel).
 
 ## 13. REST, MCP, Doku
 
-- Unter `/api/v1` (mit OpenAPI-Dokument, Vertrag, Rechte-Matrix, MCP-Parität): Runner lesen, umbenennen, widerrufen; Aufträge lesen (je Item, je Runner), abbrechen; Agenten-Konfiguration eines Bots; Agenten-Einstellungen eines Projekts; Verknüpfungen eines Items. Pairing-Code erzeugen und die GitHub-Verbindung nur aus der Sitzung (`EnsureSession`), nicht über MCP (Eintrag in A397).
-- VitePress `docs/en` und `docs/de`: „Runner“ (Installation, Config, TUI, Sicherheit, eigener macOS-Benutzer, Ausstattung der Maschine), „GitHub“ (zwei Apps, Ruleset ohne Bypass, Repos), „Agenten“ (Aufträge, Ablauf, Status, Epics, Parallelität); `operations.md` (Downloads, Drosseln), `bots.md`.
+- Unter `/api/v1` (mit OpenAPI-Dokument, Vertrag, Rechte-Matrix, MCP-Parität): Runner lesen, umbenennen, widerrufen; Aufträge lesen (je Item, je Runner), abbrechen; Agenten-Konfiguration eines Bots; Agenten-Einstellungen eines Projekts; Plätze eines Runners; Arbeitsregeln je Auftragstyp samt Vertrag (lesen) und Regeln (ändern); `labels.agent_model`, `work_item_types.agent_guidance`, die Agenten-Schritte am Workflow; Verknüpfungen eines Items. Neue Katalogfelder laufen durch `CatalogSchemas` und MCP; das Budget von `manage-organization` (heute 11 179 von 12 288 Bytes) ist zu prüfen. Pairing-Code erzeugen und die GitHub-Verbindung nur aus der Sitzung (`EnsureSession`), nicht über MCP (Eintrag in A397).
+- VitePress `docs/en` und `docs/de`: „Runner“ (Installation, Einstellungen in werkbuch, TUI, Doctor, Sicherheit, eigener macOS-Benutzer, Ausstattung der Maschine), „GitHub“ (zwei Apps, Ruleset ohne Bypass, Repos), „Agenten“ (Aufträge, Ablauf, Status, Epics, Parallelität, Regeln und Vertrag, Modelle und Modell-Labels, PR-Verknüpfung); `operations.md` (Downloads, Drosseln), `bots.md`.
 - `CLAUDE.md` bekommt die Abschnitte im gewohnten Stil, Rulings ab A472 in der Rulings-Datei.
 
 ## 14. Qualität
@@ -411,9 +414,9 @@ Vorbild sind itsaplan (feste Wörter, Checks je Link) und Plane (Status je PR-Zu
 ## 15. Dem Builder überlassen
 
 - Genaue Tabellen, Spalten, Indizes, Namen der Actions und Routen innerhalb der Regeln oben.
-- Intervalle (Polling, Heartbeat, Lease), Grenzen des Protokolls, Fristen (Aufräumen, Offline-Umzug), solange sie einstellbar oder begründet sind.
+- Intervalle (Polling, Heartbeat, Lease), Grenzen des Protokolls, Fristen (Aufräumen), solange sie begründet sind; die Frist des Offline-Umzugs ist fest 30 Minuten.
 - Der Weg der Ereignisse in den Browser (gedrosseltes Live-Signal auf dem Kanal des Items).
 - Ob Codex im ersten Wurf mitkommt.
 - Commit-Identität des Bots.
 - Wie die GitHub-Webhooks verarbeitet werden (Job, Konsument) und wie CI „grün“ bei spät dazukommenden Check-Suites stabil wird.
-- Schnitt in Tickets des Epics (Vorschlag: zuerst der Spike zur Freigabe durch eine App (11.3), dann Datenmodell und Protokoll, Runner-Daemon, Installation und Image, TUI, GitHub-App und Verknüpfung, Ablauf und Zustandsmaschine, Oberfläche, Doku und Abnahme).
+- Schnitt in Tickets des Epics (Vorschlag: zuerst der Klickdummy (Freigabe der UX), dann der Spike zur Freigabe durch eine App (11.3), dann Datenmodell und Protokoll, Runner-Daemon, Installation und Image, TUI, GitHub-App und Verknüpfung, Ablauf und Zustandsmaschine, Oberfläche, Doku und Abnahme).
