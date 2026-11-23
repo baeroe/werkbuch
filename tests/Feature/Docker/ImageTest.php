@@ -3,6 +3,7 @@
 use App\Console\Commands\EnsureAdminCommand;
 use App\Mcp\Resources\DocReference;
 use App\Models\Attachment;
+use App\Support\RunnerDist;
 use Illuminate\Filesystem\Filesystem;
 use Symfony\Component\Process\Process;
 use Tests\Support\RepoFiles;
@@ -12,6 +13,7 @@ $baseExtensions = ['opcache', 'pcntl', 'pdo_mysql', 'pdo_pgsql', 'redis', 'zip']
 
 $baseImages = [
     'node:24.22.0-trixie-slim@sha256:a6155384446670e9719bdc4fd0ebe4d4b29fb32a8d6aa523da3547a6cfbcf22c',
+    'golang:1.26.11-trixie@sha256:cff05dd6b81c901f2e8249eb6f91c69a60451d0f12c26bfef08e476a85b32d4d',
     'serversideup/php:8.4.28-fpm-nginx-trixie-v5.1.5@sha256:c98282869232f27b765324f6b7d58daee3552f63df13dfaa7074c66e58930e6e',
 ];
 
@@ -98,11 +100,11 @@ $nginxFiles = function (): array {
     return $files;
 };
 
-it('pins both base images by version and digest, on glibc', function () use ($instructions, $baseImages) {
+it('pins every base image by version and digest, on glibc', function () use ($instructions, $baseImages) {
     $froms = array_values(array_filter($instructions(), fn (string $line) => preg_match('/^FROM\s/i', $line) === 1));
     $refs = array_map(fn (string $line) => preg_replace('/^FROM\s+(?:--platform=\S+\s+)?(\S+).*$/i', '$1', $line), $froms);
 
-    expect($refs)->toHaveCount(2);
+    expect($refs)->toHaveCount(3);
     foreach ($refs as $ref) {
         expect($ref)->toMatch('/^[a-z0-9\/._-]+:[\w.-]+@sha256:[0-9a-f]{64}$/');
         expect($ref)->not->toContain('alpine');
@@ -209,6 +211,40 @@ it('ships the docs the MCP references read', function () use ($instructions, $ig
     }
 });
 
+it('builds the four runners with the version of the app on the build platform', function () use ($instructions, $ignored) {
+    $runner = $instructions('runner');
+    $build = collect($runner)->first(fn (string $line) => str_contains($line, 'go build'));
+
+    // Go of the image is the toolchain of runner/go.mod (the CI job `runner` takes it from there as well)
+    preg_match('/^toolchain go(\S+)$/m', RepoFiles::text('runner/go.mod'), $toolchain);
+    expect($runner[0])->toStartWith('FROM --platform=$BUILDPLATFORM golang:'.$toolchain[1].'-trixie@sha256:')
+        ->and($runner)->toContain('ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-trimpath')
+        ->and($build)->toStartWith('RUN --mount=type=cache,id=werkbuch-go-mod,target=/go/pkg/mod --mount=type=cache,id=werkbuch-go-build,target=/root/.cache/go-build ')
+        ->and($build)->toContain('-ldflags "-s -w -X main.version=$version"')
+        ->and($build)->toContain('sha256sum "$file" > "$file.sha256"')
+        ->and($build)->toContain('for target in '.implode(' ', array_map(fn (array $t) => implode('/', $t), RunnerDist::TARGETS)).';');
+
+    // the version of the binaries is the version the instance answers (the sed of scripts/release-version.sh)
+    preg_match('/version=\$\((sed -n "[^"]+") \/werkbuch\.php \| head -n 1\)/', $build, $sed);
+    expect($sed)->not->toBeEmpty()
+        ->and(RepoFiles::text('scripts/release-version.sh'))->toContain($sed[1]);
+    $read = Process::fromShellCommandline($sed[1].' config/werkbuch.php | head -n 1', repo_path());
+    $read->run();
+    expect(trim($read->getOutput()))->toBe(config('werkbuch.version'));
+
+    // root's copies in the app stage, outside public/ (A520); a local build never reaches the context
+    $app = $instructions('app');
+    expect($app)->toContain('COPY --from=runner /dist ./runner/dist')
+        ->and($app)->toContain('COPY resources/runner ./resources/runner')
+        ->and(config('werkbuch.runner_dist'))->toBe(base_path('runner/dist'));
+    foreach (['runner/dist/werkbuch-runner-linux-amd64', 'runner/bin/werkbuch-runner'] as $path) {
+        expect($ignored($path))->toBeTrue("{$path} reaches the build context");
+    }
+    foreach (['runner/go.mod', 'runner/go.sum', 'runner/main.go', 'runner/internal/service/service.go', 'resources/runner/install.sh', 'config/werkbuch.php'] as $path) {
+        expect($ignored($path))->toBeFalse("{$path} is missing in the build context");
+    }
+});
+
 it('ships Stoplight with its license', function () use ($instructions, $ignored) {
     expect(is_file(repo_path('public/vendor/stoplight-elements/8.4.2/LICENSE')))->toBeTrue();
     expect($ignored('public/vendor/stoplight-elements/8.4.2/LICENSE'))->toBeFalse();
@@ -267,7 +303,7 @@ it('keeps the code read-only for PHP, only storage and bootstrap/cache writable'
 
     foreach ([$steps[2], $steps[3]] as $step) {
         $words = preg_split('/\s+/', $commands[$step]);
-        foreach (['app', 'vendor', 'public', 'config', 'routes'] as $folder) {
+        foreach (['app', 'vendor', 'public', 'config', 'routes', 'runner'] as $folder) {
             expect($words)->toContain($folder);
         }
     }
@@ -374,6 +410,15 @@ it('answers every /index.php/<rest> with 404 before the base\'s open redirect', 
 
     expect($server)->toMatch('#^location \^~ /index\.php/ \{\n\s+return 404;\n\}#m');
     expect($server)->not->toMatch('#^\s*location\s+~\*?\s+[^{]*index#m');
+});
+
+it('lets /runner/install.sh through to Laravel, every other *.sh stays denied', function () {
+    // security.conf (and DDEV) deny paths ending in .sh by regex; an exact location wins over every regex (A520)
+    $location = "location = /runner/install.sh {\n    try_files \$uri /index.php?\$query_string;\n}";
+
+    expect(RepoFiles::text('docker/nginx/server-opts.d/werkbuch.conf'))->toContain($location)
+        ->and(RepoFiles::text('.ddev/nginx/runner-install.conf'))->toContain($location)
+        ->and(RepoFiles::text('docker/nginx/server-opts.d/security.conf'))->toMatch('#^location ~\* [^\n]*\|sh\|[^\n]*\{\n\s+deny all;#m');
 });
 
 it('leaves HSTS to the TLS proxy', function () use ($instructions, $nginxFiles) {

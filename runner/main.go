@@ -35,6 +35,7 @@ import (
 	"github.com/baeroe/werkbuch/runner/internal/procs"
 	"github.com/baeroe/werkbuch/runner/internal/protocol"
 	"github.com/baeroe/werkbuch/runner/internal/redact"
+	"github.com/baeroe/werkbuch/runner/internal/service"
 	"github.com/baeroe/werkbuch/runner/internal/socket"
 	"github.com/baeroe/werkbuch/runner/internal/sysexec"
 	"github.com/baeroe/werkbuch/runner/internal/tui"
@@ -53,6 +54,8 @@ Commands:
   status                                     what the daemon does now
   doctor                                     check CLIs, keychain, instance, git and the equipment
   update                                     update to the version the instance expects
+  service install [--no-start]               run the daemon as a service of this user (launchd, systemd)
+  service uninstall                          stop and remove that service
   logout                                     forget the instance and its token
   version                                    print the version
 `
@@ -96,6 +99,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return doc(ctx, stdout)
 	case "update":
 		err = requestUpdate(ctx, stdout)
+	case "service":
+		err = serviceCommand(ctx, args[1:], stdout)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n%s", args[0], usage)
 		return 2
@@ -170,6 +175,42 @@ func login(ctx context.Context, args []string, stdout io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "Paired as %q with %s.\nPlaces: %d in all, %d per repository, %d light (set in werkbuch).\nStart the daemon: werkbuch-runner daemon\n",
 		a.Runner.Name, instance, a.Places.Total, a.Places.PerRepo, a.Places.Light)
+	return nil
+}
+
+// serviceOptions are the options of the service on this machine; tests swap them.
+var serviceOptions = service.Defaults
+
+// serviceCommand writes (and loads) or removes the service of the user (spec 8.2); install.sh calls it after login.
+func serviceCommand(ctx context.Context, args []string, stdout io.Writer) error {
+	if len(args) == 0 || (args[0] != "install" && args[0] != "uninstall") {
+		return errors.New("usage: werkbuch-runner service install [--no-start] | service uninstall")
+	}
+	fs := flag.NewFlagSet("service", flag.ContinueOnError)
+	noStart := fs.Bool("no-start", false, "write the plist or unit, do not load or start it")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	o, err := serviceOptions()
+	if err != nil {
+		return err
+	}
+	if args[0] == "uninstall" {
+		if err := service.Uninstall(ctx, o); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "removed %s\n", service.File(o))
+		return nil
+	}
+	file, err := service.Install(ctx, o, !*noStart)
+	if err != nil {
+		return err
+	}
+	if *noStart {
+		fmt.Fprintf(stdout, "written to %s, not started\n", file)
+		return nil
+	}
+	fmt.Fprintln(stdout, service.Started(o))
 	return nil
 }
 

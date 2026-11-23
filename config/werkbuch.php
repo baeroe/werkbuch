@@ -26,6 +26,10 @@ return [
     // the docs the MCP references are read from (docs/en/…); tests point it elsewhere
     'docs_path' => base_path('docs'),
 
+    // the runner the instance hands out (A520): werkbuch-runner-<os>-<arch> and its .sha256, built by the image's stage
+    // `runner` (root's, read-only) or `ddev runner-build`; tests point it elsewhere
+    'runner_dist' => base_path('runner/dist'),
+
     // minutes a notification waits before its mail goes out (a read in between cancels it)
     'notification_mail_delay' => (int) env('NOTIFICATION_MAIL_DELAY', 5),
 

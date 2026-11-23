@@ -67,6 +67,32 @@ smoke() { # <mode>
 dc up -d --wait --wait-timeout 300
 smoke full
 
+# 1b. the runner from the instance (A520): install.sh in a container of the image on the host network (http only to
+#     localhost, like the runner), as www-data (the installer refuses root); the systemd unit it writes checked by
+#     systemd-analyze (installed for that, nothing starts it), the daemon polls a few seconds, then werkbuch has the
+#     runner online (smoke runner revokes it)
+code=$(smoke pair | sed -n 's/^smoke: code //p')
+if [ -z "$code" ]; then
+    echo "smoke: no one-time code for the runner" >&2
+    exit 1
+fi
+# shellcheck disable=SC2016 # evaluated by sh in the container
+docker run --rm --network host --user root --entrypoint sh \
+    -e SMOKE_URL="http://localhost:${PORT}" -e CODE="$code" -e NAME="smoke-${SMOKE_PROBE}" "$WERKBUCH_IMAGE" -c '
+        set -e
+        apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends systemd >/dev/null
+        mkdir -p /tmp/runner /tmp/xdg && chown www-data /tmp/runner /tmp/xdg && chmod 700 /tmp/xdg
+        runuser -u www-data -- env HOME=/tmp/runner XDG_RUNTIME_DIR=/tmp/xdg PATH=/tmp/runner/.local/bin:/usr/local/bin:/usr/bin:/bin sh -c "
+            set -e
+            cd /tmp/runner
+            curl -fsSL \"\$SMOKE_URL/runner/install.sh\" | sh -s -- --code \"\$CODE\" --name \"\$NAME\" --no-service
+            systemd-analyze --user verify .config/systemd/user/werkbuch-runner.service
+            test \"\$(werkbuch-runner version)\" != dev
+            timeout 15 werkbuch-runner daemon 2>/dev/null || test \$? = 124
+        "'
+echo "smoke: runner installed"
+smoke runner
+
 # 2. inside the containers: never root, the code read-only, only storage/app writable, the hardening of the ini and
 #    the patched libbrotli (Debian trixie's 1.1.0-2+deb13u1; v5.0.4 installed it itself), glibc. Since v5.1.0 the
 #    base builds on the trixie packages of its build day, so the version can move with a new base: read it from the

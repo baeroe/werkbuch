@@ -23,6 +23,28 @@ COPY resources ./resources
 RUN pnpm build
 
 # ---------------------------------------------------------------------------------------------------------------------
+# runner: the four binaries of the runner (spec 8.2, 8.3, A521), static without cgo, cross-compiled on the platform of
+# the build machine like the assets. Go as runner/go.mod's toolchain; the version of the binaries is the version of
+# the app (config/werkbuch.php, the sed of scripts/release-version.sh): the instance answers it to every runner, which
+# updates itself to it from /runner/download/<os>/<arch> and checks the .sha256 written here.
+# ---------------------------------------------------------------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM golang:1.26.11-trixie@sha256:cff05dd6b81c901f2e8249eb6f91c69a60451d0f12c26bfef08e476a85b32d4d AS runner
+WORKDIR /src
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-trimpath
+COPY runner/go.mod runner/go.sum ./
+RUN --mount=type=cache,id=werkbuch-go-mod,target=/go/pkg/mod go mod download
+COPY runner ./
+COPY config/werkbuch.php /werkbuch.php
+RUN --mount=type=cache,id=werkbuch-go-mod,target=/go/pkg/mod --mount=type=cache,id=werkbuch-go-build,target=/root/.cache/go-build \
+    version=$(sed -n "s/^[[:space:]]*'version' => '\([^']*\)'.*/\1/p" /werkbuch.php | head -n 1) \
+    && test -n "$version" \
+    && mkdir -p /dist \
+    && for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do \
+        GOOS=${target%/*} GOARCH=${target#*/} go build -ldflags "-s -w -X main.version=$version" -o "/dist/werkbuch-runner-${target%/*}-${target#*/}" . || exit 1; \
+    done \
+    && cd /dist && for file in werkbuch-runner-*; do sha256sum "$file" > "$file.sha256"; done
+
+# ---------------------------------------------------------------------------------------------------------------------
 # app: PHP-FPM + nginx (serversideup), runs as www-data (UID 33) on port 8080. v5.1.5 instead of the two-week-old
 # v5.1.1 (A414): PHP 8.4.28 closes 14 holes of php-src (FPM request smuggling, session RCE), v5.1.3 adds
 # "try_files $uri =404" before PHP-FPM and "security.limit_extensions = .php" (GHSA-8wf6-vq49-m6w2), v5.1.4 brings
@@ -78,6 +100,9 @@ COPY database ./database
 COPY lang ./lang
 COPY public ./public
 COPY resources/views ./resources/views
+# the installer of the runner (/runner/install.sh) and its binaries with their sums (/runner/download/…, A520)
+COPY resources/runner ./resources/runner
+COPY --from=runner /dist ./runner/dist
 COPY routes ./routes
 # read at runtime by the MCP references (werkbuch.docs_path, A409)
 COPY docs/en/concepts/views.md docs/en/concepts/rich-text.md docs/en/concepts/types-and-properties.md ./docs/en/concepts/
@@ -94,8 +119,8 @@ COPY --from=assets /app/public/build ./public/build
 RUN mkdir -p storage/app/private storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && BROADCAST_CONNECTION=null composer dump-autoload --no-dev --optimize --no-interaction \
     && chown root:root /var/www . && chmod 755 /var/www . \
-    && chown -R root:root artisan LICENSE app bootstrap config database docs lang public resources routes vendor \
-    && chmod -R a+rX,go-w artisan LICENSE app bootstrap config database docs lang public resources routes vendor \
+    && chown -R root:root artisan LICENSE app bootstrap config database docs lang public resources routes runner vendor \
+    && chmod -R a+rX,go-w artisan LICENSE app bootstrap config database docs lang public resources routes runner vendor \
     && chown root:root "$PHP_INI_DIR/conf.d/zzz-serversideup-docker-php-debug.ini" /usr/local/etc/php-fpm.d/zzz-docker-php-serversideup-fpm-debug.conf /usr/local/etc/php-fpm.conf \
     && chmod 644 "$PHP_INI_DIR/conf.d/zzz-serversideup-docker-php-debug.ini" /usr/local/etc/php-fpm.d/zzz-docker-php-serversideup-fpm-debug.conf /usr/local/etc/php-fpm.conf \
     && chown -R root:root /etc/nginx/server-opts.d && chmod 755 /etc/nginx/server-opts.d && chmod 644 /etc/nginx/server-opts.d/performance.conf \

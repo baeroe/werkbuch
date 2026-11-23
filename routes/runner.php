@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\RunnerDownloadController;
 use App\Http\Controllers\RunnerProtocolController;
 use App\Http\Middleware\AuthenticateRunner;
 use App\Http\Middleware\SetLocale;
@@ -20,4 +21,15 @@ Route::prefix('api/runner')->middleware(SetLocale::class.':'.SetLocale::API)->gr
         Route::post('runs/{runId}/events', [RunnerProtocolController::class, 'events'])->name('runner.events');
         Route::post('runs/{runId}/result', [RunnerProtocolController::class, 'result'])->name('runner.result');
     });
+});
+
+/*
+ * The installer and the binaries of the runner (spec 8.2, 8.3, A520): without an account and without a session (no
+ * cookie per download), throttled per address (`runner-download`), refusals as problems (ApiPaths). The sum before the
+ * binary: `{arch}` takes no dot.
+ */
+Route::prefix('runner')->middleware('throttle:runner-download')->group(function () {
+    Route::get('install.sh', [RunnerDownloadController::class, 'script'])->name('runner.install');
+    Route::get('download/{os}/{arch}.sha256', [RunnerDownloadController::class, 'checksum'])->where(['os' => '[a-z0-9]+', 'arch' => '[a-z0-9]+'])->name('runner.checksum');
+    Route::get('download/{os}/{arch}', [RunnerDownloadController::class, 'binary'])->where(['os' => '[a-z0-9]+', 'arch' => '[a-z0-9]+'])->name('runner.download');
 });
