@@ -36,8 +36,7 @@ function runnerView(db: Db, runner: StoredRunner, at: Date): Runner {
       return { id: run.id, type: run.type, status: run.status, item_id: item.id, item_key: item.key, item_title: item.title, started_at: run.started_at };
     });
   const seen = lastSeen(runner, at);
-  const missing_mcp = db.mcp_servers.filter((server) => runner.missing_mcp.includes(server.id)).map((server) => ({ id: server.id, name: server.name }));
-  return { ...runner, last_seen_at: seen, slots_used: slotsUsed(db, runner.id), load: { ...runner.load, measured_at: seen }, missing_mcp, active_runs };
+  return { ...runner, last_seen_at: seen, slots_used: slotsUsed(db, runner.id), load: { ...runner.load, measured_at: seen }, active_runs };
 }
 
 const pairingView = (pairing: StoredPairing): RunnerPairing => ({ code: pairing.code, command: installCommand(pairing.code), expires_at: pairing.expires_at, runner_id: pairing.runner_id });
@@ -93,7 +92,7 @@ export function simulatePairing(code: string, name = 'mac-mini-buero'): Promise<
       last_seen_at: stamp,
       slots: { ...DEFAULT_SLOTS },
       load: { cpu: 3, gpu: 1, ram_used: 7.4, ram_total: 24, disk_free: 311, disk_total: 460 },
-      missing_mcp: [],
+      equipment: { mcp_servers: [], skills: [], plugins: [], werkbuch_access: [] },
       update_error: null,
       created_at: stamp,
     };

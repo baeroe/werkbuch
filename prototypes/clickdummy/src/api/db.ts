@@ -49,7 +49,7 @@ import type {
   WorkItemType,
 } from '@/types';
 import { createSeed } from './seed';
-import type { StoredMcpServer, StoredPairing, StoredRun, StoredRunner } from './seed/agents';
+import type { StoredPairing, StoredRun, StoredRunner } from './seed/agents';
 
 export const DB_KEY = 'werkbuch:db';
 /**
@@ -59,8 +59,9 @@ export const DB_KEY = 'werkbuch:db';
  * 5: runners, GitHub and agents (WEBU-18).
  * 6: model labels, slots and load of runners set in werkbuch, setup commands and MCP servers per project (WEBU-18).
  * 7: the catalog of MCP servers of the organization (WEBU-18).
+ * 8: no catalog: the equipment of a runner's harness, reported by the runner (WEBU-18).
  */
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 /** An earlier identifier of a project: keys like `OLD-12` keep resolving after a rename. */
 export interface ProjectAlias {
@@ -120,7 +121,6 @@ export interface Db {
   agent_threads: AgentThread[];
   agent_runs: StoredRun[];
   pull_requests: PullRequestLink[];
-  mcp_servers: StoredMcpServer[];
 }
 
 /** The collections a stored document must have to be usable. */
@@ -160,7 +160,6 @@ const ARRAY_KEYS = [
   'agent_threads',
   'agent_runs',
   'pull_requests',
-  'mcp_servers',
 ] as const;
 const OBJECT_KEYS = ['organization', 'counters', 'unsubscribed', 'system', 'github'] as const;
 

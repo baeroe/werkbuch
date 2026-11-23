@@ -1,6 +1,7 @@
 /*
  * Static pictures of the runner in a terminal (WEBU-18, spec 8.2, 8.5 and 8.6): the output of `install.sh` and the
- * three tabs of the TUI. Nothing is set up in the TUI: slots, setup commands and MCP servers live in werkbuch. They are text with a small markup, so they stay readable and can be copied:
+ * three tabs of the TUI. Nothing is set up in the TUI: slots and setup commands live in werkbuch; MCP servers, skills
+ * and plugins are equipment of the machine. They are text with a small markup, so they stay readable and can be copied:
  *
  *   {a:text}  accent (cyan)            {A:text}  accent bold         {k:text}  key (cyan bold)
  *   {g:text}  green    {r:text}  red   {y:text}  yellow   {b:text}  blue
@@ -69,8 +70,8 @@ const install: Frame = {
     '{g:✓} paired       as {B:mac-mini-buero} with Feldwerk {d:(token stored in the keychain)}',
     '{g:✓} service      launchd {d:dev.werkbuch.runner} loaded and started',
     '',
-    'The runner polls for runs now, for every project. Slots, setup commands and MCP servers',
-    'come from werkbuch: {B:Organization → Runners} and {B:project settings → Agents}.',
+    'The runner polls for runs now, for every project. Slots and setup commands come from werkbuch;',
+    'MCP servers, skills and plugins are set up on this machine.',
     'Open the TUI with {w:werkbuch-runner}.',
     '',
     '{d:$} ',
@@ -129,7 +130,7 @@ const status: Frame = {
     '  WEB-42  comment     haiku    {g:✓ done}      09:31–09:33   answer posted',
     '  WEB-53  task        haiku    {r:✗ timed out} 08:10–09:10   {r:60 min limit, nothing pushed}',
     blank,
-    '  {d:Set up in werkbuch: slots under Organization → Runners, setup and MCP under project settings → Agents.}',
+    '  {d:Slots are set in werkbuch (Organization → Runners); MCP servers, skills, plugins on this machine.}',
     footer([['tab', 'next tab'], ['1-3', 'tabs'], ['enter', 'open run'], ['r', 'refresh'], ['l', 'logout'], ['?', 'help'], ['q', 'quit']], '{g:polled 2 s ago}'),
   ],
 };
@@ -169,29 +170,27 @@ const doctor: Frame = {
   id: 'doctor',
   fixed: true,
   title: 'Doctor',
-  caption: 'Prüft, was ein Auftrag braucht: CLIs installiert und angemeldet, die Modelle der Agenten, Git, Schlüsselbund, die Instanz, die Setup-Befehle der Projekte und die MCP-Server des Katalogs aus werkbuch. Hier auf dem alten Mac fehlt Node: die Server, die npx brauchen, stehen als „missing on this machine“, und Aufträge von WEB scheitern hier sofort.',
-  window: 'werkbuch-runner, mac-mini-alt',
+  caption: 'Prüft, was ein Auftrag braucht: CLIs installiert und angemeldet, die Modelle der Agenten, Git, Schlüsselbund und die Instanz, und zeigt die Ausstattung des Harness (MCP-Server, Skills, Plugins), die man auf der Maschine einrichtet. Hier auf build-01 läuft der Runner unter dem eigenen Benutzer: ein MCP-Server erreicht werkbuch mit einem persönlichen Token, der Agent hätte einen zweiten Zugang.',
+  window: 'werkbuch-runner, build-01',
   lines: [
     header('Doctor'),
     blank,
-    '  {g:✓} instance       https://werkbuch.example.com answers {d:(42 ms, protocol 3)}',
+    '  {g:✓} instance       https://werkbuch.example.com answers {d:(38 ms, protocol 3)}',
     '  {g:✓} token          in the keychain, accepted',
-    '  {g:✓} version        0.1.0-dev matches the instance',
+    '  {y:!} version        0.1.0-alpha, the instance offers 0.1.0-dev {d:(update failed: checksum)}',
     '  {g:✓} claude         2.4.1, logged in',
     '  {g:✓} models         sonnet, opus, haiku, fable {d:(Kira: default sonnet, review opus; model labels)}',
-    '  {y:!} codex          not installed {d:(no agent uses it)}',
     '  {g:✓} git            2.47.1',
-    '  {g:✓} WEB setup      command from werkbuch runs {d:(dry run, 6.3 s)}',
-    '  {r:✗} mcp playwright {r:missing on this machine: npx not found} {d:(used by WEB)}',
-    '  {r:✗} mcp context7   {r:missing on this machine: npx not found} {d:(used by WEB)}',
-    '  {y:!} mcp sequential-thinking  missing, {d:no project uses it}',
-    '  {g:✓} disk           61 GB free',
     blank,
-    '  {!: 2 problems } {d:Runs of WEB fail here at once. Install Node (brew install node), then run again.}',
+    rule('Harness (set up on this machine)'),
+    '  {d:mcp servers}    werkbuch-mara, context7 {d:+ werkbuch with the token of each run}',
+    '  {d:skills}         ops:runbook',
+    '  {d:plugins}        none',
+    '  {r:✗} werkbuch       {r:werkbuch-mara reaches werkbuch with a personal token: a second way in}',
+    '                   {d:Turn it off for the runner, or run the runner under its own macOS user.}',
     blank,
-    blank,
-    blank,
-    footer([['r', 'run again'], ['enter', 'details'], ['?', 'help'], ['q', 'quit']], '{r:2 problems}'),
+    '  {!: 1 problem } {d:Runs stay possible; the agent sees werkbuch twice until it is turned off.}',
+    footer([['r', 'run again'], ['enter', 'details'], ['?', 'help'], ['q', 'quit']], '{r:1 problem}'),
   ],
 };
 

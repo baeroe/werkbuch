@@ -36,17 +36,21 @@ export function connectGithubApp(kind: AppKind): Promise<GithubConnection> {
 
 /**
  * Disconnects GitHub: both apps are forgotten here (they stay at GitHub until somebody deletes them there), the
- * projects lose their repo, open strands pause and what runs on them is canceled (it could not push any more). PR and
+ * projects lose their repo, open strands of projects that had one pause and what runs on them is canceled (it could
+ * not push any more). PR and
  * branch stay at GitHub; a strand goes on when its item is assigned to the bot again (spec 7.2).
  */
 export function disconnectGithub(): Promise<GithubConnection> {
   return write((ctx) => {
     const { db, me } = ctx;
     requireOrgAdmin(me, 'GitHub trennen dürfen nur Org-Admins.');
+    // only strands of projects with a repo need GitHub; a project without one works in a folder and goes on
+    const withRepo = new Set(db.project_agents.filter((settings) => settings.repo !== null).map((settings) => settings.project_id));
     db.github = { agent_app: null, review_app: null, repos: [] };
     for (const settings of db.project_agents) settings.repo = null;
     for (const thread of db.agent_threads) {
-      if (thread.status !== 'open') continue;
+      const projectId = db.items.find((item) => item.id === thread.item_id)?.project_id;
+      if (thread.status !== 'open' || !projectId || !withRepo.has(projectId)) continue;
       thread.status = 'paused';
       thread.pause_reason = 'github';
       cancelThread(ctx, thread.id, me.id);

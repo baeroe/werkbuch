@@ -52,7 +52,11 @@ export function AgentNotice({ item }: { item: WorkItem }) {
   function runResume() {
     const before = runIds();
     settle(resume.mutateAsync(item.id), {
-      onSuccess: () => {
+      onSuccess: ({ braked }) => {
+        if (braked) {
+          toast({ title: `${item.key}: Bremse gezogen`, description: `${bot?.name ?? 'Der Agent'} hat keine Korrektur mehr frei. Das Item ging an die verantwortliche Person.`, tone: 'success' });
+          return;
+        }
         toast({ title: `${item.key}: ${bot?.name ?? 'Der Agent'} macht weiter`, description: 'Eine Korrektur im selben Strang ist eingereiht.', tone: 'success' });
         focusNewRun(before);
       },
@@ -138,7 +142,7 @@ export function AgentNotice({ item }: { item: WorkItem }) {
       >
         <span className="block max-w-[65ch]">
           {github
-            ? `Der Strang ist pausiert; PR${thread.pr_number ? ` #${thread.pr_number}` : ''} und Branch bleiben bei GitHub. Sobald GitHub wieder verbunden ist und das Projekt sein Repo hat, macht ${bot.name} mit „Weitermachen“ als Korrektur weiter; die Bremse zählt weiter.`
+            ? `Der Strang ist pausiert; PR${thread.pr_number ? ` #${thread.pr_number}` : ''} und Branch bleiben bei GitHub. Sobald GitHub wieder verbunden ist und das Projekt sein Repo hat, macht ${bot.name} mit „Weitermachen“ als Korrektur weiter; die Bremse zählt weiter und greift, wenn keine Korrektur mehr frei ist.`
             : brake
               ? `Der Strang ist pausiert: PR${thread.pr_number ? ` #${thread.pr_number}` : ''}, Branch und Session bleiben. Das Item ging an ${owner?.name ?? 'die verantwortliche Person'}, die Befunde stehen im letzten Kommentar. Weist du es wieder ${bot.name} zu, beginnt eine Korrektur mit den Kommentaren seit dem letzten Auftrag, und die Bremse zählt von vorn.`
               : `Das Item wurde ${assignee?.name ?? 'jemand anderem'} zugewiesen; der Strang ist pausiert${thread.pr_number ? `, PR #${thread.pr_number} bleibt` : ', Branch und Worktree bleiben'}. Weist du es wieder ${bot.name} zu, macht ${bot.name} mit einer Korrektur weiter.`}

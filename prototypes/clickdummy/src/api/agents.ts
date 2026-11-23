@@ -32,7 +32,6 @@ export const defaultProjectAgents = (project_id: string): ProjectAgents => ({
   merge_method: 'squash',
   setup_command: '',
   teardown_command: '',
-  mcp_server_ids: [],
   review_bot_id: null,
   states: { working: null, review: null, correction: null, merged: null },
   max_corrections: 3,
@@ -131,9 +130,6 @@ export function saveProjectAgents(input: ProjectAgents): Promise<ProjectAgents> 
       if (owner) errors.add('repo', `Das Repo gehört schon zum Projekt ${projectOrThrow(db, owner.project_id).identifier}. Ein Repo gehört höchstens einem Projekt.`);
     }
     if (input.base_branch.trim() === '') errors.add('base_branch', 'Gib den Basis-Branch an, etwa main.');
-    input.mcp_server_ids.forEach((id, index) => {
-      if (!db.mcp_servers.some((server) => server.id === id)) errors.add(`mcp_server_ids.${index}`, 'Diesen MCP-Server gibt es nicht mehr.');
-    });
     if (!wholeIn(input.max_corrections, 1, 10)) errors.add('max_corrections', 'Eine ganze Zahl von 1 bis 10.');
     if (!wholeIn(input.max_conflicts, 1, 10)) errors.add('max_conflicts', 'Eine ganze Zahl von 1 bis 10.');
     if (input.review_bot_id !== null) {
@@ -148,7 +144,6 @@ export function saveProjectAgents(input: ProjectAgents): Promise<ProjectAgents> 
       base_branch: input.base_branch.trim(),
       setup_command: input.setup_command.trim(),
       teardown_command: input.teardown_command.trim(),
-      mcp_server_ids: [...new Set(input.mcp_server_ids)],
       models: trimModels(input.models),
     };
     const index = db.project_agents.findIndex((settings) => settings.project_id === project.id);

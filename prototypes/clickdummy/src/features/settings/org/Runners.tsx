@@ -334,6 +334,32 @@ function Load({ runner }: { runner: Runner }) {
   );
 }
 
+/** What the harness offers an agent, read-only: it is set up on the machine (spec 8.7). */
+function Equipment({ runner }: { runner: Runner }) {
+  const { mcp_servers, skills, plugins, werkbuch_access } = runner.equipment;
+  const parts = [
+    mcp_servers.length > 0 && `MCP: ${mcp_servers.join(', ')}`,
+    skills.length > 0 && `${skills.length} ${skills.length === 1 ? 'Skill' : 'Skills'}`,
+    plugins.length > 0 && `Plugins: ${plugins.join(', ')}`,
+  ].filter(Boolean);
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span translate="no" title={skills.length > 0 ? skills.join(', ') : undefined}>
+        {parts.length > 0 ? parts.join('; ') : <span className="text-muted">Nichts eingerichtet: nur werkbuch</span>}
+      </span>
+      {werkbuch_access.length > 0 && (
+        <span className="flex items-start gap-1.5 text-sm text-danger">
+          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            <span translate="no">{werkbuch_access.join(', ')}</span> erreicht werkbuch mit einem persönlichen Token: Agenten hätten hier einen zweiten Zugang. Für den Runner abschalten.
+          </span>
+        </span>
+      )}
+      <span className="text-sm text-muted">Einrichtung auf der Maschine. werkbuch gibt jedem Agenten seinen eigenen Server dazu.</span>
+    </span>
+  );
+}
+
 /* ---------------------------------------------------------------------------- slots */
 
 function SlotsDialog({ runner, open, onOpenChange }: { runner: Runner | null; open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -436,19 +462,9 @@ function RunnerCard({ runner, onSlots, onRename, onRevoke, onCancelRun }: { runn
         <dd className="text-ink">
           <Load runner={runner} />
         </dd>
-        <dt className="text-muted">MCP-Server</dt>
+        <dt className="text-muted">Ausstattung</dt>
         <dd className="text-ink">
-          {runner.missing_mcp.length === 0 ? (
-            <span className="text-muted">Alle aus dem Katalog gefunden</span>
-          ) : (
-            <span className="flex items-start gap-1.5 text-danger">
-              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <span>
-                <span translate="no">{runner.missing_mcp.map((server) => server.name).join(', ')}</span>
-                {` fehlt auf dieser Maschine: Befehl nicht gefunden. Aufträge, deren Projekt ${runner.missing_mcp.length === 1 ? 'ihn' : 'sie'} nutzt, scheitern hier sofort.`}
-              </span>
-            </span>
-          )}
+          <Equipment runner={runner} />
         </dd>
         <dt className="text-muted">Aufträge</dt>
         <dd className="min-w-0 text-ink">

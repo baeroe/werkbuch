@@ -16,7 +16,7 @@
  */
 
 import { DEFAULT_RULES } from '@/domain/agentRuleDefaults';
-import type { AgentConfig, AgentRun, AgentThread, Comment, GithubConnection, ItemEvent, ProjectAgents, PullRequestLink, RunLogLine, RunnerLoad, RunnerSlots, RunType } from '@/types';
+import type { AgentConfig, AgentRun, AgentThread, Comment, GithubConnection, ItemEvent, ProjectAgents, PullRequestLink, RunLogLine, RunnerEquipment, RunnerLoad, RunnerSlots, RunType } from '@/types';
 import { comment, event, state } from './activity';
 import { at, doc, p, ul } from './helpers';
 import { itemId } from './items';
@@ -33,8 +33,8 @@ export interface StoredRunner {
   slots: RunnerSlots;
   /** The last load the runner sent; `measured_at` follows its last contact. */
   load: Omit<RunnerLoad, 'measured_at'>;
-  /** Ids of catalog MCP servers whose command the runner did not find (spec 8.7). */
-  missing_mcp: string[];
+  /** What the harness offers, as the runner reports it (spec 8.7). */
+  equipment: RunnerEquipment;
   update_error: string | null;
   created_at: string;
 }
@@ -63,7 +63,13 @@ export const runners: StoredRunner[] = [
     last_seen_at: at('10-28 09:59'),
     slots: { total: 2, per_repo: 1, light: 2 },
     load: { cpu: 31, gpu: 12, ram_used: 38.2, ram_total: 64, disk_free: 182, disk_total: 994 },
-    missing_mcp: [],
+    // set up on the machine for the runner's own macOS user
+    equipment: {
+      mcp_servers: ['playwright', 'context7'],
+      skills: ['superpowers:test-driven-development', 'superpowers:systematic-debugging', 'design:web-design-guidelines'],
+      plugins: ['superpowers'],
+      werkbuch_access: [],
+    },
     update_error: null,
     created_at: at('10-20 16:40'),
   },
@@ -78,8 +84,8 @@ export const runners: StoredRunner[] = [
     slots: { total: 1, per_repo: 1, light: 1 },
     // an Intel Mac: no GPU load without root
     load: { cpu: 6, gpu: null, ram_used: 9.1, ram_total: 16, disk_free: 61, disk_total: 256 },
-    // no Node on the old Mac: npx is missing, so are the servers that need it (WEB-54 failed on it)
-    missing_mcp: ['mcp_playwright', 'mcp_context7', 'mcp_sequential'],
+    // nothing set up on the old Mac yet
+    equipment: { mcp_servers: [], skills: [], plugins: [], werkbuch_access: [] },
     update_error: null,
     created_at: at('10-22 10:15'),
   },
@@ -93,27 +99,11 @@ export const runners: StoredRunner[] = [
     last_seen_at: at('10-28 09:59'),
     slots: { total: 4, per_repo: 1, light: 2 },
     load: { cpu: 7, gpu: null, ram_used: 5.8, ram_total: 32, disk_free: 410, disk_total: 500 },
-    missing_mcp: [],
+    // runs under the admin's own user: her werkbuch server with a personal token comes along
+    equipment: { mcp_servers: ['werkbuch-mara', 'context7'], skills: ['ops:runbook'], plugins: [], werkbuch_access: ['werkbuch-mara'] },
     update_error: 'Die Prüfsumme des neuen Binarys stimmt nicht. Der Runner läuft mit 0.1.0-alpha weiter und versucht es beim nächsten Kontakt erneut.',
     created_at: at('10-12 11:00'),
   },
-];
-
-/** An MCP server as stored: the values of its environment, which no answer gives out. */
-export interface StoredMcpServer {
-  id: string;
-  name: string;
-  command: string;
-  args: string[];
-  env: { name: string; value: string }[];
-  created_at: string;
-}
-
-/** The catalog of MCP servers (spec 8.7); the API key is made up. */
-export const mcpServers: StoredMcpServer[] = [
-  { id: 'mcp_playwright', name: 'playwright', command: 'npx', args: ['@playwright/mcp', '--headless'], env: [], created_at: at('10-20 17:05') },
-  { id: 'mcp_context7', name: 'context7', command: 'npx', args: ['-y', '@upstash/context7-mcp'], env: [{ name: 'CONTEXT7_API_KEY', value: 'ctx7sk-demo-0000-feldwerk' }], created_at: at('10-21 09:30') },
-  { id: 'mcp_sequential', name: 'sequential-thinking', command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'], env: [], created_at: at('10-24 14:12') },
 ];
 
 export const TIMEOUTS: Record<RunType, number> = { task: 60, correction: 60, conflict: 30, review: 20, comment: 10 };
@@ -143,7 +133,6 @@ export const projectAgents: ProjectAgents[] = [
     // a DDEV project per worktree, so two worktrees of the website do not share one (spec 8.4)
     setup_command: 'ddev config --project-name=web-$WORKTREE && ddev start',
     teardown_command: 'ddev delete -Oy web-$WORKTREE',
-    mcp_server_ids: ['mcp_playwright', 'mcp_context7'],
     review_bot_id: 'u_kira',
     states: { working: 'std_progress', review: 'std_pending', correction: 'std_todo', merged: 'std_done' },
     max_corrections: 3,
@@ -378,7 +367,7 @@ export const agentRuns: StoredRun[] = [
   }),
   run({ id: 'run_web44_correction', type: 'correction', status: 'waiting', key: 'WEB-44', thread: 'th_web44', runner: 'rn_mini', model: 'opus', source: 'label', label: 'lb_agent_opus', created: '10-28 09:50', started: null, finished: null }),
 
-  // WEB-54: on mac-mini-alt the Playwright server is missing: the task failed at once, before Claude Code started
+  // WEB-54: on mac-mini-alt the setup command of the project failed (Docker is not running): no Claude Code, no change
   run({
     id: 'run_web54_task',
     type: 'task',
@@ -391,8 +380,12 @@ export const agentRuns: StoredRun[] = [
     created: '10-28 09:34',
     started: '10-28 09:35',
     finished: '10-28 09:35',
-    error: 'Die MCP-Server „playwright“, „context7“ fehlen auf mac-mini-alt. Der Auftrag ist gescheitert, bevor Claude Code startete; nichts wurde geändert.',
-    log: [line(0, 'system', 'Worktree agent/WEB-54-browser-test-formulare angelegt'), line(1, 'error', 'MCP-Server playwright, context7: npx nicht gefunden (PATH /usr/bin:/bin:/usr/sbin:/sbin)')],
+    error: 'Der Setup-Befehl des Projekts ist gescheitert: ddev braucht Docker, und Colima läuft auf mac-mini-alt nicht. Der Auftrag ist gescheitert, bevor Claude Code startete; nichts wurde geändert.',
+    log: [
+      line(0, 'system', 'Worktree agent/WEB-54-browser-test-formulare angelegt'),
+      line(1, 'tool', 'Setup: ddev config --project-name=web-WEB-54 && ddev start'),
+      line(4, 'error', 'Could not connect to a docker provider. Please start or install a docker provider.'),
+    ],
   }),
 
   // WEB-53: the first attempt got lost (the Mac lost its network), the second ran into the time limit

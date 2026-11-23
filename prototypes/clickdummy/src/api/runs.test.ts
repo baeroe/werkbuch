@@ -8,9 +8,9 @@ import { now } from '@/lib/clock';
 import { asUser, failure, resetApi } from '@/test/api';
 import { getProjectAgents, listAgentProjects, saveAgentConfig, getAgentConfig, saveProjectAgents } from './agents';
 import { getDb, saveDb } from './db';
-import { disconnectGithub } from './github';
+import { connectGithubApp, disconnectGithub } from './github';
 import { createPairing, expirePairing, listRunners, revokeRunner, saveRunnerSlots, simulatePairing } from './runners';
-import { advance, CANCEL_DELAY_MS, cancelRun, getItemAgents, retryRun, START_DELAY_MS } from './runs';
+import { advance, CANCEL_DELAY_MS, cancelRun, getItemAgents, resumeThread, retryRun, START_DELAY_MS } from './runs';
 import { listActivity, updateWorkItem } from './workItems';
 
 beforeEach(resetApi);
@@ -217,5 +217,58 @@ describe('runners', () => {
     expect(await revokeRunner('rn_studio')).toEqual({ canceled: 1 });
     expect((await getItemAgents('WEB-51')).runs[0]).toMatchObject({ status: 'canceled', error: 'Der Runner wurde widerrufen.' });
     expect((await getAgentConfig('u_kira')).runner_ids).toEqual(['rn_mini']);
+  });
+});
+
+describe('going on after GitHub was disconnected', () => {
+  async function reconnect() {
+    await connectGithubApp('agent');
+    await connectGithubApp('review');
+    await saveProjectAgents({ ...(await getProjectAgents('p_web')), repo: 'feldwerk/website' });
+  }
+
+  it('waits for a repo, then queues a correction on the same strand', async () => {
+    await disconnectGithub();
+    expect((await failure(resumeThread('WEB-51'))).reason).toBe('no_repo');
+    await reconnect();
+    const { run, braked } = await resumeThread('WEB-51');
+    expect(braked).toBe(false);
+    expect(run).toMatchObject({ type: 'correction', status: 'queued', thread_id: 'th_web51' });
+    expect((await getItemAgents('WEB-51')).thread).toMatchObject({ status: 'open', corrections: 1 });
+    expect((await failure(resumeThread('WEB-51'))).reason).toBe('nothing_to_resume');
+  });
+
+  it('lets the brake hold: with the corrections used up the strand stays paused and the item goes to the person', async () => {
+    getDb().agent_threads.find((thread) => thread.id === 'th_web51')!.corrections = 3;
+    saveDb();
+    await disconnectGithub();
+    await reconnect();
+    expect(await resumeThread('WEB-51')).toEqual({ run: null, braked: true });
+    const state = await getItemAgents('WEB-51');
+    expect(state.thread).toMatchObject({ status: 'paused', corrections: 3 });
+    expect(state.thread?.pause_reason).toBeUndefined();
+    expect(getDb().items.find((item) => item.key === 'WEB-51')?.assignee_id).toBe('u_mara');
+  });
+
+  it('leaves strands of projects without a repo alone', async () => {
+    getDb().project_agents.find((settings) => settings.project_id === 'p_web')!.repo = null;
+    saveDb();
+    await disconnectGithub();
+    expect((await getItemAgents('WEB-51')).thread).toMatchObject({ status: 'open' });
+  });
+});
+
+describe('the equipment of a runner', () => {
+  it('is what its harness reports, read only, with a warning for a second way into werkbuch', async () => {
+    const runners = (await listRunners()).items;
+    expect(runners.find((runner) => runner.name === 'mac-studio')?.equipment).toMatchObject({ mcp_servers: ['playwright', 'context7'], werkbuch_access: [] });
+    expect(runners.find((runner) => runner.name === 'mac-mini-alt')?.equipment).toEqual({ mcp_servers: [], skills: [], plugins: [], werkbuch_access: [] });
+    expect(runners.find((runner) => runner.name === 'build-01')?.equipment.werkbuch_access).toEqual(['werkbuch-mara']);
+  });
+
+  it('lets WEB-54 fail on a setup command, before the CLI', async () => {
+    const [run] = (await getItemAgents('WEB-54')).runs;
+    expect(run).toMatchObject({ status: 'failed', runner_name: 'mac-mini-alt' });
+    expect(run.error).toContain('Setup-Befehl');
   });
 });

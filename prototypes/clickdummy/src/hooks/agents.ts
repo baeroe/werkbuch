@@ -9,7 +9,6 @@ import { useEffect, useRef } from 'react';
 import { getAgentConfig, getProjectAgents, listAgentBotIds, listAgentConfigs, listAgentProjects, listRepoOwners, saveAgentConfig, saveProjectAgents } from '@/api/agents';
 import { connectGithubApp, disconnectGithub, getGithub } from '@/api/github';
 import { createPairing, expirePairing, getPairing, listRunners, renameRunner, revokeRunner, saveRunnerSlots, simulatePairing } from '@/api/runners';
-import { deleteMcpServer, listMcpServers, saveMcpServer } from '@/api/mcp';
 import { cancelRun, getItemAgents, resumeThread, retryRun } from '@/api/runs';
 import { isActive } from '@/domain/agents';
 import type { RunnerSlots } from '@/types';
@@ -135,19 +134,6 @@ export function useCancelRun() {
 
 export function useRetryRun() {
   return useApiMutation(retryRun, [qk.itemAgents.all, qk.runners.all, qk.workItems.all, qk.activity.all]);
-}
-
-/** The catalog of MCP servers; values of the environment never come along. */
-export function useMcpServers() {
-  return useQuery({ queryKey: qk.mcpServers.all, queryFn: listMcpServers });
-}
-
-export function useSaveMcpServer() {
-  return useApiMutation(saveMcpServer, [qk.mcpServers.all, qk.projectAgents.all, qk.runners.all]);
-}
-
-export function useDeleteMcpServer() {
-  return useApiMutation(deleteMcpServer, [qk.mcpServers.all, qk.projectAgents.all, qk.runners.all]);
 }
 
 /** Goes on with a strand GitHub's disconnect paused (variable: the item's id or key). */

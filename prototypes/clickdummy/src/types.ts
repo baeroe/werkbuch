@@ -728,8 +728,11 @@ export interface Runner {
   slots_used: RunnerSlots;
   /** The last load the runner sent (spec 8.6); of an offline runner, from its last contact. */
   load: RunnerLoad;
-  /** MCP servers of the catalog whose command the runner did not find on its machine (spec 8.7). */
-  missing_mcp: { id: string; name: string }[];
+  /**
+   * What the harness of the machine offers an agent, as the runner reports it (spec 8.7): set up on the machine, by
+   * hand or with a tool of the person's choice, never in werkbuch. werkbuch adds only its own server with the token of the run.
+   */
+  equipment: RunnerEquipment;
   /** The last self-update failed: why; the old version keeps running. */
   update_error: string | null;
   created_at: string;
@@ -795,31 +798,13 @@ export type AgentStep = 'working' | 'review' | 'correction' | 'merged';
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
 /** The agent settings of a project (spec 10.3). */
-/**
- * An MCP server of the organization's catalog (WEBU-18, spec 8.7): a stdio server that projects can give their agents.
- * The values of its environment are write-only: a reader learns only which names are set.
- */
-export interface McpServer {
-  id: string;
-  /** Unique; small letters, digits and `-`; never `werkbuch` (every agent has werkbuch already). */
-  name: string;
-  command: string;
-  args: string[];
-  env: { name: string; set: boolean }[];
-  /** The projects that give it to their agents, by identifier. */
-  projects: { id: string; identifier: string }[];
-  /** Runners on which its command was not found (spec 8.7). */
-  missing_on: { id: string; name: string }[];
-  created_at: string;
-}
-
-/** What a save sends: an env value of null or undefined keeps the stored one, a text replaces it. */
-export interface McpServerInput {
-  id?: string;
-  name: string;
-  command: string;
-  args: string[];
-  env: { name: string; value?: string | null }[];
+/** The equipment of a runner's harness: MCP servers, skills and plugins, and ways to werkbuch besides the run's. */
+export interface RunnerEquipment {
+  mcp_servers: string[];
+  skills: string[];
+  plugins: string[];
+  /** MCP servers of the machine that reach werkbuch with a personal token: the agent would have a second way in. */
+  werkbuch_access: string[];
 }
 
 export interface ProjectAgents {
@@ -834,8 +819,6 @@ export interface ProjectAgents {
    */
   setup_command: string;
   teardown_command: string;
-  /** The MCP servers of the organization's catalog the agents of the project get, besides werkbuch's (spec 8.7). */
-  mcp_server_ids: string[];
   /** The bot that reviews PRs of the repo, of agents and of people. */
   review_bot_id: string | null;
   /** The status each step sets; agents are off in the project until all four are set. */

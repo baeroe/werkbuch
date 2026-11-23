@@ -9,13 +9,13 @@
  * pauses the strand. Statuses are set by the agent bot with the reason „Agent: …“.
  */
 
-import { isActive, LIGHT_RUNS, pickModel, RUN_TYPE_NAMES, whyNotHere } from '@/domain/agents';
+import { afterFindings, isActive, LIGHT_RUNS, pickModel, RUN_TYPE_NAMES, whyNotHere } from '@/domain/agents';
 import { now as clockNow } from '@/lib/clock';
 import type { AgentRun, AgentThread, ItemAgentState, RunnerSlots, RunType, User, WorkItemRecord } from '@/types';
 import { canSeeProject, requireWritable } from './access';
 import { conflict, makeCtx, newId, notFound, read, write, type Ctx } from './client';
 import { saveDb, type Db } from './db';
-import { moveItem } from './itemRules';
+import { moveItem, patchItem } from './itemRules';
 import { LOG_TEMPLATES, TASK_LOGS, type StoredRun, type StoredRunner } from './seed/agents';
 import { requireItem } from './workItems';
 
@@ -55,14 +55,6 @@ function slug(title: string): string {
 
 function agentBot(db: Db, botId: string): User | undefined {
   return db.users.find((user) => user.id === botId);
-}
-
-const CLI_NAMES = { claude: 'Claude Code', codex: 'Codex' } as const;
-
-/** The names of the project's MCP servers whose command the runner did not find. */
-export function missingServers(db: Db, runner: StoredRunner, projectId: string): string[] {
-  const chosen = db.project_agents.find((settings) => settings.project_id === projectId)?.mcp_server_ids ?? [];
-  return db.mcp_servers.filter((server) => chosen.includes(server.id) && runner.missing_mcp.includes(server.id)).map((server) => server.name);
 }
 
 /** The repo a run works in: the project's, or the project itself when it has none (a folder per strand). */
@@ -141,16 +133,6 @@ export function advance(db: Db, at: Date = clockNow()): boolean {
       run.runner_id = runner.id;
       if (thread && thread.runner_id === '') thread.runner_id = runner.id;
       run.started_at = started.toISOString();
-      // a server of the project the runner cannot start: the run fails at once, before the CLI (spec 8.7)
-      const missing = missingServers(db, runner, item.project_id);
-      if (missing.length > 0) {
-        run.status = 'failed';
-        run.finished_at = started.toISOString();
-        run.error = `${missing.length === 1 ? 'Der MCP-Server' : 'Die MCP-Server'} ${missing.map((name) => `„${name}“`).join(', ')} ${missing.length === 1 ? 'fehlt' : 'fehlen'} auf ${runner.name}. Der Auftrag ist gescheitert, bevor ${CLI_NAMES[db.agent_configs.find((config) => config.bot_id === run.bot_id)?.cli ?? 'claude']} startete; nichts wurde geändert.`;
-        run.log = [{ offset: 0, kind: 'error', text: `MCP-Server ${missing.join(', ')}: Befehl nicht gefunden` }];
-        changed = true;
-        continue;
-      }
       run.status = 'running';
       run.log = fillLog(run, item, thread?.branch ?? `agent/${item.key}`);
       changed = true;
@@ -368,9 +350,10 @@ export function retryRun(id: string): Promise<AgentRun> {
 
 /**
  * Goes on with a strand that paused when GitHub was disconnected while the item stayed with the bot: a correction on
- * the strand, the brake counts on. Only once the project has a repo again (spec 7.2, 10.2).
+ * the strand, and the brake counts on (spec 7.2): when the strand has used up its corrections, it stays paused and the
+ * item goes to the bot's responsible person, as after any brake. Only once the project has a repo again.
  */
-export function resumeThread(itemRef: string): Promise<AgentRun> {
+export function resumeThread(itemRef: string): Promise<{ run: AgentRun | null; braked: boolean }> {
   return write((ctx) => {
     advance(ctx.db, ctx.now);
     const { item, project } = requireItem(ctx.db, ctx.me, itemRef);
@@ -382,10 +365,20 @@ export function resumeThread(itemRef: string): Promise<AgentRun> {
     }
     const why = whyAssigneeIsNoAgent(ctx.db, item);
     if (why) throw conflict('not_an_agent', why);
-    thread.status = 'open';
+    const settings = ctx.db.project_agents.find((entry) => entry.project_id === item.project_id)!;
+    const bot = agentBot(ctx.db, thread.bot_id)!;
+    const decision = afterFindings(thread, settings, 'correction');
     delete thread.pause_reason;
-    thread.corrections += 1;
-    return runView(ctx.db, queueRun(ctx, agentBot(ctx.db, thread.bot_id)!, item, thread, 'correction'), ctx.now);
+    if (decision.next === 'paused') {
+      // the brake: the strand stays paused, the item goes to the responsible person (assigned by the bot itself, so
+      // nothing is canceled twice)
+      const owner = ctx.db.users.find((user) => user.id === bot.owner_id);
+      if (owner) patchItem(ctx, bot, item, { assignee_id: owner.id }, { reason: `Agent: Bremse nach ${decision.max} Korrekturen` });
+      return { run: null, braked: true };
+    }
+    thread.status = 'open';
+    thread.corrections = decision.used;
+    return { run: runView(ctx.db, queueRun(ctx, bot, item, thread, 'correction'), ctx.now), braked: false };
   });
 }
 

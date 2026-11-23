@@ -3,7 +3,8 @@
  * the bottom (⌘↵), in six sheets:
  * - Repository: the repo (1:1, only repos with both GitHub apps), base branch, merge method, the review agent (a bot
  *   that works as an agent; the others stand greyed with the reason), reviews of PRs by people, the comment on the PR.
- * - Worktree: the setup and teardown commands the runner runs around a worktree, and further MCP servers (spec 8.4).
+ * - Worktree: the setup and teardown commands the runner runs around a worktree (spec 8.4). MCP servers, skills and
+ *   plugins are equipment of the machine, not set here (spec 8.7).
  * - Status je Schritt: the status each step of the flow sets; the category is checked at once and by the server.
  *   Without all four, agents are off in the project: an assignment to a bot stays a plain one.
  * - Bremsen: corrections and conflicts per strand before the item goes back to the bot's responsible person.
@@ -20,8 +21,6 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { ToneDot } from '@/components/ui/Chip';
-import { Checkbox } from '@/components/ui/Checkbox';
-import { cx } from '@/components/ui/cx';
 import { Input } from '@/components/ui/Input';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Select } from '@/components/ui/Select';
@@ -35,14 +34,14 @@ import { DEFAULT_RULES } from '@/domain/agentRuleDefaults';
 import { AGENT_STEPS, categoriesText, isModelLabel, mappingComplete, mappingErrors, RUN_TYPE_HINTS, RUN_TYPE_NAMES, RUN_TYPES, STEP_CATEGORIES, STEP_HINTS, STEP_NAMES } from '@/domain/agents';
 import { ModelField } from '@/features/agents/ModelField';
 import { SaveBar } from '@/features/agents/SaveBar';
-import { useAgentBotIds, useGithub, useMcpServers, useProjectAgents, useRepoOwners, useSaveProjectAgents } from '@/hooks/agents';
+import { useAgentBotIds, useGithub, useProjectAgents, useRepoOwners, useSaveProjectAgents } from '@/hooks/agents';
 import { useLabels } from '@/hooks/catalog';
 import { useMembers } from '@/hooks/projects';
 import { useUsers } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
 import { notifyError } from '@/lib/errors';
 import { usePermissions } from '@/lib/permissions';
-import type { AgentStep, Label, McpServer, MergeMethod, ProjectAgents, RunType, User, Workflow } from '@/types';
+import type { AgentStep, Label, MergeMethod, ProjectAgents, RunType, User, Workflow } from '@/types';
 import { fieldErrors, useDraft, useFieldErrors, useSaveShortcut } from './form';
 import type { SectionProps } from './sectionProps';
 import { SettingsCard, SettingsError, SettingsSkeleton, UnsavedGuard } from './SettingsParts';
@@ -57,7 +56,6 @@ interface Form {
   merge_method: MergeMethod;
   setup_command: string;
   teardown_command: string;
-  mcp_server_ids: string[];
   review_bot_id: string;
   states: Record<AgentStep, string | null>;
   max_corrections: string;
@@ -74,7 +72,6 @@ const formOf = (settings: ProjectAgents): Form => ({
   merge_method: settings.merge_method,
   setup_command: settings.setup_command,
   teardown_command: settings.teardown_command,
-  mcp_server_ids: settings.mcp_server_ids,
   review_bot_id: settings.review_bot_id ?? NO_BOT,
   states: settings.states,
   max_corrections: String(settings.max_corrections),
@@ -92,7 +89,6 @@ const toSettings = (project_id: string, form: Form): ProjectAgents => ({
   merge_method: form.merge_method,
   setup_command: form.setup_command,
   teardown_command: form.teardown_command,
-  mcp_server_ids: form.mcp_server_ids,
   review_bot_id: form.review_bot_id === NO_BOT ? null : form.review_bot_id,
   states: form.states,
   max_corrections: Number(form.max_corrections),
@@ -200,54 +196,6 @@ function RulesEditor({ value, onChange, readOnly }: { value: Rules; onChange: (c
   );
 }
 
-/* ------------------------------------------------------------------------- MCP servers */
-
-/** The servers of the organization's catalog the agents of the project get, as ticks; werkbuch's own is always there. */
-function McpChoice({ servers, chosen, readOnly, error, canManage, onChange }: { servers: readonly McpServer[]; chosen: string[]; readOnly: boolean; error?: string; canManage: boolean; onChange: (ids: string[]) => void }) {
-  const link = canManage ? (
-    <Link to="/settings/mcp" className="font-medium text-accent-text underline-offset-2 hover:underline">
-      Katalog bearbeiten
-    </Link>
-  ) : null;
-  return (
-    <fieldset className="flex flex-col gap-2 border-t border-line pt-4">
-      <legend className={cx(labelClass, 'float-left mb-2 w-full')}>MCP-Server</legend>
-      <p className="max-w-[65ch] text-sm text-pretty text-muted">
-        Jeder Agent bekommt werkbuch mit dem Token seines Auftrags. Dazu kommen die Server, die du hier anhakst, aus dem Katalog der Organisation; die Server der Maschine sieht ein Agent nie. {link}
-      </p>
-      {servers.length === 0 ? (
-        <p className="text-ui text-muted">Der Katalog ist noch leer.</p>
-      ) : (
-        <ul className="flex flex-col gap-1.5">
-          {servers.map((server) => (
-            <li key={server.id}>
-              <Checkbox
-                checked={chosen.includes(server.id)}
-                disabled={readOnly}
-                onCheckedChange={(on) => onChange(on ? [...chosen, server.id] : chosen.filter((id) => id !== server.id))}
-                label={
-                  <span className="min-w-0">
-                    <span className="font-medium" translate="no">
-                      {server.name}
-                    </span>{' '}
-                    <span className="text-sm text-muted" translate="no">
-                      {[server.command, ...server.args].join(' ')}
-                    </span>
-                    {server.missing_on.length > 0 && (
-                      <span className="block text-sm text-danger">{`Fehlt auf ${server.missing_on.map((runner) => runner.name).join(', ')}: Aufträge dort scheitern sofort.`}</span>
-                    )}
-                  </span>
-                }
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-      {error && <p className="text-sm text-danger">{error}</p>}
-    </fieldset>
-  );
-}
-
 /* ------------------------------------------------------------------------ model labels */
 
 /** The model labels of the organization, which go before the project's models; they are set in Organisation → Labels. */
@@ -295,8 +243,7 @@ export function Agents({ project, canManage }: SectionProps) {
   const users = useUsers();
   const members = useMembers(project.id);
   const agentBots = useAgentBotIds();
-  const mcp = useMcpServers();
-  const queries = [settings, github, owners, workflows, labels, users, members, agentBots, mcp];
+  const queries = [settings, github, owners, workflows, labels, users, members, agentBots];
 
   if (queries.some((query) => query.isPending)) return <SettingsSkeleton rows={6} label="Agenten werden geladen …" />;
   const failed = queries.find((query) => query.isError);
@@ -313,12 +260,12 @@ export function Agents({ project, canManage }: SectionProps) {
   }
   const memberIds = new Set(members.data!.items.map((member) => member.user_id));
   const bots = users.data!.items.filter((user) => user.type === 'bot' && !user.is_default_bot && user.disabled_at === null && memberIds.has(user.id));
-  return <AgentsForm project={project} canManage={canManage} settings={settings.data!} workflow={workflow} bots={bots} agentBotIds={new Set(agentBots.data!)} mcpServers={mcp.data!.items} />;
+  return <AgentsForm project={project} canManage={canManage} settings={settings.data!} workflow={workflow} bots={bots} agentBotIds={new Set(agentBots.data!)} />;
 }
 
-type FormProps = SectionProps & { settings: ProjectAgents; workflow: Workflow; bots: User[]; agentBotIds: Set<string>; mcpServers: McpServer[] };
+type FormProps = SectionProps & { settings: ProjectAgents; workflow: Workflow; bots: User[]; agentBotIds: Set<string> };
 
-function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds, mcpServers }: FormProps) {
+function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds }: FormProps) {
   const form = useRef<HTMLFormElement>(null);
   const save = useSaveProjectAgents();
   const github = useGithub().data!;
@@ -461,8 +408,8 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds,
       </SettingsCard>
 
       <SettingsCard
-        title="Worktree und Werkzeuge"
-        description="Was der Runner für dieses Projekt um einen Worktree tut und welche MCP-Server aus dem Katalog die Agenten bekommen. Gilt auf jedem Runner; auf der Maschine stellt man nichts ein."
+        title="Worktree"
+        description="Was der Runner für dieses Projekt um einen Worktree tut, auf jedem Runner. MCP-Server, Skills und Plugins richtet man auf der Maschine ein; werkbuch gibt jedem Agenten nur seinen eigenen Server mit dem Token des Auftrags dazu."
       >
         <div className="grid items-start gap-4 md:grid-cols-2">
           <Textarea
@@ -496,14 +443,6 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds,
             onChange={(event) => edit({ teardown_command: event.target.value }, 'teardown_command')}
           />
         </div>
-        <McpChoice
-          servers={mcpServers}
-          chosen={value.mcp_server_ids}
-          readOnly={readOnly}
-          canManage={can('org.manage')}
-          error={Object.entries(problems.errors).find(([path]) => path.startsWith('mcp_server_ids'))?.[1]}
-          onChange={(mcp_server_ids) => edit({ mcp_server_ids }, ...value.mcp_server_ids.map((_, index) => `mcp_server_ids.${index}`))}
-        />
       </SettingsCard>
 
       <SettingsCard
