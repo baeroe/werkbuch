@@ -17,7 +17,7 @@ import (
 const recentOnStatus = 5
 
 // configHint says where things are set up (spec 8.5: nothing is set up in the TUI).
-const configHint = "Slots are set in werkbuch (Organization → Runners), setup commands per project; MCP servers, skills and plugins on this machine."
+const configHint = "Slots are set in werkbuch (Organization → Runners); MCP servers, skills, plugins on this machine."
 
 func itoa(n int) string { return strconv.Itoa(n) }
 
@@ -178,7 +178,8 @@ func (m *Model) statusView(w, h int) string {
 			strand = append(strand, "session "+oneLine(short(r.Session)))
 		}
 		if r.Dir != "" {
-			strand = append(strand, "worktree "+oneLine(r.Dir))
+			used := 12 + width(strings.Join(strand, "   ")) + 3 + len("worktree ")
+			strand = append(strand, "worktree "+middle(tildify(oneLine(r.Dir), m.opts.Home), max(w-used-1, 12)))
 		}
 		if len(strand) > 0 {
 			add("            " + dimStyle.Render(strings.Join(strand, "   ")))
@@ -211,6 +212,25 @@ func (m *Model) row(line, id string, w int) string {
 		return highlightRow(line, w)
 	}
 	return line
+}
+
+// tildify shows paths under home with ~.
+func tildify(p, home string) string {
+	home = strings.TrimSuffix(home, "/")
+	if home != "" && (p == home || strings.HasPrefix(p, home+"/")) {
+		return "~" + p[len(home):]
+	}
+	return p
+}
+
+// middle shortens plain text to w cells by cutting out its middle (good for paths).
+func middle(s string, w int) string {
+	r := []rune(s)
+	if len(r) <= w {
+		return s
+	}
+	right := (w - 1) * 2 / 3
+	return string(r[:w-1-right]) + "…" + string(r[len(r)-right:])
 }
 
 func short(s string) string {

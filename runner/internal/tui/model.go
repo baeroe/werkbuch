@@ -12,6 +12,7 @@ package tui
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -42,6 +43,8 @@ type Options struct {
 	Source Source
 	// Socket is the path of the socket, named when no daemon answers.
 	Socket string
+	// Home shortens paths to ~ (default os.UserHomeDir).
+	Home string
 	// LocalDoctor runs the checks in this process when no daemon answers (A500); nil shows only that none answers.
 	LocalDoctor func(ctx context.Context) []socket.Check
 	// Logout forgets the token like `werkbuch-runner logout` and says what it did; nil hides `l`.
@@ -139,6 +142,9 @@ type (
 func New(opts Options) *Model {
 	if opts.Now == nil {
 		opts.Now = time.Now
+	}
+	if opts.Home == "" {
+		opts.Home, _ = os.UserHomeDir()
 	}
 	if opts.Every == 0 {
 		opts.Every = 2 * time.Second

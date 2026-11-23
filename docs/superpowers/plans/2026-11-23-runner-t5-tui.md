@@ -1,6 +1,6 @@
 # Runner, Task 5: Runner-TUI in Go (WEBU-22)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:test-driven-development. Steps use checkbox (`- [ ]`) syntax.
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:test-driven-development. Steps use checkbox (`- [x]`) syntax.
 
 **Goal:** `werkbuch-runner` ohne Argumente öffnet im Terminal eine TUI mit drei Reitern nach dem freigegebenen Stand von `/_tui` des Klickdummys (WEBU-18, PR #63): **Status** (Verbindung, Instanz, Version, Plätze aus werkbuch, laufende und letzte Aufträge, Auslastung CPU/GPU/RAM/Speicher mit Verläufen), **Runs** (laufende und letzte Aufträge, Protokoll live, Abbrechen) und **Doctor** (Prüfungen, Ausstattung der Maschine mit Warnung vor einem weiteren werkbuch-Zugang). Eingestellt wird nichts außer Abmelden; ein Hinweis nennt, wo in werkbuch konfiguriert wird.
 
@@ -47,27 +47,31 @@ Ein falscher Daemon unter `runner/docs/demo/` (eigenes `main`, dasselbe `socket.
 
 ### 1. Socket und Daemon erweitern
 
-- [ ] Test: `GET /doctor` antwortet die Prüfungen des Backends; `Status.system`; `Summary.branch`/`session`.
-- [ ] `socket.Check`, `Backend.Doctor`, Route; `Daemon.Doctor` (Funktion aus main plus Prüfung der Version); `executor.Fake` für Tests und Demo.
+- [x] Test: `GET /doctor` antwortet die Prüfungen des Backends; `Status.system`; `Summary.branch`/`session`.
+- [x] `socket.Check`, `Backend.Doctor`, Route; `Daemon.Doctor` (Funktion aus main plus Prüfung der Version); `executor.Fake` für Tests und Demo.
 
 ### 2. Gerüst der TUI, Source, Abfrage
 
-- [ ] Test: ohne Daemon „no daemon“ im Kopf und Hinweis auf Status; mit Daemon Instanz, Version, Plätze, Auslastung mit Verlauf.
-- [ ] `styles.go`, `layout.go`, `source.go`, `model.go`, `status.go`.
+- [x] Test: ohne Daemon „no daemon“ im Kopf und Hinweis auf Status; mit Daemon Instanz, Version, Plätze, Auslastung mit Verlauf.
+- [x] `styles.go`, `layout.go`, `source.go`, `model.go`, `status.go`.
 
 ### 3. Runs
 
-- [ ] Test: Liste, Auswahl bleibt bei neuer Abfrage am Auftrag, Protokoll aus dem Stream, Folgen, volles Protokoll, Abbrechen mit Rückfrage.
+- [x] Test: Liste, Auswahl bleibt bei neuer Abfrage am Auftrag, Protokoll aus dem Stream, Folgen, volles Protokoll, Abbrechen mit Rückfrage.
 
 ### 4. Doctor
 
-- [ ] Test: Prüfungen über den Daemon, Rückfall lokal, Ausstattung mit Warnung, Zählung im Fuß, Details.
+- [x] Test: Prüfungen über den Daemon, Rückfall lokal, Ausstattung mit Warnung, Zählung im Fuß, Details.
 
 ### 5. Befehl, Demo, Screenshots, Doku
 
-- [ ] `werkbuch-runner` ohne Argumente startet die TUI (nur in einem Terminal, sonst der Hinweis).
-- [ ] Demo-Daemon, `screenshots.sh`, Tapes, Bilder; README, `CLAUDE.md` „Runner (Go)“, Rulings.
+- [x] `werkbuch-runner` ohne Argumente startet die TUI (nur in einem Terminal, sonst der Hinweis).
+- [x] Demo-Daemon, `screenshots.sh`, Tapes, Bilder; README, `CLAUDE.md` „Runner (Go)“, Rulings.
 
 ## Abweichungen und Stand (nach der Umsetzung)
 
-(nach der Umsetzung ergänzt)
+- Umgesetzt wie geplant; Rulings A500–A504. Abweichungen vom Klickdummy stehen in A504 (Verlauf fünf statt zehn Minuten, kein Runner-Name, keine Prüfung „models“, kein „↻ lost“, Zugang zu werkbuch als Warnung wie in `doctor`).
+- Tabs wechseln nur `tab`/`⇧tab` und `1`–`3` (wie skilltri); `l` ist auf Status das Abmelden.
+- Runs zeigt ab 90 Spalten Liste und Protokoll nebeneinander, darunter nur die Liste (`enter` öffnet das Protokoll).
+- Bilder: `runner/docs/screenshots/{status,runs,cancel,doctor}.png`, erzeugt mit `bash runner/docs/screenshots.sh`.
+- Tests: `internal/tui` (Modell-Tests gegen eine falsche `Source`, `SocketSource` gegen `socket.Handler`), `socket` (`GET /doctor`), `daemon` (Version im Doctor, `system`), `executor` (`branch`, `session`, `Fake`), `main` (ohne Terminal der Hinweis).

@@ -132,7 +132,7 @@ func demoStatus() *socket.Status {
 func demoRuns() []executor.Summary {
 	return []executor.Summary{
 		{ID: "01run51", Type: "task", CLI: "claude", Model: "sonnet", Project: "WEB", Item: "WEB-51", Title: "Cookie-Banner auf Consent v2 umstellen",
-			Status: "running", Branch: "agent/WEB-51-cookie-banner", Session: "4f2c9e1a77", Dir: "~/work/WEB-51", Started: now0.Add(-6*time.Minute - 12*time.Second)},
+			Status: "running", Branch: "agent/WEB-51-cookie-banner", Session: "4f2c9e1a77", Dir: "/home/demo/.local/share/werkbuch-runner/worktrees/WEB-51", Started: now0.Add(-6*time.Minute - 12*time.Second)},
 		{ID: "01run44", Type: "review", Model: "opus", Project: "WEB", Item: "WEB-44", Title: "Footer-Links prüfen", Status: "finished", Result: "succeeded",
 			Started: now0.Add(-22 * time.Minute), Ended: now0.Add(-11 * time.Minute)},
 		{ID: "01run53", Type: "task", Model: "haiku", Project: "OPS", Status: "finished", Result: "timed_out",
@@ -151,7 +151,7 @@ func demoHistory() []protocol.Load {
 func newHarness(t *testing.T, f *fake, opts Options) *harness {
 	t.Helper()
 	h := &harness{t: t, f: f, now: now0}
-	opts.Source, opts.NoTick, opts.Socket = f, true, "/tmp/wr.sock"
+	opts.Source, opts.NoTick, opts.Socket, opts.Home = f, true, "/tmp/wr.sock", "/home/demo"
 	opts.Now = func() time.Time { return h.now }
 	if opts.Logout == nil {
 		opts.Logout = func() (string, error) {
@@ -318,7 +318,7 @@ func TestStatus(t *testing.T) {
 		"■□  1 of 2", "per repo 0 of 1", "light (reviews, answers) □□  0 of 2", "(from werkbuch)",
 		"Load", "last 5 minutes", "31 %", "12 %", "38.2 of 64 GB", "182 of 994 GB free",
 		"Running", "WEB-51", "sonnet", "● 6:12", "Cookie-Banner auf Consent v2 umstellen",
-		"agent/WEB-51-cookie-banner   session 4f2c9e1a   worktree ~/work/WEB-51",
+		"agent/WEB-51-cookie-banner   session 4f2c9e1a   worktree ~/.local/share/werkbuch-runner/worktrees/WEB-51",
 		"Recent", "WEB-44", "✓ done", "OPS", "✗ timed out",
 		"Slots are set in werkbuch", "polled now", "enter open run", "l logout")
 	if !strings.ContainsAny(h.view(), "▁▂▃") {
@@ -543,7 +543,7 @@ func TestDoctor(t *testing.T) {
 		t.Fatal("no checks")
 	}
 	h.sees("✓ version", "✓ keychain", "! codex", "not signed in",
-		"Harness", "mcp servers    werkbuch-mara, context7 + werkbuch-run with the token of each run", "skills         ops:runbook", "plugins        none",
+		"Harness", "mcp servers     werkbuch-mara, context7 + werkbuch-run with the token of each run", "skills          ops:runbook", "plugins         none",
 		"! werkbuch access", "Turn it off for the runner", "2 warnings  Runs stay possible", "checked now")
 	h.misses("! equipment", "✓ equipment")
 	// back and forth does not check again; r does
@@ -716,3 +716,9 @@ func TestHelpers(t *testing.T) {
 }
 
 func sizeMsg(w, h int) tea.WindowSizeMsg { return tea.WindowSizeMsg{Width: w, Height: h} }
+
+func TestMiddle(t *testing.T) {
+	if middle("short", 10) != "short" || middle("~/.local/share/werkbuch-runner/worktrees/WEB-51", 20) != "~/.loca…trees/WEB-51" {
+		t.Fatal(middle("~/.local/share/werkbuch-runner/worktrees/WEB-51", 20))
+	}
+}

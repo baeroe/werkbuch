@@ -186,18 +186,25 @@ func (m *Model) doctorView(w, h int) string {
 		add(row(i, items[i]))
 	}
 	add("", "  "+boldStyle.Render("Harness")+dimStyle.Render(" (set up on this machine for the user of the runner)"))
-	const lw = 15
 	if m.st != nil && m.st.Equipment != nil {
 		eq := m.st.Equipment
-		add("  "+kv("mcp servers", join(eq.MCPServers)+dimStyle.Render(" + werkbuch-run with the token of each run"), lw),
-			"  "+kv("skills", join(eq.Skills), lw),
-			"  "+kv("plugins", join(eq.Plugins), lw))
+		add("    "+kv("mcp servers", join(eq.MCPServers)+dimStyle.Render(" + werkbuch-run with the token of each run"), nw),
+			"    "+kv("skills", join(eq.Skills), nw),
+			"    "+kv("plugins", join(eq.Plugins), nw))
 	} else {
-		add("  " + dimStyle.Render("known once the daemon has reported it (see the check equipment)"))
+		add("    " + dimStyle.Render("known once the daemon has reported it (see the check equipment)"))
 	}
+	indent := strings.Repeat(" ", 4+nw)
 	for ; i < len(items); i++ {
-		add(row(i, items[i]))
-		add("    " + strings.Repeat(" ", nw) + dimStyle.Render("Turn it off for the runner, or run the runner under its own macOS user."))
+		// the warning in full: it names the server to switch off
+		lines := wrap(items[i].Detail, max(w-4-nw-1, 10))
+		first := items[i]
+		first.Detail = lines[0]
+		add(row(i, first))
+		for _, l := range lines[1:] {
+			add(indent + l)
+		}
+		add(indent + dimStyle.Render("Turn it off for the runner, or run the runner under its own macOS user."))
 	}
 	add("")
 	fails, warns := m.counts()
