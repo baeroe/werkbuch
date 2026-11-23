@@ -53,9 +53,12 @@ final class Manifest
         return $web.$path.'?state='.rawurlencode($state);
     }
 
-    /** Where the person installs the app on repos after registering it. */
-    public static function installUrl(string $slug): string
+    /**
+     * Where the person installs the app on repos after registering it; GitHub sends the `state` back to the setup URL.
+     */
+    public static function installUrl(string $slug, ?string $state = null): string
     {
-        return rtrim((string) config('werkbuch.github.web_url'), '/').'/apps/'.rawurlencode($slug).'/installations/new';
+        return rtrim((string) config('werkbuch.github.web_url'), '/').'/apps/'.rawurlencode($slug).'/installations/new'
+            .($state === null ? '' : '?state='.rawurlencode($state));
     }
 }

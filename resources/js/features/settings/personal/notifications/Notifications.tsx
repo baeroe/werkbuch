@@ -36,7 +36,11 @@ const EVENT_TEXT: Record<NotificationEvent, { label: TranslationKey; hint: Trans
   item_created: { label: 'settings.notifications.event.item_created.label', hint: 'settings.notifications.event.item_created.hint' },
   template_run_failed: { label: 'settings.notifications.event.template_run_failed.label', hint: 'settings.notifications.event.template_run_failed.hint' },
   webhook_disabled: { label: 'settings.notifications.event.webhook_disabled.label', hint: 'settings.notifications.event.webhook_disabled.hint' },
+  merge_guard_detected: { label: 'settings.notifications.event.merge_guard_detected.label', hint: 'settings.notifications.event.merge_guard_detected.hint' },
 };
+
+/** The events only org admins hear of. */
+const ADMIN_EVENTS: readonly NotificationEvent[] = ['webhook_disabled', 'merge_guard_detected'];
 
 export function Notifications({ user }: { user: User }) {
   const form = useRef<HTMLFormElement>(null);
@@ -48,9 +52,9 @@ export function Notifications({ user }: { user: User }) {
   const draft = useDraft(saved);
   useSaveShortcut(form, true);
 
-  // the events in the order of the server; the one about webhooks only matters to org admins
+  // the events in the order of the server; the ones only org admins hear of matter only to them
   const events = useMemo(
-    () => [...new Set((preferences.data ?? []).map((row) => row.event))].filter((event) => event !== 'webhook_disabled' || user.org_role === 'admin'),
+    () => [...new Set((preferences.data ?? []).map((row) => row.event))].filter((event) => !ADMIN_EVENTS.includes(event) || user.org_role === 'admin'),
     [preferences.data, user.org_role],
   );
   // without a mail server the mail cells stay as stored: the defaults touch only what can be chosen

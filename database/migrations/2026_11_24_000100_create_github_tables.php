@@ -70,9 +70,8 @@ return new class extends Migration
             $table->timestamp('guard_detected_at')->nullable();
             $table->string('guard_sha', 64)->nullable();
             $table->string('guard_branch', 255)->nullable();
-            $table->ulid('guard_run_id')->nullable();
-            $table->ulid('guard_item_id')->nullable();
-            $table->ulid('guard_bot_id')->nullable();
+            // the runs werkbuch takes for the push: `[{run_id, item_id, bot_id}]`, empty when it found none
+            $table->json('guard_runs')->nullable();
             $table->timestamps();
         });
 
@@ -91,16 +90,25 @@ return new class extends Migration
             $table->string('delivery_id', 100)->unique();
             $table->string('event', 64);
             $table->string('action', 64)->nullable();
-            $table->mediumText('payload');
+            // GitHub sends up to 25 MB (spec 11.4)
+            $table->longText('payload');
             $table->timestamp('received_at');
             $table->timestamp('processed_at')->nullable();
             $table->string('outcome', 32)->nullable();
             $table->index('received_at');
         });
+
+        // a run GitHub gave no token for because it did not answer waits until then (A511)
+        Schema::table('agent_runs', function (Blueprint $table) {
+            $table->timestamp('retry_at')->nullable()->after('lease_expires_at');
+        });
     }
 
     public function down(): void
     {
+        Schema::table('agent_runs', function (Blueprint $table) {
+            $table->dropColumn('retry_at');
+        });
         Schema::dropIfExists('github_deliveries');
         Schema::dropIfExists('github_merges');
         Schema::dropIfExists('project_repositories');

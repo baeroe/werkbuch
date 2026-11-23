@@ -13,6 +13,7 @@ use App\Models\AgentThread;
 use App\Models\GitHubApp;
 use App\Models\GitHubInstallation;
 use App\Models\Organization;
+use App\Models\Project;
 use App\Models\ProjectRepository;
 use App\Support\Actor;
 use App\Support\CatalogLock;
@@ -43,7 +44,10 @@ final class DisconnectGitHub
             CatalogLock::take();
             $app = GitHubApp::query()->lockForUpdate()->first() ?? throw Problem::conflict('github_not_connected');
 
+            // project → repo → run, as the claim and the guard take them (shared projects, then the rows of the repos)
             $projects = ProjectRepository::query()->pluck('project_id')->all();
+            Project::query()->whereIn('id', $projects ?: [''])->orderBy('id')->sharedLock()->get();
+            ProjectRepository::query()->whereIn('project_id', $projects ?: [''])->orderBy('id')->lockForUpdate()->get();
 
             $runs = AgentRun::query()->lockForUpdate()->whereIn('project_id', $projects ?: [''])
                 ->whereIn('status', [RunStatus::Queued->value, RunStatus::Waiting->value, RunStatus::Running->value])->orderBy('id')->get();

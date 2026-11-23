@@ -53,6 +53,7 @@ use App\Actions\GitHub\HandleGitHubDelivery;
 use App\Actions\GitHub\LinkRepository;
 use App\Actions\GitHub\PruneGitHubDeliveries;
 use App\Actions\GitHub\ReceiveGitHubDelivery;
+use App\Actions\GitHub\ReturnFromInstallation;
 use App\Actions\GitHub\StartManifest;
 use App\Actions\GitHub\SyncGitHub;
 use App\Actions\Invitations\InviteUser;
@@ -1605,6 +1606,17 @@ return [
             return SyncGitHub::run($a);
         },
         'allowed' => $catalogAdmins,
+    ],
+    // the way back from installing: with the state of the person it reads GitHub for those who manage it, does nothing for
+    // anybody else (no refusal: a link must not tell)
+    'ReturnFromInstallation' => [
+        'action' => ReturnFromInstallation::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->github();
+
+            return ReturnFromInstallation::run($a, ['state' => StartManifest::issueState($a->user->id, 'setup')]);
+        },
+        'allowed' => $everyone,
     ],
     'DisconnectGitHub' => [
         'action' => DisconnectGitHub::class,

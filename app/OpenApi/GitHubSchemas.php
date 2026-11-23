@@ -65,14 +65,16 @@ final class GitHubSchemas
             'base_branch' => ['type' => 'string', 'description' => 'What agents branch from and werkbuch merges into.'],
             'protected' => ['type' => ['boolean', 'null'], 'description' => 'Whether a ruleset keeps a direct push off the base branch (only a hint); `null`: GitHub did not say.'],
             'protected_checked_at' => self::time(),
-            'guard' => ['anyOf' => [self::object('A push of the app to the base branch no merge of werkbuch explains (spec 11.3): every strand of the project pauses until an admin of the project confirms.', [
+            'guard' => ['anyOf' => [self::object('A push of the app to the base branch (or deleting it) no merge of werkbuch explains (spec 11.3): every strand of the project pauses until an admin of the project confirms.', [
                 'detected_at' => self::time(false),
                 'sha' => ['type' => 'string', 'description' => 'The commit of the push.'],
                 'branch' => ['type' => 'string'],
-                'run_id' => ['type' => ['string', 'null'], 'description' => 'The one code run of the project that ran then, if there was exactly one.'],
-                'item_id' => ['type' => ['string', 'null']],
-                'bot_id' => ['type' => ['string', 'null']],
-            ], ['detected_at', 'sha', 'branch', 'run_id', 'item_id', 'bot_id']), ['type' => 'null']]],
+                'runs' => ['type' => 'array', 'description' => 'The runs werkbuch takes for the push: the code runs that reported its commit, else the code runs of the project within the life of a token; empty when there was none.', 'items' => self::object('A run.', [
+                    'run_id' => ['type' => 'string', 'pattern' => self::ULID],
+                    'item_id' => ['type' => ['string', 'null']],
+                    'bot_id' => ['type' => 'string', 'pattern' => self::ULID],
+                ], ['run_id', 'item_id', 'bot_id'])],
+            ], ['detected_at', 'sha', 'branch', 'runs']), ['type' => 'null']]],
             'updated_at' => self::time(),
         ], ['project_id', 'repository', 'base_branch', 'protected', 'protected_checked_at', 'guard', 'updated_at']);
     }

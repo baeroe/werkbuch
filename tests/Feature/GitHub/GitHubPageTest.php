@@ -66,22 +66,43 @@ it('turns the way back of GitHub into the app and sends the person on to the ins
     // the state of a start the person makes (the page shows another one)
     $state = StartManifest::run(Actor::system($admin, 'test'), [])['state'];
 
-    $this->get('/github/manifest?code=abc123&state='.$state)->assertRedirect('https://github.com/apps/feldwerk-werkbuch/installations/new');
-    expect(GitHubApp::query()->sole()->slug)->toBe('feldwerk-werkbuch');
+    $redirect = $this->get('/github/manifest?code=abc123&state='.$state)->assertRedirect()->headers->get('Location');
+    expect(GitHubApp::query()->sole()->slug)->toBe('feldwerk-werkbuch')
+        ->and($redirect)->toStartWith('https://github.com/apps/feldwerk-werkbuch/installations/new?state=');
+    // the state of the way back from installing is the admin's, once
+    parse_str((string) parse_url((string) $redirect, PHP_URL_QUERY), $query);
+    expect(StartManifest::takeState($query['state'], $admin->id, 'setup'))->toBeTrue()
+        ->and(StartManifest::takeState($query['state'], $admin->id, 'setup'))->toBeFalse();
 
     $this->get('/github/manifest?code=abc123&state=nope')->assertForbidden();
 });
 
-it('reads the installation again after GitHub sends the person to setup', function () {
+it('reads the installation again only with the state werkbuch gave for the way back from GitHub', function () {
     $github = FakeGitHub::connected();
     $github->repositories[55_000_001][] = FakeGitHub::repositoryJson(700_000_003, 'feldwerk/neu');
-    $this->actingAs(User::factory()->create());
+    $member = User::factory()->create();
+    $admin = User::factory()->admin()->create();
+    $fresh = fn () => GitHubRepository::query()->where('full_name', 'feldwerk/neu')->exists();
+
+    // no state, a state of somebody else, a state for another way: the address alone changes nothing (A518)
+    $this->actingAs($member);
+    $this->get('/github/setup?installation_id=55000001&setup_action=update&state='.StartManifest::issueState($member->id, 'setup'))->assertRedirect('/github');
+    $this->actingAs($admin);
     $this->get('/github/setup?installation_id=55000001&setup_action=update')->assertRedirect('/github');
+    $this->get('/github/setup?state='.StartManifest::issueState($member->id, 'setup'))->assertRedirect('/github');
+    $this->get('/github/setup?state='.StartManifest::issueState($admin->id))->assertRedirect('/github');
+    expect($fresh())->toBeFalse();
     Http::assertNothingSent();
 
-    $this->actingAs(User::factory()->admin()->create());
-    $this->get('/github/setup?installation_id=55000001&setup_action=update')->assertRedirect('/github');
-    expect(GitHubRepository::query()->where('full_name', 'feldwerk/neu')->exists())->toBeTrue();
+    // the page gives the admin the link to install with a state of their own: GitHub sends it back
+    $page = $this->get('/github')->assertOk()->getContent();
+    preg_match('#installations/new\?state=([A-Za-z0-9]+)#', (string) $page, $link);
+    $this->get('/github/setup?installation_id=55000001&setup_action=update&state='.$link[1])->assertRedirect('/github');
+    expect($fresh())->toBeTrue();
+    // once
+    GitHubRepository::query()->where('full_name', 'feldwerk/neu')->delete();
+    $this->get('/github/setup?state='.$link[1])->assertRedirect('/github');
+    expect($fresh())->toBeFalse();
 });
 
 it('signs the app in with a JWT GitHub can check with the public key', function () {

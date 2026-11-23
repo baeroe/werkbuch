@@ -12,7 +12,6 @@ use App\Models\GitHubApp;
 use App\Models\Organization;
 use App\Support\Actor;
 use App\Support\CatalogLock;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -42,7 +41,7 @@ final class CompleteManifest
         if (! is_string($code) || preg_match('/^[A-Za-z0-9_-]{1,100}\z/', $code) !== 1) {
             throw ValidationException::withMessages(['code' => __('field.code.github')]);
         }
-        if (! is_string($state) || Cache::pull(StartManifest::stateKey($state)) !== $actor->user->id) {
+        if (! StartManifest::takeState($state, $actor->user->id)) {
             throw Problem::forbidden(__('problem.detail.github_state'));
         }
         if (GitHubApp::current() !== null) {

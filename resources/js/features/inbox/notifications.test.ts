@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import en from '../../../../lang/en.json';
 import { initI18n } from '@/lib/i18n';
-import { makeNotification } from '@/test/fixtures';
+import { makeNotification, project } from '@/test/fixtures';
 import type { Notification } from '@/types';
 import { changedFields, groupNotifications, opensElsewhere, timeAgo } from './notifications';
 import { hrefOf } from './NotificationRow';
@@ -169,6 +169,12 @@ describe('hrefOf', () => {
       '/settings/webhooks?deliveries=wh_crm',
     );
     expect(hrefOf(notification('n2', { event: 'webhook_disabled', work_item_id: null, project_id: null, data: {} }), undefined)).toBe('/settings/webhooks');
+  });
+
+  it('leads an unauthorized merge to the settings of its project, without the project to the projects', () => {
+    const guard = notification('n1', { event: 'merge_guard_detected', work_item_id: null, project_id: 'p_web', data: { sha: 'a41c9e7', branch: 'main' } });
+    expect(hrefOf(guard, project('WEB', 'admin'))).toBe('/projects/WEB/settings');
+    expect(hrefOf(guard, undefined)).toBe('/projects');
   });
 
   it('leads a kind without an item it does not know to the settings, never to the webhooks (T14-M7)', () => {

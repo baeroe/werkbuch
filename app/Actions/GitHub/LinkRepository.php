@@ -13,6 +13,7 @@ use App\Models\GitHubRepository;
 use App\Models\Project;
 use App\Models\ProjectRepository;
 use App\Support\Actor;
+use App\Support\CatalogLock;
 use App\Support\ProjectLock;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -53,6 +54,7 @@ final class LinkRepository
 
         try {
             return DB::transaction(function () use ($actor, $project, $repository, $branch, $protected): ?ProjectRepository {
+                CatalogLock::share();
                 $locked = ProjectLock::lock($project);
                 $current = ProjectRepository::query()->with('repository')->lockForUpdate()->where('project_id', $locked->id)->first();
 

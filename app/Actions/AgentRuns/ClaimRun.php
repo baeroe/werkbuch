@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
+use Throwable;
 
 /**
  * A runner asks for work (spec 6.3, 9): its report becomes its last state, then werkbuch hands it the next run it may
@@ -44,6 +45,11 @@ final class ClaimRun
 
     /** The error of a run GitHub gave no installation token for. */
     public const GIT_TOKEN = 'git_token';
+
+    /** The reason a run waits while GitHub does not answer, and how long it waits (A511). */
+    public const GITHUB_UNAVAILABLE = 'github_unavailable';
+
+    public const RETRY_SECONDS = 120;
 
     /**
      * @param  array<array-key, mixed>  $input  the report (`load`, `clis`, `equipment`), `version` and `protocol` of the headers
@@ -72,10 +78,15 @@ final class ClaimRun
         // the installation token after the commit: never HTTP under the locks of the claim (A511)
         try {
             $git = InstallationTokens::forRun($run);
-        } catch (GitHubUnavailable $e) {
+        } catch (Throwable $e) {
             report($e);
-            self::giveBack($run);
+            self::giveBack($run, $e);
 
+            return ['run' => null, ...$answer];
+        }
+
+        // the run may have been canceled while GitHub answered (the guard, a person): then it is not handed out
+        if ($git !== null && AgentRun::query()->whereKey($run->id)->value('status') !== RunStatus::Running) {
             return ['run' => null, ...$answer];
         }
 
@@ -83,18 +94,23 @@ final class ClaimRun
     }
 
     /**
-     * A run GitHub gave no token for goes back (A511): the first time as a new attempt into the queue, the second time
-     * it fails with `git_token` (a repo the app no longer reaches never gets one). Only if it is still this attempt.
+     * A run GitHub gave no token for goes back (A511), only if it is still this attempt. GitHub without an answer or
+     * with a 5xx counts no attempt: the run waits (`github_unavailable`) until `RETRY_SECONDS` have passed. A refusal
+     * (a repo the app no longer reaches) or anything else is an attempt: the first time a new one into the queue, the
+     * second time it fails with `git_token`.
      */
-    private static function giveBack(AgentRun $run): void
+    private static function giveBack(AgentRun $run, Throwable $cause): void
     {
-        DB::transaction(function () use ($run): void {
+        DB::transaction(function () use ($run, $cause): void {
             $locked = AgentRun::query()->lockForUpdate()->find($run->id);
             if ($locked === null || $locked->status !== RunStatus::Running || $locked->attempt !== $run->attempt) {
                 return;
             }
 
-            if ($locked->attempt >= Protocol::MAX_ATTEMPTS) {
+            if ($cause instanceof GitHubUnavailable && $cause->transient()) {
+                ReapLostRuns::requeue($locked, self::GITHUB_UNAVAILABLE, false);
+                $locked->forceFill(['status' => RunStatus::Waiting, 'waiting_reason' => self::GITHUB_UNAVAILABLE, 'retry_at' => now()->addSeconds(self::RETRY_SECONDS)])->save();
+            } elseif ($locked->attempt >= Protocol::MAX_ATTEMPTS) {
                 FinishRun::end($locked, RunStatus::Failed, ['error' => self::GIT_TOKEN]);
             } else {
                 ReapLostRuns::requeue($locked, self::GIT_TOKEN);
@@ -172,6 +188,7 @@ final class ClaimRun
         return AgentRun::query()->select('agent_runs.*')
             ->whereIn('agent_runs.status', [RunStatus::Queued->value, RunStatus::Waiting->value])
             ->whereIn('agent_runs.cli', $clis)
+            ->where(fn (Builder $due) => $due->whereNull('agent_runs.retry_at')->orWhere('agent_runs.retry_at', '<=', now()))
             ->join('projects', 'projects.id', '=', 'agent_runs.project_id')->whereNull('projects.deleting_at')
             ->whereNotExists(fn ($guard) => $guard->selectRaw('1')->from('project_repositories')
                 ->whereColumn('project_repositories.project_id', 'agent_runs.project_id')->whereNotNull('project_repositories.guard_detected_at'))

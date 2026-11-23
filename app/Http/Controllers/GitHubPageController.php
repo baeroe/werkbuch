@@ -5,10 +5,9 @@ namespace App\Http\Controllers;
 use App\Access\Authorize;
 use App\Actions\GitHub\CompleteManifest;
 use App\Actions\GitHub\GetGitHub;
+use App\Actions\GitHub\ReturnFromInstallation;
 use App\Actions\GitHub\StartManifest;
-use App\Actions\GitHub\SyncGitHub;
 use App\GitHub\Manifest;
-use App\Models\GitHubApp;
 use App\Models\Organization;
 use App\Support\Actor;
 use Illuminate\Contracts\View\View;
@@ -20,7 +19,7 @@ use Illuminate\Validation\ValidationException;
  * The plain page of the GitHub app (WEBU-24, until the settings show it in WEBU-27): its state for every account and,
  * for org admins without an app, the form that posts the manifest to GitHub (no script: the form posts itself). GitHub
  * sends the person back to `manifest` (the app becomes werkbuch's, then on to the installation) and, after installing or
- * changing the installation, to `setup` (installations and repos are read again).
+ * changing the installation, to `setup` (installations and repos are read again, only with the state werkbuch gave).
  */
 final class GitHubPageController extends Controller
 {
@@ -41,23 +40,23 @@ final class GitHubPageController extends Controller
             }
         }
 
-        return view('github', ['status' => $status, 'manages' => $manages, 'start' => $start, 'error' => $error,
+        $install = $manages && $status['app'] !== null ? Manifest::installUrl($status['app']->slug, StartManifest::issueState($actor->user->id, 'setup')) : null;
+
+        return view('github', ['status' => $status, 'manages' => $manages, 'start' => $start, 'error' => $error, 'install' => $install,
             'organization' => is_string($request->query('organization')) && $error === null ? $request->query('organization') : null]);
     }
 
     public function manifest(Request $request): RedirectResponse
     {
-        $app = CompleteManifest::run(Actor::fromRequest($request), $request->query());
+        $actor = Actor::fromRequest($request);
+        $app = CompleteManifest::run($actor, $request->query());
 
-        return redirect()->away(Manifest::installUrl($app->slug));
+        return redirect()->away(Manifest::installUrl($app->slug, StartManifest::issueState($actor->user->id, 'setup')));
     }
 
     public function setup(Request $request): RedirectResponse
     {
-        $actor = Actor::fromRequest($request);
-        if (GitHubApp::current() !== null && Authorize::allows($actor, 'manageGitHub', Organization::class)) {
-            SyncGitHub::run($actor);
-        }
+        ReturnFromInstallation::run(Actor::fromRequest($request), $request->query());
 
         return redirect()->route('github');
     }

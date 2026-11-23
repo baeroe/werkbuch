@@ -86,13 +86,14 @@ final class ReapLostRuns
 
     /**
      * Puts a busy run read `for update` back into the queue as a new attempt (the runner of the old one gets 409
-     * `run_replaced`), its run token revoked: a lost run (A475) or one GitHub gave no token for (A511).
+     * `run_replaced`), its run token revoked: a lost run (A475) or one GitHub gave no token for (A511); a run GitHub did
+     * not answer for keeps its attempt.
      */
-    public static function requeue(AgentRun $run, string $reason): void
+    public static function requeue(AgentRun $run, string $reason, bool $newAttempt = true): void
     {
         $run->forceFill([
             'status' => RunStatus::Queued,
-            'attempt' => $run->attempt + 1, 'runner_id' => null, 'lease_expires_at' => null, 'started_at' => null, 'error' => $reason,
+            'attempt' => $run->attempt + ($newAttempt ? 1 : 0), 'runner_id' => null, 'lease_expires_at' => null, 'started_at' => null, 'error' => $reason,
         ])->save();
         RunTokens::revoke($run);
         EventRecorder::record(EventType::AgentRunQueued, Actor::agent($run->bot)->withReason($reason), $run, $run->project, [

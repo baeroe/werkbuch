@@ -123,13 +123,15 @@ final class NotifyRecipients
 
     /**
      * The mail collection a row of the event joins: the one of its item, or of its template for a failed run, which has
-     * no item (A348), or of its webhook for one the system switched off (phase 11).
+     * no item (A348), of its webhook for one the system switched off (phase 11), or of its project for an unauthorized
+     * merge (WEBU-24).
      */
     private static function scopeOf(Event $event, ?string $itemId): string
     {
         return match ($event->type) {
             EventType::TemplateRunFailed => "template:{$event->subject_id}",
             EventType::WebhookDisabled => "webhook:{$event->subject_id}",
+            EventType::ProjectMergeGuardDetected => "guard:{$event->subject_id}",
             default => "item:{$itemId}",
         };
     }

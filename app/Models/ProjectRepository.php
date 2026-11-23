@@ -26,26 +26,24 @@ use Illuminate\Support\Carbon;
  * @property CarbonImmutable|null $guard_detected_at
  * @property string|null $guard_sha
  * @property string|null $guard_branch
- * @property string|null $guard_run_id
- * @property string|null $guard_item_id
- * @property string|null $guard_bot_id
+ * @property list<array{run_id: string, item_id: string|null, bot_id: string}>|null $guard_runs
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Project $project
  * @property-read GitHubRepository $repository
  */
-#[Fillable(['project_id', 'repository_id', 'base_branch', 'protected', 'protected_checked_at', 'guard_detected_at', 'guard_sha', 'guard_branch', 'guard_run_id', 'guard_item_id', 'guard_bot_id'])]
+#[Fillable(['project_id', 'repository_id', 'base_branch', 'protected', 'protected_checked_at', 'guard_detected_at', 'guard_sha', 'guard_branch', 'guard_runs'])]
 final class ProjectRepository extends Model
 {
     /** @use HasFactory<ProjectRepositoryFactory> */
     use HasFactory, HasUlids;
 
     /** The guard columns, emptied together. */
-    public const GUARD = ['guard_detected_at' => null, 'guard_sha' => null, 'guard_branch' => null, 'guard_run_id' => null, 'guard_item_id' => null, 'guard_bot_id' => null];
+    public const GUARD = ['guard_detected_at' => null, 'guard_sha' => null, 'guard_branch' => null, 'guard_runs' => null];
 
     protected function casts(): array
     {
-        return ['protected' => 'boolean', 'protected_checked_at' => 'immutable_datetime', 'guard_detected_at' => 'immutable_datetime'];
+        return ['protected' => 'boolean', 'protected_checked_at' => 'immutable_datetime', 'guard_detected_at' => 'immutable_datetime', 'guard_runs' => 'array'];
     }
 
     /** @return BelongsTo<Project, $this> */

@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\AgentRuns\ClaimRun;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
 use App\Events\EventType;
@@ -9,6 +10,9 @@ use App\Models\GitHubRepository;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
 use App\Models\ProjectRepository;
+use App\Support\RunQueue;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -75,7 +79,7 @@ it('hands a project without a repo no git', function () use ($claim) {
 it('gives the run back once when GitHub refuses the token, then fails it', function () use ($claim) {
     [, $token] = AgentWorld::runner();
     $run = AgentWorld::run($this->agent, $this->project);
-    $this->github->refuse = ['/app/installations/*/access_tokens' => 500];
+    $this->github->refuse = ['/app/installations/*/access_tokens' => 422];
 
     expect($claim($token)->assertOk()->json('run'))->toBeNull();
     $run->refresh();
@@ -86,6 +90,71 @@ it('gives the run back once when GitHub refuses the token, then fails it', funct
     expect($claim($token)->assertOk()->json('run'))->toBeNull();
     $run->refresh();
     expect([$run->status, $run->error])->toBe([RunStatus::Failed, 'git_token']);
+});
+
+it('lets a run wait without counting an attempt while GitHub does not answer or answers with a 5xx', function () use ($claim) {
+    [, $token] = AgentWorld::runner();
+    $run = AgentWorld::run($this->agent, $this->project);
+    $this->github->refuse = ['/app/installations/*/access_tokens' => 502];
+
+    expect($claim($token)->assertOk()->json('run'))->toBeNull();
+    $run->refresh();
+    expect([$run->status, $run->waiting_reason, $run->attempt, $run->runner_id])->toBe([RunStatus::Waiting, 'github_unavailable', 1, null])
+        ->and($run->retry_at->getTimestamp())->toBe(now()->addSeconds(ClaimRun::RETRY_SECONDS)->getTimestamp())
+        ->and(PersonalAccessToken::query()->where('agent_run_id', $run->id)->exists())->toBeFalse();
+    // the reason holds while it waits
+    RunQueue::refreshReasons();
+    expect($run->fresh()->waiting_reason)->toBe('github_unavailable');
+
+    // not before its time, then again; GitHub not answering at all is the same
+    expect($claim($token)->assertOk()->json('run'))->toBeNull();
+    $this->travel(ClaimRun::RETRY_SECONDS + 1)->seconds();
+    $this->github->refuse = [];
+    $this->github->meanwhile = function ($request) {
+        if (str_contains($request->url(), 'access_tokens')) {
+            throw new ConnectionException('timeout');
+        }
+    };
+    expect($claim($token)->assertOk()->json('run'))->toBeNull()
+        ->and([$run->fresh()->status, $run->fresh()->attempt])->toBe([RunStatus::Waiting, 1]);
+
+    $this->travel(ClaimRun::RETRY_SECONDS + 1)->seconds();
+    $this->github->meanwhile = null;
+    expect($claim($token)->assertOk()->json('run.id'))->toBe($run->id)
+        ->and([$run->fresh()->status, $run->fresh()->attempt])->toBe([RunStatus::Running, 1]);
+});
+
+it('gives the run back after anything else that goes wrong while werkbuch asks for its token', function () use ($claim) {
+    [, $token] = AgentWorld::runner();
+    $run = AgentWorld::run($this->agent, $this->project);
+    $reported = 0;
+    $this->app->make(ExceptionHandler::class)->reportable(function (LogicException $e) use (&$reported) {
+        $reported++;
+
+        return false;
+    });
+    $this->github->meanwhile = function ($request) {
+        if (str_contains($request->url(), 'access_tokens')) {
+            throw new LogicException('Something else');
+        }
+    };
+
+    expect($claim($token)->assertOk()->json('run'))->toBeNull()
+        ->and([$run->fresh()->status, $run->fresh()->attempt, $run->fresh()->error])->toBe([RunStatus::Queued, 2, 'git_token'])
+        ->and($reported)->toBe(1);
+});
+
+it('hands out no run that was canceled while GitHub answered', function () use ($claim) {
+    [, $token] = AgentWorld::runner();
+    $run = AgentWorld::run($this->agent, $this->project);
+    $this->github->meanwhile = function ($request) use ($run) {
+        if (str_contains($request->url(), 'access_tokens')) {
+            AgentRun::query()->whereKey($run->id)->update(['status' => RunStatus::Canceling->value]);
+        }
+    };
+
+    expect($claim($token)->assertOk()->json('run'))->toBeNull()
+        ->and($run->fresh()->status)->toBe(RunStatus::Canceling);
 });
 
 it('fails a run at once whose repo the app no longer reaches, on the second attempt', function () use ($claim) {
@@ -120,6 +189,15 @@ it('renews the token of a running run for its runner in its attempt only', funct
 
     GitHubInstallation::query()->update(['suspended_at' => now()]);
     $renew(['attempt' => 1])->assertConflict()->assertJsonPath('reason', 'repository_unavailable');
+
+    GitHubInstallation::query()->update(['suspended_at' => null]);
+    // no token while the guard holds the project, none for a run being canceled
+    ProjectRepository::query()->update(['guard_detected_at' => now(), 'guard_sha' => str_repeat('a', 40), 'guard_branch' => 'main']);
+    $renew(['attempt' => 1])->assertConflict()->assertJsonPath('reason', 'merge_guard_open');
+    ProjectRepository::query()->update(ProjectRepository::GUARD);
+    AgentRun::query()->whereKey($run['id'])->update(['status' => RunStatus::Canceling->value]);
+    $renew(['attempt' => 1])->assertConflict()->assertJsonPath('reason', 'run_canceling');
+    AgentRun::query()->whereKey($run['id'])->update(['status' => RunStatus::Running->value]);
 
     ProjectRepository::query()->delete();
     $renew(['attempt' => 1])->assertConflict()->assertJsonPath('reason', 'no_repository');

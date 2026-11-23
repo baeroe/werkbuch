@@ -40,9 +40,7 @@ final class ProjectRepositoryResource extends JsonResource
                 'detected_at' => $link->guard_detected_at?->toJSON(),
                 'sha' => $link->guard_sha,
                 'branch' => $link->guard_branch,
-                'run_id' => $link->guard_run_id,
-                'item_id' => $link->guard_item_id,
-                'bot_id' => $link->guard_bot_id,
+                'runs' => $link->guard_runs ?? [],
             ],
             'updated_at' => $link->updated_at?->toJSON(),
         ];

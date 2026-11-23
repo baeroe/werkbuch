@@ -5,6 +5,9 @@ use App\Actions\GitHub\LinkRepository;
 use App\Actions\GitHub\SyncGitHub;
 use App\Events\EventType;
 use App\Exceptions\Problem;
+use App\GitHub\GitHubApi;
+use App\GitHub\GitHubUnavailable;
+use App\Models\GitHubApp;
 use App\Models\GitHubInstallation;
 use App\Models\GitHubRepository;
 use App\Models\Project;
@@ -55,6 +58,23 @@ it('reads installations and repos from GitHub, removes what is gone and keeps th
     $this->github->repositories[55_000_001][] = FakeGitHub::repositoryJson(700_000_009, 'feldwerk/alt');
     SyncGitHub::run(Actor::system($this->admin, 'test'));
     expect($other->fresh()->removed_at)->toBeNull();
+});
+
+it('never takes a list of repos as complete that GitHub answered only in part', function () {
+    $link = FakeGitHub::link($this->project);
+    // GitHub says there are 1 200 repos, but its pages end after one
+    $this->github->totalCount = 1_200;
+
+    expect(fn () => SyncGitHub::pull(GitHubApp::current()))->toThrow(GitHubUnavailable::class, 'GitHub answered 1200 rows of repositories but gave 1.')
+        ->and(fn () => SyncGitHub::run(Actor::system($this->admin, 'test')))->toThrow(Problem::class)
+        ->and(GitHubRepository::query()->whereNotNull('removed_at')->exists())->toBeFalse()
+        ->and($link->fresh()->repository->removed_at)->toBeNull();
+
+    // more pages than werkbuch reads: incomplete as well
+    $this->github->totalCount = null;
+    $this->github->endless = true;
+    expect(fn () => SyncGitHub::pull(GitHubApp::current()))->toThrow(GitHubUnavailable::class, 'GitHub answered more than '.GitHubApi::MAX_PAGES.' pages.')
+        ->and(GitHubRepository::query()->whereNotNull('removed_at')->exists())->toBeFalse();
 });
 
 it('syncs over REST for org admins only and answers 503 when GitHub refuses', function () {

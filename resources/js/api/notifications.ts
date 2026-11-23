@@ -64,6 +64,7 @@ export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = [
   'item_created',
   'template_run_failed',
   'webhook_disabled',
+  'merge_guard_detected',
 ];
 
 /** The whole matrix of events and channels for the signed-in person: their choices, the defaults for the rest. */

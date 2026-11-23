@@ -4,6 +4,7 @@ use App\Actions\GitHub\HandleGitHubDelivery;
 use App\Actions\GitHub\PruneGitHubDeliveries;
 use App\Domain\GitHub\WebhookSignature;
 use App\GitHub\GitHubUnavailable;
+use App\Http\Middleware\VerifyGitHubSignature;
 use App\Jobs\ProcessGitHubDelivery;
 use App\Jobs\PruneGitHubDeliveriesJob;
 use App\Models\GitHubApp;
@@ -92,6 +93,34 @@ it('lets the job try a sync again when GitHub does not answer and ignores delive
     (new ProcessGitHubDelivery($id))->handle();
     expect(GitHubDelivery::query()->sole()->outcome)->toBe('ignored');
     Http::assertNotSent(fn ($request) => str_contains($request->url(), 'installation/repositories'));
+});
+
+it('takes a signed delivery larger than the JSON limit of the API, up to the 25 MB of GitHub', function () {
+    Queue::fake([ProcessGitHubDelivery::class]);
+    // a push with many commits: over the 8 MiB of the API, under the 25 MB GitHub sends at most
+    $payload = ['zen' => 'Big', 'filler' => str_repeat('x', 10 * 1024 * 1024)];
+
+    FakeGitHub::deliver($this, 'ping', $payload, 'd-big')->assertStatus(202);
+    expect(strlen(GitHubDelivery::query()->sole()->payload))->toBeGreaterThan(10 * 1024 * 1024);
+
+    $this->call('POST', '/github/webhook', [], [], [], ['CONTENT_TYPE' => 'application/json', 'CONTENT_LENGTH' => (string) (VerifyGitHubSignature::MAX_BYTES + 1)], '{}')
+        ->assertStatus(413)->assertJsonPath('reason', 'payload_too_large')->assertJsonPath('detail', __('problem.detail.github_too_large'));
+});
+
+it('counts only unsigned requests against their address', function () {
+    Queue::fake([ProcessGitHubDelivery::class]);
+    foreach (range(1, VerifyGitHubSignature::UNSIGNED_PER_MINUTE) as $n) {
+        FakeGitHub::deliver($this, 'ping', ['zen' => 'x'], "u-{$n}", 'wrong secret')->assertUnauthorized();
+    }
+    FakeGitHub::deliver($this, 'ping', ['zen' => 'x'], 'u-last', 'wrong secret')->assertStatus(429)->assertHeader('Retry-After');
+
+    // GitHub itself (signed) is never throttled, not even from the same address
+    foreach (range(1, VerifyGitHubSignature::UNSIGNED_PER_MINUTE + 5) as $n) {
+        FakeGitHub::deliver($this, 'ping', ['zen' => 'x'], "s-{$n}")->assertStatus(202);
+    }
+
+    $this->travel(61)->seconds();
+    FakeGitHub::deliver($this, 'ping', ['zen' => 'x'], 'u-again', 'wrong secret')->assertUnauthorized();
 });
 
 it('forgets deliveries after 30 days', function () {

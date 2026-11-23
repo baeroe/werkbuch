@@ -12,9 +12,9 @@ export type Choices = Record<string, boolean>;
 export const cellKey = (event: NotificationEvent, channel: NotificationChannel): string => `${event}:${channel}`;
 
 /** The mails that are on until somebody chooses otherwise (`NotificationKind::mailByDefault()`). */
-const MAIL_BY_DEFAULT: readonly NotificationEvent[] = ['assigned', 'mentioned', 'comment', 'due'];
+const MAIL_BY_DEFAULT: readonly NotificationEvent[] = ['assigned', 'mentioned', 'comment', 'due', 'merge_guard_detected'];
 
-/** What a person gets without having chosen: the inbox for every event, mail for the four above. */
+/** What a person gets without having chosen: the inbox for every event, mail for the five above. */
 export function defaultEnabled(event: NotificationEvent, channel: NotificationChannel): boolean {
   return channel === 'inbox' || MAIL_BY_DEFAULT.includes(event);
 }

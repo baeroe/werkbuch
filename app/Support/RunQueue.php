@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Actions\AgentRuns\ClaimRun;
 use App\Actions\GitHub\DetectUnauthorizedPush;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
@@ -43,7 +44,7 @@ final class RunQueue
     }
 
     /**
-     * Why a run cannot start now: its agent is off (`agent_off`), the guard holds its project (`merge_guard`), no runner of the pool has its CLI (`no_cli`), or the
+     * Why a run cannot start now: its agent is off (`agent_off`), the guard holds its project (`merge_guard`), GitHub gave no token a moment ago (`github_unavailable`), no runner of the pool has its CLI (`no_cli`), or the
      * runner of its strand is offline (`runner_offline`); null when a runner could take it.
      *
      * @param  Collection<int, Runner>  $runners  every runner that is not revoked
@@ -57,6 +58,10 @@ final class RunQueue
 
         if (in_array($run->project_id, $guarded, true)) {
             return DetectUnauthorizedPush::WAITING;
+        }
+
+        if ($run->retry_at !== null && $run->retry_at->isFuture()) {
+            return ClaimRun::GITHUB_UNAVAILABLE;
         }
 
         $pool = $runners->filter(fn (Runner $runner) => $config->pools($runner));

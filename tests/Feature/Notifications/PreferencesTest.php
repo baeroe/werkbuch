@@ -16,7 +16,7 @@ it('answers the defaults of the spec for a new person', function () use ($flat) 
 
     $rows = GetNotificationPreferences::run(actor($mara));
 
-    expect($rows)->toHaveCount(18)
+    expect($rows)->toHaveCount(20)
         ->and(collect($rows)->pluck('user_id')->unique()->all())->toBe([$mara->id])
         ->and($flat($rows))->toBe([
             'assigned:inbox' => true, 'assigned:mail' => true,
@@ -28,6 +28,7 @@ it('answers the defaults of the spec for a new person', function () use ($flat) 
             'item_created:inbox' => true, 'item_created:mail' => false,
             'template_run_failed:inbox' => true, 'template_run_failed:mail' => false,
             'webhook_disabled:inbox' => true, 'webhook_disabled:mail' => false,
+            'merge_guard_detected:inbox' => true, 'merge_guard_detected:mail' => true,
         ])
         ->and(array_keys($rows[0]))->toBe(['user_id', 'event', 'channel', 'enabled']);
 });
@@ -44,7 +45,7 @@ it('stores a choice and answers the whole matrix', function () use ($flat) {
         ['user_id' => $erik->id, 'event' => 'due', 'channel' => 'inbox', 'enabled' => false],
     ]]);
 
-    expect($rows)->toHaveCount(18)
+    expect($rows)->toHaveCount(20)
         ->and($flat($rows))->toMatchArray(['comment:mail' => false, 'state_changed:mail' => true, 'due:inbox' => false, 'comment:inbox' => true])
         ->and($flat(GetNotificationPreferences::run(actor($mara))))->toBe($flat($rows))
         ->and($flat(GetNotificationPreferences::run(actor($erik))))->toMatchArray(['comment:mail' => false, 'state_changed:mail' => false, 'due:inbox' => true]);

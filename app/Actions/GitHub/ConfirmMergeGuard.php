@@ -10,6 +10,7 @@ use App\Models\AgentThread;
 use App\Models\Project;
 use App\Models\ProjectRepository;
 use App\Support\Actor;
+use App\Support\CatalogLock;
 use App\Support\ProjectLock;
 use App\Support\RunQueue;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +35,7 @@ final class ConfirmMergeGuard
         Authorize::check($actor, 'manageRepository', $project);
 
         $link = DB::transaction(function () use ($actor, $project): ProjectRepository {
+            CatalogLock::share();
             $locked = ProjectLock::lock($project);
             $link = ProjectRepository::query()->lockForUpdate()->where('project_id', $locked->id)->first();
             if ($link === null || ! $link->guarded()) {

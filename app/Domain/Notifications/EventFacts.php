@@ -20,7 +20,7 @@ final readonly class EventFacts
      * @param  ?string  $templateAuthorId  who wrote the template of `template.run_failed` (`meta.author_id`)
      * @param  ?string  $causedBy  the person an automation or a template run acted for (`meta.on_behalf_of`, A342,
      *                             K12): left out like the actor
-     * @param  list<string>  $orgAdmins  the active people with the org role admin, for `webhook.disabled` (phase 11, K12)
+     * @param  list<string>  $orgAdmins  the active people with the org role admin, for `webhook.disabled` (phase 11, K12) and `project.merge_guard_detected` (WEBU-24)
      */
     public function __construct(
         public string $type,

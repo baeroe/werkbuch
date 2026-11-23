@@ -11,13 +11,15 @@ use Illuminate\Support\Facades\Http;
 /**
  * The calls werkbuch makes to the REST API of GitHub (spec 11.3), over Laravel's HTTP client: no state, no database.
  * Every call has the timeout of `werkbuch.github.timeout`; a refusal or no answer is GitHubUnavailable (`github`) with
- * path and status, never a body. Lists are read in pages of 100, at most `MAX_PAGES`.
+ * path and status, never a body. Lists are read in pages of 100 to their end; one that does not end within
+ * `MAX_PAGES` or holds fewer rows than its `total_count` is GitHubUnavailable as well: a sync never takes part of a
+ * list for all of it (a repo would look gone).
  */
 final class GitHubApi
 {
     public const API_VERSION = '2022-11-28';
 
-    public const MAX_PAGES = 10;
+    public const MAX_PAGES = 100;
 
     /**
      * Exchanges the temporary code of the manifest flow for the app (spec 10.2): `id`, `slug`, `name`, `owner`,
@@ -56,7 +58,7 @@ final class GitHubApi
             ->post('/app/installations/'.$installationId.'/access_tokens', $body), 'access_tokens'));
 
         if (! is_string($answer['token'] ?? null) || ! is_string($answer['expires_at'] ?? null)) {
-            throw new GitHubUnavailable(GitHubUnavailable::GITHUB, 'GitHub answered access_tokens without a token.');
+            throw new GitHubUnavailable(GitHubUnavailable::GITHUB, 'GitHub answered access_tokens without a token.', GitHubUnavailable::MALFORMED);
         }
 
         return ['token' => $answer['token'], 'expires_at' => $answer['expires_at']];
@@ -97,18 +99,24 @@ final class GitHubApi
     private static function pages(callable $page, ?string $key): array
     {
         $all = [];
+        $total = null;
         for ($number = 1; $number <= self::MAX_PAGES; $number++) {
             $data = self::json($page($number));
             $rows = $key === null ? $data : ($data[$key] ?? []);
             $rows = is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
+            $total = $key !== null && is_int($data['total_count'] ?? null) ? $data['total_count'] : $total;
             array_push($all, ...$rows);
             if (count($rows) < 100) {
-                break;
+                if ($total !== null && count($all) < $total) {
+                    throw new GitHubUnavailable(GitHubUnavailable::GITHUB, "GitHub answered {$total} rows of {$key} but gave ".count($all).'.', GitHubUnavailable::MALFORMED);
+                }
+
+                /** @var list<array<string, mixed>> $all */
+                return $all;
             }
         }
 
-        /** @var list<array<string, mixed>> $all */
-        return $all;
+        throw new GitHubUnavailable(GitHubUnavailable::GITHUB, 'GitHub answered more than '.self::MAX_PAGES.' pages.', GitHubUnavailable::MALFORMED);
     }
 
     /**

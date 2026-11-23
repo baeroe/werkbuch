@@ -42,8 +42,8 @@
             <dt>{{ __('github.page.app') }}</dt>
             <dd><a href="{{ $status['app']->html_url }}">{{ $status['app']->name }}</a> ({{ $status['app']->owner_login }})</dd>
         </dl>
-        @if ($manages)
-            <p><a href="{{ \App\GitHub\Manifest::installUrl($status['app']->slug) }}">{{ __('github.page.install') }}</a></p>
+        @if ($install !== null)
+            <p><a href="{{ $install }}">{{ __('github.page.install') }}</a></p>
         @endif
 
         <h2>{{ __('github.page.installations') }}</h2>

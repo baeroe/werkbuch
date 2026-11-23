@@ -5,25 +5,35 @@ use App\Actions\GitHub\ConfirmMergeGuard;
 use App\Actions\GitHub\DetectUnauthorizedPush;
 use App\Actions\GitHub\DisconnectGitHub;
 use App\Actions\GitHub\LinkRepository;
+use App\Actions\Notifications\NotifyRecipients;
+use App\Actions\Notifications\SendNotificationMail;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
+use App\Domain\Notifications\NotificationKind;
 use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Jobs\ProcessGitHubDelivery;
+use App\Jobs\SendNotificationMailJob;
+use App\Mail\NotificationDigest;
 use App\Models\AgentThread;
 use App\Models\Comment;
 use App\Models\GitHubApp;
 use App\Models\GitHubDelivery;
 use App\Models\GitHubInstallation;
 use App\Models\GitHubRepository;
+use App\Models\Notification;
+use App\Models\NotificationMail;
 use App\Models\Project;
 use App\Models\ProjectRepository;
 use App\Models\User;
 use App\Models\WorkItem;
+use App\Notifications\NotificationConsumer;
 use App\Support\Actor;
 use App\Support\OwnMerges;
 use App\Support\RunQueue;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 use Tests\Support\AgentWorld;
@@ -32,7 +42,7 @@ use Tests\Support\FakeGitHub;
 /*
  * The guard against an unauthorized merge (spec 11.3): a push of the app to the base branch of a project that no merge
  * of werkbuch explains pauses every strand of the project, cancels what runs and holds what waits, says so at the item
- * of the run and to the org admins, until an admin of the project confirms.
+ * of the runs it takes for the push and always to the org admins, until an admin of the project confirms.
  */
 
 beforeEach(function () {
@@ -57,7 +67,7 @@ it('pauses the threads of a project when the app pushes to its base branch outsi
 
     $link = $this->link->fresh();
     expect($link->guarded())->toBeTrue()
-        ->and([$link->guard_sha, $link->guard_branch, $link->guard_run_id, $link->guard_item_id, $link->guard_bot_id])->toBe([$sha, 'main', $running->id, $item->id, $this->agent->id])
+        ->and([$link->guard_sha, $link->guard_branch, $link->guard_runs])->toBe([$sha, 'main', [['run_id' => $running->id, 'item_id' => $item->id, 'bot_id' => $this->agent->id]]])
         ->and([$thread->fresh()->status, $thread->fresh()->pause_reason, $other->fresh()->status])->toBe([AgentThread::PAUSED, 'guard', AgentThread::PAUSED])
         ->and($running->fresh()->status)->toBe(RunStatus::Canceling)
         ->and([$queued->fresh()->status, $queued->fresh()->waiting_reason])->toBe([RunStatus::Waiting, 'merge_guard'])
@@ -66,13 +76,14 @@ it('pauses the threads of a project when the app pushes to its base branch outsi
 
     $event = eventsOf(EventType::ProjectMergeGuardDetected)->sole();
     expect($event->changes)->toBe(['guard' => ['old' => null, 'new' => $sha]])
-        ->and($event->meta)->toMatchArray(['branch' => 'main', 'run_id' => $running->id, 'item_id' => $item->id, 'paused' => 2, 'canceled' => 1]);
+        ->and($event->meta)->toMatchArray(['branch' => 'main', 'deleted' => false, 'item_ids' => [$item->id], 'paused' => 2, 'canceled' => 1]);
 
-    // werkbuch says so at the item of the run and mentions the org admins
+    // werkbuch says so at the item of the run, without mentions and without code marks, pointing to werkbuch
     $comment = Comment::query()->where('work_item_id', $item->id)->sole();
-    expect($comment->body_text)->toContain('main')->toContain('aaaaaaa')->toContain('WEB')->toContain('@mara')
+    expect($comment->body_text)->toContain('main')->toContain('aaaaaaa')->toContain('WEB')->not->toContain('@')
+        ->and(json_encode($comment->body))->not->toContain('"code"')
         ->and($comment->author_id)->toBe(User::defaultBot()->id)
-        ->and(eventsOf(EventType::CommentCreated)->sole()->meta['mentioned'] ?? [])->toContain($this->admin->id);
+        ->and(eventsOf(EventType::CommentCreated)->sole()->meta)->not->toHaveKey('mentioned');
 
     // no run of the project starts while the guard holds it, and the reason stays
     [, $token] = AgentWorld::runner(['name' => 'second']);
@@ -85,7 +96,7 @@ it('pauses the threads of a project when the app pushes to its base branch outsi
     expect(eventsOf(EventType::ProjectMergeGuardDetected))->toHaveCount(1)->and($this->link->fresh()->guard_sha)->toBe($sha);
 });
 
-it('lets a merge of werkbuch, a push of a person, another branch or repo and a deleted branch pass', function () {
+it('lets a merge of werkbuch, a push of a person, another branch or repo and a deleted agent branch pass', function () {
     $merge = OwnMerges::expect($this->link->repository_id, 12);
     OwnMerges::merged($merge, str_repeat('C', 40));
     $act = fn (array $payload) => DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), $payload);
@@ -94,7 +105,8 @@ it('lets a merge of werkbuch, a push of a person, another branch or repo and a d
         ->and($act(FakeGitHub::push(str_repeat('d', 40), sender: 'rafael-feldwerk')))->toBe('ignored')
         ->and($act(FakeGitHub::push(str_repeat('d', 40), branch: 'agent/WEB-1-login')))->toBe('ignored')
         ->and($act(FakeGitHub::push(str_repeat('d', 40), repositoryId: 999)))->toBe('ignored')
-        ->and($act([...FakeGitHub::push(str_repeat('0', 40)), 'deleted' => true]))->toBe('ignored')
+        ->and($act([...FakeGitHub::push(str_repeat('0', 40)), 'before' => str_repeat('0', 40), 'deleted' => true]))->toBe('ignored')
+        ->and($act([...FakeGitHub::push(str_repeat('0', 40), branch: 'agent/WEB-1-login'), 'deleted' => true]))->toBe('ignored')
         ->and($act(['ref' => 'refs/tags/v1', 'after' => str_repeat('d', 40)]))->toBe('ignored')
         ->and($act([...FakeGitHub::push('nohex'), 'after' => 'nohex']))->toBe('ignored')
         ->and($this->link->fresh()->guarded())->toBeFalse();
@@ -120,22 +132,127 @@ it('waits with a push while a merge of werkbuch has no commit yet, then decides'
     expect($this->link->fresh()->guarded())->toBeTrue()->and(GitHubDelivery::query()->sole()->outcome)->toBe('foreign');
 });
 
-it('guards without an item when no or several code runs ran and in a project being deleted not at all', function () {
-    $act = fn (string $sha) => DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), FakeGitHub::push($sha));
-    [$runner] = AgentWorld::runner();
-    foreach ([1, 2] as $n) {
-        AgentWorld::run($this->agent, $this->project, RunType::Task, ['status' => RunStatus::Running, 'runner_id' => $runner->id, 'started_at' => now()]);
-    }
+it('takes the run that reported the commit, even when it finished before the push came', function () {
+    $sha = str_repeat('a', 40);
+    $item = WorkItem::factory()->create(['project_id' => $this->project->id]);
+    $other = WorkItem::factory()->create(['project_id' => $this->project->id]);
+    // the run pushed, reported its commit (short) and finished; the webhook comes later
+    $culprit = AgentWorld::run($this->agent, $item, RunType::Task, ['status' => RunStatus::Succeeded, 'started_at' => now()->subHours(3), 'finished_at' => now()->subHours(2), 'result' => ['summary' => 'Done', 'commit' => 'aaaaaaa']]);
+    // a code run that ran meanwhile is not taken: a commit names the culprit
+    AgentWorld::run($this->agent, $other, RunType::Task, ['status' => RunStatus::Succeeded, 'started_at' => now()->subMinutes(20), 'finished_at' => now()->subMinutes(10), 'result' => ['commit' => 'bbbbbbb']]);
 
-    expect($act(str_repeat('f', 40)))->toBe('foreign')
-        ->and($this->link->fresh()->guard_item_id)->toBeNull()
+    $this->travel(30)->minutes();
+    expect(DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), FakeGitHub::push($sha)))->toBe('foreign')
+        ->and($this->link->fresh()->guard_runs)->toBe([['run_id' => $culprit->id, 'item_id' => $item->id, 'bot_id' => $this->agent->id]])
+        ->and(Comment::query()->where('work_item_id', $item->id)->exists())->toBeTrue()
+        ->and(Comment::query()->where('work_item_id', $other->id)->exists())->toBeFalse();
+});
+
+it('takes a run by a commit the push brought besides the one it ended at', function () {
+    $item = WorkItem::factory()->create(['project_id' => $this->project->id]);
+    $culprit = AgentWorld::run($this->agent, $item, RunType::Correction, ['status' => RunStatus::Succeeded, 'started_at' => now()->subHours(2), 'finished_at' => now()->subHours(2), 'result' => ['commit' => 'cccccccccccc']]);
+    $push = FakeGitHub::push(str_repeat('d', 40));
+    $push['commits'][] = ['id' => str_repeat('c', 40), 'message' => 'Fix'];
+
+    DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), $push);
+    expect(array_column($this->link->fresh()->guard_runs, 'run_id'))->toBe([$culprit->id]);
+});
+
+it('takes every code run of the token time when no commit names one, and says it at each item', function () {
+    [$runner] = AgentWorld::runner();
+    $first = AgentWorld::run($this->agent, $this->project, RunType::Task, ['status' => RunStatus::Running, 'runner_id' => $runner->id, 'started_at' => now()->subMinutes(5)]);
+    $second = AgentWorld::run($this->agent, $this->project, RunType::Conflict, ['status' => RunStatus::Succeeded, 'started_at' => now()->subMinutes(40), 'finished_at' => now()->subMinutes(30), 'result' => ['summary' => 'No commit']]);
+    // a run of the same item: one comment there
+    $again = AgentWorld::run($this->agent, $second->workItem, RunType::Task, ['status' => RunStatus::Failed, 'started_at' => now()->subMinutes(50), 'finished_at' => now()->subMinutes(45)]);
+    // outside the token time, never started, not a code run, another project: not taken
+    AgentWorld::run($this->agent, $this->project, RunType::Task, ['status' => RunStatus::Succeeded, 'started_at' => now()->subHours(3), 'finished_at' => now()->subMinutes(DetectUnauthorizedPush::TOKEN_MINUTES + 1)]);
+    AgentWorld::run($this->agent, $this->project, RunType::Task, ['status' => RunStatus::Canceled, 'finished_at' => now()->subMinutes(5)]);
+    AgentWorld::run($this->agent, $this->project, RunType::Review, ['status' => RunStatus::Succeeded, 'started_at' => now()->subMinutes(5), 'finished_at' => now()->subMinutes(2)]);
+    AgentWorld::run($this->agent, Project::factory()->create(), RunType::Task, ['status' => RunStatus::Running, 'runner_id' => $runner->id, 'started_at' => now()]);
+
+    expect(DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), FakeGitHub::push(str_repeat('f', 40))))->toBe('foreign')
+        ->and(array_column($this->link->fresh()->guard_runs, 'run_id'))->toBe([$first->id, $second->id, $again->id])
+        ->and(Comment::query()->pluck('work_item_id')->sort()->values()->all())->toBe(collect([$first->work_item_id, $second->work_item_id])->sort()->values()->all());
+});
+
+it('guards without any run and tells the org admins, and in a project being deleted not at all', function () {
+    consumers(NotificationConsumer::class);
+    config(['mail.default' => 'smtp']);
+    Mail::fake();
+    Queue::fake([SendNotificationMailJob::class]);
+    $member = memberOf($this->project, ProjectRole::Admin);
+
+    expect(DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), FakeGitHub::push(str_repeat('f', 40))))->toBe('foreign')
+        ->and($this->link->fresh()->guard_runs)->toBe([])
         ->and(Comment::query()->exists())->toBeFalse();
+
+    // the org admins hear of it every time, without an item, with a mail of its own; an admin of the project does not
+    $notification = Notification::query()->where('user_id', $this->admin->id)->sole();
+    expect([$notification->kind, $notification->work_item_id, $notification->project_id, $notification->inbox])->toBe([NotificationKind::MergeGuardDetected, null, $this->project->id, true])
+        ->and($notification->data)->toBe(['sha' => str_repeat('f', 40), 'branch' => 'main', 'deleted' => false, 'item_ids' => []])
+        ->and(Notification::query()->where('user_id', $member->id)->exists())->toBeFalse()
+        ->and(NotificationMail::query()->where('user_id', $this->admin->id)->sole()->scope)->toBe("guard:{$this->project->id}");
+
+    SendNotificationMail::run(Actor::system(User::defaultBot(), 'test'), NotificationMail::query()->where('user_id', $this->admin->id)->sole()->id);
+    Mail::assertSent(NotificationDigest::class, fn (NotificationDigest $mail) => $mail->hasTo($this->admin->email)
+        && str_contains($mail->render(), 'fffffff') && str_contains($mail->render(), '/projects/WEB/settings')
+        && $mail->envelope()->subject === __('mail.notifications.guard.subject', ['identifier' => 'WEB']));
 
     $deleting = Project::factory()->create(['deleting_at' => now()]);
     $repository = GitHubRepository::factory()->create(['installation_id' => GitHubInstallation::query()->value('id'), 'github_id' => 700_000_005, 'full_name' => 'feldwerk/gone']);
     ProjectRepository::factory()->create(['project_id' => $deleting->id, 'repository_id' => $repository->id]);
     expect(DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), FakeGitHub::push(str_repeat('f', 40), repositoryId: 700_000_005, fullName: 'feldwerk/gone')))->toBe('foreign')
         ->and(ProjectRepository::query()->where('project_id', $deleting->id)->sole()->guarded())->toBeFalse();
+});
+
+it('sends no mail of a guard that an admin confirmed meanwhile', function () {
+    consumers(NotificationConsumer::class);
+    config(['mail.default' => 'smtp']);
+    Mail::fake();
+    Queue::fake([SendNotificationMailJob::class]);
+    DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), FakeGitHub::push(str_repeat('f', 40)));
+    ConfirmMergeGuard::run(Actor::system($this->admin, 'test'), $this->project);
+
+    expect(SendNotificationMail::run(Actor::system(User::defaultBot(), 'test'), NotificationMail::query()->where('user_id', $this->admin->id)->sole()->id))->toBe(NotificationMail::SKIPPED);
+    Mail::assertNothingSent();
+});
+
+it('tells nobody of a guard whose project is being deleted when it is consumed', function () {
+    DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), FakeGitHub::push(str_repeat('f', 40)));
+    $this->project->forceFill(['deleting_at' => now()])->save();
+
+    expect(NotifyRecipients::run(Actor::system(User::defaultBot(), 'test'), eventsOf(EventType::ProjectMergeGuardDetected)->sole()))->toBe(0)
+        ->and(Notification::query()->exists())->toBeFalse();
+});
+
+it('counts the app deleting the base branch', function () {
+    $item = WorkItem::factory()->create(['project_id' => $this->project->id]);
+    $culprit = AgentWorld::run($this->agent, $item, RunType::Task, ['status' => RunStatus::Succeeded, 'started_at' => now()->subMinutes(10), 'finished_at' => now()->subMinutes(5)]);
+    $sha = str_repeat('9', 40);
+    $push = [...FakeGitHub::push(str_repeat('0', 40)), 'before' => $sha, 'deleted' => true, 'commits' => [], 'head_commit' => null];
+    // werkbuch never deletes a base branch: not even a merge of its own explains it
+    OwnMerges::merged(OwnMerges::expect($this->link->repository_id, 3), $sha);
+
+    expect(DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), $push))->toBe('foreign')
+        ->and([$this->link->fresh()->guard_sha, array_column($this->link->fresh()->guard_runs, 'run_id')])->toBe([$sha, [$culprit->id]])
+        ->and(eventsOf(EventType::ProjectMergeGuardDetected)->sole()->meta['deleted'])->toBeTrue()
+        ->and(Comment::query()->where('work_item_id', $item->id)->sole()->body_text)->toContain(__('github.guard.comment_deleted', ['branch' => 'main', 'sha' => '9999999', 'project' => 'WEB', 'run' => __('github.guard.run.task')]));
+});
+
+it('compares the base branch again under the lock', function () {
+    // the base branch changes between reading the link and locking it
+    $this->link->forceFill(['base_branch' => 'main'])->save();
+    $changed = false;
+    DB::connection()->beforeExecuting(function (string $sql) use (&$changed) {
+        if (! $changed && str_starts_with($sql, 'select * from `project_repositories`') && str_contains($sql, 'for update')) {
+            $changed = true;
+            DB::table('project_repositories')->update(['base_branch' => 'develop']);
+        }
+    });
+
+    expect(DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), FakeGitHub::push(str_repeat('a', 40))))->toBe('foreign')
+        ->and($this->link->fresh()->guarded())->toBeFalse()
+        ->and(eventsOf(EventType::ProjectMergeGuardDetected))->toHaveCount(0);
 });
 
 it('keeps the guard when the comment cannot be written', function () {

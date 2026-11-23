@@ -125,9 +125,9 @@ describe('matrix', () => {
     ]);
   });
 
-  it('has the inbox on for every event and mail on for assigned, mentioned, comment and due', () => {
+  it('has the inbox on for every event and mail on for assigned, mentioned, comment, due and an unauthorized merge', () => {
     const on = NOTIFICATION_EVENTS.filter((event) => defaultEnabled(event, 'mail'));
-    expect(on).toEqual(['assigned', 'mentioned', 'comment', 'due']);
+    expect(on).toEqual(['assigned', 'mentioned', 'comment', 'due', 'merge_guard_detected']);
     expect(NOTIFICATION_EVENTS.every((event) => defaultEnabled(event, 'inbox'))).toBe(true);
     expect(defaultsFor(['comment', 'item_changed'], ['mail'])).toEqual({ 'comment:mail': true, 'item_changed:mail': false });
   });
@@ -155,11 +155,12 @@ describe('Notifications', () => {
       'Neues Item im Projekt',
       'Vorlage fehlgeschlagen',
       'Webhook abgeschaltet',
+      'Eigenmächtiger Merge',
     ]);
     expect(rows[5]!.textContent).toContain('Deine zugewiesenen Items, täglich um 08:00 in deiner Zeitzone.');
 
-    // the inbox for everything, mail for four
-    for (const label of ['Zugewiesen', 'Erwähnt', 'Neuer Kommentar', 'Fällig oder überfällig']) expect(checked(label, 'E-Mail')).toBe(true);
+    // the inbox for everything, mail for five
+    for (const label of ['Zugewiesen', 'Erwähnt', 'Neuer Kommentar', 'Fällig oder überfällig', 'Eigenmächtiger Merge']) expect(checked(label, 'E-Mail')).toBe(true);
     for (const label of ['Statuswechsel', 'Sonstige Änderungen', 'Neues Item im Projekt', 'Vorlage fehlgeschlagen', 'Webhook abgeschaltet']) {
       expect(checked(label, 'E-Mail')).toBe(false);
     }
@@ -167,11 +168,12 @@ describe('Notifications', () => {
     expect(cell('Zugewiesen', 'E-Mail').getAttribute('aria-disabled')).not.toBe('true');
   });
 
-  it('leaves the webhooks out for members', async () => {
+  it('leaves the webhooks and the unauthorized merges out for members', async () => {
     signedIn = ida;
     renderSettings();
     await screen.findByRole('table');
     expect(screen.queryByRole('checkbox', { name: 'Webhook abgeschaltet, In-App' })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'Eigenmächtiger Merge, In-App' })).toBeNull();
     expect(screen.getAllByRole('rowheader')).toHaveLength(8);
   });
 

@@ -44,6 +44,12 @@ final class FakeGitHub
     /** @var array<string, int> path pattern → status GitHub refuses with */
     public array $refuse = [];
 
+    /** The `total_count` GitHub claims for the repos of an installation (null: as many as there are). */
+    public ?int $totalCount = null;
+
+    /** Whether the repos of an installation never end: every page is full. */
+    public bool $endless = false;
+
     public ?string $conversionPem = null;
 
     /** @var array<string, mixed> keys of the conversion answer to change (`null` removes one), for an answer GitHub should not give */
@@ -148,7 +154,13 @@ final class FakeGitHub
         $token = str_replace('Bearer ', '', $request->header('Authorization')[0] ?? '');
         $repositories = $this->repositories[$this->issuedFor[$token] ?? 0] ?? [];
 
-        return ['total_count' => count($repositories), 'repositories' => (int) ($request->data()['page'] ?? 1) === 1 ? $repositories : []];
+        if ($this->endless) {
+            $repositories = array_map(fn (int $n) => self::repositoryJson(800_000_000 + $n, "feldwerk/r{$n}"), range(1, (int) ($request->data()['per_page'] ?? 100)));
+
+            return ['total_count' => 1_000_000, 'repositories' => $repositories];
+        }
+
+        return ['total_count' => $this->totalCount ?? count($repositories), 'repositories' => (int) ($request->data()['page'] ?? 1) === 1 ? $repositories : []];
     }
 
     /** @return list<array<string, mixed>> */

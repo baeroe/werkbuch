@@ -51,8 +51,7 @@ final class StartManifest
             throw ValidationException::withMessages(['organization' => __('field.organization.github_login')]);
         }
 
-        $state = Str::random(40);
-        Cache::put(self::stateKey($state), $actor->user->id, now()->addMinutes(self::STATE_MINUTES));
+        $state = self::issueState($actor->user->id);
 
         return [
             'url' => Manifest::registerUrl($organization, $state),
@@ -61,8 +60,26 @@ final class StartManifest
         ];
     }
 
-    public static function stateKey(string $state): string
+    /**
+     * A state for a way back from GitHub (registering, installing; `purpose`), good for an hour and once, bound to the
+     * person.
+     */
+    public static function issueState(string $userId, string $purpose = 'manifest'): string
     {
-        return 'github-manifest:'.hash('sha256', $state);
+        $state = Str::random(40);
+        Cache::put(self::stateKey($state, $purpose), $userId, now()->addMinutes(self::STATE_MINUTES));
+
+        return $state;
+    }
+
+    /** Whether the state is the person's for this purpose; it is taken either way. */
+    public static function takeState(mixed $state, string $userId, string $purpose = 'manifest'): bool
+    {
+        return is_string($state) && Cache::pull(self::stateKey($state, $purpose)) === $userId;
+    }
+
+    public static function stateKey(string $state, string $purpose = 'manifest'): string
+    {
+        return 'github-'.$purpose.':'.hash('sha256', $state);
     }
 }
