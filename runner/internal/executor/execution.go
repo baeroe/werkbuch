@@ -127,3 +127,6 @@ func (e *Execution) Finished() bool {
 	defer e.mu.Unlock()
 	return e.status == "finished"
 }
+
+// Feed adds lines to the log of an execution as a run would (tests of the socket).
+func Feed(e *Execution, events ...protocol.Event) { e.add(events) }

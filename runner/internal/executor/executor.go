@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -53,9 +54,24 @@ type Executor struct {
 	Retry time.Duration
 	// LookPath finds the binary of a CLI (tests point it at a fake).
 	LookPath func(string) (string, error)
+
+	once  sync.Once
+	pulse atomic.Int64
 }
 
-func (x *Executor) defaults() {
+// SetHeartbeat changes the interval of heartbeats (werkbuch names it in every answer).
+func (x *Executor) SetHeartbeat(d time.Duration) { x.pulse.Store(int64(d)) }
+
+func (x *Executor) heartbeat() time.Duration {
+	if d := time.Duration(x.pulse.Load()); d > 0 {
+		return d
+	}
+	return x.Heartbeat
+}
+
+func (x *Executor) defaults() { x.once.Do(x.setDefaults) }
+
+func (x *Executor) setDefaults() {
 	if x.Grace == 0 {
 		x.Grace = 10 * time.Second
 	}
@@ -338,7 +354,7 @@ func (x *Executor) watch(ctx context.Context, e *Execution, s *sender, waited ch
 	deadline := run.Deadline(e.Started)
 	limit := time.NewTimer(time.Until(deadline))
 	defer limit.Stop()
-	interval := x.Heartbeat
+	interval := x.heartbeat()
 	beat := time.NewTimer(interval)
 	defer beat.Stop()
 
