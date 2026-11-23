@@ -1,19 +1,18 @@
 /*
- * GitHub (WEBU-18, spec 10.2 and 11.3). Not connected: two steps, each a manifest flow at GitHub (name, rights,
- * webhook address and the way back are filled in), first the agent app, then the review app, both installed on the
- * same repos. Connected: the state of both apps, the repos (only those with both apps can be chosen by a project), the
- * ruleset every repo needs, and "Trennen". Private keys and webhook secrets stay on the server and never show.
+ * GitHub (WEBU-18, spec 10.2 and 11.3). Not connected: one step, the manifest flow of the one app at GitHub (name,
+ * rights, webhook address and the way back are filled in) and its installation on the repos. Connected: the state of
+ * the app, the repos with whether a ruleset protects the base branch (only shown: werkbuch detects an unauthorized
+ * merge either way), and "Trennen". Private key and webhook secret stay on the server and never show.
  */
 
-import { Check, ExternalLink, GitBranch, Lock, ShieldCheck, Unplug } from 'lucide-react';
+import { Check, ExternalLink, GitBranch, Lock, ShieldAlert, ShieldCheck, Unplug } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
-import { cx } from '@/components/ui/cx';
 import { toast } from '@/components/ui/toast';
 import { focusWhenLost } from '@/features/item-detail/shared';
-import { useConnectGithubApp, useDisconnectGithub, useGithub, useRepoOwners } from '@/hooks/agents';
+import { useConnectGithub, useDisconnectGithub, useGithub, useRepoOwners } from '@/hooks/agents';
 import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import { DEMO_ORIGIN } from '@/lib/links';
@@ -22,123 +21,62 @@ import { formatDate, useOrgZone } from './format';
 import { Badge, FormSkeleton, Loaded, Panel, Row, Rows, SectionHeader } from './parts';
 import type { SectionProps } from './sections';
 
-/** The page title takes the focus when the view under it changes (disconnected, both apps there). */
+/** The page title takes the focus when the view under it changes (connected, disconnected). */
 const GITHUB_TITLE = 'github-title';
 
-const AGENT_RIGHTS = ['Inhalte schreiben', 'Pull Requests schreiben', 'Checks lesen', 'Actions lesen', 'Metadaten lesen'];
-const REVIEW_RIGHTS = ['Pull Requests schreiben', 'Inhalte lesen', 'Metadaten lesen'];
+const RIGHTS = ['Inhalte schreiben', 'Pull Requests schreiben', 'Checks lesen', 'Actions lesen', 'Metadaten lesen'];
 
-/* -------------------------------------------------------------------------- steps */
+/* -------------------------------------------------------------------------- connect */
 
-type StepProps = {
-  number: 1 | 2;
-  title: string;
-  text: string;
-  rights: string[];
-  webhooks: boolean;
-  app: GithubApp | null;
-  /** The step before is not done yet: why this one waits. */
-  waitsFor: string | null;
-  pending: boolean;
-  onStart: () => void;
-};
-
-function Step({ number, title, text, rights, webhooks, app, waitsFor, pending, onStart }: StepProps) {
-  const done = app !== null;
-  return (
-    <li data-github-step={number} className="flex gap-3 px-4 py-4">
-      <span
-        className={cx('mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full border text-sm font-semibold tabular-nums', done ? 'border-transparent bg-accent text-on-accent' : 'border-line-strong text-ink')}
-        aria-hidden="true"
-      >
-        {done ? <Check className="size-4" strokeWidth={3} /> : number}
-      </span>
-      <div className="min-w-0 flex-1">
-        <h3 className="text-md font-semibold text-ink">
-          <span className="sr-only">{`Schritt ${number}${done ? ', erledigt' : ''}: `}</span>
-          {title}
-        </h3>
-        <p className="mt-0.5 max-w-[65ch] text-ui text-pretty text-muted">{text}</p>
-        <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
-          <dt className="text-muted">Rechte</dt>
-          <dd className="text-ink">{rights.join(', ')}</dd>
-          <dt className="text-muted">Webhooks</dt>
-          <dd className="break-all text-ink" translate="no">
-            {webhooks ? `${DEMO_ORIGIN}/github/webhook` : 'keine'}
-          </dd>
-        </dl>
-        <div className="mt-3">
-          {done ? (
-            <p className="text-ui text-ink">
-              <span className="font-semibold">{app.name}</span> ist angelegt und installiert.
-            </p>
-          ) : (
-            <Button variant={waitsFor ? 'secondary' : 'primary'} icon={ExternalLink} pending={pending} disabledReason={waitsFor} onClick={onStart}>
-              Bei GitHub anlegen
-            </Button>
-          )}
-        </div>
-      </div>
-    </li>
-  );
-}
-
-function ConnectSteps({ github }: { github: GithubConnection }) {
+function Connect() {
   const settle = useSettle();
-  const connect = useConnectGithubApp();
+  const connect = useConnectGithub();
 
-  function start(kind: 'agent' | 'review') {
-    settle(connect.mutateAsync(kind), {
+  function start() {
+    settle(connect.mutateAsync(undefined), {
       onSuccess: (next) => {
-        const app = kind === 'agent' ? next.agent_app : next.review_app;
-        toast({ title: `„${app?.name}“ angelegt`, description: kind === 'agent' ? 'Jetzt fehlt noch die Review-App.' : 'GitHub ist verbunden. Projekte können jetzt ein Repo wählen.', tone: 'success' });
-        // the button goes with its step: the focus goes on to step 2, or to the page once both are there
-        focusWhenLost(() => document.querySelector<HTMLElement>(kind === 'agent' ? '[data-github-step="2"] button' : `#${GITHUB_TITLE}`), 2000);
+        toast({ title: `„${next.app?.name}“ angelegt und installiert`, description: 'GitHub ist verbunden. Projekte können jetzt ein Repo wählen.', tone: 'success' });
+        // the button goes with the step: the focus goes to the page title above the connected view
+        focusWhenLost(() => document.getElementById(GITHUB_TITLE), 2000);
       },
-      onError: (error) => notifyError('GitHub-App nicht angelegt', error, () => start(kind)),
+      onError: (error) => notifyError('GitHub nicht verbunden', error, start),
     });
   }
 
   return (
-    <Panel title="Mit GitHub verbinden" description="Zwei Apps, einmalig: GitHub führt jeweils durch Anlegen und Installieren und kommt danach hierher zurück. Wähle bei beiden dieselben Repos.">
-      <ol className="divide-y divide-line">
-        <Step
-          number={1}
-          title="Agenten-App"
-          text="Pusht, öffnet Pull Requests und mergt, wenn CI und Freigabe auf demselben Commit grün sind. Meldet werkbuch Pushes, PRs und Checks. Vorgeschlagener Name: Feldwerk werkbuch."
-          rights={AGENT_RIGHTS}
-          webhooks
-          app={github.agent_app}
-          waitsFor={null}
-          pending={connect.isPending && connect.variables === 'agent'}
-          onStart={() => start('agent')}
-        />
-        <Step
-          number={2}
-          title="Review-App"
-          text="Gibt Pull Requests frei, wenn das Review eines Agenten keine Befunde hat. Pusht nie. Vorgeschlagener Name: Feldwerk werkbuch review."
-          rights={REVIEW_RIGHTS}
-          webhooks={false}
-          app={github.review_app}
-          waitsFor={github.agent_app === null ? 'Lege zuerst die Agenten-App an.' : null}
-          pending={connect.isPending && connect.variables === 'review'}
-          onStart={() => start('review')}
-        />
-      </ol>
+    <Panel title="Mit GitHub verbinden" description="Eine App, einmalig: GitHub führt durch Anlegen und Installieren und kommt danach hierher zurück. Wähle dabei die Repos, an denen Agenten arbeiten sollen.">
+      <div className="flex flex-col gap-3 p-4">
+        <p className="max-w-[65ch] text-ui text-pretty text-ink">
+          Die App pusht, öffnet Pull Requests, schreibt Reviews und mergt, wenn CI grün ist und das Review keine Befunde hat. Sie meldet werkbuch Pushes, PRs und Checks. Vorgeschlagener Name: Feldwerk
+          werkbuch.
+        </p>
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+          <dt className="text-muted">Rechte</dt>
+          <dd className="text-ink">{RIGHTS.join(', ')}</dd>
+          <dt className="text-muted">Webhooks</dt>
+          <dd className="break-all text-ink" translate="no">
+            {`${DEMO_ORIGIN}/github/webhook`}
+          </dd>
+        </dl>
+        <div>
+          <Button variant="primary" icon={ExternalLink} pending={connect.isPending} onClick={start}>
+            Mit GitHub verbinden
+          </Button>
+        </div>
+      </div>
     </Panel>
   );
 }
 
 /* ---------------------------------------------------------------------- connected */
 
-function AppRow({ role, app }: { role: string; app: GithubApp }) {
+function AppRow({ app }: { app: GithubApp }) {
   const zone = useOrgZone();
   return (
     <Row className="items-start">
       <div className="min-w-0 flex-1 basis-64">
         <p className="flex flex-wrap items-center gap-2">
           <span className="font-semibold text-ink">{app.name}</span>
-          <Badge tone="quiet">{role}</Badge>
           {app.installed && <Badge icon={Check}>Installiert</Badge>}
         </p>
         <p className="mt-1 text-sm text-pretty text-muted">{`${app.permissions.join(', ')}. ${app.webhooks ? 'Webhooks an werkbuch.' : 'Keine Webhooks.'} Angelegt am ${formatDate(app.created_at, zone)}.`}</p>
@@ -171,7 +109,7 @@ function Connected({ github }: { github: GithubConnection }) {
       onSuccess: () => {
         afterDisconnect.current = document.getElementById(GITHUB_TITLE);
         setAsking(false);
-        toast({ title: 'GitHub getrennt', description: 'Lösche die beiden Apps bei GitHub, wenn du sie nicht mehr brauchst.', tone: 'success' });
+        toast({ title: 'GitHub getrennt', description: 'Lösche die App bei GitHub, wenn du sie nicht mehr brauchst.', tone: 'success' });
       },
       onError: (error) => notifyError('GitHub nicht getrennt', error, run),
     });
@@ -179,16 +117,13 @@ function Connected({ github }: { github: GithubConnection }) {
 
   return (
     <>
-      <Panel title="Apps">
-        <Rows label="GitHub-Apps">
-          {github.agent_app && <AppRow role="Agenten-App" app={github.agent_app} />}
-          {github.review_app && <AppRow role="Review-App" app={github.review_app} />}
-        </Rows>
+      <Panel title="App">
+        <Rows label="GitHub-App">{github.app && <AppRow app={github.app} />}</Rows>
       </Panel>
 
       <Panel
         title="Repos"
-        description="Ein Projekt wählt sein Repo in den Projekteinstellungen unter „Agenten“. Wählbar sind nur Repos, auf denen beide Apps installiert sind; ein Repo gehört höchstens einem Projekt."
+        description="Ein Projekt wählt sein Repo in den Projekteinstellungen unter „Agenten“; ein Repo gehört höchstens einem Projekt. Ob ein Ruleset den Basis-Branch schützt, steht nur zur Information da."
         actions={
           <a
             href="https://github.com/apps/feldwerk-werkbuch/installations/new"
@@ -204,7 +139,6 @@ function Connected({ github }: { github: GithubConnection }) {
       >
         <Rows label="Freigegebene Repos">
           {github.repos.map((repo) => {
-            const both = repo.agent_app && repo.review_app;
             const owner = ownerOf(repo.full_name);
             return (
               <Row key={repo.full_name}>
@@ -221,13 +155,17 @@ function Connected({ github }: { github: GithubConnection }) {
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {both ? <Badge icon={Check}>Beide Apps</Badge> : <Badge tone="danger">Review-App fehlt</Badge>}
+                  {repo.protected ? (
+                    <Badge icon={ShieldCheck}>{`Ruleset schützt ${repo.default_branch}`}</Badge>
+                  ) : (
+                    <Badge tone="quiet" icon={ShieldAlert}>{`${repo.default_branch} ohne Ruleset`}</Badge>
+                  )}
                   {owner ? (
                     <Badge tone="accent">
                       <span translate="no">{owner.identifier ?? 'anderes Projekt'}</span>
                     </Badge>
                   ) : (
-                    <span className="text-sm text-muted">{both ? 'Kein Projekt' : 'Nicht wählbar'}</span>
+                    <span className="text-sm text-muted">Kein Projekt</span>
                   )}
                 </div>
               </Row>
@@ -236,14 +174,15 @@ function Connected({ github }: { github: GithubConnection }) {
         </Rows>
       </Panel>
 
-      <Banner tone="info" icon={ShieldCheck} title="Ruleset für jedes Repo">
+      <Banner tone="info" icon={ShieldCheck} title="Ruleset empfohlen">
         <span className="block max-w-[65ch]">
-          Schütze den Standard-Branch mit einem Ruleset: Pull Request nötig, Check „tests“ muss grün sein, ein Approve, keine App und keine Person als Bypass. werkbuch mergt nur, wenn CI und die Freigabe der
-          Review-App auf demselben Commit grün sind. Ohne Bypass kann auch ein Agent, der sich etwas einreden lässt, weder mergen noch auf main pushen.
+          werkbuch mergt, wenn CI grün ist und das Review keine Befunde hat; die App ist dabei der einzige Weg auf den Basis-Branch. Ein Ruleset (Pull Request nötig, Check „tests“ grün, nur die App als
+          Bypass) verhindert, dass ein Agent, der sich etwas einreden lässt, selbst auf main pusht. Ohne Ruleset erkennt werkbuch einen eigenmächtigen Merge und pausiert alle Stränge des Projekts, bis
+          ein Projekt-Admin bestätigt.
         </span>
       </Banner>
 
-      <Panel title="Trennen" description="werkbuch vergisst beide Apps. Projekte verlieren ihr Repo, laufende Stränge halten an. Die Apps bleiben bei GitHub, bis du sie dort löschst.">
+      <Panel title="Trennen" description="werkbuch vergisst die App. Projekte verlieren ihr Repo, laufende Stränge halten an. Die App bleibt bei GitHub, bis du sie dort löschst.">
         <div className="p-4">
           <Button
             variant="secondary"
@@ -261,7 +200,7 @@ function Connected({ github }: { github: GithubConnection }) {
         open={asking}
         onOpenChange={setAsking}
         title="GitHub trennen?"
-        description="Kein Agent kann danach pushen oder PRs öffnen, und werkbuch hört keine Webhooks von GitHub mehr. Offene Stränge pausieren, laufende Aufträge werden abgebrochen; PRs und Branches bleiben bei GitHub. Zum Verbinden legst du die Apps neu an."
+        description="Kein Agent kann danach pushen oder PRs öffnen, und werkbuch hört keine Webhooks von GitHub mehr. Offene Stränge pausieren, laufende Aufträge werden abgebrochen; PRs und Branches bleiben bei GitHub. Zum Verbinden legst du die App neu an."
         confirmLabel="Trennen"
         pending={disconnect.isPending}
         finalFocus={afterDisconnect}
@@ -273,17 +212,17 @@ function Connected({ github }: { github: GithubConnection }) {
 
 export default function Github(_props: SectionProps) {
   const github = useGithub();
-  const connected = github.data?.agent_app != null && github.data?.review_app != null;
+  const connected = github.data?.app != null;
   return (
     <div className="flex flex-col gap-4">
       <SectionHeader
         titleId={GITHUB_TITLE}
         title="GitHub"
-        description="Über zwei GitHub-Apps arbeiten Agenten an Repos: Sie pushen und öffnen PRs als App der Instanz, nie als eine Person. Tokens gelten je Auftrag für ein Repo und eine Stunde."
+        description="Über eine GitHub-App arbeiten Agenten an Repos: Sie pushen und öffnen PRs als App der Instanz, nie als eine Person. Tokens gelten je Auftrag für ein Repo und eine Stunde."
         actions={connected ? <Badge tone="accent" icon={Check}>Verbunden</Badge> : undefined}
       />
       <Loaded queries={[github]} failure="Die Verbindung zu GitHub konnte nicht geladen werden" skeleton={<FormSkeleton label="GitHub wird geladen …" />}>
-        {() => (connected ? <Connected github={github.data!} /> : <ConnectSteps github={github.data!} />)}
+        {() => (connected ? <Connected github={github.data!} /> : <Connect />)}
       </Loaded>
     </div>
   );

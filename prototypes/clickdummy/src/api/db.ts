@@ -64,8 +64,9 @@ export const DB_KEY = 'werkbuch:db';
  * 9: the status per step of the agents belongs to the workflow, not to the project (WEBU-18).
  * 10: runners report their CLIs; Otto works with Codex; agents have no slots or time limits of their own (WEBU-18).
  * 11: working rules per kind of run in the organization, guidance per item type, project info; no bot instruction.
+ * 12: one GitHub app instead of two; repos say whether a ruleset protects the base branch; the merge guard.
  */
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 /** An earlier identifier of a project: keys like `OLD-12` keep resolving after a rename. */
 export interface ProjectAlias {

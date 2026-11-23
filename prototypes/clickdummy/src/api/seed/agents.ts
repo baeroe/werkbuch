@@ -9,7 +9,7 @@
  *   WEB-49  the brake: three corrections and a conflict, the strand is paused, the item is back with Mara
  *   WEB-47  two PRs of Jonas: one closed, one open with CI still running
  *   WEB-42  a draft PR of Ida, and a question to @kira that a `comment` run answered
- *   WEB-40  Lene's PR, reviewed and approved by Kira, merged
+ *   WEB-40  Lene's PR, reviewed by Kira with an approve at GitHub, merged
  *   OPS-15  assigned to Kira, but OPS has no agent settings: a plain assignment, and the detail says why
  *
  * "Now" is 2026-10-28 10:00 when the page loads. Everything is made up: hosts, repos, commits and logins.
@@ -183,7 +183,7 @@ export const agentRules: AgentRules = {
 };
 
 export const github: GithubConnection = {
-  agent_app: {
+  app: {
     name: 'Feldwerk werkbuch',
     slug: 'feldwerk-werkbuch',
     permissions: ['Inhalte schreiben', 'Pull Requests schreiben', 'Checks lesen', 'Actions lesen', 'Metadaten lesen'],
@@ -191,19 +191,12 @@ export const github: GithubConnection = {
     installed: true,
     created_at: at('10-20 16:05'),
   },
-  review_app: {
-    name: 'Feldwerk werkbuch review',
-    slug: 'feldwerk-werkbuch-review',
-    permissions: ['Pull Requests schreiben', 'Inhalte lesen', 'Metadaten lesen'],
-    webhooks: false,
-    installed: true,
-    created_at: at('10-20 16:09'),
-  },
+  // the website and the infrastructure have a ruleset on main, the customer app and the design tokens do not
   repos: [
-    { full_name: 'feldwerk/website', private: true, default_branch: 'main', agent_app: true, review_app: true },
-    { full_name: 'feldwerk/kunden-app', private: true, default_branch: 'main', agent_app: true, review_app: true },
-    { full_name: 'feldwerk/infrastruktur', private: true, default_branch: 'main', agent_app: true, review_app: true },
-    { full_name: 'feldwerk/design-tokens', private: false, default_branch: 'main', agent_app: true, review_app: false },
+    { full_name: 'feldwerk/website', private: true, default_branch: 'main', protected: true },
+    { full_name: 'feldwerk/kunden-app', private: true, default_branch: 'main', protected: false },
+    { full_name: 'feldwerk/infrastruktur', private: true, default_branch: 'main', protected: true },
+    { full_name: 'feldwerk/design-tokens', private: false, default_branch: 'main', protected: false },
   ],
 };
 
@@ -516,7 +509,7 @@ export const agentRuns: StoredRun[] = [
   }),
 
   // WEB-40: Lene's PR, reviewed and approved
-  run({ id: 'run_web40_review', type: 'review', status: 'succeeded', key: 'WEB-40', thread: null, runner: 'rn_studio', model: 'opus', source: 'bot', created: '10-23 13:39', started: '10-23 13:40', finished: '10-23 13:47', result: { verdict: 'approve', summary: 'Keine Befunde. Freigegeben.' } }),
+  run({ id: 'run_web40_review', type: 'review', status: 'succeeded', key: 'WEB-40', thread: null, runner: 'rn_studio', model: 'opus', source: 'bot', created: '10-23 13:39', started: '10-23 13:40', finished: '10-23 13:47', result: { verdict: 'approve', summary: 'Keine Befunde. Review „Approve“ bei GitHub gegeben.' } }),
 ];
 
 /* ---------------------------------------------------------------------------- PRs */
@@ -609,7 +602,7 @@ export const agentComments: Comment[] = [
   {
     ...comment('c_web44_review', 'WEB-44', 'kira', '10-28 09:49', ''),
     body: doc(
-      p('Review von PR #214 (Commit a41c9e2): Änderungen nötig.'),
+      p('Review von PR #214 (Commit a41c9e2): 2 Befunde.'),
       ul('Important: Dekorative Icons im Footer haben einen Alt-Text. Sie brauchen alt="", sonst liest der Screenreader „Pfeil“ vor (resources/views/partials/footer.blade.php:18).', 'Minor: Der Test prüft nur die Startseite. Die Leistungsseiten fehlen (tests/Feature/AltTextTest.php:12).'),
     ),
     run_id: 'run_web44_review',
@@ -628,7 +621,7 @@ export const agentComments: Comment[] = [
     run_id: 'run_web42_comment',
   },
   {
-    ...comment('c_web40_review', 'WEB-40', 'kira', '10-23 13:47', 'Review von PR #198 (Commit f0e1d2c): Freigegeben, keine Befunde.'),
+    ...comment('c_web40_review', 'WEB-40', 'kira', '10-23 13:47', 'Review von PR #198 (Commit f0e1d2c): Keine Befunde, bei GitHub mit „Approve“ bestätigt.'),
     run_id: 'run_web40_review',
   },
 ];

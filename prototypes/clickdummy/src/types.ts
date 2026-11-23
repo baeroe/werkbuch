@@ -831,7 +831,7 @@ export interface ModelRef {
 
 export interface ProjectAgents {
   project_id: string;
-  /** `owner/name` of a repo both apps are installed on; null: the project has no repo (runs end with a summary). */
+  /** `owner/name` of a repo the app is installed on; null: the project has no repo (runs end with a summary). */
   repo: string | null;
   base_branch: string;
   merge_method: MergeMethod;
@@ -856,6 +856,8 @@ export interface ProjectAgents {
   info: string;
   /** Only in answers: whether the project has saved its settings once; before that agents are off there. */
   configured?: boolean;
+  /** An unauthorized merge werkbuch detected and nobody confirmed yet; set by werkbuch only, never by a save. */
+  guard?: MergeGuard | null;
 }
 
 /**
@@ -880,14 +882,29 @@ export interface GithubRepo {
   full_name: string;
   private: boolean;
   default_branch: string;
-  agent_app: boolean;
-  review_app: boolean;
+  /** Whether a ruleset protects the base branch (spec 11.3); only shown, werkbuch works either way. */
+  protected: boolean;
 }
 
+/** The one GitHub app of the instance (spec 11.3): pushes, opens and merges PRs, writes reviews, gets the webhooks. */
 export interface GithubConnection {
-  agent_app: GithubApp | null;
-  review_app: GithubApp | null;
+  app: GithubApp | null;
+  /** The repos the app is installed on. */
   repos: GithubRepo[];
+}
+
+/**
+ * A push of the app to the base branch that did not come from a merge by werkbuch (spec 7.1): every strand of the
+ * project pauses until a project admin confirms.
+ */
+export interface MergeGuard {
+  detected_at: string;
+  branch: string;
+  sha: string;
+  /** The item whose run pushed, if werkbuch knows it. */
+  item_id: string | null;
+  item_key: string | null;
+  bot_id: string | null;
 }
 
 export type RunStatus = 'queued' | 'waiting' | 'running' | 'canceling' | 'succeeded' | 'failed' | 'canceled' | 'timed_out' | 'lost';
@@ -948,7 +965,7 @@ export interface AgentThread {
   conflicts: number;
   pr_number: number | null;
   /** Why a strand paused, when it was not a person or the brake: GitHub was disconnected. */
-  pause_reason?: 'github';
+  pause_reason?: 'github' | 'guard';
 }
 
 export interface PullRequestCheck {

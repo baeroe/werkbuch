@@ -66,7 +66,13 @@ function PullRequestRow({ pr }: { pr: PullRequestLink }) {
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <Badge tone={pr.state === 'open' && !pr.draft ? 'accent' : 'quiet'}>{state.label}</Badge>
           {pr.state === 'open' && !pr.draft && <Badge tone={ci.tone}>{ci.label}</Badge>}
-          {pr.review && (pr.review === 'approve' ? <Badge icon={CircleCheck}>Review: freigegeben</Badge> : <Badge tone="danger">Review: Änderungen nötig</Badge>)}
+          {pr.review &&
+            (pr.review === 'approve' ? (
+              // an agent's PR gets the verdict as a comment, a person's PR a GitHub review "Approve" (spec 7.2)
+              <Badge icon={CircleCheck}>{pr.author.kind === 'agent' ? 'Review: ohne Befunde' : 'Review: Approve'}</Badge>
+            ) : (
+              <Badge tone="danger">Review: Befunde</Badge>
+            ))}
           <span className="text-muted">von {author}</span>
           <span className="min-w-0 text-muted">
             <span translate="no" className="break-all">

@@ -17,6 +17,7 @@ import { conflict, makeCtx, newId, notFound, read, write, type Ctx } from './cli
 import { saveDb, type Db } from './db';
 import { moveItem, patchItem } from './itemRules';
 import { LOG_TEMPLATES, TASK_LOGS, type StoredRun, type StoredRunner } from './seed/agents';
+import { findProject } from './lookup';
 import { requireItem } from './workItems';
 
 /** A queued run starts this long after it was queued, when a runner is free. */
@@ -204,6 +205,10 @@ export function whyAssigneeIsNoAgent(db: Db, item: WorkItemRecord): string | nul
   const bot = db.users.find((user) => user.id === item.assignee_id);
   if (bot?.type !== 'bot') return null;
   const project = db.projects.find((entry) => entry.id === item.project_id)!;
+  // an unauthorized merge pauses the agents of the whole project until a project admin confirms (spec 7.1)
+  if (db.project_agents.find((entry) => entry.project_id === project.id)?.guard) {
+    return `In ${project.identifier} ist ein eigenmächtiger Merge erkannt: Die Agenten pausieren, bis ein Projekt-Admin ihn unter Projekteinstellungen → Agenten bestätigt.`;
+  }
   return whyNotHere(bot, db.agent_configs.find((entry) => entry.bot_id === bot.id) ?? null, {
     identifier: project.identifier,
     // a bot works where it is a member, never as a reader of a public project
@@ -409,4 +414,70 @@ export function runVisible(db: Db, me: User, run: StoredRun): boolean {
   const item = db.items.find((entry) => entry.id === run.item_id);
   const project = item && db.projects.find((entry) => entry.id === item.project_id);
   return Boolean(project && canSeeProject(db, me, project));
+}
+
+/* ---------------------------------------------------------------- unauthorized merge */
+
+/** The strands of a project, by the items they belong to. */
+function threadsOf(db: Db, projectId: string): AgentThread[] {
+  const items = new Set(db.items.filter((item) => item.project_id === projectId).map((item) => item.id));
+  return db.agent_threads.filter((thread) => items.has(thread.item_id));
+}
+
+/**
+ * Only in the click dummy: plays what the webhook would tell werkbuch, a push of the app to the base branch that no
+ * merge of werkbuch explains (spec 7.1). Every open strand of the project pauses and what runs is canceled; the push
+ * is told to have come from the running code run of the project, if there is one.
+ */
+export function simulateUnauthorizedMerge(projectId: string): Promise<{ paused: number }> {
+  return write((ctx) => {
+    const { db, me, stamp } = ctx;
+    const project = findProject(db, projectId);
+    if (!project) throw notFound('Das Projekt');
+    requireWritable(db, me, project, 'admin', 'Nur Projekt-Admins.');
+    const settings = db.project_agents.find((entry) => entry.project_id === project.id);
+    if (!settings?.repo) throw conflict('no_repo', `${project.identifier} hat kein Repo: ohne Basis-Branch gibt es keinen Merge.`);
+    const threads = threadsOf(db, project.id);
+    const pusher = db.agent_runs.find((run) => run.status === 'running' && CODE_RUNS.includes(run.type) && threads.some((thread) => thread.id === run.thread_id));
+    const item = pusher ? db.items.find((entry) => entry.id === pusher.item_id) : undefined;
+    settings.guard = { detected_at: stamp, branch: settings.base_branch, sha: 'a41c9e7', item_id: item?.id ?? null, item_key: item?.key ?? null, bot_id: pusher?.bot_id ?? null };
+    let paused = 0;
+    for (const thread of threads) {
+      if (thread.status !== 'open') continue;
+      thread.status = 'paused';
+      thread.pause_reason = 'guard';
+      cancelThread(ctx, thread.id, null);
+      paused += 1;
+    }
+    return { paused };
+  });
+}
+
+/**
+ * A project admin confirms the unauthorized merge was looked at (spec 7.1): the guard goes, and every strand it paused
+ * goes on where the item is still with its agent, with a correction on the strand (the brake counts on); the others
+ * stay paused and are given back as usual.
+ */
+export function confirmMergeGuard(projectId: string): Promise<{ resumed: number }> {
+  return write((ctx) => {
+    const { db, me } = ctx;
+    const project = findProject(db, projectId);
+    if (!project) throw notFound('Das Projekt');
+    requireWritable(db, me, project, 'admin', 'Einen eigenmächtigen Merge bestätigen nur Admins des Projekts.');
+    const settings = db.project_agents.find((entry) => entry.project_id === project.id);
+    if (!settings?.guard) throw conflict('nothing_to_confirm', 'Es gibt keinen eigenmächtigen Merge zu bestätigen.');
+    settings.guard = null;
+    let resumed = 0;
+    for (const thread of threadsOf(db, project.id)) {
+      if (thread.status !== 'paused' || thread.pause_reason !== 'guard') continue;
+      delete thread.pause_reason;
+      const item = db.items.find((entry) => entry.id === thread.item_id)!;
+      const bot = agentBot(db, thread.bot_id);
+      if (!bot || item.assignee_id !== bot.id || whyAssigneeIsNoAgent(db, item)) continue;
+      thread.status = 'open';
+      queueRun(ctx, bot, item, thread, 'correction');
+      resumed += 1;
+    }
+    return { resumed };
+  });
 }

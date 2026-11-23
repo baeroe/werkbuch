@@ -138,7 +138,7 @@ export function getProjectAgents(project_id: string): Promise<ProjectAgents> {
 }
 
 /**
- * Saves the agent settings of a project. Checked: a repo both apps are installed on that belongs to no other project
+ * Saves the agent settings of a project. Checked: a repo the app is installed on that belongs to no other project
  * (1:1), the brakes, the review bot. The status per step is the workflow's (spec 7.4).
  */
 export function saveProjectAgents(input: ProjectAgents): Promise<ProjectAgents> {
@@ -149,7 +149,6 @@ export function saveProjectAgents(input: ProjectAgents): Promise<ProjectAgents> 
     if (input.repo !== null) {
       const repo = db.github.repos.find((entry) => entry.full_name === input.repo);
       if (!repo) errors.add('repo', 'Dieses Repo ist nicht freigegeben.');
-      else if (!repo.agent_app || !repo.review_app) errors.add('repo', 'Auf diesem Repo sind nicht beide GitHub-Apps installiert.');
       const owner = db.project_agents.find((settings) => settings.repo === input.repo && settings.project_id !== project.id);
       if (owner) errors.add('repo', `Das Repo gehört schon zum Projekt ${projectOrThrow(db, owner.project_id).identifier}. Ein Repo gehört höchstens einem Projekt.`);
     }
@@ -167,9 +166,12 @@ export function saveProjectAgents(input: ProjectAgents): Promise<ProjectAgents> 
       else if (!db.agent_configs.find((config) => config.bot_id === reviewer.id)?.enabled) errors.add('review_bot_id', `${reviewer.name} arbeitet nicht als Agent. Schalte „Als Agent arbeiten“ in den Einstellungen des Bots ein.`);
     }
     errors.throwIfAny();
-    const { configured: _configured, ...fields } = input;
+    const { configured: _configured, guard: _guard, ...fields } = input;
+    const previous = db.project_agents.find((settings) => settings.project_id === project.id);
     const stored: ProjectAgents = {
       ...fields,
+      // a detected unauthorized merge is werkbuch's to set and a project admin's to confirm, never a save's
+      guard: previous?.guard ?? null,
       base_branch: input.base_branch.trim(),
       setup_command: input.setup_command.trim(),
       teardown_command: input.teardown_command.trim(),

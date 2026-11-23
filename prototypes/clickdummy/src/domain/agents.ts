@@ -28,7 +28,7 @@ export const RUN_TYPE_HINTS: Record<RunType, string> = {
   task: 'Das Item umsetzen und einen PR öffnen. Startet, wenn ein Item dem Bot zugewiesen wird.',
   correction: 'Befunde aus CI oder Review abarbeiten und auf denselben PR pushen.',
   conflict: 'Die Basis in den Branch mergen und die Konflikte lösen.',
-  review: 'Einen PR prüfen, sobald CI grün ist. Nur lesen; werkbuch gibt frei und mergt.',
+  review: 'Einen PR prüfen, sobald CI grün ist. Nur lesen: bei PRs der Agenten steht das Urteil als Kommentar am PR und werkbuch mergt ohne Befunde; bei PRs von Personen gibt die App ein Review „Approve“ oder einen Kommentar.',
   comment: 'Eine Frage beantworten, wenn jemand den Bot in einem Kommentar erwähnt. Nur lesen.',
 };
 

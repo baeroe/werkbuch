@@ -5,6 +5,7 @@ import { archiveProject, getProject, updateProject } from '@/api/projects';
 import { dismissToast, runToastAction } from '@/components/ui/toast';
 import { listCommands } from '@/lib/commands';
 import { getProjectAgents } from '@/api/agents';
+import { simulateUnauthorizedMerge } from '@/api/runs';
 import { failure } from '@/test/api';
 import { renderSettings, textbox, toastTitled, useSettingsTestSetup } from './testing';
 
@@ -439,5 +440,33 @@ describe('the models of a project', () => {
     expect(await screen.findByText('Agenten in OPS noch nicht eingerichtet')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: /^Speichern/ }));
     await waitFor(async () => expect((await getProjectAgents('p_ops')).configured).toBe(true));
+  });
+});
+
+describe('an unauthorized merge in a project', () => {
+  it('shows the banner, and a project admin confirms and goes on', async () => {
+    const user = userEvent.setup();
+    await simulateUnauthorizedMerge('p_web');
+    renderSettings('/projects/WEB/settings/agents');
+    expect(await screen.findByText('Eigenmächtiger Merge erkannt: WEB pausiert')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'WEB-51' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Bestätigen und fortsetzen' }));
+    await waitFor(async () => expect((await getProjectAgents('p_web')).guard).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Eigenmächtiger Merge erkannt: WEB pausiert')).toBeNull());
+  });
+
+  it('lets readers see it without the button', async () => {
+    await simulateUnauthorizedMerge('p_web');
+    renderSettings('/projects/WEB/settings/agents', 'u_theo');
+    expect(await screen.findByText('Eigenmächtiger Merge erkannt: WEB pausiert')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Bestätigen und fortsetzen' })).toBeNull();
+  });
+
+  it('offers the demo only in the click dummy, for project admins of a project with a repo', async () => {
+    const user = userEvent.setup();
+    renderSettings('/projects/WEB/settings/agents');
+    await user.click(await screen.findByRole('button', { name: 'Eigenmächtigen Merge auslösen' }));
+    expect(await screen.findByText('Eigenmächtiger Merge erkannt: WEB pausiert')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Bestätigen und fortsetzen' })));
   });
 });

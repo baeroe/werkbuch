@@ -15,11 +15,12 @@
  * Everybody in the project reads; project admins change it.
  */
 
-import { CircleAlert, GitBranch } from 'lucide-react';
+import { CircleAlert, GitBranch, ShieldAlert } from 'lucide-react';
 import { useMemo, useRef, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar';
 import { Banner } from '@/components/ui/Banner';
+import { Button } from '@/components/ui/Button';
 import { ToneDot } from '@/components/ui/Chip';
 import { Input } from '@/components/ui/Input';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
@@ -32,14 +33,17 @@ import { toast } from '@/components/ui/toast';
 import { AGENT_STEPS, categoriesText, isModelLabel, mappingComplete, missingSteps, RUN_TYPE_NAMES, RUN_TYPES, STEP_CATEGORIES, STEP_HINTS, STEP_NAMES } from '@/domain/agents';
 import { ModelChoice } from '@/features/agents/ModelField';
 import { SaveBar } from '@/features/agents/SaveBar';
-import { useAgentBotIds, useAgentModels, useGithub, useProjectAgents, useRepoOwners, useSaveProjectAgents } from '@/hooks/agents';
+import { useAgentBotIds, useAgentModels, useConfirmMergeGuard, useGithub, useSimulateUnauthorizedMerge, useProjectAgents, useRepoOwners, useSaveProjectAgents } from '@/hooks/agents';
 import { useLabels } from '@/hooks/catalog';
 import { useMembers } from '@/hooks/projects';
 import { useUsers } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
+import { focusWhenLost } from '@/features/item-detail/shared';
+import { useSettle } from '@/hooks/mutation';
+import { formatDateTime, useOrgZone } from '@/features/settings/org/format';
 import { notifyError } from '@/lib/errors';
 import { usePermissions } from '@/lib/permissions';
-import type { AgentStep, Label, MergeMethod, ModelRef, ProjectAgents, RunType, User, Workflow } from '@/types';
+import type { AgentStep, Label, MergeGuard, MergeMethod, ModelRef, ProjectAgents, RunType, User, Workflow } from '@/types';
 import { fieldErrors, useDraft, useFieldErrors, useSaveShortcut } from './form';
 import type { SectionProps } from './sectionProps';
 import { SettingsCard, SettingsError, SettingsSkeleton, UnsavedGuard } from './SettingsParts';
@@ -167,6 +171,83 @@ function ModelLabels({ labels, canManage }: { labels: readonly Label[]; canManag
   );
 }
 
+/* ------------------------------------------------------------------- unauthorized merge */
+
+/**
+ * werkbuch detected a push of the app to the base branch that no merge of werkbuch explains (spec 7.1): every strand
+ * of the project pauses until a project admin confirms; the strands then go on with a correction.
+ */
+function MergeGuardBanner({ project, guard, canManage }: { project: SectionProps['project']; guard: MergeGuard; canManage: boolean }) {
+  const settle = useSettle();
+  const confirm = useConfirmMergeGuard();
+  const zone = useOrgZone();
+  function run() {
+    settle(confirm.mutateAsync(project.id), {
+      onSuccess: ({ resumed }) => {
+        toast({ title: 'Merge bestätigt', description: resumed > 0 ? `${resumed === 1 ? 'Ein Strang macht' : `${resumed} Stränge machen`} mit einer Korrektur weiter.` : 'Die Agenten arbeiten wieder; pausiert war kein Strang mehr beim Bot.', tone: 'success' });
+        // the banner goes with the confirm: the focus moves to the first field of the page
+        focusWhenLost(() => document.querySelector<HTMLElement>('[data-agents-form] button, [data-agents-form] input'), 2000);
+      },
+      onError: (error) => notifyError('Nicht bestätigt', error, run),
+    });
+  }
+  return (
+    <Banner
+      tone="danger"
+      icon={ShieldAlert}
+      title={`Eigenmächtiger Merge erkannt: ${project.identifier} pausiert`}
+      action={
+        canManage ? (
+          <Button variant="secondary" size="sm" pending={confirm.isPending} onClick={run} data-confirm-guard="">
+            Bestätigen und fortsetzen
+          </Button>
+        ) : undefined
+      }
+    >
+      <span className="block max-w-[65ch]">
+        {`Am ${formatDateTime(guard.detected_at, zone)} kam auf ${guard.branch} ein Push der App (${guard.sha}), den kein Merge von werkbuch erklärt`}
+        {guard.item_key ? (
+          <>
+            {', aus dem Auftrag von '}
+            <Link to={`/items/${guard.item_key}`} className="font-medium text-accent-text underline-offset-2 hover:underline">
+              {guard.item_key}
+            </Link>
+          </>
+        ) : null}
+        {'. Alle Stränge des Projekts pausieren. '}
+        {canManage
+          ? 'Prüfe den Commit bei GitHub, mach ihn bei Bedarf rückgängig und bestätige dann; die Stränge machen mit einer Korrektur weiter. Ein Ruleset auf dem Basis-Branch verhindert solche Pushes.'
+          : 'Ein Admin des Projekts prüft den Commit und bestätigt; danach machen die Stränge weiter.'}
+      </span>
+    </Banner>
+  );
+}
+
+/** Only in the click dummy: what werkbuch does when the webhook reports such a push. */
+function DemoGuard({ project }: { project: SectionProps['project'] }) {
+  const settle = useSettle();
+  const simulate = useSimulateUnauthorizedMerge();
+  function run() {
+    settle(simulate.mutateAsync(project.id), {
+      onSuccess: ({ paused }) => {
+        toast({ title: 'Eigenmächtiger Merge erkannt', description: `${paused === 1 ? 'Ein Strang pausiert' : `${paused} Stränge pausieren`}.` });
+        focusWhenLost(() => document.querySelector<HTMLElement>('[data-confirm-guard]'), 2000);
+      },
+      onError: (error) => notifyError('Nicht ausgelöst', error, run),
+    });
+  }
+  return (
+    <section aria-label="Nur im Klickdummy" className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-dashed border-line-strong px-4 py-3">
+      <p className="max-w-[60ch] text-sm text-pretty text-muted">
+        <span className="font-medium text-ink">Nur im Klickdummy:</span> Was werkbuch tut, wenn die App auf den Basis-Branch pusht, ohne dass werkbuch gemergt hat.
+      </p>
+      <Button variant="secondary" size="sm" pending={simulate.isPending} onClick={run}>
+        Eigenmächtigen Merge auslösen
+      </Button>
+    </section>
+  );
+}
+
 /* ------------------------------------------------------------------------- the screen */
 
 export function Agents({ project, canManage }: SectionProps) {
@@ -253,23 +334,23 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds,
     }
   }
 
-  const connected = github.agent_app !== null && github.review_app !== null;
+  const connected = github.app !== null;
   const repoOptions = [
     { value: NO_REPO, label: 'Kein Repo: Aufträge enden mit einer Zusammenfassung' },
     ...github.repos.map((repo) => {
       const owner = owners.find((entry) => entry.repo === repo.full_name && entry.project_id !== project.id);
-      const both = repo.agent_app && repo.review_app;
       return {
         value: repo.full_name,
-        label: owner ? `${repo.full_name} (gehört zu ${owner.identifier ?? 'einem anderen Projekt'})` : both ? repo.full_name : `${repo.full_name} (Review-App fehlt)`,
+        label: owner ? `${repo.full_name} (gehört zu ${owner.identifier ?? 'einem anderen Projekt'})` : repo.protected ? repo.full_name : `${repo.full_name} (ohne Ruleset)`,
         icon: <GitBranch className="size-4 text-muted" aria-hidden="true" />,
-        disabled: Boolean(owner) || !both,
+        disabled: Boolean(owner),
       };
     }),
   ];
 
   return (
-    <form ref={form} noValidate onSubmit={(event) => void submit(event)} className="flex flex-col gap-6">
+    <form ref={form} noValidate onSubmit={(event) => void submit(event)} data-agents-form="" className="flex flex-col gap-6">
+      {settings.guard && <MergeGuardBanner project={project} guard={settings.guard} canManage={canManage} />}
       {canManage && <UnsavedGuard dirty={draft.dirty} saving={save.isPending} />}
       {settings.configured === false && (
         <Banner tone="info" title={`Agenten in ${project.identifier} noch nicht eingerichtet`}>
@@ -331,7 +412,7 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds,
           <div>
             <SegmentedControl label="Merge-Methode" value={value.merge_method} onValueChange={(merge_method) => edit({ merge_method })} options={MERGE_METHODS.map((option) => ({ ...option, disabled: readOnly }))} />
           </div>
-          <p className="text-sm text-pretty text-muted">{MERGE_HINTS[value.merge_method]} werkbuch mergt, wenn CI und die Freigabe des Reviews auf demselben Commit grün sind; der Agent mergt nie.</p>
+          <p className="text-sm text-pretty text-muted">{MERGE_HINTS[value.merge_method]} Bei PRs der Agenten steht das Urteil des Reviews als Kommentar am PR; werkbuch mergt, wenn CI grün ist und das Review keine Befunde hat, beides auf demselben Commit. Der Agent mergt nie.</p>
         </div>
         <Select
           label="Review-Agent"
@@ -352,14 +433,14 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds,
         <div className="flex flex-col gap-3">
           <SwitchRow
             title="PRs von Personen reviewen"
-            text="Wie die der Agenten, sobald CI grün ist; Entwürfe nicht. Bei Befunden schreibt der Agent einen Kommentar statt „Request changes“, gemergt wird nicht."
+            text="Wie die der Agenten, sobald CI grün ist; Entwürfe nicht. Ohne Befunde gibt die App ein GitHub-Review „Approve“, mit Befunden einen Kommentar statt „Request changes“. Gemergt wird nicht."
             checked={value.review_human_prs}
             disabled={readOnly}
             onChange={(review_human_prs) => edit({ review_human_prs })}
           />
           <SwitchRow
             title="Kommentar am PR"
-            text="Bei einer neuen Verknüpfung schreibt die Agenten-App einen Kommentar mit Links auf die Items (einer je PR, wird aktualisiert)."
+            text="Bei einer neuen Verknüpfung schreibt die GitHub-App einen Kommentar mit Links auf die Items (einer je PR, wird aktualisiert)."
             checked={value.comment_on_pr}
             disabled={readOnly}
             onChange={(comment_on_pr) => edit({ comment_on_pr })}
@@ -494,6 +575,8 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds,
           </Link>
         </p>
       </SettingsCard>
+
+      {canManage && settings.repo && !settings.guard && <DemoGuard project={project} />}
 
       {canManage && (
         <SaveBar

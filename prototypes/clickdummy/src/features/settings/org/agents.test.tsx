@@ -100,18 +100,25 @@ describe('Runners', () => {
 });
 
 describe('GitHub', () => {
-  it('moves the focus to step 2 after step 1, and to the title after a disconnect', async () => {
+  it('connects in one step and moves the focus to the title, after a disconnect as well', async () => {
     const user = userEvent.setup();
-    getDb().github = { agent_app: null, review_app: null, repos: [] };
+    getDb().github = { app: null, repos: [] };
     renderWithData(<Github readOnlyReason={null} />);
-    await user.click((await screen.findAllByRole('button', { name: 'Bei GitHub anlegen' }))[0]);
-    await waitFor(() => expect(document.activeElement?.closest('[data-github-step="2"]')).not.toBeNull());
-    await user.keyboard('{Enter}');
+    await user.click(await screen.findByRole('button', { name: 'Mit GitHub verbinden' }));
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'GitHub' })));
+    expect(screen.getByText('Feldwerk werkbuch')).toBeTruthy();
+    expect(screen.queryByText(/Review-App/)).toBeNull();
 
     await user.click(await screen.findByRole('button', { name: 'GitHub trennen' }));
     await user.click(within(await screen.findByRole('alertdialog', { name: 'GitHub trennen?' })).getByRole('button', { name: 'Trennen' }));
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'GitHub' })));
+  });
+
+  it('says per repo whether a ruleset protects the base branch', async () => {
+    renderWithData(<Github readOnlyReason={null} />);
+    const repos = await screen.findByRole('list', { name: 'Freigegebene Repos' });
+    expect(within(repos).getAllByText('Ruleset schützt main')).toHaveLength(2);
+    expect(within(repos).getAllByText('main ohne Ruleset')).toHaveLength(2);
   });
 
   it('pauses open strands and cancels their runs on a disconnect', async () => {

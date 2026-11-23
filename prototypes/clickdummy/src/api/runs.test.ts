@@ -9,9 +9,9 @@ import { asUser, failure, resetApi } from '@/test/api';
 import { getAgentRules, getProjectAgents, listAgentProjects, saveAgentConfig, getAgentConfig, saveAgentRules, saveProjectAgents } from './agents';
 import { listWorkItemTypes, saveWorkItemType } from './workItemTypes';
 import { getDb, saveDb } from './db';
-import { connectGithubApp, disconnectGithub } from './github';
+import { connectGithub, disconnectGithub } from './github';
 import { createPairing, expirePairing, listRunners, revokeRunner, saveRunnerSlots, simulatePairing } from './runners';
-import { advance, CANCEL_DELAY_MS, cancelRun, getItemAgents, resumeThread, retryRun, START_DELAY_MS } from './runs';
+import { advance, CANCEL_DELAY_MS, cancelRun, confirmMergeGuard, getItemAgents, resumeThread, retryRun, simulateUnauthorizedMerge, START_DELAY_MS } from './runs';
 import { listActivity, updateWorkItem } from './workItems';
 import { assignWorkflow, listWorkflows, saveWorkflow } from './workflows';
 
@@ -135,10 +135,10 @@ describe('assigning an item to an agent', () => {
 });
 
 describe('the agent settings', () => {
-  it('give a repo to one project only, and only one with both apps', async () => {
+  it('give a repo to one project only, with or without a ruleset', async () => {
     const ops = await getProjectAgents('p_ops');
     expect((await failure(saveProjectAgents({ ...ops, repo: 'feldwerk/website' }))).errors?.repo?.[0]).toContain('gehört schon zum Projekt WEB');
-    expect((await failure(saveProjectAgents({ ...ops, repo: 'feldwerk/design-tokens' }))).errors?.repo?.[0]).toContain('nicht beide GitHub-Apps');
+    expect((await failure(saveProjectAgents({ ...ops, repo: 'feldwerk/unbekannt' }))).errors?.repo?.[0]).toContain('nicht freigegeben');
     expect((await saveProjectAgents({ ...ops, repo: 'feldwerk/infrastruktur' })).repo).toBe('feldwerk/infrastruktur');
   });
 
@@ -212,8 +212,7 @@ describe('runners', () => {
 
 describe('going on after GitHub was disconnected', () => {
   async function reconnect() {
-    await connectGithubApp('agent');
-    await connectGithubApp('review');
+    await connectGithub();
     await saveProjectAgents({ ...(await getProjectAgents('p_web')), repo: 'feldwerk/website' });
   }
 
@@ -397,5 +396,40 @@ describe('models with their CLI (spec 7.7)', () => {
     const saved = await saveProjectAgents(ops);
     expect(saved.configured).toBe(true);
     expect(getDb().project_agents.find((settings) => settings.project_id === 'p_ops')).not.toHaveProperty('configured');
+  });
+});
+
+describe('an unauthorized merge (spec 7.1)', () => {
+  it('pauses every open strand of the project and cancels what runs, naming the item whose run pushed', async () => {
+    expect(await simulateUnauthorizedMerge('p_web')).toEqual({ paused: 5 });
+    const settings = await getProjectAgents('p_web');
+    expect(settings.guard).toMatchObject({ branch: 'main', item_key: 'WEB-51', bot_id: 'u_kira' });
+    expect(getDb().agent_threads.find((thread) => thread.id === 'th_web51')).toMatchObject({ status: 'paused', pause_reason: 'guard' });
+    expect(getDb().agent_runs.find((run) => run.id === 'run_web51_task')?.status).toBe('canceling');
+    // a new assignment to the agent queues nothing while the project is paused
+    await updateWorkItem('wi_web_50', { assignee_id: 'u_kira' });
+    const web50 = await getItemAgents('WEB-50');
+    expect(web50.runs).toEqual([]);
+    expect(web50.not_an_agent).toContain('eigenmächtiger Merge erkannt');
+    // a save of the settings keeps the guard: werkbuch sets it, a project admin confirms it
+    expect((await saveProjectAgents({ ...settings, guard: null })).guard).not.toBeNull();
+  });
+
+  it('goes on after a project admin confirms: a correction on every strand still with its agent', async () => {
+    await simulateUnauthorizedMerge('p_web');
+    asUser('u_jonas');
+    expect((await failure(confirmMergeGuard('p_web'))).status).toBe(403);
+    asUser('u_mara');
+    const { resumed } = await confirmMergeGuard('p_web');
+    expect(resumed).toBeGreaterThan(0);
+    expect((await getProjectAgents('p_web')).guard).toBeNull();
+    const state = await getItemAgents('WEB-51');
+    expect(state.thread).toMatchObject({ status: 'open' });
+    expect(state.runs.at(-1)).toMatchObject({ type: 'correction', status: 'queued' });
+    expect((await failure(confirmMergeGuard('p_web'))).reason).toBe('nothing_to_confirm');
+  });
+
+  it('needs a repo', async () => {
+    expect((await failure(simulateUnauthorizedMerge('p_ops'))).reason).toBe('no_repo');
   });
 });

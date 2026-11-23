@@ -150,6 +150,7 @@ export function RunLine({ run, runs, item, thread }: { run: AgentRun; runs: read
   // the way back is a new assignment; with the item still at the bot (GitHub was disconnected) it is „Weitermachen“
   const backWay = needsGiveBack(run, runs, item, thread) && item.assignee_id !== run.bot_id;
   const githubPaused = needsGiveBack(run, runs, item, thread) && item.assignee_id === run.bot_id && thread?.pause_reason === 'github';
+  const guardPaused = needsGiveBack(run, runs, item, thread) && item.assignee_id === run.bot_id && thread?.pause_reason === 'guard';
 
   // a click elsewhere puts the person somewhere else: the card does not pull the focus back later
   useEffect(() => {
@@ -252,7 +253,7 @@ export function RunLine({ run, runs, item, thread }: { run: AgentRun; runs: read
             {run.result?.verdict && (
               <div className="flex gap-1.5">
                 <dt className="text-muted">Urteil</dt>
-                <dd>{run.result.verdict === 'approve' ? <Badge>Freigegeben</Badge> : <Badge tone="danger">Änderungen nötig</Badge>}</dd>
+                <dd>{run.result.verdict === 'approve' ? <Badge>Ohne Befunde</Badge> : <Badge tone="danger">Befunde</Badge>}</dd>
               </div>
             )}
             {run.usage && (
@@ -281,6 +282,9 @@ export function RunLine({ run, runs, item, thread }: { run: AgentRun; runs: read
           </p>
         )}
         {run.status === 'canceled' && run.canceled_by && <p className="mt-2 text-sm text-muted">{`Abgebrochen von ${users.get(run.canceled_by)?.name ?? 'jemandem'}${run.finished_at ? ` um ${clockTime(run.finished_at)}` : ''}.`}</p>}
+        {guardPaused && (
+          <p className="mt-2 max-w-[65ch] text-sm text-pretty text-muted">Ein eigenmächtiger Merge im Projekt hat den Strang pausiert. Sobald ein Projekt-Admin ihn bestätigt, geht es mit einer Korrektur weiter.</p>
+        )}
         {githubPaused && (
           <p className="mt-2 max-w-[65ch] text-sm text-pretty text-muted">GitHub ist getrennt, der Strang pausiert. Sobald das Projekt wieder ein Repo hat, geht es mit „Weitermachen“ oben am Item weiter.</p>
         )}

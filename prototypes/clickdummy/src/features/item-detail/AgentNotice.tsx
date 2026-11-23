@@ -12,7 +12,7 @@ import { Bot, CircleDot, Hourglass, OctagonPause, Play, RotateCw, TriangleAlert,
 import { Link } from 'react-router';
 import { useEditReason, useUserMap } from '@/components/fields/itemData';
 import { Banner } from '@/components/ui/Banner';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
 import { isActive } from '@/domain/agents';
 import { clockTime, runName, useNow } from '@/features/agents/runParts';
 import { toast } from '@/components/ui/toast';
@@ -116,11 +116,13 @@ export function AgentNotice({ item }: { item: WorkItem }) {
     );
   }
 
-  if (!active && thread?.status === 'paused' && bot) {
+  // an unauthorized merge says so at once, while the canceled run is still stopping
+  if ((!active || thread?.pause_reason === 'guard') && thread?.status === 'paused' && bot) {
     const owner = users.get(bot.owner_id ?? '');
     const github = thread.pause_reason === 'github';
+    const guard = thread.pause_reason === 'guard' ? (settings.data?.guard ?? null) : null;
     // which brake stopped the strand: corrections and conflicts are counted apart (spec 7.2)
-    const brake = github
+    const brake = github || guard
       ? null
       : thread.corrections >= (settings.data?.max_corrections ?? 3)
         ? `nach ${thread.corrections} Korrekturen`
@@ -134,9 +136,20 @@ export function AgentNotice({ item }: { item: WorkItem }) {
         key="paused"
         tone="neutral"
         icon={OctagonPause}
-        title={github ? `${bot.name} hat aufgehört: GitHub ist getrennt` : brake ? `Bremse gezogen: ${bot.name} hat ${brake} aufgehört` : `${bot.name} arbeitet nicht mehr daran`}
+        title={
+          guard
+            ? guard.item_id === item.id
+              ? `Eigenmächtiger Merge erkannt: ${bot.name} hat auf ${guard.branch} gepusht`
+              : `${bot.name} pausiert: eigenmächtiger Merge in ${project?.identifier ?? 'diesem Projekt'}`
+            : github ? `${bot.name} hat aufgehört: GitHub ist getrennt` : brake ? `Bremse gezogen: ${bot.name} hat ${brake} aufgehört` : `${bot.name} arbeitet nicht mehr daran`}
         action={
-          withBot ? (
+          guard ? (
+            project && can('project.manage', project.id) ? (
+              <Link to={`/projects/${project.identifier}/settings/agents`} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+                In Projekt → Agenten bestätigen
+              </Link>
+            ) : null
+          ) : withBot ? (
             github && (
               <Button variant="secondary" size="sm" icon={Play} pending={resume.isPending} disabledReason={editReason ?? (settings.data?.repo ? null : `${project?.identifier ?? 'Das Projekt'} hat noch kein Repo. Verbinde GitHub und wähle unter Agenten ein Repo.`)} onClick={runResume}>
                 Weitermachen
@@ -150,7 +163,11 @@ export function AgentNotice({ item }: { item: WorkItem }) {
         }
       >
         <span className="block max-w-[65ch]">
-          {github
+          {guard
+            ? guard.item_id === item.id
+              ? `Auf ${guard.branch} kam ein Push der App (${guard.sha}), den kein Merge von werkbuch erklärt, aus dem Auftrag dieses Items. Alle Stränge von ${project?.identifier ?? 'diesem Projekt'} pausieren, bis ein Projekt-Admin den Merge prüft und bestätigt. Ein Ruleset auf ${guard.branch} hätte den Push verhindert.`
+              : `Auf ${guard.branch} kam ein Push der App (${guard.sha}), den kein Merge von werkbuch erklärt${guard.item_key ? `, aus dem Auftrag von ${guard.item_key}` : ''}. Alle Stränge des Projekts pausieren, bis ein Projekt-Admin bestätigt; danach macht ${bot.name} hier mit einer Korrektur weiter.`
+            : github
             ? `Der Strang ist pausiert; PR${thread.pr_number ? ` #${thread.pr_number}` : ''} und Branch bleiben bei GitHub. Sobald GitHub wieder verbunden ist und das Projekt sein Repo hat, macht ${bot.name} mit „Weitermachen“ als Korrektur weiter; die Bremse zählt weiter und greift, wenn keine Korrektur mehr frei ist.`
             : brake
               ? `Der Strang ist pausiert: PR${thread.pr_number ? ` #${thread.pr_number}` : ''}, Branch und Session bleiben. Das Item ging an ${owner?.name ?? 'die verantwortliche Person'}, die Befunde stehen im letzten Kommentar. Weist du es wieder ${bot.name} zu, beginnt eine Korrektur mit den Kommentaren seit dem letzten Auftrag, und die Bremse zählt von vorn.`
@@ -181,7 +198,8 @@ export function AgentNotice({ item }: { item: WorkItem }) {
     );
   }
 
-  if (not_an_agent && assignee) {
+  // a strand paused by an unauthorized merge says it above; the same reason would only repeat it
+  if (not_an_agent && assignee && thread?.pause_reason !== 'guard') {
     const fix =
       project && not_an_agent.includes('nicht eingerichtet') ? (
         can('project.manage', project.id) ? (

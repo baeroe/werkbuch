@@ -7,9 +7,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { getAgentConfig, getProjectAgents, getAgentRules, listAgentBotIds, listAgentConfigs, listAgentModels, saveAgentRules, listAgentProjects, listRepoOwners, saveAgentConfig, saveProjectAgents } from '@/api/agents';
-import { connectGithubApp, disconnectGithub, getGithub } from '@/api/github';
+import { connectGithub, disconnectGithub, getGithub } from '@/api/github';
 import { createPairing, expirePairing, getPairing, listRunners, renameRunner, revokeRunner, saveRunnerSlots, simulatePairing } from '@/api/runners';
-import { cancelRun, getItemAgents, resumeThread, retryRun } from '@/api/runs';
+import { cancelRun, confirmMergeGuard, getItemAgents, resumeThread, retryRun, simulateUnauthorizedMerge } from '@/api/runs';
 import { isActive } from '@/domain/agents';
 import type { RunnerSlots } from '@/types';
 import { qk } from './keys';
@@ -60,8 +60,8 @@ export function useGithub() {
   return useQuery({ queryKey: qk.github.all, queryFn: getGithub });
 }
 
-export function useConnectGithubApp() {
-  return useApiMutation(connectGithubApp, [qk.github.all]);
+export function useConnectGithub() {
+  return useApiMutation(connectGithub, [qk.github.all]);
 }
 
 export function useDisconnectGithub() {
@@ -151,6 +151,15 @@ export function useRetryRun() {
 }
 
 /** Goes on with a strand GitHub's disconnect paused (variable: the item's id or key). */
+/** Only in the click dummy: what werkbuch does when the webhook reports an unauthorized merge. */
+export function useSimulateUnauthorizedMerge() {
+  return useApiMutation(simulateUnauthorizedMerge, [qk.projectAgents.all, qk.itemAgents.all, qk.runners.all]);
+}
+
+export function useConfirmMergeGuard() {
+  return useApiMutation(confirmMergeGuard, [qk.projectAgents.all, qk.itemAgents.all, qk.runners.all, qk.workItems.all, qk.activity.all]);
+}
+
 export function useResumeThread() {
   return useApiMutation(resumeThread, [qk.itemAgents.all, qk.runners.all, qk.workItems.all, qk.activity.all]);
 }
