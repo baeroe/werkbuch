@@ -1,12 +1,14 @@
 /*
  * Project → Agenten (WEBU-18, spec 10.3): how agents work in this project. One form, saved as a whole from the bar at
- * the bottom (⌘↵), in five sheets:
- * - Repository: the repo (1:1, only repos with both GitHub apps), base branch, merge method, the review agent, reviews
- *   of PRs by people, the comment on the PR.
+ * the bottom (⌘↵), in six sheets:
+ * - Repository: the repo (1:1, only repos with both GitHub apps), base branch, merge method, the review agent (a bot
+ *   that works as an agent; the others stand greyed with the reason), reviews of PRs by people, the comment on the PR.
+ * - Worktree: the setup and teardown commands the runner runs around a worktree, and further MCP servers (spec 8.4).
  * - Status je Schritt: the status each step of the flow sets; the category is checked at once and by the server.
  *   Without all four, agents are off in the project: an assignment to a bot stays a plain one.
  * - Bremsen: corrections and conflicts per strand before the item goes back to the bot's responsible person.
- * - Modelle: per kind of run, and label → model in order (the first row wins).
+ * - Modelle: per kind of run. A model label of the item (a label of the organization with a model for agents) goes
+ *   first; those are set in Organisation → Labels (spec 7.7).
  * - Arbeitsregeln: a Markdown text per kind of run, with the standard werkbuch ships and "Standard wiederherstellen".
  * Everybody in the project reads; project admins change it.
  */
@@ -29,18 +31,18 @@ import { Tab, Tabs, TabsList, TabsPanel } from '@/components/ui/Tabs';
 import { Textarea } from '@/components/ui/Textarea';
 import { toast } from '@/components/ui/toast';
 import { DEFAULT_RULES } from '@/domain/agentRuleDefaults';
-import { AGENT_STEPS, categoriesText, mappingComplete, mappingErrors, RUN_TYPE_HINTS, RUN_TYPE_NAMES, RUN_TYPES, STEP_CATEGORIES, STEP_HINTS, STEP_NAMES } from '@/domain/agents';
+import { AGENT_STEPS, categoriesText, isModelLabel, mappingComplete, mappingErrors, RUN_TYPE_HINTS, RUN_TYPE_NAMES, RUN_TYPES, STEP_CATEGORIES, STEP_HINTS, STEP_NAMES } from '@/domain/agents';
 import { ModelField } from '@/features/agents/ModelField';
+import { focusSoon, neighbourOf } from '@/features/settings/org/focus';
 import { SaveBar } from '@/features/agents/SaveBar';
-import { SortableList } from '@/features/settings/org/Sortable';
-import { useGithub, useProjectAgents, useRepoOwners, useSaveProjectAgents } from '@/hooks/agents';
+import { useAgentBotIds, useGithub, useProjectAgents, useRepoOwners, useSaveProjectAgents } from '@/hooks/agents';
 import { useLabels } from '@/hooks/catalog';
 import { useMembers } from '@/hooks/projects';
 import { useUsers } from '@/hooks/users';
 import { useWorkflows } from '@/hooks/workflows';
 import { notifyError } from '@/lib/errors';
 import { usePermissions } from '@/lib/permissions';
-import type { AgentStep, MergeMethod, ProjectAgents, RunType, User, Workflow } from '@/types';
+import type { AgentStep, Label, McpServer, MergeMethod, ProjectAgents, RunType, User, Workflow } from '@/types';
 import { fieldErrors, useDraft, useFieldErrors, useSaveShortcut } from './form';
 import type { SectionProps } from './sectionProps';
 import { SettingsCard, SettingsError, SettingsSkeleton, UnsavedGuard } from './SettingsParts';
@@ -49,16 +51,20 @@ const NO_REPO = '__none';
 const NO_BOT = '__none';
 const READ_ONLY = 'bg-sunken! shadow-none!';
 
-interface LabelRow {
+interface McpRow extends McpServer {
   id: string;
-  label_id: string;
-  model: string;
 }
+
+let rowSequence = 0;
+const rowId = () => `mcp_${(rowSequence += 1)}`;
 
 interface Form {
   repo: string;
   base_branch: string;
   merge_method: MergeMethod;
+  setup_command: string;
+  teardown_command: string;
+  mcp_servers: McpRow[];
   review_bot_id: string;
   states: Record<AgentStep, string | null>;
   max_corrections: string;
@@ -66,17 +72,16 @@ interface Form {
   review_human_prs: boolean;
   comment_on_pr: boolean;
   models: Record<RunType, string>;
-  label_models: LabelRow[];
   rules: Record<RunType, string | null>;
 }
-
-let rowSequence = 0;
-const rowId = () => `lm_${(rowSequence += 1)}`;
 
 const formOf = (settings: ProjectAgents): Form => ({
   repo: settings.repo ?? NO_REPO,
   base_branch: settings.base_branch,
   merge_method: settings.merge_method,
+  setup_command: settings.setup_command,
+  teardown_command: settings.teardown_command,
+  mcp_servers: settings.mcp_servers.map((server, index) => ({ id: `stored_${index}`, ...server })),
   review_bot_id: settings.review_bot_id ?? NO_BOT,
   states: settings.states,
   max_corrections: String(settings.max_corrections),
@@ -84,7 +89,6 @@ const formOf = (settings: ProjectAgents): Form => ({
   review_human_prs: settings.review_human_prs,
   comment_on_pr: settings.comment_on_pr,
   models: Object.fromEntries(RUN_TYPES.map((type) => [type, settings.models[type] ?? ''])) as Record<RunType, string>,
-  label_models: settings.label_models.map((row, index) => ({ id: `stored_${index}`, ...row })),
   rules: settings.rules,
 });
 
@@ -93,6 +97,9 @@ const toSettings = (project_id: string, form: Form): ProjectAgents => ({
   repo: form.repo === NO_REPO ? null : form.repo,
   base_branch: form.base_branch,
   merge_method: form.merge_method,
+  setup_command: form.setup_command,
+  teardown_command: form.teardown_command,
+  mcp_servers: form.mcp_servers.map(({ name, command }) => ({ name, command })),
   review_bot_id: form.review_bot_id === NO_BOT ? null : form.review_bot_id,
   states: form.states,
   max_corrections: Number(form.max_corrections),
@@ -100,7 +107,6 @@ const toSettings = (project_id: string, form: Form): ProjectAgents => ({
   review_human_prs: form.review_human_prs,
   comment_on_pr: form.comment_on_pr,
   models: form.models,
-  label_models: form.label_models.map(({ label_id, model }) => ({ label_id, model })),
   rules: form.rules,
 });
 
@@ -139,7 +145,10 @@ function StepRow({ step, workflow, value, error, disabled, onChange }: { step: A
 
 /* -------------------------------------------------------------------------- the rules */
 
-function RulesEditor({ value, onChange, readOnly }: { value: Record<RunType, string | null>; onChange: (rules: Record<RunType, string | null>) => void; readOnly: boolean }) {
+type Rules = Record<RunType, string | null>;
+
+/** `onChange` takes a change of the rules as they are when it applies: the undo of a toast comes later. */
+function RulesEditor({ value, onChange, readOnly }: { value: Rules; onChange: (change: (rules: Rules) => Rules) => void; readOnly: boolean }) {
   const [tab, setTab] = useState<RunType>('task');
   return (
     <Tabs value={tab} onValueChange={(next) => setTab(next as RunType)}>
@@ -170,7 +179,10 @@ function RulesEditor({ value, onChange, readOnly }: { value: Record<RunType, str
               className={readOnly ? READ_ONLY : undefined}
               spellCheck
               hint="Markdown. Wird nach dem festen Vertrag und der Anweisung des Bots in jeden Auftrag dieses Typs gesetzt."
-              onChange={(event) => onChange({ ...value, [type]: event.target.value === DEFAULT_RULES[type] ? null : event.target.value })}
+              onChange={(event) => {
+                const next = event.target.value === DEFAULT_RULES[type] ? null : event.target.value;
+                onChange((rules) => ({ ...rules, [type]: next }));
+              }}
             />
             {!readOnly && own !== null && (
               <div>
@@ -179,8 +191,9 @@ function RulesEditor({ value, onChange, readOnly }: { value: Record<RunType, str
                   size="sm"
                   icon={RotateCcw}
                   onClick={() => {
-                    onChange({ ...value, [type]: null });
-                    toast({ title: `Standard für „${RUN_TYPE_NAMES[type]}“ wiederhergestellt`, description: 'Gilt nach dem Speichern.', action: { label: 'Rückgängig', onClick: () => onChange({ ...value, [type]: own }) } });
+                    onChange((rules) => ({ ...rules, [type]: null }));
+                    // the undo puts back this one text, into the rules as they are by then
+                    toast({ title: `Standard für „${RUN_TYPE_NAMES[type]}“ wiederhergestellt`, description: 'Gilt nach dem Speichern.', action: { label: 'Rückgängig', onClick: () => onChange((rules) => ({ ...rules, [type]: own })) } });
                   }}
                 >
                   Standard wiederherstellen
@@ -194,6 +207,119 @@ function RulesEditor({ value, onChange, readOnly }: { value: Record<RunType, str
   );
 }
 
+/* ------------------------------------------------------------------------- MCP servers */
+
+/** Further MCP servers of the project: a name and the command that starts it; werkbuch's own every agent has. */
+function McpServers({ rows, readOnly, errors, onChange }: { rows: McpRow[]; readOnly: boolean; errors: Record<string, string>; onChange: (rows: McpRow[], ...paths: string[]) => void }) {
+  const list = useRef<HTMLUListElement>(null);
+  return (
+    <div className="flex flex-col gap-2 border-t border-line pt-4">
+      <p className={labelClass}>Weitere MCP-Server</p>
+      <p className="max-w-[65ch] text-sm text-pretty text-muted">Jeder Agent bekommt den MCP-Server von werkbuch mit einem Token für seinen Auftrag. Hier kommen weitere dazu, etwa Playwright für Tests im Browser; der Befehl startet den Server über stdio.</p>
+      {rows.length === 0 ? (
+        <p className="text-ui text-muted">Keine weiteren.</p>
+      ) : (
+        <ul ref={list} aria-label="Weitere MCP-Server" className="flex flex-col gap-2">
+          {rows.map((row, index) => (
+            <li key={row.id} className="flex flex-wrap items-start gap-2 sm:flex-nowrap">
+              <Input
+                aria-label={`Name des Servers ${index + 1}`}
+                className="min-w-0 flex-1 basis-32 sm:max-w-48"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                translate="no"
+                placeholder="playwright"
+                value={row.name}
+                readOnly={readOnly}
+                error={errors[`mcp_servers.${index}.name`]}
+                onChange={(event) => onChange(rows.map((entry) => (entry.id === row.id ? { ...entry, name: event.target.value } : entry)), `mcp_servers.${index}.name`)}
+              />
+              <Input
+                aria-label={`Befehl des Servers ${index + 1}`}
+                className="min-w-0 flex-[3] basis-56"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                translate="no"
+                placeholder="pnpm dlx @playwright/mcp --headless"
+                value={row.command}
+                readOnly={readOnly}
+                error={errors[`mcp_servers.${index}.command`]}
+                onChange={(event) => onChange(rows.map((entry) => (entry.id === row.id ? { ...entry, command: event.target.value } : entry)), `mcp_servers.${index}.command`)}
+              />
+              {!readOnly && (
+                <IconButton
+                  icon={Trash2}
+                  label={`Server „${row.name || index + 1}“ entfernen`}
+                  onClick={(event) => {
+                    const next = neighbourOf(event.currentTarget);
+                    focusSoon(next && next.id !== 'main' ? next : document.getElementById('add-mcp-server'));
+                    onChange(rows.filter((entry) => entry.id !== row.id));
+                  }}
+                />
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!readOnly && (
+        <div>
+          <Button
+            id="add-mcp-server"
+            variant="secondary"
+            size="sm"
+            icon={Plus}
+            onClick={() => {
+              onChange([...rows, { id: rowId(), name: '', command: '' }]);
+              // the new row's name takes the focus
+              requestAnimationFrame(() => list.current?.querySelector<HTMLInputElement>('li:last-child input')?.focus());
+            }}
+          >
+            MCP-Server hinzufügen
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------------ model labels */
+
+/** The model labels of the organization, which go before the project's models; they are set in Organisation → Labels. */
+function ModelLabels({ labels, canManage }: { labels: readonly Label[]; canManage: boolean }) {
+  const link = canManage ? (
+    <Link to="/settings/labels" className="font-medium text-accent-text underline-offset-2 hover:underline">
+      Labels bearbeiten
+    </Link>
+  ) : null;
+  return (
+    <div className="flex flex-col gap-2">
+      <p className={labelClass}>Modell-Labels der Organisation</p>
+      {labels.length === 0 ? (
+        <p className="max-w-[65ch] text-sm text-pretty text-muted">Noch kein Label mit einem Modell für Agenten. Ein solches Label legen Org-Admins unter Labels an. {link}</p>
+      ) : (
+        <>
+          <p className="max-w-[65ch] text-sm text-pretty text-muted">
+            Trägt ein Item eins davon, nimmt der Agent dessen Modell; bei mehreren das erste in dieser Reihenfolge. Ein Kind eines Epics ohne Modell-Label nimmt das des Epics. {link}
+          </p>
+          <ul aria-label="Modell-Labels" className="flex flex-wrap gap-2">
+            {labels.map((label) => (
+              <li key={label.id} className="inline-flex h-7 items-center gap-1.5 rounded-chip border border-line bg-surface px-2 text-sm">
+                <ToneDot tone={label.color} className="size-2.5" />
+                <span className="font-medium text-ink">{label.name}</span>
+                <span className="text-muted" translate="no">
+                  {label.agent_model}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------------- the screen */
 
 export function Agents({ project, canManage }: SectionProps) {
@@ -204,7 +330,8 @@ export function Agents({ project, canManage }: SectionProps) {
   const labels = useLabels();
   const users = useUsers();
   const members = useMembers(project.id);
-  const queries = [settings, github, owners, workflows, labels, users, members];
+  const agentBots = useAgentBotIds();
+  const queries = [settings, github, owners, workflows, labels, users, members, agentBots];
 
   if (queries.some((query) => query.isPending)) return <SettingsSkeleton rows={6} label="Agenten werden geladen …" />;
   const failed = queries.find((query) => query.isError);
@@ -221,17 +348,17 @@ export function Agents({ project, canManage }: SectionProps) {
   }
   const memberIds = new Set(members.data!.items.map((member) => member.user_id));
   const bots = users.data!.items.filter((user) => user.type === 'bot' && !user.is_default_bot && user.disabled_at === null && memberIds.has(user.id));
-  return <AgentsForm project={project} canManage={canManage} settings={settings.data!} workflow={workflow} bots={bots} />;
+  return <AgentsForm project={project} canManage={canManage} settings={settings.data!} workflow={workflow} bots={bots} agentBotIds={new Set(agentBots.data!)} />;
 }
 
-type FormProps = SectionProps & { settings: ProjectAgents; workflow: Workflow; bots: User[] };
+type FormProps = SectionProps & { settings: ProjectAgents; workflow: Workflow; bots: User[]; agentBotIds: Set<string> };
 
-function AgentsForm({ project, canManage, settings, workflow, bots }: FormProps) {
+function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds }: FormProps) {
   const form = useRef<HTMLFormElement>(null);
   const save = useSaveProjectAgents();
   const github = useGithub().data!;
   const owners = useRepoOwners().data!;
-  const labels = useLabels().data!.items;
+  const modelLabels = useLabels().data!.items.filter(isModelLabel);
   const { can } = usePermissions();
   const draft = useDraft(useMemo(() => formOf(settings), [settings]));
   const problems = useFieldErrors(form);
@@ -340,7 +467,14 @@ function AgentsForm({ project, canManage, settings, workflow, bots }: FormProps)
           value={value.review_bot_id}
           disabled={readOnly}
           error={problems.errors.review_bot_id}
-          options={[{ value: NO_BOT, label: 'Kein Review: werkbuch mergt nicht' }, ...bots.map((bot) => ({ value: bot.id, label: bot.name, icon: <Avatar user={bot} size="sm" decorative /> }))]}
+          options={[
+            { value: NO_BOT, label: 'Kein Review: werkbuch mergt nicht' },
+            // only a bot that works as an agent can review; the others stand greyed with the reason
+            ...bots.map((bot) => {
+              const agent = agentBotIds.has(bot.id);
+              return { value: bot.id, label: agent ? bot.name : `${bot.name} (arbeitet nicht als Agent)`, icon: <Avatar user={bot} size="sm" decorative />, disabled: !agent && bot.id !== settings.review_bot_id };
+            }),
+          ]}
           onValueChange={(review_bot_id) => review_bot_id && edit({ review_bot_id }, 'review_bot_id')}
         />
         <div className="flex flex-col gap-3">
@@ -359,6 +493,45 @@ function AgentsForm({ project, canManage, settings, workflow, bots }: FormProps)
             onChange={(comment_on_pr) => edit({ comment_on_pr })}
           />
         </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Worktree und Werkzeuge"
+        description="Was der Runner für dieses Projekt um einen Worktree tut und welche MCP-Server die Agenten zusätzlich zu werkbuch bekommen. Gilt auf jedem Runner; auf der Maschine stellt man nichts ein."
+      >
+        <div className="grid items-start gap-4 md:grid-cols-2">
+          <Textarea
+            label="Setup-Befehl"
+            name="setup_command"
+            rows={2}
+            spellCheck={false}
+            translate="no"
+            autoCapitalize="none"
+            placeholder="keiner"
+            value={value.setup_command}
+            readOnly={readOnly}
+            className={readOnly ? READ_ONLY : undefined}
+            hint="Läuft im neuen Worktree, bevor der Agent startet. $WORKTREE ist sein Name, etwa für ein eigenes DDEV-Projekt."
+            error={problems.errors.setup_command}
+            onChange={(event) => edit({ setup_command: event.target.value }, 'setup_command')}
+          />
+          <Textarea
+            label="Teardown-Befehl"
+            name="teardown_command"
+            rows={2}
+            spellCheck={false}
+            translate="no"
+            autoCapitalize="none"
+            placeholder="keiner"
+            value={value.teardown_command}
+            readOnly={readOnly}
+            className={readOnly ? READ_ONLY : undefined}
+            hint="Läuft, bevor der Runner den Worktree entfernt (nach dem Merge oder wenn der Strang endet)."
+            error={problems.errors.teardown_command}
+            onChange={(event) => edit({ teardown_command: event.target.value }, 'teardown_command')}
+          />
+        </div>
+        <McpServers rows={value.mcp_servers} readOnly={readOnly} errors={problems.errors} onChange={(mcp_servers, ...paths) => edit({ mcp_servers }, ...paths)} />
       </SettingsCard>
 
       <SettingsCard
@@ -415,70 +588,8 @@ function AgentsForm({ project, canManage, settings, workflow, bots }: FormProps)
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Modelle" description="Nicht jeder Auftrag braucht das stärkste Modell. Es gewinnt das erste, das passt: Label des Items, dann der Auftragstyp hier, dann die Einstellungen des Bots.">
-        <div className="flex flex-col gap-2">
-          <p className={labelClass}>Label → Modell</p>
-          <p className="max-w-[65ch] text-sm text-pretty text-muted">Trägt ein Item mehrere dieser Labels, gewinnt die obere Zeile. Ein Kind eines Epics ohne passendes Label nimmt das des Epics.</p>
-          {value.label_models.length === 0 ? (
-            <p className="text-ui text-muted">Noch keine Zuordnung.</p>
-          ) : (
-            <SortableList
-              label="Label → Modell"
-              items={value.label_models}
-              disabled={readOnly}
-              nameOf={(row) => labels.find((label) => label.id === row.label_id)?.name ?? 'Label'}
-              onReorder={(label_models) => edit({ label_models })}
-              rowClassName="flex flex-wrap items-start gap-2 py-1 sm:flex-nowrap"
-              renderItem={(row, { handle, index }) => (
-                <>
-                  {handle}
-                  <Select
-                    aria-label={`Label der Zeile ${index + 1}`}
-                    className="min-w-0 flex-1 basis-40"
-                    value={row.label_id}
-                    disabled={readOnly}
-                    error={problems.errors[`label_models.${index}.label_id`]}
-                    options={labels.map((label) => ({ value: label.id, label: label.name, icon: <ToneDot tone={label.color} className="size-2.5" /> }))}
-                    onValueChange={(label_id) => label_id && edit({ label_models: value.label_models.map((entry) => (entry.id === row.id ? { ...entry, label_id } : entry)) })}
-                  />
-                  <ModelField
-                    hideLabel
-                    label={`Modell der Zeile ${index + 1}`}
-                    className="min-w-0 flex-1 basis-28"
-                    cli="claude"
-                    suggestions={false}
-                    readOnly={readOnly}
-                    value={row.model}
-                    error={problems.errors[`label_models.${index}.model`]}
-                    onChange={(model) => edit({ label_models: value.label_models.map((entry) => (entry.id === row.id ? { ...entry, model } : entry)) })}
-                  />
-                  {!readOnly && (
-                    <IconButton
-                      icon={Trash2}
-                      label={`Zeile „${labels.find((label) => label.id === row.label_id)?.name ?? ''}“ entfernen`}
-                      onClick={() => edit({ label_models: value.label_models.filter((entry) => entry.id !== row.id) })}
-                    />
-                  )}
-                </>
-              )}
-            />
-          )}
-          {!readOnly && (
-            <div>
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={Plus}
-                onClick={() => {
-                  const free = labels.find((label) => !value.label_models.some((row) => row.label_id === label.id));
-                  if (free) edit({ label_models: [...value.label_models, { id: rowId(), label_id: free.id, model: 'haiku' }] });
-                }}
-              >
-                Zuordnung hinzufügen
-              </Button>
-            </div>
-          )}
-        </div>
+      <SettingsCard title="Modelle" description="Nicht jeder Auftrag braucht das stärkste Modell. Es gewinnt das erste, das passt: ein Modell-Label des Items, dann der Auftragstyp hier, dann die Einstellungen des Bots.">
+        <ModelLabels labels={modelLabels} canManage={can('org.manage_catalog')} />
         <div className="flex flex-col gap-2 border-t border-line pt-4">
           <p className={labelClass}>Modell je Auftragstyp</p>
           <p className="text-sm text-muted">Leer heißt: wie in den Einstellungen des Bots.</p>
@@ -500,7 +611,7 @@ function AgentsForm({ project, canManage, settings, workflow, bots }: FormProps)
       </SettingsCard>
 
       <SettingsCard title="Arbeitsregeln" description="Wie Agenten in diesem Projekt arbeiten, je Auftragstyp. Was nie erlaubt ist (Status setzen, mergen, Force-Push) und das Ausgabeformat stehen fest im Code und gehen vor; die Regeln für den Code stehen im Repo (CLAUDE.md, AGENTS.md).">
-        <RulesEditor value={value.rules} readOnly={readOnly} onChange={(rules) => edit({ rules })} />
+        <RulesEditor value={value.rules} readOnly={readOnly} onChange={(change) => draft.update((current) => ({ rules: change(current.rules) }))} />
       </SettingsCard>
 
       {canManage && (

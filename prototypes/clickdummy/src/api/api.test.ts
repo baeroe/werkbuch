@@ -733,7 +733,12 @@ describe('seed: the moodboard demo content', () => {
       'Barrierefreiheit',
       'Backend',
       'Design',
+      // model labels (WEBU-18, spec 7.7)
+      'Haiku Agent',
+      'Opus Agent',
+      'Fable Agent',
     ]);
+    expect(db.labels.filter((l) => l.agent_model).map((l) => l.agent_model)).toEqual(['haiku', 'opus', 'fable']);
     expect(db.relation_types.map((r) => r.name)).toEqual(['blockiert', 'Duplikat', 'verwandt', 'testet']);
     expect(db.relation_types.find((r) => r.name === 'testet')).toMatchObject({
       outward_label: 'testet',

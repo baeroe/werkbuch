@@ -30,6 +30,9 @@ export const defaultProjectAgents = (project_id: string): ProjectAgents => ({
   repo: null,
   base_branch: 'main',
   merge_method: 'squash',
+  setup_command: '',
+  teardown_command: '',
+  mcp_servers: [],
   review_bot_id: null,
   states: { working: null, review: null, correction: null, merged: null },
   max_corrections: 3,
@@ -37,7 +40,6 @@ export const defaultProjectAgents = (project_id: string): ProjectAgents => ({
   review_human_prs: true,
   comment_on_pr: true,
   models: {},
-  label_models: [],
   rules: { ...NO_RULES },
 });
 
@@ -47,6 +49,11 @@ export function listAgentConfigs(): Promise<Page<AgentConfig>> {
     requireOrgAdmin(me, 'Agenten sehen nur Org-Admins.');
     return paginate(db.agent_configs);
   });
+}
+
+/** The bots that work as agents (the review agent of a project is one of them); every account may read the list. */
+export function listAgentBotIds(): Promise<string[]> {
+  return read(({ db }) => db.agent_configs.filter((config) => config.enabled).map((config) => config.bot_id));
 }
 
 export function getAgentConfig(bot_id: string): Promise<AgentConfig> {
@@ -124,19 +131,32 @@ export function saveProjectAgents(input: ProjectAgents): Promise<ProjectAgents> 
       if (owner) errors.add('repo', `Das Repo gehört schon zum Projekt ${projectOrThrow(db, owner.project_id).identifier}. Ein Repo gehört höchstens einem Projekt.`);
     }
     if (input.base_branch.trim() === '') errors.add('base_branch', 'Gib den Basis-Branch an, etwa main.');
+    const names = new Set<string>();
+    input.mcp_servers.forEach((server, index) => {
+      const name = server.name.trim();
+      if (name === '') errors.add(`mcp_servers.${index}.name`, 'Gib dem Server einen Namen, etwa playwright.');
+      else if (!/^[a-z0-9_-]{1,40}$/.test(name)) errors.add(`mcp_servers.${index}.name`, 'Kleinbuchstaben, Ziffern, - und _, ohne Leerzeichen.');
+      else if (name === 'werkbuch') errors.add(`mcp_servers.${index}.name`, 'werkbuch bekommt jeder Agent schon.');
+      else if (names.has(name)) errors.add(`mcp_servers.${index}.name`, 'Diesen Namen gibt es schon.');
+      names.add(name);
+      if (server.command.trim() === '') errors.add(`mcp_servers.${index}.command`, 'Gib den Befehl an, der den Server startet.');
+    });
     if (!wholeIn(input.max_corrections, 1, 10)) errors.add('max_corrections', 'Eine ganze Zahl von 1 bis 10.');
     if (!wholeIn(input.max_conflicts, 1, 10)) errors.add('max_conflicts', 'Eine ganze Zahl von 1 bis 10.');
-    if (input.review_bot_id !== null && db.users.find((user) => user.id === input.review_bot_id)?.type !== 'bot') errors.add('review_bot_id', 'Das ist kein Bot.');
-    input.label_models.forEach((row, index) => {
-      if (!db.labels.some((label) => label.id === row.label_id)) errors.add(`label_models.${index}.label_id`, 'Das Label gibt es nicht.');
-      if (row.model.trim() === '') errors.add(`label_models.${index}.model`, 'Gib ein Modell an.');
-    });
+    if (input.review_bot_id !== null) {
+      // the review agent is a bot that works as an agent: it needs a runner pool and a CLI (spec 10.3)
+      const reviewer = db.users.find((user) => user.id === input.review_bot_id);
+      if (reviewer?.type !== 'bot') errors.add('review_bot_id', 'Das ist kein Bot.');
+      else if (!db.agent_configs.find((config) => config.bot_id === reviewer.id)?.enabled) errors.add('review_bot_id', `${reviewer.name} arbeitet nicht als Agent. Schalte „Als Agent arbeiten“ in den Einstellungen des Bots ein.`);
+    }
     errors.throwIfAny();
     const stored: ProjectAgents = {
       ...input,
       base_branch: input.base_branch.trim(),
+      setup_command: input.setup_command.trim(),
+      teardown_command: input.teardown_command.trim(),
+      mcp_servers: input.mcp_servers.map((server) => ({ name: server.name.trim(), command: server.command.trim() })),
       models: trimModels(input.models),
-      label_models: input.label_models.map((row) => ({ label_id: row.label_id, model: row.model.trim() })),
     };
     const index = db.project_agents.findIndex((settings) => settings.project_id === project.id);
     if (index >= 0) db.project_agents[index] = stored;

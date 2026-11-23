@@ -24,14 +24,24 @@ function stateOf(pr: PullRequestLink): { label: string; icon: LucideIcon; classN
 function checkOf(check: PullRequestCheck): { label: string; icon: LucideIcon; className: string } {
   if (check.status !== 'completed') return check.status === 'queued' ? { label: 'wartet', icon: CircleDashed, className: 'text-muted' } : { label: 'läuft', icon: CircleDot, className: 'text-accent-text' };
   if (check.conclusion === 'success') return { label: 'grün', icon: CircleCheck, className: 'text-st-completed' };
-  if (check.conclusion === 'skipped') return { label: 'übersprungen', icon: CircleMinus, className: 'text-muted' };
-  return { label: check.conclusion === 'cancelled' ? 'abgebrochen' : 'rot', icon: CircleX, className: 'text-danger' };
+  if (check.conclusion === 'skipped' || check.conclusion === 'neutral') return { label: check.conclusion === 'skipped' ? 'übersprungen' : 'neutral', icon: CircleMinus, className: 'text-muted' };
+  return { label: RED_WORDS[check.conclusion ?? 'failure'] ?? 'rot', icon: CircleX, className: 'text-danger' };
 }
+
+const RED_WORDS: Partial<Record<NonNullable<PullRequestCheck['conclusion']>, string>> = {
+  cancelled: 'abgebrochen',
+  timed_out: 'Zeitlimit',
+  action_required: 'braucht eine Freigabe',
+  stale: 'veraltet',
+};
+
+/** A finished check that holds the PR back: everything but success, skipped and neutral (spec 7.2). */
+const isRed = (check: PullRequestCheck) => check.status === 'completed' && check.conclusion !== 'success' && check.conclusion !== 'skipped' && check.conclusion !== 'neutral';
 
 /** CI of the head commit in words: red as soon as one check fails, green when all have passed (spec 7.2). */
 export function ciOf(checks: readonly PullRequestCheck[]): { label: string; tone: 'neutral' | 'danger' | 'quiet' | 'accent' } {
   if (checks.length === 0) return { label: 'Keine Checks', tone: 'quiet' };
-  if (checks.some((check) => check.status === 'completed' && (check.conclusion === 'failure' || check.conclusion === 'cancelled'))) return { label: 'CI rot', tone: 'danger' };
+  if (checks.some(isRed)) return { label: 'CI rot', tone: 'danger' };
   if (checks.some((check) => check.status !== 'completed')) return { label: 'CI läuft', tone: 'accent' };
   return { label: 'CI grün', tone: 'neutral' };
 }

@@ -18,7 +18,8 @@ import { statesInOrder } from '@/domain/workflow';
 import { useAssignWorkflow } from '@/hooks/workflows';
 import { notifyError } from '@/lib/errors';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
-import type { Automation, Project, State, Workflow } from '@/types';
+import { AGENT_STEPS, followMapping, STEP_NAMES } from '@/domain/agents';
+import type { AgentStep, Automation, Project, State, Workflow } from '@/types';
 import { cancelTargets } from './automationRules';
 import { fieldErrors } from './form';
 import { mappingEffects, suggestMapping } from './mapping';
@@ -31,6 +32,8 @@ export interface MappingPlan {
   counts: ReadonlyMap<string, number>;
   /** The Auto-Close automation of the project, if it is switched on: it follows to the new workflow. */
   autoClose: Automation | undefined;
+  /** The agents' status per step, if the project has set them: they follow the mapping where the category fits. */
+  agentStates?: Record<AgentStep, string | null>;
 }
 
 type Props = {
@@ -57,8 +60,21 @@ function StateLabel({ state }: { state: State }) {
   );
 }
 
+/** What the agents' status per step becomes (spec 7.4): which steps follow, and which need a new choice. */
+function AgentsAfter({ states, to, identifier }: { states: Record<AgentStep, string | null>; to: Workflow; identifier: string }) {
+  const lost = AGENT_STEPS.filter((step) => states[step] === null);
+  const named = AGENT_STEPS.filter((step) => states[step] !== null).map((step) => `${STEP_NAMES[step]} „${to.states.find((state) => state.id === states[step])?.name}“`);
+  return (
+    <Banner role="status" tone={lost.length > 0 ? 'danger' : 'neutral'} title="Agenten">
+      {lost.length === 0
+        ? `Die Status je Schritt folgen der Zuordnung: ${named.join(', ')}.`
+        : `${lost.map((step) => `„${STEP_NAMES[step]}“`).join(', ')} ${lost.length === 1 ? 'passt' : 'passen'} danach zu keinem Status. Bis jemand unter Agenten einen wählt, sind die Agenten in ${identifier} aus.`}
+    </Banner>
+  );
+}
+
 export function StateMappingDialog({ open, onOpenChange, project, plan, finalFocus, onSwitched }: Props) {
-  const { from, to, counts, autoClose } = plan;
+  const { from, to, counts, autoClose, agentStates } = plan;
   const formId = useId();
   const form = useRef<HTMLFormElement>(null);
   const assign = useAssignWorkflow();
@@ -163,6 +179,7 @@ export function StateMappingDialog({ open, onOpenChange, project, plan, finalFoc
             Sie bekommen die Standard-Resolution ihrer Kategorie.
           </Banner>
         )}
+        {agentStates && <AgentsAfter states={followMapping(agentStates, mapping, to)} to={to} identifier={project.identifier} />}
         {autoClose?.enabled && (
           <Banner role="status" tone={nextCancel ? 'neutral' : 'danger'} title="Auto-Close">
             {nextCancel ? `Auto-Close setzt Items danach auf „${nextCancel.name}“.` : `„${to.name}“ hat keinen Status der Kategorie Canceled. Auto-Close lässt sich dort nicht nutzen.`}

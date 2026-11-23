@@ -5,14 +5,19 @@
  */
 
 import { DEMO_ORIGIN } from '@/lib/links';
-import type { Runner, RunnerPairing } from '@/types';
+import type { Runner, RunnerPairing, RunnerSlots } from '@/types';
 import { requireOrgAdmin } from './access';
 import { conflict, FieldErrors, newId, notFound, paginate, read, write, type Page } from './client';
 import type { Db } from './db';
-import { advance, isActive, lastSeen } from './runs';
+import { advance, isActive, lastSeen, slotsUsed } from './runs';
 import { RUNNER_VERSION, type StoredPairing, type StoredRunner } from './seed/agents';
 
 export const PAIRING_MS = 10 * 60_000;
+
+/** The slots of a new runner (spec 9). */
+export const DEFAULT_SLOTS: RunnerSlots = { total: 2, per_repo: 1, light: 2 };
+/** The most slots a pot takes; more is rarely what a machine can carry. */
+export const MAX_SLOTS = 16;
 
 /** The install command of a code. The demo has no instance of its own, so it names the made-up one. */
 export const installCommand = (code: string) => `curl -fsSL ${DEMO_ORIGIN}/runner/install.sh | sh -s -- --code ${code}`;
@@ -30,7 +35,8 @@ function runnerView(db: Db, runner: StoredRunner, at: Date): Runner {
       const item = db.items.find((entry) => entry.id === run.item_id)!;
       return { id: run.id, type: run.type, status: run.status, item_id: item.id, item_key: item.key, item_title: item.title, started_at: run.started_at };
     });
-  return { ...runner, last_seen_at: lastSeen(runner, at), active_runs };
+  const seen = lastSeen(runner, at);
+  return { ...runner, last_seen_at: seen, slots_used: slotsUsed(db, runner.id), load: { ...runner.load, measured_at: seen }, active_runs };
 }
 
 const pairingView = (pairing: StoredPairing): RunnerPairing => ({ code: pairing.code, command: installCommand(pairing.code), expires_at: pairing.expires_at, runner_id: pairing.runner_id });
@@ -84,8 +90,8 @@ export function simulatePairing(code: string, name = 'mac-mini-buero'): Promise<
       version: RUNNER_VERSION,
       online: true,
       last_seen_at: stamp,
-      slots: { total: 2, per_repo: 1, light: 2 },
-      projects: [],
+      slots: { ...DEFAULT_SLOTS },
+      load: { cpu: 3, gpu: 1, ram_used: 7.4, ram_total: 24, disk_free: 311, disk_total: 460 },
       update_error: null,
       created_at: stamp,
     };
@@ -118,6 +124,28 @@ export function renameRunner(id: string, name: string): Promise<Runner> {
     else if (db.runners.some((entry) => entry.id !== id && entry.name.toLowerCase() === trimmed.toLowerCase())) errors.add('name', `Ein anderer Runner heißt schon „${trimmed}“.`);
     errors.throwIfAny();
     runner.name = trimmed;
+    return runnerView(db, runner, now);
+  });
+}
+
+/**
+ * Sets the slots of a runner (spec 8.4): code runs in all and per repo (at most as many as in all), light runs. The
+ * runner gets them with its next contact; what runs keeps running, a lower number only holds back new runs.
+ */
+export function saveRunnerSlots(id: string, slots: RunnerSlots): Promise<Runner> {
+  return write(({ db, me, now }) => {
+    requireOrgAdmin(me, 'Runner verwalten nur Org-Admins.');
+    const runner = db.runners.find((entry) => entry.id === id);
+    if (!runner) throw notFound('Der Runner');
+    const errors = new FieldErrors();
+    const whole = (value: number) => Number.isInteger(value) && value >= 1 && value <= MAX_SLOTS;
+    if (!whole(slots.total)) errors.add('total', `Eine ganze Zahl von 1 bis ${MAX_SLOTS}.`);
+    if (!whole(slots.per_repo)) errors.add('per_repo', `Eine ganze Zahl von 1 bis ${MAX_SLOTS}.`);
+    else if (whole(slots.total) && slots.per_repo > slots.total) errors.add('per_repo', 'Höchstens so viele wie gesamt.');
+    if (!whole(slots.light)) errors.add('light', `Eine ganze Zahl von 1 bis ${MAX_SLOTS}.`);
+    errors.throwIfAny();
+    runner.slots = { total: slots.total, per_repo: slots.per_repo, light: slots.light };
+    advance(db, now);
     return runnerView(db, runner, now);
   });
 }

@@ -8,6 +8,7 @@
 import type { GithubApp, GithubConnection } from '@/types';
 import { requireOrgAdmin } from './access';
 import { conflict, read, write } from './client';
+import { cancelThread } from './runs';
 import { github as seeded } from './seed/agents';
 
 export type AppKind = 'agent' | 'review';
@@ -35,13 +36,21 @@ export function connectGithubApp(kind: AppKind): Promise<GithubConnection> {
 
 /**
  * Disconnects GitHub: both apps are forgotten here (they stay at GitHub until somebody deletes them there), the
- * projects lose their repo, open strands pause.
+ * projects lose their repo, open strands pause and what runs on them is canceled (it could not push any more). PR and
+ * branch stay at GitHub; a strand goes on when its item is assigned to the bot again (spec 7.2).
  */
 export function disconnectGithub(): Promise<GithubConnection> {
-  return write(({ db, me }) => {
+  return write((ctx) => {
+    const { db, me } = ctx;
     requireOrgAdmin(me, 'GitHub trennen dürfen nur Org-Admins.');
     db.github = { agent_app: null, review_app: null, repos: [] };
     for (const settings of db.project_agents) settings.repo = null;
+    for (const thread of db.agent_threads) {
+      if (thread.status !== 'open') continue;
+      thread.status = 'paused';
+      thread.pause_reason = 'github';
+      cancelThread(ctx, thread.id, me.id);
+    }
     return db.github;
   });
 }

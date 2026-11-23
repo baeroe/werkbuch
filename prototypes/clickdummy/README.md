@@ -68,7 +68,7 @@ Es starten nur die Server der Projekte, die laufen: Das Projekt `flows` (`e2e/fl
 5. „Seitenstruktur“ bearbeiten: Konfliktbanner; „Meine Fassung übernehmen“ hält eine Version mehr (4 statt 3).
 6. Vorlage „Monatsbericht“: Die Vorschau zeigt 02.11.2026, 07.12.2026, 04.01.2027, 01.02.2027 und 01.03.2027.
 7. Workflow „Agentur-Freigabe“ ohne den letzten Übergang nach Review: „Review ist vom Startstatus aus nicht erreichbar“, Speichern wird abgelehnt.
-8. (WEBU-18) Runner verbinden (Befehl mit Code, „Verbindung simulieren“), den neuen Runner in Kiras Pool aufnehmen (⌘⏎), WEB-50 mit `a` Kira zuweisen: Der Auftrag „Umsetzen“ läuft, das Protokoll wächst, „Abbrechen“ nach Rückfrage, danach „Auftrag abgebrochen“ mit „Erneut starten“.
+8. (WEBU-18) Runner verbinden (Befehl mit Code, „Verbindung simulieren“), den neuen Runner in Kiras Pool aufnehmen (⌘⏎), WEB-50 mit `a` Kira zuweisen: Der Auftrag „Umsetzen“ läuft auf dem neuen Runner (mac-studio hat den Platz für das Repo schon belegt), der Chip zeigt ihn auch unter dem Filter „Kommentare“, das Protokoll wächst, „Abbrechen“ nach Rückfrage, der Fokus bleibt am Auftrag, „Erneut starten“ setzt ihn auf den neuen Versuch.
 
 Neben den Flows prüft das Projekt `flows` am Handy (390 px), dass Zeilen, Gruppenzeilen und ihre Schalter in der Tabelle mindestens 44 px hoch sind, dass sich im Pfad eines Kind-Items (WEB-42 unter WEB-30) die Keys nicht überlappen, dass ein Item ohne Eltern-Item den Namen seines Projekts zeigt und dass auf einer schmalen Karte im Board das Epic zuerst gekürzt wird, der Key nie. In beiden Themes prüft es, wie der Textmarker „Heute“ markiert, auf der Timeline und im Kalender: hell als gelbe Fläche, im Nachtheft als gelbe Schrift mit Schein. Das Projekt `review` (`e2e/review.spec.ts`) prüft den Review-Build (siehe unten). In der CI läuft `pnpm e2e`, also beides, im Job `clickdummy`; er ist kein Pflicht-Check.
 
@@ -102,7 +102,7 @@ Der Build für Reviews läuft als claude.ai-Artifact, also als eine statische Se
 | `/me/:section?` | Persönlich: `profile`, `security`, `notifications`, `api` |
 | `/login`, `/forgot-password`, `/invitations/:token` | Bildschirme vor der Anmeldung |
 | `/_components` | Komponenten-Galerie |
-| `/_tui` | Bilder des Runners im Terminal: Ausgabe von `install.sh` und die fünf Reiter der TUI (WEBU-18) |
+| `/_tui` | Bilder des Runners im Terminal: Ausgabe von `install.sh` und die drei Reiter der TUI (WEBU-18) |
 
 Eine unbekannte Route zeigt „Diese Seite gibt es nicht“ in der Shell. Im Review-Build steht vor jeder Route ein `#`.
 
@@ -202,7 +202,7 @@ src/
   app/               Router (Browser- oder Hash-Router), Shell mit Seitenleiste und Profilmenü, Live-Banner, Hosts für
                      Vorschau und Anlegen-Dialog
   features/<name>/   die Bildschirme, je Bereich ein Ordner
-e2e/                 Playwright: flows.spec.ts (die sieben Flows und die Handy-Prüfungen), review.spec.ts (der
+e2e/                 Playwright: flows.spec.ts (die acht Flows und die Handy-Prüfungen), review.spec.ts (der
                      Review-Build), fixtures.ts (Fehlerprüfung und Palette für beide)
 scripts/
   shots.mjs          Screenshots mit Prüfung
@@ -215,17 +215,20 @@ scripts/
 Der Klickdummy ist eingefroren; dieser Teil erweitert ihn bewusst, damit Rafael die Oberfläche von Runner und GitHub-Integration freigibt, bevor sie gebaut wird (Spec `docs/superpowers/specs/2026-11-23-runner-design.md`, Plan `docs/superpowers/plans/2026-11-23-runner.md`, Task 1).
 
 **Bildschirme**
-- Organisation → Betrieb → **Runner** (`/settings/runners`): Karten mit online/offline, System, Version, Plätzen, Projekten und laufenden Aufträgen; Update gescheitert (build-01); „Runner verbinden“ mit Befehl, Kopieren und Ablauf des Codes; Umbenennen; Widerrufen mit Rückfrage.
+- Organisation → Betrieb → **Runner** (`/settings/runners`): Karten mit online/offline, System, Version, den drei Töpfen der Plätze (gesamt, je Repo, Reviews und Antworten, belegt/gesamt), der Auslastung (CPU, GPU oder „nicht verfügbar“, RAM, Speicher; offline mit dem Zeitpunkt des letzten Stands) und laufenden Aufträgen mit „Abbrechen“; Update gescheitert (build-01); „Plätze“ als Dialog an der Karte (konfiguriert wird in werkbuch, nicht auf der Maschine); „Runner verbinden“ mit Befehl, Kopieren und Ablauf des Codes; Umbenennen; Widerrufen mit Rückfrage. Ein Runner nimmt Aufträge aller Projekte.
 - Organisation → Betrieb → **GitHub** (`/settings/github`): verbunden mit beiden Apps, Repos (eins ohne Review-App) und Hinweis zum Ruleset; „GitHub trennen“ führt zu den zwei Schritten Agenten-App und Review-App.
 - Organisation → Bots → **Agent** (`/settings/bots?agent=u_kira`): an/aus, Projekte mit Grund, Runner-Pool, CLI, Modelle, Anweisung, Plätze, Zeitlimits. Der Standard-Bot sagt, warum er kein Agent sein kann.
-- Projekt → **Agenten** (`/projects/WEB/settings/agents`): Repo (1:1), Basis-Branch, Merge-Methode, Review-Agent, PRs von Personen, Kommentar am PR, Status je Schritt mit Prüfung der Kategorie, Bremsen, Modelle (Label → Modell sortierbar), Arbeitsregeln je Typ mit Standard und „Standard wiederherstellen“. OPS hat keine Einstellungen: Agenten sind dort aus.
-- **Item**: Aufträge als Zeilen der Aktivität (Filter „Aufträge“) mit Modell und Herkunft, Runner, Dauer, Protokoll, Abbrechen und Erneut starten; Abschnitt „Pull Requests“; Chip „Kira arbeitet“ und Hinweise unter dem Titel.
+- Projekt → **Agenten** (`/projects/WEB/settings/agents`): Repo (1:1), Basis-Branch, Merge-Methode, Review-Agent (nur Bots, die als Agent arbeiten; die anderen ausgegraut mit Grund), PRs von Personen, Kommentar am PR, Setup- und Teardown-Befehl des Worktrees und weitere MCP-Server, Status je Schritt mit Prüfung der Kategorie, Bremsen, Modell je Auftragstyp (darüber die Modell-Labels der Organisation), Arbeitsregeln je Typ mit Standard und „Standard wiederherstellen“. OPS hat keine Einstellungen: Agenten sind dort aus. Ein Workflow-Wechsel sagt, welche Schritte der Zuordnung folgen.
+- Organisation → **Labels** (`/settings/labels`): ein Label kann ein „Modell für Agenten“ tragen (Modell-Label); wer ein Modell wählt, bekommt den Namen „Haiku Agent“ vorgeschlagen. Erkannt wird über das Feld, nie über den Namen. Seeds: „Haiku Agent“, „Opus Agent“, „Fable Agent“; WEB-44 läuft mit opus vom Label „Opus Agent“, WEB-53 mit haiku vom Label „Haiku Agent“.
+- **Item**: Aufträge als Zeilen der Aktivität (Filter „Aufträge“) mit Modell und Herkunft („vom Label Opus Agent“, „aus dem Projekt“, „vom Bot“), Runner, Dauer, Protokoll, Abbrechen und Erneut starten (nur solange das Item beim Bot ist; sonst „Wieder Kira zuweisen“); Abschnitt „Pull Requests“; Chip „Kira arbeitet“ und Hinweise unter dem Titel (Bremse nach Korrekturen oder Konflikten, GitHub getrennt, gescheitert, Runner offline, Bot ohne Agent).
+- **`/_tui`**: `install.sh` und drei Reiter (Status mit Auslastung und Verläufen der letzten Minuten, Aufträge, Doctor); eingestellt wird in werkbuch.
 
 **Demo-Zustände**: WEB-51 (Auftrag läuft), WEB-44 (Korrektur wartet auf den Runner mac-mini-alt, offline), WEB-53 (Zeitlimit erreicht), WEB-49 (Bremse nach drei Korrekturen, bei Mara), WEB-47 (zwei PRs von Jonas, CI läuft), WEB-42 (Entwurf, Antwort von Kira), WEB-40 (gemergt, Review freigegeben), OPS-15 (Kira zugewiesen, Agenten im Projekt nicht eingerichtet). Seeds in `src/api/seed/agents.ts`, Regeln in `src/domain/agents.ts` (Tests `agents.test.ts`), Fake-API in `src/api/runners.ts`, `github.ts`, `agents.ts`, `runs.ts` (Tests `runs.test.ts`).
 
 **Abweichungen und Vereinfachungen**
 - Der Befehl nennt die erfundene Adresse `https://werkbuch.example.com`, nicht die Adresse der Seite.
-- Der Fake-Runner prüft nur „gesamt“ der Plätze, nicht „je Repo“ und „leicht“; der Umzug eines Strangs nach 30 Minuten offline wird nur angekündigt, nicht gespielt.
+- Der Fake-Runner prüft die drei Töpfe der Plätze (Aufträge, die Code ändern, gesamt und je Repo; Reviews und Antworten im eigenen Topf). Den Umzug eines Strangs nach 30 Minuten offline spielt er nicht: der Auftrag wartet weiter, und das Item sagt ab der Frist, dass ein anderer Runner übernommen hätte. Die Reihenfolge der Vergabe (Korrekturen und Reviews zuerst) spielt er auch nicht.
+- Die Auslastung ist ein fester Stand je Runner aus dem Seed.
 - Die TUI und `install.sh` sind Englisch wie skilltri und tussh; sie stehen in Mono-Schrift, nur auf `/_tui` (DESIGN.md, Entscheidungen 2026-11-23).
 - Arbeitsregeln speichert das Formular als Ganzes mit dem Rest des Abschnitts; „Standard wiederherstellen“ gilt nach dem Speichern.
 

@@ -10,7 +10,7 @@
  */
 
 import { Ellipsis, Pencil, RotateCw, SmilePlus, Trash2, Zap } from 'lucide-react';
-import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { addDays, botWord, formatDay, formatPropertyValue } from '@/components/fields/format';
 import { archivedReason, useToday, useUserMap } from '@/components/fields/itemData';
@@ -43,6 +43,7 @@ import { UploadOwnerContext } from '@/features/editor/pasteImages';
 import { isEmptyDoc, RichTextEditor, RichTextView } from '@/features/editor/RichTextEditor';
 import { CommentComposer } from './CommentComposer';
 import { RunLine } from './RunLine';
+import { SHOW_RUNS_EVENT, showRun } from './runFocus';
 import { useItemAgents } from '@/hooks/agents';
 import type { AgentRun } from '@/types';
 import { focusWhenLost, Section, useDetail } from './shared';
@@ -521,11 +522,7 @@ function RunLink({ runId }: { runId: string }) {
   return (
     <button
       type="button"
-      onClick={() => {
-        const target = document.getElementById(`run-${runId}`);
-        target?.scrollIntoView({ block: 'center' });
-        target?.focus();
-      }}
+      onClick={() => showRun(runId)}
       className="inline-flex min-h-11 cursor-pointer items-center rounded-chip text-sm text-muted underline-offset-2 hover:text-ink hover:underline md:min-h-0"
     >
       Ergebnis eines Auftrags
@@ -652,6 +649,16 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
       { replace: true },
     );
   };
+  // a run is asked for (the chip, „Ergebnis eines Auftrags“): a filter that hides runs goes back to „Alles“
+  const hidesRuns = filter === 'comments' || filter === 'changes';
+  const showAll = useRef(() => setFilter('all'));
+  showAll.current = () => setFilter('all');
+  useEffect(() => {
+    if (!hidesRuns) return;
+    const show = () => showAll.current();
+    window.addEventListener(SHOW_RUNS_EVENT, show);
+    return () => window.removeEventListener(SHOW_RUNS_EVENT, show);
+  }, [hidesRuns]);
   /** Deleted comments while their undo toast stands. */
   const [gone, setGone] = useState<string[]>([]);
   const timeline = useRef<HTMLDivElement>(null);
@@ -721,7 +728,7 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
               line.kind === 'comment' ? (
                 <CommentCard key={line.key} comment={line.comment} item={item} users={users} onDelete={deleteComment} />
               ) : line.kind === 'run' ? (
-                <RunLine key={line.key} run={line.run} runs={runs} item={item} />
+                <RunLine key={line.key} run={line.run} runs={runs} item={item} thread={agents.data?.thread ?? null} />
               ) : (
                 <EventLine key={line.key} line={line} ctx={ctx} />
               ),

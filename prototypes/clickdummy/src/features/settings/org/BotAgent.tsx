@@ -202,7 +202,7 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
                               {runner.name}
                             </span>
                             <span id={`runner-hint-${runner.id}`} className="block text-sm text-muted">
-                              {`${runner.online ? 'Online' : `Offline seit ${clockTime(runner.last_seen_at, zone)}`}, ${runner.projects.length > 0 ? `Projekte ${runner.projects.join(', ')}` : 'noch kein Projekt'}`}
+                              {`${runner.online ? 'Online' : `Offline seit ${clockTime(runner.last_seen_at, zone)}`}, ${runner.slots.total} ${runner.slots.total === 1 ? 'Platz' : 'Plätze'}, ${runner.slots.light} für Reviews und Antworten`}
                             </span>
                           </span>
                         }

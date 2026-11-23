@@ -57,8 +57,9 @@ export const DB_KEY = 'werkbuch:db';
  * 3: two levels of items (correction round 2026-10-29): only epics are parents, epics have none.
  * 4: bots are called „Bot“ (correction round 2026-10-29): Kira's description, its token „MCP“ and its webhook „Kira“.
  * 5: runners, GitHub and agents (WEBU-18).
+ * 6: model labels, slots and load of runners set in werkbuch, setup commands and MCP servers per project (WEBU-18).
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /** An earlier identifier of a project: keys like `OLD-12` keep resolving after a rename. */
 export interface ProjectAlias {

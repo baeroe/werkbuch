@@ -1,13 +1,13 @@
 /*
  * The rules of the agents (spec `2026-11-23-runner-design.md`), as pure functions: they are ported to PHP later.
  * - `mappingErrors`: the status each step of the flow sets has to be of the right category (7.4).
- * - `pickModel`: the model of a run; label of the item, then the project per kind of run, then the bot (7.7).
+ * - `pickModel`: the model of a run; a model label of the item, then the project per kind of run, then the bot (7.7).
  * - `afterFindings`: what CI red or review findings lead to: a correction, or the brake when the strand has had
  *   enough (7.2).
  * - `whyNoAgent`: why a bot cannot be an agent at all, or not in a project (7.2, 7.4, 10.4).
  */
 
-import type { AgentConfig, AgentRun, AgentStep, AgentThread, ProjectAgents, ProjectRole, RunType, State, StateCategory, User, Workflow } from '@/types';
+import type { AgentConfig, AgentRun, AgentStep, AgentThread, Label, ProjectAgents, ProjectRole, RunType, State, StateCategory, User, Workflow } from '@/types';
 
 export const RUN_TYPES: readonly RunType[] = ['task', 'correction', 'conflict', 'review', 'comment'];
 
@@ -102,6 +102,21 @@ export function mappingComplete(workflow: Workflow, states: Record<AgentStep, st
   return AGENT_STEPS.every((step) => states[step] !== null) && Object.keys(mappingErrors(workflow, states)).length === 0;
 }
 
+/**
+ * The status of each step after a change of workflow (spec 7.4, like Auto-Close, A345): a step keeps the state the
+ * mapping of the change gives its old one when that fits the step's category; otherwise it has none, and agents stay
+ * off in the project until somebody chooses one.
+ */
+export function followMapping(states: Record<AgentStep, string | null>, mapping: Record<string, string>, to: Workflow): Record<AgentStep, string | null> {
+  const next = {} as Record<AgentStep, string | null>;
+  for (const step of AGENT_STEPS) {
+    const old = states[step];
+    const target = old === null ? undefined : to.states.find((state) => state.id === mapping[old]);
+    next[step] = target && STEP_CATEGORIES[step].includes(target.category) ? target.id : null;
+  }
+  return next;
+}
+
 /** A first guess per step for a workflow: the first status of a fitting category, "In Review" by name if there is one. */
 export function suggestMapping(workflow: Workflow): Record<AgentStep, string | null> {
   const fitting = (step: AgentStep): State[] => workflow.states.filter((state) => STEP_CATEGORIES[step].includes(state.category)).sort((a, b) => a.position - b.position);
@@ -121,30 +136,36 @@ export function suggestMapping(workflow: Workflow): Record<AgentStep, string | n
 export interface ModelChoice {
   model: string;
   source: 'label' | 'project' | 'bot';
-  /** With source `label`: the label of the row that won. */
+  /** With source `label`: the model label that won. */
   label_id: string | null;
 }
 
 export interface ModelInput {
   type: RunType;
+  /** The label catalog of the organization, in its order: the labels with `agent_model` are the model labels. */
+  catalog: readonly Pick<Label, 'id' | 'agent_model'>[];
   /** The labels of the item. */
   labelIds: readonly string[];
-  /** A child of an epic without a matching label takes the epic's (spec 7.7). */
+  /** A child of an epic without a model label takes the epic's (spec 7.7). */
   epicLabelIds?: readonly string[];
-  project: Pick<ProjectAgents, 'label_models' | 'models'> | null;
+  project: Pick<ProjectAgents, 'models'> | null;
   agent: Pick<AgentConfig, 'model' | 'models'>;
 }
 
-const filled = (model: string | undefined): model is string => model !== undefined && model.trim() !== '';
+const filled = (model: string | null | undefined): model is string => model !== undefined && model !== null && model.trim() !== '';
+
+/** Whether a label of the catalog sets the model of an agent (recognized by its field, never by its name). */
+export const isModelLabel = (label: Pick<Label, 'agent_model'>) => filled(label.agent_model);
 
 /**
- * The model of a run: the first row of the project's label list whose label the item carries (then the epic's),
- * then the project's model for the kind of run, then the bot's for the kind of run, then the bot's default.
+ * The model of a run (spec 7.7): the model label of the item (with several, the first in the order of the catalog),
+ * for a child of an epic without one the epic's; then the project's model for the kind of run, then the bot's for the
+ * kind of run, then the bot's default.
  */
-export function pickModel({ type, labelIds, epicLabelIds = [], project, agent }: ModelInput): ModelChoice {
+export function pickModel({ type, catalog, labelIds, epicLabelIds = [], project, agent }: ModelInput): ModelChoice {
   for (const labels of [labelIds, epicLabelIds]) {
-    const row = project?.label_models.find((entry) => labels.includes(entry.label_id) && filled(entry.model));
-    if (row) return { model: row.model.trim(), source: 'label', label_id: row.label_id };
+    const label = catalog.find((entry) => labels.includes(entry.id) && isModelLabel(entry));
+    if (label) return { model: label.agent_model!.trim(), source: 'label', label_id: label.id };
   }
   const fromProject = project?.models[type];
   if (filled(fromProject)) return { model: fromProject.trim(), source: 'project', label_id: null };

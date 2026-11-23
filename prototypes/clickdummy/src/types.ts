@@ -157,6 +157,11 @@ export interface Label {
   id: string;
   name: string;
   color: TypeTone;
+  /**
+   * The model an agent takes for an item with this label (WEBU-18, spec 7.7), e.g. `haiku`; null or missing: an
+   * ordinary label. werkbuch reads the field, never the name.
+   */
+  agent_model?: string | null;
 }
 
 export interface RelationType {
@@ -714,15 +719,38 @@ export interface Runner {
   /** When it last called in; the fake API keeps it close to the clock while the runner is online. */
   last_seen_at: string;
   online: boolean;
-  /** Slots from the runner's config: in all, per repo, and the pot of light runs (`review`, `comment`). */
-  slots: { total: number; per_repo: number; light: number };
-  /** Projects the runner has an environment for (identifiers, from its config). */
-  projects: string[];
+  /**
+   * Slots, set in werkbuch (spec 8.4, 9): code runs in all and per repo, and the pot of light runs (`review`,
+   * `comment`). The runner gets them with every answer; a change holds without a restart.
+   */
+  slots: RunnerSlots;
+  /** What runs now in each pot; `per_repo` is the busiest repo. */
+  slots_used: RunnerSlots;
+  /** The last load the runner sent (spec 8.6); of an offline runner, from its last contact. */
+  load: RunnerLoad;
   /** The last self-update failed: why; the old version keeps running. */
   update_error: string | null;
   created_at: string;
   /** What runs on it now or waits for it, with the item. */
   active_runs: { id: string; type: RunType; status: RunStatus; item_id: string; item_key: string; item_title: string; started_at: string | null }[];
+}
+
+export interface RunnerSlots {
+  total: number;
+  per_repo: number;
+  light: number;
+}
+
+/** The load of a runner's machine (spec 8.6): percent, and sizes in GB. */
+export interface RunnerLoad {
+  cpu: number;
+  /** Null where the system gives no GPU load without root. */
+  gpu: number | null;
+  ram_used: number;
+  ram_total: number;
+  disk_free: number;
+  disk_total: number;
+  measured_at: string;
 }
 
 /** A one-time code to pair a runner: valid for ten minutes, redeemed once. */
@@ -765,12 +793,26 @@ export type AgentStep = 'working' | 'review' | 'correction' | 'merged';
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
 /** The agent settings of a project (spec 10.3). */
+/** An MCP server an agent gets: a name and the command (with its arguments) that starts it over stdio. */
+export interface McpServer {
+  name: string;
+  command: string;
+}
+
 export interface ProjectAgents {
   project_id: string;
   /** `owner/name` of a repo both apps are installed on; null: the project has no repo (runs end with a summary). */
   repo: string | null;
   base_branch: string;
   merge_method: MergeMethod;
+  /**
+   * Shell commands the runner runs after it set up a worktree and before it removes one (spec 8.4), e.g. a DDEV
+   * project per worktree; `$WORKTREE` is its name. Empty: none.
+   */
+  setup_command: string;
+  teardown_command: string;
+  /** Further MCP servers the agents of the project get, besides werkbuch's (spec 8.4). */
+  mcp_servers: McpServer[];
   /** The bot that reviews PRs of the repo, of agents and of people. */
   review_bot_id: string | null;
   /** The status each step sets; agents are off in the project until all four are set. */
@@ -780,8 +822,6 @@ export interface ProjectAgents {
   review_human_prs: boolean;
   comment_on_pr: boolean;
   models: Partial<Record<RunType, string>>;
-  /** Label → model, in order: the first row an item's labels match wins. */
-  label_models: { label_id: string; model: string }[];
   /** The working rules per kind of run as Markdown; null takes the standard werkbuch ships. */
   rules: Record<RunType, string | null>;
 }
@@ -867,12 +907,15 @@ export interface AgentThread {
   corrections: number;
   conflicts: number;
   pr_number: number | null;
+  /** Why a strand paused, when it was not a person or the brake: GitHub was disconnected. */
+  pause_reason?: 'github';
 }
 
 export interface PullRequestCheck {
   name: string;
   status: 'queued' | 'in_progress' | 'completed';
-  conclusion: 'success' | 'failure' | 'cancelled' | 'skipped' | null;
+  /** GitHub's conclusions; `neutral` and `skipped` do not hold a PR back, all other ends than `success` are red. */
+  conclusion: 'success' | 'failure' | 'cancelled' | 'skipped' | 'neutral' | 'timed_out' | 'action_required' | 'stale' | null;
 }
 
 /** A PR at an item (`work_item_links`, spec 12). */

@@ -6,11 +6,12 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import { getAgentConfig, getProjectAgents, listAgentConfigs, listAgentProjects, listRepoOwners, saveAgentConfig, saveProjectAgents } from '@/api/agents';
+import { getAgentConfig, getProjectAgents, listAgentBotIds, listAgentConfigs, listAgentProjects, listRepoOwners, saveAgentConfig, saveProjectAgents } from '@/api/agents';
 import { connectGithubApp, disconnectGithub, getGithub } from '@/api/github';
-import { createPairing, expirePairing, getPairing, listRunners, renameRunner, revokeRunner, simulatePairing } from '@/api/runners';
+import { createPairing, expirePairing, getPairing, listRunners, renameRunner, revokeRunner, saveRunnerSlots, simulatePairing } from '@/api/runners';
 import { cancelRun, getItemAgents, retryRun } from '@/api/runs';
 import { isActive } from '@/domain/agents';
+import type { RunnerSlots } from '@/types';
 import { qk } from './keys';
 import { useApiMutation } from './mutation';
 
@@ -47,6 +48,10 @@ export function useRenameRunner() {
   return useApiMutation(({ id, name }: { id: string; name: string }) => renameRunner(id, name), [qk.runners.all]);
 }
 
+export function useSaveRunnerSlots() {
+  return useApiMutation(({ id, slots }: { id: string; slots: RunnerSlots }) => saveRunnerSlots(id, slots), [qk.runners.all, qk.itemAgents.all]);
+}
+
 export function useRevokeRunner() {
   return useApiMutation(revokeRunner, [qk.runners.all, qk.agentConfigs.all, qk.itemAgents.all]);
 }
@@ -60,11 +65,16 @@ export function useConnectGithubApp() {
 }
 
 export function useDisconnectGithub() {
-  return useApiMutation(disconnectGithub, [qk.github.all, qk.projectAgents.all]);
+  return useApiMutation(disconnectGithub, [qk.github.all, qk.projectAgents.all, qk.itemAgents.all, qk.runners.all]);
 }
 
 export function useAgentConfigs(enabled = true) {
   return useQuery({ queryKey: qk.agentConfigs.list(), queryFn: listAgentConfigs, enabled });
+}
+
+/** The bots that work as agents, for every account (the review agent of a project). */
+export function useAgentBotIds() {
+  return useQuery({ queryKey: qk.agentConfigs.list({ agents: true }), queryFn: listAgentBotIds });
 }
 
 export function useAgentConfig(botId: string | null) {

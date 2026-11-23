@@ -327,9 +327,22 @@ test('Flow 8 (WEBU-18): connect a runner, set up the agent, assign an item to th
   await expect(page.getByRole('button', { name: /Kira arbeitet: Umsetzen/ })).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Felder' }).getByRole('combobox', { name: 'Status: In Progress' })).toBeVisible();
 
-  // the log of the CLI, live while it runs
-  await tabTo(page, run.getByRole('button', { name: /^Protokoll/ }));
+  // the chip shows the run even when the activity hides runs: the filter goes back to „Alles“
+  const filter = page.getByRole('group', { name: 'Aktivität filtern' });
+  await filter.getByRole('button', { name: 'Kommentare' }).click();
+  await expect(run).toBeHidden();
+  await tabTo(page, page.getByRole('button', { name: /Kira arbeitet: Umsetzen/ }));
   await page.keyboard.press('Enter');
+  await expect(run).toBeFocused();
+  await expect(filter.getByRole('button', { name: 'Alles' })).toHaveAttribute('aria-pressed', 'true');
+
+  // the log of the CLI, live while it runs
+  // a running run shows its log from the start; a queued one when opened
+  const toggle = run.getByRole('button', { name: /^Protokoll/ });
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+    await tabTo(page, toggle);
+    await page.keyboard.press('Enter');
+  }
   await expect(run.getByRole('log', { name: 'Protokoll: Umsetzen' })).toContainText('werkbuch_work-items get WEB-50', { timeout: 15_000 });
 
   // cancel, after the question
@@ -340,7 +353,15 @@ test('Flow 8 (WEBU-18): connect a runner, set up the agent, assign an item to th
   await page.keyboard.press('Enter');
   await expect(run.getByText('Abgebrochen', { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Auftrag abgebrochen: Umsetzen')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Erneut starten' }).first()).toBeVisible();
+  // „Abbrechen“ went with the end of the run: the focus stays on the run, not on the page
+  await expect(run).toBeFocused();
+
+  // start it again: the new attempt's line takes the focus
+  await tabTo(page, run.getByRole('button', { name: 'Erneut starten' }));
+  await page.keyboard.press('Enter');
+  const again = page.getByRole('article', { name: 'Auftrag „Umsetzen“ von Kira' }).last();
+  await expect(again.getByText('Versuch')).toBeVisible({ timeout: 15_000 });
+  await expect(again).toBeFocused();
 });
 
 test.describe('the highlighter marks today (DESIGN.md: at night yellow text with a glow instead of a yellow area)', () => {

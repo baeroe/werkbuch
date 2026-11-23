@@ -1,6 +1,6 @@
 /*
- * Static pictures of the runner in a terminal (WEBU-18, spec 8.2 and 8.5): the output of `install.sh` and the five
- * tabs of the TUI. They are text with a small markup, so they stay readable and can be copied:
+ * Static pictures of the runner in a terminal (WEBU-18, spec 8.2, 8.5 and 8.6): the output of `install.sh` and the
+ * three tabs of the TUI. Nothing is set up in the TUI: slots, setup commands and MCP servers live in werkbuch. They are text with a small markup, so they stay readable and can be copied:
  *
  *   {a:text}  accent (cyan)            {A:text}  accent bold         {k:text}  key (cyan bold)
  *   {g:text}  green    {r:text}  red   {y:text}  yellow   {b:text}  blue
@@ -24,7 +24,7 @@ function spread(left: string, right: string): string {
   return `${left}${' '.repeat(Math.max(1, gap))}${right} `;
 }
 
-const TABS = ['Status', 'Runs', 'Projects', 'Settings', 'Doctor'] as const;
+const TABS = ['Status', 'Runs', 'Doctor'] as const;
 export type TabName = (typeof TABS)[number];
 
 function header(active: TabName): string {
@@ -69,8 +69,9 @@ const install: Frame = {
     '{g:✓} paired       as {B:mac-mini-buero} with Feldwerk {d:(token stored in the keychain)}',
     '{g:✓} service      launchd {d:dev.werkbuch.runner} loaded and started',
     '',
-    'The runner polls for runs now. It has no project environments yet:',
-    '  open the TUI with {w:werkbuch-runner} and add them under {A:3 Projects}.',
+    'The runner polls for runs now, for every project. Slots, setup commands and MCP servers',
+    'come from werkbuch: {B:Organization → Runners} and {B:project settings → Agents}.',
+    'Open the TUI with {w:werkbuch-runner}.',
     '',
     '{d:$} ',
   ],
@@ -92,7 +93,7 @@ const installExpired: Frame = {
     '{g:✓} installed    ~/.local/bin/werkbuch-runner',
     '{r:✗} paired       {r:the code has expired (valid for 10 minutes, once)}',
     '',
-    'Create a new code in werkbuch: {B:Settings → Runner → Connect runner}, then run the command again.',
+    'Create a new code in werkbuch: {B:Organization → Runners → Connect runner}, then run the command again.',
     'Nothing else changed; no service was set up.',
     '',
     '{d:$} ',
@@ -103,7 +104,7 @@ const status: Frame = {
   id: 'status',
   fixed: true,
   title: 'Status',
-  caption: 'Verbindung, Instanz, Version, Plätze und was gerade läuft. Die Kopfzeile zeigt die Reiter und den Zustand, die Fußzeile die Tasten.',
+  caption: 'Verbindung, Instanz, Version, die Plätze aus werkbuch, die Auslastung der Maschine mit Verläufen der letzten zehn Minuten und was gerade läuft. Eingestellt wird nichts hier, sondern in werkbuch.',
   window: 'werkbuch-runner, mac-studio',
   lines: [
     header('Status'),
@@ -111,9 +112,13 @@ const status: Frame = {
     '  {d:instance}   https://werkbuch.example.com  {d:(Feldwerk)}',
     '  {d:runner}     {B:mac-studio}   darwin/arm64   0.1.0-dev   {d:protocol 3}',
     '  {d:connection} {g:● connected}  {d:last poll 2 s ago, next in 3 s}',
-    '  {d:slots}      {A:■}□  1 of 2   {d:per repo} 1   {d:light (reviews, answers)} 0 of 2',
-    '  {d:service}    launchd {d:dev.werkbuch.runner}, up since Oct 20 16:40',
-    '  {d:update}     {g:up to date}',
+    '  {d:slots}      {A:■}□  1 of 2   {d:per repo} 0 of 1   {d:light (reviews, answers)} □□ 0 of 2   {d:(from werkbuch)}',
+    blank,
+    rule('Load') + '                                                {d:last 10 minutes}',
+    '  {d:cpu}       {a:██████}{d:░░░░░░░░░░░░░░}   31 %                {a:▂▃▃▅▆▄▃▃▅▆▇▆▅▄▃▃▄▅▅▄▃▄▅▆▅▄▃▃▄▅}',
+    '  {d:gpu}       {a:██}{d:░░░░░░░░░░░░░░░░░░}   12 %                {a:▁▁▂▁▁▁▂▃▂▁▁▁▂▁▁▁▁▂▁▁▁▂▂▁▁▁▂▁▁▁}',
+    '  {d:memory}    {a:████████████}{d:░░░░░░░░}   38.2 of 64 GB       {a:▅▅▅▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆}',
+    '  {d:disk}      {a:████████████████}{d:░░░░}   182 of 994 GB free  {a:▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇}',
     blank,
     rule('Running'),
     '§  {s:WEB-51}  task        sonnet   {a:● 6:12}   Cookie-Banner auf Consent v2 umstellen',
@@ -122,11 +127,10 @@ const status: Frame = {
     rule('Recent'),
     '  WEB-44  review      opus     {g:✓ done}      09:38–09:49   {y:changes (2 findings)}',
     '  WEB-42  comment     haiku    {g:✓ done}      09:31–09:33   answer posted',
-    '  WEB-44  task        opus     {d:moved}       08:52–09:21   {d:strand on mac-mini-alt (offline)}',
     '  WEB-53  task        haiku    {r:✗ timed out} 08:10–09:10   {r:60 min limit, nothing pushed}',
-    '  WEB-53  task        haiku    {d:↻ lost}      08:05–08:09   {d:no heartbeat, requeued}',
     blank,
-    footer([['tab', 'next tab'], ['1-5', 'tabs'], ['enter', 'open run'], ['r', 'refresh'], ['?', 'help'], ['q', 'quit']], '{g:polled 2 s ago}'),
+    '  {d:Set up in werkbuch: slots under Organization → Runners, setup and MCP under project settings → Agents.}',
+    footer([['tab', 'next tab'], ['1-3', 'tabs'], ['enter', 'open run'], ['r', 'refresh'], ['l', 'logout'], ['?', 'help'], ['q', 'quit']], '{g:polled 2 s ago}'),
   ],
 };
 
@@ -161,72 +165,11 @@ const runs: Frame = {
   ],
 };
 
-const projects: Frame = {
-  id: 'projects',
-  fixed: true,
-  title: 'Projects',
-  caption: 'Die Projekte, für die dieser Runner eine Umgebung hat, mit den Hooks, die einen Worktree einrichten und abbauen. Nur für diese Projekte holt er Aufträge.',
-  window: 'werkbuch-runner, mac-studio',
-  lines: [
-    header('Projects'),
-    blank,
-    `  {d:PROJECT  REPO                      WORKTREES}  {d:│} {B:WEB} Website-Relaunch`,
-    `§  {s:WEB}     feldwerk/website          2 (1 busy)  {d:│} {d:repo}       feldwerk/website {d:(mirror)}`,
-    `  APP      feldwerk/kunden-app       0           {d:│} {d:setup}      ddev start -p web-$WORKTREE`,
-    `                                                 {d:│} {d:teardown}   ddev delete -Oy web-$WORKTREE`,
-    `                                                 {d:│} {d:env}        COMPOSER_CACHE_DIR=~/.cache/c`,
-    `                                                 {d:│} {d:worktrees}  WEB-51 {a:busy}   WEB-53 {d:idle, kept 3 days}`,
-    `                                                 {d:│}`,
-    `                                                 {d:│} {g:✓} hooks are executable   {g:✓} ddev found`,
-    blank,
-    `  {d:OPS is not set up here: runs of OPS go to build-01.}`,
-    blank,
-    blank,
-    blank,
-    blank,
-    blank,
-    blank,
-    blank,
-    blank,
-    footer([['j/k', 'move'], ['a', 'add'], ['e', 'edit hooks'], ['t', 'test setup'], ['d', 'remove'], ['?', 'help'], ['q', 'quit']]),
-  ],
-};
-
-const settings: Frame = {
-  id: 'settings',
-  fixed: true,
-  title: 'Settings',
-  caption: 'Die Config des Runners (~/.config/werkbuch-runner/config.yaml): Name, Plätze, CLIs und weitere MCP-Server. Änderungen gelten ohne Neustart. Das Token liegt im Schlüsselbund, nie in der Config.',
-  window: 'werkbuch-runner, mac-studio',
-  lines: [
-    header('Settings'),
-    blank,
-    '  {d:instance}            https://werkbuch.example.com {d:(token in the keychain)}',
-    '§  {s:name}                mac-studio',
-    '  {d:slots total}         2',
-    '  {d:slots per repo}      1     {d:DDEV shares the test database}',
-    '  {d:slots light}         2     {d:reviews and answers}',
-    '  {d:claude}              /opt/homebrew/bin/claude   {d:2.4.1}',
-    '  {d:codex}               {d:not installed}',
-    '  {d:extra MCP servers}   playwright {d:(npx-free: ~/.local/bin/mcp-playwright)}',
-    '  {d:skilltri}            {y:on}   {d:needs a rule that turns off its werkbuch server here}',
-    '  {d:keep worktrees}      3 days',
-    '  {d:log level}           info',
-    blank,
-    '  {d:config}  ~/.config/werkbuch-runner/config.yaml   {g:reloaded 10:01}',
-    blank,
-    blank,
-    blank,
-    blank,
-    footer([['j/k', 'move'], ['enter', 'edit'], ['o', 'open in $EDITOR'], ['l', 'logout'], ['?', 'help'], ['q', 'quit']]),
-  ],
-};
-
 const doctor: Frame = {
   id: 'doctor',
   fixed: true,
   title: 'Doctor',
-  caption: 'Prüft, was ein Auftrag braucht: CLIs installiert und angemeldet, die Modelle der Agenten, Git, Schlüsselbund, die Instanz und die Hooks. Ein Modell, das das CLI nicht kennt, steht hier und nicht erst am gescheiterten Auftrag.',
+  caption: 'Prüft, was ein Auftrag braucht: CLIs installiert und angemeldet, die Modelle der Agenten, Git, Schlüsselbund, die Instanz und die Setup-Befehle der Projekte aus werkbuch. Ein Modell, das das CLI nicht kennt, steht hier und nicht erst am gescheiterten Auftrag.',
   window: 'werkbuch-runner, mac-studio',
   lines: [
     header('Doctor'),
@@ -235,15 +178,16 @@ const doctor: Frame = {
     '  {g:✓} token          in the keychain, accepted',
     '  {g:✓} version        0.1.0-dev matches the instance',
     '  {g:✓} claude         2.4.1, logged in',
-    '  {g:✓} models         sonnet, opus, haiku {d:(Kira: default sonnet, review opus; WEB labels: opus, haiku)}',
+    '  {g:✓} models         sonnet, opus, haiku, fable {d:(Kira: default sonnet, review opus; model labels)}',
     '  {y:!} codex          not installed {d:(no agent uses it)}',
     '  {g:✓} git            2.47.1',
     '  {g:✓} gh             2.63.0 {d:(uses the token of each run)}',
-    '  {g:✓} WEB setup      hook runs {d:(dry run, 4.1 s)}',
-    '  {r:✗} APP setup      {r:ddev: project "app-$WORKTREE" needs Docker, Colima is not running}',
+    '  {g:✓} WEB setup      command from werkbuch runs {d:(dry run, 4.1 s)}',
+    '  {g:✓} WEB MCP        playwright starts {d:(pnpm dlx @playwright/mcp)}',
+    '  {r:✗} docker         {r:the setup command of WEB needs Docker, Colima is not running}',
     '  {g:✓} disk           182 GB free',
     blank,
-    '  {!: 1 problem } {d:APP runs fail until Colima runs. Start it with} {w:colima start}{d:.}',
+    '  {!: 1 problem } {d:Runs of WEB fail until Colima runs. Start it with} {w:colima start}{d:.}',
     blank,
     blank,
     blank,
@@ -254,5 +198,5 @@ const doctor: Frame = {
   ],
 };
 
-export const FRAMES: Frame[] = [install, installExpired, status, runs, projects, settings, doctor];
+export const FRAMES: Frame[] = [install, installExpired, status, runs, doctor];
 export const padLine = pad;

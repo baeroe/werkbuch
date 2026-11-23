@@ -8,7 +8,8 @@ import { now } from '@/lib/clock';
 import { asUser, failure, resetApi } from '@/test/api';
 import { getProjectAgents, listAgentProjects, saveAgentConfig, getAgentConfig, saveProjectAgents } from './agents';
 import { getDb, saveDb } from './db';
-import { createPairing, expirePairing, listRunners, revokeRunner, simulatePairing } from './runners';
+import { disconnectGithub } from './github';
+import { createPairing, expirePairing, listRunners, revokeRunner, saveRunnerSlots, simulatePairing } from './runners';
 import { advance, CANCEL_DELAY_MS, cancelRun, getItemAgents, retryRun, START_DELAY_MS } from './runs';
 import { listActivity, updateWorkItem } from './workItems';
 
@@ -30,6 +31,10 @@ describe('assigning an item to an agent', () => {
     expect(state.runs[0]).toMatchObject({ type: 'task', status: 'queued', model: 'sonnet', model_source: 'bot' });
     expect(state.thread).toMatchObject({ branch: 'agent/WEB-50-fehlerseite-404-gestalten', status: 'open' });
 
+    // mac-studio works on WEB-51 in the same repo, and takes one run per repo: the task waits
+    tick(START_DELAY_MS + 100);
+    expect((await getItemAgents('WEB-50')).runs[0].status).toBe('queued');
+    await saveRunnerSlots('rn_studio', { total: 2, per_repo: 2, light: 2 });
     expect(tick(START_DELAY_MS + 100)).toBe(true);
     state = await getItemAgents('WEB-50');
     expect(state.runs[0]).toMatchObject({ status: 'running', runner_name: 'mac-studio', runner_online: true });
@@ -38,12 +43,13 @@ describe('assigning an item to an agent', () => {
     expect(moved?.kind === 'event' && moved.event).toMatchObject({ actor_id: 'u_kira', reason: 'Agent: Auftrag „Umsetzen“ gestartet' });
   });
 
-  it('takes the model of a label the item carries (SEO → haiku in WEB)', async () => {
-    await updateWorkItem('wi_web_50', { assignee_id: 'u_kira', label_ids: ['lb_seo'] });
-    expect((await getItemAgents('WEB-50')).runs[0]).toMatchObject({ model: 'haiku', model_source: 'label', model_label_id: 'lb_seo' });
+  it('takes the model of a model label the item carries („Fable Agent“), an ordinary label does nothing', async () => {
+    await updateWorkItem('wi_web_50', { assignee_id: 'u_kira', label_ids: ['lb_seo', 'lb_agent_fable'] });
+    expect((await getItemAgents('WEB-50')).runs[0]).toMatchObject({ model: 'fable', model_source: 'label', model_label_id: 'lb_agent_fable' });
   });
 
   it('cancels a running run in two steps and lets it start again as the next attempt', async () => {
+    await saveRunnerSlots('rn_studio', { total: 2, per_repo: 2, light: 2 });
     await updateWorkItem('wi_web_50', { assignee_id: 'u_kira' });
     tick(START_DELAY_MS + 100);
     const [run] = (await getItemAgents('WEB-50')).runs;
@@ -59,6 +65,26 @@ describe('assigning an item to an agent', () => {
     expect(again).toMatchObject({ type: 'task', status: 'queued', attempt: 2 });
     // one run at a time per item
     expect((await failure(retryRun(run.id))).reason).toBe('run_active');
+  });
+
+  it('starts nothing again on a strand a person took over: the way back is assigning the item to the bot (spec 7.2)', async () => {
+    // WEB-53 ran out of time; Jonas takes it over, the strand pauses
+    await updateWorkItem('wi_web_53', { assignee_id: 'u_jonas' });
+    expect((await getItemAgents('WEB-53')).thread?.status).toBe('paused');
+    const refused = await failure(retryRun('run_web53_task'));
+    expect(refused).toMatchObject({ status: 409, reason: 'not_assigned' });
+    expect(refused.message).toContain('Weise es wieder Kira zu');
+    // given back, a correction starts on the same strand
+    await updateWorkItem('wi_web_53', { assignee_id: 'u_kira' });
+    expect((await getItemAgents('WEB-53')).runs.at(-1)).toMatchObject({ type: 'correction', status: 'queued' });
+  });
+
+  it('pauses open strands with the reason when GitHub is disconnected', async () => {
+    await disconnectGithub();
+    const state = await getItemAgents('WEB-51');
+    expect(state.thread).toMatchObject({ status: 'paused', pause_reason: 'github' });
+    expect(state.runs[0].status).toBe('canceling');
+    expect((await getProjectAgents('p_web')).repo).toBeNull();
   });
 
   it('lets only who may edit the item cancel', async () => {
@@ -82,7 +108,9 @@ describe('assigning an item to an agent', () => {
     expect(state.runs.at(-1)).toMatchObject({ type: 'correction', status: 'queued' });
   });
 
-  it('keeps a run waiting for the offline runner of its strand', async () => {
+  // a simplification of the demo: past the 30 minutes another runner of the pool would take the strand over (spec 9);
+  // the demo keeps the run waiting, and the item says what would have happened
+  it('keeps a run waiting for the offline runner of its strand (the demo plays no takeover)', async () => {
     tick(60 * 60_000);
     expect((await getItemAgents('WEB-44')).runs.at(-1)).toMatchObject({ type: 'correction', status: 'waiting', runner_name: 'mac-mini-alt', runner_online: false });
   });
@@ -144,6 +172,25 @@ describe('the agent settings', () => {
   });
 });
 
+describe('the slots of a runner (spec 9)', () => {
+  it('keep a light run apart from code runs: a review starts while the code slot of the repo is taken', async () => {
+    // a review of WEB-44 (its strand's runner is offline, a review may go to any runner of the pool)
+    const db = getDb();
+    const before = db.agent_runs.length;
+    db.agent_runs.push({ ...db.agent_runs.find((run) => run.id === 'run_web44_review')!, id: 'run_review_now', status: 'queued', runner_id: null, created_at: now().toISOString(), started_at: null, finished_at: null, result: null, log: [], usage: null });
+    saveDb();
+    tick(START_DELAY_MS + 100);
+    expect(getDb().agent_runs.find((run) => run.id === 'run_review_now')).toMatchObject({ status: 'running', runner_id: 'rn_studio' });
+    expect(getDb().agent_runs.length).toBe(before + 1);
+    expect((await listRunners()).items.find((runner) => runner.id === 'rn_studio')?.slots_used).toEqual({ total: 1, per_repo: 1, light: 1 });
+  });
+
+  it('are whole numbers, per repo at most as many as in all', async () => {
+    const refused = await failure(saveRunnerSlots('rn_studio', { total: 2, per_repo: 3, light: 0 }));
+    expect(Object.keys(refused.errors ?? {}).sort()).toEqual(['light', 'per_repo']);
+  });
+});
+
 describe('runners', () => {
   it('pair with a code that is valid once and for ten minutes', async () => {
     const pairing = await createPairing();
@@ -151,7 +198,7 @@ describe('runners', () => {
     expect(Date.parse(pairing.expires_at) - now().getTime()).toBeGreaterThan(9 * 60_000);
 
     const runner = await simulatePairing(pairing.code);
-    expect(runner).toMatchObject({ name: 'mac-mini-buero', online: true, projects: [] });
+    expect(runner).toMatchObject({ name: 'mac-mini-buero', online: true, slots: { total: 2, per_repo: 1, light: 2 } });
     expect((await failure(simulatePairing(pairing.code))).reason).toBe('code_used');
 
     const expired = await createPairing();

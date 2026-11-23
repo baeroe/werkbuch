@@ -7,11 +7,11 @@
  */
 
 import { Bot as BotIcon, BotMessageSquare, Pencil, Plus, ShieldAlert, Trash2, UserRoundCheck, UserRoundX } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router';
 import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import { Avatar } from '@/components/ui/Avatar';
 import { Banner } from '@/components/ui/Banner';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { IconButton } from '@/components/ui/IconButton';
@@ -37,7 +37,6 @@ import { fieldMessage, noticeOf } from './errors';
 import { formatDate, relativeTime, useOrgZone } from './format';
 import { FormDialog } from './FormDialog';
 import { Badge, FieldGroup, Loaded, Row, Rows, RowsSkeleton, SectionHeader } from './parts';
-import { buttonClass } from '@/components/ui/Button';
 import { SecretDialog, type Secret } from './SecretDialog';
 import type { SectionProps } from './sections';
 import { useDialogRound } from './useDialogRound';

@@ -190,6 +190,10 @@ export const labels: Label[] = [
   { id: 'lb_a11y', name: 'Barrierefreiheit', color: 'slate' },
   { id: 'lb_backend', name: 'Backend', color: 'sky' },
   { id: 'lb_design', name: 'Design', color: 'plum' },
+  // model labels (WEBU-18, spec 7.7): an item with one runs its agent on this model
+  { id: 'lb_agent_haiku', name: 'Haiku Agent', color: 'moss', agent_model: 'haiku' },
+  { id: 'lb_agent_opus', name: 'Opus Agent', color: 'plum', agent_model: 'opus' },
+  { id: 'lb_agent_fable', name: 'Fable Agent', color: 'ochre', agent_model: 'fable' },
 ];
 
 export const relationTypes: RelationType[] = [

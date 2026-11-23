@@ -9,14 +9,14 @@
  * pauses the strand. Statuses are set by the agent bot with the reason „Agent: …“.
  */
 
-import { isActive, pickModel, RUN_TYPE_NAMES, whyNotHere } from '@/domain/agents';
+import { isActive, LIGHT_RUNS, pickModel, RUN_TYPE_NAMES, whyNotHere } from '@/domain/agents';
 import { now as clockNow } from '@/lib/clock';
-import type { AgentRun, AgentThread, ItemAgentState, RunType, User, WorkItemRecord } from '@/types';
+import type { AgentRun, AgentThread, ItemAgentState, RunnerSlots, RunType, User, WorkItemRecord } from '@/types';
 import { canSeeProject, requireWritable } from './access';
 import { conflict, makeCtx, newId, notFound, read, write, type Ctx } from './client';
 import { saveDb, type Db } from './db';
 import { moveItem } from './itemRules';
-import { LOG_TEMPLATES, type StoredRun, type StoredRunner } from './seed/agents';
+import { LOG_TEMPLATES, TASK_LOGS, type StoredRun, type StoredRunner } from './seed/agents';
 import { requireItem } from './workItems';
 
 /** A queued run starts this long after it was queued, when a runner is free. */
@@ -57,25 +57,64 @@ function agentBot(db: Db, botId: string): User | undefined {
   return db.users.find((user) => user.id === botId);
 }
 
-/** A runner of the pool that is online, has the project and a free repo slot. */
-function freeRunner(db: Db, run: StoredRun, item: WorkItemRecord): StoredRunner | undefined {
+/** The repo a run works in: the project's, or the project itself when it has none (a folder per strand). */
+export function repoOf(db: Db, itemId: string): string {
+  const item = db.items.find((entry) => entry.id === itemId);
+  if (!item) return '';
+  return db.project_agents.find((settings) => settings.project_id === item.project_id)?.repo ?? `project:${item.project_id}`;
+}
+
+const busy = (run: StoredRun) => run.status === 'running' || run.status === 'canceling';
+
+/**
+ * What runs on a runner in each pot (spec 9): code runs in all, code runs of the busiest repo, light runs (`review`,
+ * `comment`) in a pot of their own.
+ */
+export function slotsUsed(db: Db, runnerId: string): RunnerSlots {
+  const runs = db.agent_runs.filter((run) => run.runner_id === runnerId && busy(run));
+  const code = runs.filter((run) => !LIGHT_RUNS.includes(run.type));
+  const perRepo = new Map<string, number>();
+  for (const run of code) perRepo.set(repoOf(db, run.item_id), (perRepo.get(repoOf(db, run.item_id)) ?? 0) + 1);
+  return { total: code.length, per_repo: Math.max(0, ...perRepo.values()), light: runs.length - code.length };
+}
+
+/**
+ * A runner of the pool that is online and has a free slot for the run (spec 9): a light run in the pot of light runs,
+ * a code run in all and in its repo. Every runner takes runs of every project (spec 8.4).
+ */
+function freeRunner(db: Db, run: StoredRun): StoredRunner | undefined {
   const config = db.agent_configs.find((entry) => entry.bot_id === run.bot_id);
-  const project = db.projects.find((entry) => entry.id === item.project_id);
-  if (!config || !project) return undefined;
+  if (!config) return undefined;
   const thread = db.agent_threads.find((entry) => entry.id === run.thread_id);
   // a correction or comment at a strand goes to the strand's runner (spec 9)
   const pool = thread?.runner_id && run.type !== 'review' ? config.runner_ids.filter((id) => id === thread.runner_id) : config.runner_ids;
+  const repo = repoOf(db, run.item_id);
   return pool
     .map((id) => db.runners.find((runner) => runner.id === id))
     .find((runner): runner is StoredRunner => {
-      if (!runner?.online || !runner.projects.includes(project.identifier)) return false;
-      const busy = db.agent_runs.filter((other) => other.runner_id === runner.id && (other.status === 'running' || other.status === 'canceling'));
-      return busy.length < runner.slots.total;
+      if (!runner?.online) return false;
+      const running = db.agent_runs.filter((other) => other.runner_id === runner.id && busy(other));
+      if (LIGHT_RUNS.includes(run.type)) return running.filter((other) => LIGHT_RUNS.includes(other.type)).length < runner.slots.light;
+      const code = running.filter((other) => !LIGHT_RUNS.includes(other.type));
+      return code.length < runner.slots.total && code.filter((other) => repoOf(db, other.item_id) === repo).length < runner.slots.per_repo;
     });
 }
 
+/** A word of the title to search for, and a name for the test the story writes. */
+function wordsOf(title: string): { word: string; test: string } {
+  const word = title.split(/[^\p{L}\p{N}.]+/u).find((part) => part.length > 3) ?? title;
+  const test = `${slug(word).replace(/(^|-)(\w)/g, (_match, _dash, letter: string) => letter.toUpperCase())}Test`;
+  return { word, test };
+}
+
+/** The log a run writes: the story of its kind, or of its item when it has one, filled in for the item. */
 function fillLog(run: StoredRun, item: WorkItemRecord, branch: string) {
-  return LOG_TEMPLATES[run.type].map((line) => ({ ...line, text: line.text.replaceAll('{key}', item.key).replaceAll('{branch}', branch).replaceAll('{model}', run.model) }));
+  const { word, test } = wordsOf(item.title);
+  const template = run.type === 'task' ? (TASK_LOGS[item.key] ?? LOG_TEMPLATES.task) : LOG_TEMPLATES[run.type];
+  return template.map((line) => ({
+    ...line,
+    text: line.text.replaceAll('{key}', item.key).replaceAll('{branch}', branch).replaceAll('{model}', run.model).replaceAll('{title}', item.title).replaceAll('{word}', word).replaceAll('{test}', test),
+  }));
 }
 
 /**
@@ -87,7 +126,7 @@ export function advance(db: Db, at: Date = clockNow()): boolean {
   for (const run of db.agent_runs) {
     if (run.status === 'queued' && at.getTime() - Date.parse(run.created_at) >= START_DELAY_MS) {
       const item = db.items.find((entry) => entry.id === run.item_id);
-      const runner = item && freeRunner(db, run, item);
+      const runner = item && freeRunner(db, run);
       if (!item || !runner) continue;
       const started = new Date(Date.parse(run.created_at) + START_DELAY_MS);
       const thread = db.agent_threads.find((entry) => entry.id === run.thread_id);
@@ -175,7 +214,7 @@ function queueRun(ctx: Ctx, bot: User, item: WorkItemRecord, thread: AgentThread
   const settings = db.project_agents.find((entry) => entry.project_id === item.project_id) ?? null;
   const config = db.agent_configs.find((entry) => entry.bot_id === bot.id)!;
   const parent = item.parent_id ? db.items.find((entry) => entry.id === item.parent_id) : undefined;
-  const model = pickModel({ type, labelIds: item.label_ids, epicLabelIds: parent?.label_ids ?? [], project: settings, agent: config });
+  const model = pickModel({ type, catalog: db.labels, labelIds: item.label_ids, epicLabelIds: parent?.label_ids ?? [], project: settings, agent: config });
   const offline = thread ? db.runners.find((runner) => runner.id === thread.runner_id && !runner.online) : undefined;
   const run: StoredRun = {
     id: newId('run'),
@@ -204,8 +243,17 @@ function queueRun(ctx: Ctx, bot: User, item: WorkItemRecord, thread: AgentThread
 }
 
 function cancelActive(ctx: Ctx, item: WorkItemRecord, by: string | null): void {
+  cancelRuns(ctx, (run) => run.item_id === item.id, by);
+}
+
+/** Cancels what is active on a strand (GitHub disconnected). */
+export function cancelThread(ctx: Ctx, threadId: string, by: string | null): void {
+  cancelRuns(ctx, (run) => run.thread_id === threadId, by);
+}
+
+function cancelRuns(ctx: Ctx, which: (run: StoredRun) => boolean, by: string | null): void {
   for (const run of ctx.db.agent_runs) {
-    if (run.item_id !== item.id || !isActive(run) || run.status === 'canceling') continue;
+    if (!which(run) || !isActive(run) || run.status === 'canceling') continue;
     if (run.status === 'running') {
       run.status = 'canceling';
       run.cancel_requested_at = ctx.stamp;
@@ -230,11 +278,13 @@ export function onAssigneeChanged(ctx: Ctx, actor: User, item: WorkItemRecord, p
   if (left?.type === 'bot' && thread && thread.bot_id === left.id && actor.id !== left.id) {
     cancelActive(ctx, item, actor.id);
     thread.status = 'paused';
+    delete thread.pause_reason;
   }
   const bot = db.users.find((user) => user.id === item.assignee_id);
   if (bot?.type !== 'bot' || whyAssigneeIsNoAgent(db, item) !== null) return;
   if (thread && thread.bot_id === bot.id) {
     thread.status = 'open';
+    delete thread.pause_reason;
     thread.corrections = 1;
     thread.conflicts = 0;
     queueRun(ctx, bot, item, thread, 'correction');
@@ -276,7 +326,8 @@ export function cancelRun(id: string): Promise<AgentRun> {
 
 /**
  * Starts a run again that failed, ran out of time, got lost or was canceled: the same kind on the same strand, as the
- * next attempt. The brake is not reset (spec 7.2).
+ * next attempt. The brake is not reset (spec 7.2). Only while the item is still with the bot and its strand is not
+ * paused: a strand goes on after a person took over only by assigning the item to the bot again (spec 7.2).
  */
 export function retryRun(id: string): Promise<AgentRun> {
   return write((ctx) => {
@@ -288,6 +339,9 @@ export function retryRun(id: string): Promise<AgentRun> {
     if (ctx.db.agent_runs.some((other) => other.item_id === item.id && isActive(other))) throw conflict('run_active', `An ${item.key} läuft schon ein Auftrag.`);
     const bot = agentBot(ctx.db, run.bot_id)!;
     const thread = ctx.db.agent_threads.find((entry) => entry.id === run.thread_id) ?? null;
+    if (item.assignee_id !== bot.id || thread?.status === 'paused') {
+      throw conflict('not_assigned', `${item.key} ist nicht mehr bei ${bot.name}. Weise es wieder ${bot.name} zu, dann macht ${bot.name} mit einer Korrektur weiter.`);
+    }
     if (thread) thread.status = 'open';
     const attempts = ctx.db.agent_runs.filter((other) => other.thread_id === run.thread_id && other.type === run.type).length;
     return runView(ctx.db, queueRun(ctx, bot, item, thread, run.type, attempts + 1), ctx.now);

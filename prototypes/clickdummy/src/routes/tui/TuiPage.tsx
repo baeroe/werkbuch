@@ -1,6 +1,6 @@
 /*
  * /_tui (WEBU-18): pictures of the runner in a terminal, for the review of the UX before it is built: the output of
- * `install.sh` (connected, and with an expired code) and the five tabs of the TUI (spec 8.5). The TUI follows skilltri:
+ * `install.sh` (connected, and with an expired code) and the three tabs of the TUI (spec 8.5, 8.6). The TUI follows skilltri:
  * Bubble Tea and Lip Gloss, the 16 colours of the terminal, tabs in the header with the state on the right, the keys
  * in the footer. Each picture scrolls sideways on a narrow screen; the page itself does not.
  */
@@ -106,8 +106,8 @@ export function TuiPage() {
           <div className="min-w-0 max-w-[60ch]">
             <h1 className="font-display text-3xl font-extrabold tracking-display text-ink">Runner im Terminal</h1>
             <p className="mt-4 text-body text-pretty text-ink">
-              So sieht werkbuch-runner auf der Maschine aus: die Installation per Befehl aus „Runner verbinden“ und die TUI mit ihren fünf Reitern, im Stil von skilltri. Statische Bilder mit den
-              Demo-Daten des Klickdummys; die Texte des Terminals sind Englisch wie bei skilltri und tussh.
+              So sieht werkbuch-runner auf der Maschine aus: die Installation per Befehl aus „Runner verbinden“ und die TUI mit ihren drei Reitern, im Stil von skilltri. Eingestellt wird auf der Maschine nichts: Plätze stehen in werkbuch unter Organisation → Runner, Setup-Befehle und
+              MCP-Server je Projekt unter Agenten. Statische Bilder mit den Demo-Daten des Klickdummys; die Texte des Terminals sind Englisch wie bei skilltri und tussh.
             </p>
             <nav aria-label="Bilder" className="mt-5">
               <ul className="flex flex-wrap gap-2">

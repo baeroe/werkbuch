@@ -36,9 +36,9 @@ export function RunStatusBadge({ status }: { status: RunStatus }) {
 
 export const runName = (run: Pick<AgentRun, 'type'>) => RUN_TYPE_NAMES[run.type];
 
-/** "opus" and where it came from: „aus Label Barrierefreiheit“, „aus dem Projekt“, „vom Bot“. */
+/** Where the model of a run came from: „vom Label Opus Agent“, „aus dem Projekt“, „vom Bot“. */
 export function modelOrigin(run: Pick<AgentRun, 'model_source' | 'model_label_id'>, labels: readonly Label[] | undefined): string {
-  if (run.model_source === 'label') return `aus Label „${labels?.find((label) => label.id === run.model_label_id)?.name ?? 'gelöscht'}“`;
+  if (run.model_source === 'label') return `vom Label ${labels?.find((label) => label.id === run.model_label_id)?.name ?? '(gelöscht)'}`;
   return run.model_source === 'project' ? 'aus dem Projekt' : 'vom Bot';
 }
 

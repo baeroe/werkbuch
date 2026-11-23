@@ -16,7 +16,7 @@
  */
 
 import { DEFAULT_RULES } from '@/domain/agentRuleDefaults';
-import type { AgentConfig, AgentRun, AgentThread, Comment, GithubConnection, ItemEvent, ProjectAgents, PullRequestLink, RunLogLine, RunType } from '@/types';
+import type { AgentConfig, AgentRun, AgentThread, Comment, GithubConnection, ItemEvent, ProjectAgents, PullRequestLink, RunLogLine, RunnerLoad, RunnerSlots, RunType } from '@/types';
 import { comment, event, state } from './activity';
 import { at, doc, p, ul } from './helpers';
 import { itemId } from './items';
@@ -30,8 +30,9 @@ export interface StoredRunner {
   version: string;
   online: boolean;
   last_seen_at: string;
-  slots: { total: number; per_repo: number; light: number };
-  projects: string[];
+  slots: RunnerSlots;
+  /** The last load the runner sent; `measured_at` follows its last contact. */
+  load: Omit<RunnerLoad, 'measured_at'>;
   update_error: string | null;
   created_at: string;
 }
@@ -59,7 +60,7 @@ export const runners: StoredRunner[] = [
     online: true,
     last_seen_at: at('10-28 09:59'),
     slots: { total: 2, per_repo: 1, light: 2 },
-    projects: ['WEB', 'APP'],
+    load: { cpu: 31, gpu: 12, ram_used: 38.2, ram_total: 64, disk_free: 182, disk_total: 994 },
     update_error: null,
     created_at: at('10-20 16:40'),
   },
@@ -72,7 +73,8 @@ export const runners: StoredRunner[] = [
     online: false,
     last_seen_at: at('10-28 09:41'),
     slots: { total: 1, per_repo: 1, light: 1 },
-    projects: ['WEB'],
+    // an Intel Mac: no GPU load without root
+    load: { cpu: 6, gpu: null, ram_used: 9.1, ram_total: 16, disk_free: 61, disk_total: 256 },
     update_error: null,
     created_at: at('10-22 10:15'),
   },
@@ -85,7 +87,7 @@ export const runners: StoredRunner[] = [
     online: true,
     last_seen_at: at('10-28 09:59'),
     slots: { total: 4, per_repo: 1, light: 2 },
-    projects: ['OPS'],
+    load: { cpu: 7, gpu: null, ram_used: 5.8, ram_total: 32, disk_free: 410, disk_total: 500 },
     update_error: 'Die Prüfsumme des neuen Binarys stimmt nicht. Der Runner läuft mit 0.1.0-alpha weiter und versucht es beim nächsten Kontakt erneut.',
     created_at: at('10-12 11:00'),
   },
@@ -115,6 +117,10 @@ export const projectAgents: ProjectAgents[] = [
     repo: 'feldwerk/website',
     base_branch: 'main',
     merge_method: 'squash',
+    // a DDEV project per worktree, so two worktrees of the website do not share one (spec 8.4)
+    setup_command: 'ddev config --project-name=web-$WORKTREE && ddev start',
+    teardown_command: 'ddev delete -Oy web-$WORKTREE',
+    mcp_servers: [{ name: 'playwright', command: 'pnpm dlx @playwright/mcp --headless' }],
     review_bot_id: 'u_kira',
     states: { working: 'std_progress', review: 'std_pending', correction: 'std_todo', merged: 'std_done' },
     max_corrections: 3,
@@ -122,10 +128,6 @@ export const projectAgents: ProjectAgents[] = [
     review_human_prs: true,
     comment_on_pr: true,
     models: { comment: 'haiku' },
-    label_models: [
-      { label_id: 'lb_a11y', model: 'opus' },
-      { label_id: 'lb_seo', model: 'haiku' },
-    ],
     // WEB reviews with a focus of its own; the other kinds use the standard
     rules: {
       ...NO_RULES,
@@ -174,21 +176,20 @@ const line = (offset: number, kind: RunLogLine['kind'], text: string): RunLogLin
 
 /** What a run of each kind writes, for runs started in the demo (assigned, retried); `{key}` is the item. */
 export const LOG_TEMPLATES: Record<RunType, RunLogLine[]> = {
+  // the story of a task in general; an item may have one of its own (TASK_LOGS)
   task: [
-    line(0, 'system', 'Worktree {branch} angelegt, Setup-Hook gelaufen (ddev start)'),
+    line(0, 'system', 'Worktree {branch} angelegt, Setup-Befehl des Projekts gelaufen'),
     line(2, 'system', 'Claude Code gestartet, Modell {model}'),
     line(5, 'tool', 'werkbuch_work-items get {key}'),
-    line(9, 'text', 'Ich lese das Item und die verknüpften Seiten, dann suche ich die betroffenen Dateien.'),
-    line(14, 'tool', 'Grep "404" resources/views'),
-    line(21, 'tool', 'Read resources/views/errors/404.blade.php'),
-    line(30, 'text', 'Die Fehlerseite nutzt noch das alte Layout. Ich schreibe zuerst einen Test für die neue Seite.'),
-    line(42, 'tool', 'Edit tests/Feature/ErrorPageTest.php'),
-    line(58, 'tool', 'Bash ddev artisan test --filter=ErrorPageTest'),
-    line(71, 'result', '1 failed: erwartet die Überschrift „Diese Seite gibt es nicht“'),
-    line(80, 'tool', 'Edit resources/views/errors/404.blade.php'),
-    line(96, 'tool', 'Bash ddev artisan test --filter=ErrorPageTest'),
-    line(108, 'result', '1 passed'),
-    line(115, 'text', 'Der Test ist grün. Jetzt noch das Bild für Mobilgeräte und die Links auf Startseite und Suche.'),
+    line(9, 'text', 'Ich lese „{title}“ und die verknüpften Seiten, dann suche ich die betroffenen Dateien.'),
+    line(16, 'tool', 'Grep "{word}" resources tests'),
+    line(27, 'text', 'Ich schreibe zuerst einen Test, der zeigt, was fehlt.'),
+    line(41, 'tool', 'Bash ddev artisan test --filter={test}'),
+    line(54, 'result', '1 failed'),
+    line(66, 'text', 'Der Test zeigt das Ziel. Jetzt die Änderung selbst.'),
+    line(95, 'tool', 'Bash ddev artisan test --filter={test}'),
+    line(107, 'result', '1 passed'),
+    line(115, 'text', 'Der Test ist grün. Jetzt der Rest des Tickets und die Suite.'),
   ],
   correction: [
     line(0, 'system', 'Worktree {branch} wieder aufgenommen, Session fortgesetzt'),
@@ -208,6 +209,26 @@ export const LOG_TEMPLATES: Record<RunType, RunLogLine[]> = {
   comment: [
     line(0, 'system', 'Frische Session, nur lesen'),
     line(2, 'tool', 'werkbuch_pages search'),
+  ],
+};
+
+/** The story of a task at an item that has one: WEB-50, the 404 page of the flow in the README. */
+export const TASK_LOGS: Record<string, RunLogLine[]> = {
+  'WEB-50': [
+    line(0, 'system', 'Worktree {branch} angelegt, Setup-Befehl des Projekts gelaufen'),
+    line(2, 'system', 'Claude Code gestartet, Modell {model}'),
+    line(5, 'tool', 'werkbuch_work-items get {key}'),
+    line(9, 'text', 'Ich lese das Item und die verknüpften Seiten, dann suche ich die betroffenen Dateien.'),
+    line(14, 'tool', 'Grep "404" resources/views'),
+    line(21, 'tool', 'Read resources/views/errors/404.blade.php'),
+    line(30, 'text', 'Die Fehlerseite nutzt noch das alte Layout. Ich schreibe zuerst einen Test für die neue Seite.'),
+    line(42, 'tool', 'Edit tests/Feature/ErrorPageTest.php'),
+    line(58, 'tool', 'Bash ddev artisan test --filter=ErrorPageTest'),
+    line(71, 'result', '1 failed: erwartet die Überschrift „Diese Seite gibt es nicht“'),
+    line(80, 'tool', 'Edit resources/views/errors/404.blade.php'),
+    line(96, 'tool', 'Bash ddev artisan test --filter=ErrorPageTest'),
+    line(108, 'result', '1 passed'),
+    line(115, 'text', 'Der Test ist grün. Jetzt noch das Bild für Mobilgeräte und die Links auf Startseite und Suche.'),
   ],
 };
 
@@ -258,7 +279,7 @@ function run(seed: RunSeed): StoredRun {
 
 /** The log of WEB-51's running task: streams in during the first seven minutes after the page loads (10:00). */
 const web51Log: RunLogLine[] = [
-  line(0, 'system', 'Worktree agent/WEB-51-cookie-banner-consent-v2 angelegt, Setup-Hook gelaufen (ddev start)'),
+  line(0, 'system', 'Worktree agent/WEB-51-cookie-banner-consent-v2 angelegt, Setup-Befehl des Projekts gelaufen'),
   line(4, 'system', 'Claude Code 2.4.1 gestartet, Modell sonnet, Session 4f2c9e1a'),
   line(9, 'tool', 'werkbuch_work-items get WEB-51'),
   line(15, 'text', 'Das Banner soll auf Consent v2 umgestellt werden. Ich suche, wo das Banner heute eingebunden ist.'),
@@ -294,14 +315,14 @@ export const agentRuns: StoredRun[] = [
     runner: 'rn_mini',
     model: 'opus',
     source: 'label',
-    label: 'lb_a11y',
+    label: 'lb_agent_opus',
     created: '10-28 08:51',
     started: '10-28 08:52',
     finished: '10-28 09:21',
     result: { commit: 'a41c9e2', summary: 'Alt-Texte für 23 Bilder der Startseite und der Leistungsseiten ergänzt, dazu ein Test, der leere Alt-Attribute findet. PR #214 geöffnet.' },
     usage: { input: 412_300, output: 18_900 },
     log: [
-      line(0, 'system', 'Worktree agent/WEB-44-alt-texte angelegt, Setup-Hook gelaufen (ddev start)'),
+      line(0, 'system', 'Worktree agent/WEB-44-alt-texte angelegt, Setup-Befehl des Projekts gelaufen'),
       line(3, 'system', 'Claude Code 2.4.1 gestartet, Modell opus, Session 7b01d3c2'),
       line(8, 'tool', 'werkbuch_work-items get WEB-44'),
       line(140, 'tool', 'Bash ddev artisan test --filter=AltTextTest'),
@@ -319,7 +340,7 @@ export const agentRuns: StoredRun[] = [
     runner: 'rn_studio',
     model: 'opus',
     source: 'label',
-    label: 'lb_a11y',
+    label: 'lb_agent_opus',
     created: '10-28 09:37',
     started: '10-28 09:38',
     finished: '10-28 09:49',
@@ -331,7 +352,7 @@ export const agentRuns: StoredRun[] = [
       line(380, 'text', 'Zwei Befunde, einer davon Important. Urteil: changes.'),
     ],
   }),
-  run({ id: 'run_web44_correction', type: 'correction', status: 'waiting', key: 'WEB-44', thread: 'th_web44', runner: 'rn_mini', model: 'opus', source: 'label', label: 'lb_a11y', created: '10-28 09:50', started: null, finished: null }),
+  run({ id: 'run_web44_correction', type: 'correction', status: 'waiting', key: 'WEB-44', thread: 'th_web44', runner: 'rn_mini', model: 'opus', source: 'label', label: 'lb_agent_opus', created: '10-28 09:50', started: null, finished: null }),
 
   // WEB-53: the first attempt got lost (the Mac lost its network), the second ran into the time limit
   run({
@@ -343,7 +364,7 @@ export const agentRuns: StoredRun[] = [
     runner: 'rn_studio',
     model: 'haiku',
     source: 'label',
-    label: 'lb_seo',
+    label: 'lb_agent_haiku',
     created: '10-28 08:04',
     started: '10-28 08:05',
     finished: '10-28 08:09',
@@ -359,7 +380,7 @@ export const agentRuns: StoredRun[] = [
     runner: 'rn_studio',
     model: 'haiku',
     source: 'label',
-    label: 'lb_seo',
+    label: 'lb_agent_haiku',
     attempt: 2,
     created: '10-28 08:09',
     started: '10-28 08:10',
@@ -397,7 +418,7 @@ export const agentRuns: StoredRun[] = [
   run({ id: 'run_web49_review1', type: 'review', status: 'succeeded', key: 'WEB-49', thread: 'th_web49', runner: 'rn_studio', model: 'opus', source: 'bot', created: '10-27 10:04', started: '10-27 10:05', finished: '10-27 10:16', result: { verdict: 'changes', summary: '1 Befund: Das Raster bricht unter 390 px.' } }),
   run({ id: 'run_web49_corr1', type: 'correction', status: 'succeeded', key: 'WEB-49', thread: 'th_web49', runner: 'rn_studio', model: 'sonnet', source: 'bot', created: '10-27 10:17', started: '10-27 10:20', finished: '10-27 10:41', result: { commit: '9a07bc1', summary: 'Raster unter 390 px einspaltig.' } }),
   run({ id: 'run_web49_corr2', type: 'correction', status: 'succeeded', key: 'WEB-49', thread: 'th_web49', runner: 'rn_studio', model: 'sonnet', source: 'bot', created: '10-27 10:58', started: '10-27 11:00', finished: '10-27 11:18', result: { commit: 'e3f4410', summary: 'CI rot: Snapshot der Leistungsseite angepasst.' } }),
-  run({ id: 'run_web49_review2', type: 'review', status: 'canceled', key: 'WEB-49', thread: 'th_web49', runner: 'rn_studio', model: 'opus', source: 'bot', created: '10-27 11:31', started: '10-27 11:32', finished: '10-27 11:35', error: 'Neuer Push auf den PR: werkbuch hat das Review dieses Commits abgebrochen.' }),
+  run({ id: 'run_web49_review2', type: 'review', status: 'canceled', key: 'WEB-49', thread: 'th_web49', runner: 'rn_studio', model: 'opus', source: 'bot', created: '10-27 11:31', started: '10-27 11:32', finished: '10-27 11:35', error: 'main ist weitergezogen, der PR hat jetzt einen Konflikt: werkbuch hat das Review abgebrochen. Erst wird der Konflikt gelöst, dann laufen CI und Review neu.' }),
   run({ id: 'run_web49_conflict', type: 'conflict', status: 'succeeded', key: 'WEB-49', thread: 'th_web49', runner: 'rn_studio', model: 'sonnet', source: 'bot', created: '10-27 11:36', started: '10-27 11:40', finished: '10-27 11:52', result: { commit: '71c0d95', summary: 'main hineingemergt, Konflikt in resources/css/app.css gelöst.' } }),
   run({ id: 'run_web49_review3', type: 'review', status: 'succeeded', key: 'WEB-49', thread: 'th_web49', runner: 'rn_studio', model: 'opus', source: 'bot', created: '10-27 12:04', started: '10-27 12:05', finished: '10-27 12:16', result: { verdict: 'changes', summary: '1 Befund: Der Kontaktblock hat keinen sichtbaren Fokus.' } }),
   run({ id: 'run_web49_corr3', type: 'correction', status: 'succeeded', key: 'WEB-49', thread: 'th_web49', runner: 'rn_studio', model: 'sonnet', source: 'bot', created: '10-27 12:17', started: '10-27 12:20', finished: '10-27 12:46', result: { commit: 'b88e2f3', summary: 'Fokusring am Kontaktblock ergänzt.' } }),

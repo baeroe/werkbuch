@@ -1,12 +1,13 @@
 /*
- * Runners (WEBU-18, spec 6.2 and 10.1): the machines that run the agents. Each card says whether the runner is
- * online, what it is, how many of its slots are taken and by which runs, and for which projects it has an environment.
+ * Runners (WEBU-18, spec 6.2, 8.4, 8.6 and 10.1): the machines that run the agents. Each card says whether the runner
+ * is online, what it is, how many of its slots are taken in each pot and by which runs (with "Abbrechen"), and the
+ * last load it sent. Its slots are set here, not on the machine ("Plätze"); every runner takes runs of every project.
  * "Runner verbinden" shows the install command with a one-time code that is valid for ten minutes; the dialog waits
  * for the runner and says when it has connected. Renaming is a small dialog; revoking asks first, because it stops
  * what runs there.
  */
 
-import { CircleAlert, Cpu, Laptop, Link2, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, TriangleAlert } from 'lucide-react';
+import { CircleAlert, CircleStop, Cpu, Laptop, Link2, Pencil, Plus, RefreshCw, ShieldCheck, SlidersHorizontal, Trash2, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { AlertDialog } from '@/components/ui/AlertDialog';
@@ -19,11 +20,13 @@ import { Input } from '@/components/ui/Input';
 import { toast } from '@/components/ui/toast';
 import { CommandBlock } from '@/features/agents/CommandBlock';
 import { clockTime, runName, statusLabel, useNow } from '@/features/agents/runParts';
-import { useCreatePairing, useExpirePairing, usePairing, useRenameRunner, useRevokeRunner, useRunners, useSimulatePairing } from '@/hooks/agents';
+import { focusWhenLost } from '@/features/item-detail/shared';
+import { useCancelRun, useCreatePairing, useExpirePairing, usePairing, useRenameRunner, useRevokeRunner, useRunners, useSaveRunnerSlots, useSimulatePairing } from '@/hooks/agents';
 import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import { hrefOf } from '@/lib/links';
 import type { Runner } from '@/types';
+import { neighbourOf } from './focus';
 import { fieldMessage, noticeOf } from './errors';
 import { counted, formatDateTime, relativeTime, useOrgZone } from './format';
 import { FormDialog } from './FormDialog';
@@ -135,9 +138,9 @@ function PairingDialog({ open, onOpenChange }: PairingProps) {
             {connected.version}
           </dd>
           <dt className="text-muted">Plätze</dt>
-          <dd className="text-ink">{`${connected.slots.total} gesamt, ${connected.slots.per_repo} je Repo, ${connected.slots.light} für Reviews und Antworten`}</dd>
+          <dd className="text-ink">{`${connected.slots.total} gesamt, ${connected.slots.per_repo} je Repo, ${connected.slots.light} für Reviews und Antworten. Ändern kannst du sie an seiner Karte unter „Plätze“.`}</dd>
           <dt className="text-muted">Projekte</dt>
-          <dd className="text-ink">Noch keins. Die Umgebungen trägst du auf der Maschine ein: in der TUI von werkbuch-runner unter „Projekte“.</dd>
+          <dd className="text-ink">Alle. Setup-Befehle und MCP-Server stehen je Projekt unter Projekteinstellungen → Agenten.</dd>
         </dl>
       ) : (
         <div className="flex flex-col gap-4">
@@ -270,26 +273,120 @@ function OnlineBadge({ runner }: { runner: Runner }) {
   );
 }
 
-/** Slots as little boxes, filled for each run, with the count in words beside them. */
-function Slots({ runner }: { runner: Runner }) {
-  const used = runner.active_runs.filter((run) => run.status === 'running' || run.status === 'canceling').length;
+/** A pot of slots as little boxes, filled for each run, with the count in words beside them. */
+function Pot({ label, used, total }: { label: string; used: number; total: number }) {
   return (
     <span className="inline-flex items-center gap-2">
       <span className="inline-flex gap-0.5" aria-hidden="true">
-        {Array.from({ length: runner.slots.total }, (_, index) => (
+        {Array.from({ length: total }, (_, index) => (
           <span key={index} className={cx('h-3 w-2 rounded-[2px] border', index < used ? 'border-accent bg-accent' : 'border-line-strong bg-surface')} />
         ))}
       </span>
-      <span className="tabular-nums">{`${used} von ${runner.slots.total} belegt`}</span>
+      <span className="tabular-nums">
+        <span className="text-muted">{label}</span> {`${used} von ${total}`}
+      </span>
     </span>
   );
 }
 
-function RunnerCard({ runner, onRename, onRevoke }: { runner: Runner; onRename: () => void; onRevoke: () => void }) {
+/** The three pots (spec 9): code runs in all and in the busiest repo, light runs apart. */
+function Slots({ runner }: { runner: Runner }) {
+  return (
+    <span className="flex flex-wrap items-center gap-x-5 gap-y-1">
+      <Pot label="Gesamt" used={runner.slots_used.total} total={runner.slots.total} />
+      <Pot label="Je Repo" used={runner.slots_used.per_repo} total={runner.slots.per_repo} />
+      <Pot label="Reviews und Antworten" used={runner.slots_used.light} total={runner.slots.light} />
+    </span>
+  );
+}
+
+const GB = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
+
+/** One measure of the load: a short bar and the value in words; a full one in red. */
+function Meter({ label, share, text }: { label: string; share: number | null; text: string }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2">
+      <span className="w-16 shrink-0 text-muted">{label}</span>
+      {share !== null && (
+        <span className="h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-sunken ring-1 ring-line" aria-hidden="true">
+          <span className={cx('block h-full rounded-full', share >= 0.9 ? 'bg-danger' : 'bg-accent')} style={{ width: `${Math.max(2, Math.round(share * 100))}%` }} />
+        </span>
+      )}
+      <span className={cx('tabular-nums', share === null ? 'text-muted' : 'text-ink')}>{text}</span>
+    </span>
+  );
+}
+
+/** The last load the runner sent (spec 8.6); an offline runner's says when it was measured. */
+function Load({ runner }: { runner: Runner }) {
+  const zone = useOrgZone();
+  const { load } = runner;
+  return (
+    <span className="flex flex-col gap-1">
+      <span className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+        <Meter label="CPU" share={load.cpu / 100} text={`${load.cpu} %`} />
+        <Meter label="GPU" share={load.gpu === null ? null : load.gpu / 100} text={load.gpu === null ? 'nicht verfügbar' : `${load.gpu} %`} />
+        <Meter label="RAM" share={load.ram_used / load.ram_total} text={`${GB.format(load.ram_used)} von ${GB.format(load.ram_total)} GB belegt`} />
+        <Meter label="Speicher" share={1 - load.disk_free / load.disk_total} text={`${GB.format(load.disk_free)} von ${GB.format(load.disk_total)} GB frei`} />
+      </span>
+      {!runner.online && <span className="text-sm text-muted">{`Letzter Stand vom ${formatDateTime(load.measured_at, zone)}`}</span>}
+    </span>
+  );
+}
+
+/* ---------------------------------------------------------------------------- slots */
+
+function SlotsDialog({ runner, open, onOpenChange }: { runner: Runner | null; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const settle = useSettle();
+  const save = useSaveRunnerSlots();
+  const [values, setValues] = useState({ total: String(runner?.slots.total ?? 2), per_repo: String(runner?.slots.per_repo ?? 1), light: String(runner?.slots.light ?? 2) });
+  const field = (key: keyof typeof values, label: string, hint: string) => (
+    <Input
+      label={label}
+      name={`slots_${key}`}
+      inputMode="numeric"
+      autoComplete="off"
+      value={values[key]}
+      hint={hint}
+      error={fieldMessage(save.error, key)}
+      onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
+    />
+  );
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      size="sm"
+      title={`Plätze von „${runner?.name ?? ''}“`}
+      description="Wie viele Aufträge der Runner zugleich nimmt. Er bekommt die Zahlen beim nächsten Kontakt; was läuft, läuft weiter."
+      submitLabel="Speichern"
+      pending={save.isPending}
+      notice={noticeOf(save.error, ['total', 'per_repo', 'light'])}
+      onSubmit={() => {
+        if (!runner) return;
+        const slots = { total: Number(values.total), per_repo: Number(values.per_repo), light: Number(values.light) };
+        settle(save.mutateAsync({ id: runner.id, slots }), {
+          onSuccess: (saved) => {
+            onOpenChange(false);
+            toast({ title: `Plätze von „${saved.name}“ gespeichert`, description: `${saved.slots.total} gesamt, ${saved.slots.per_repo} je Repo, ${saved.slots.light} für Reviews und Antworten.`, tone: 'success' });
+          },
+        });
+      }}
+    >
+      {field('total', 'Gesamt', 'Aufträge, die Code ändern (Umsetzen, Korrektur, Konflikt). Standard 2.')}
+      {field('per_repo', 'Je Repo', 'Höchstens so viele im selben Repo; DDEV teilt die Test-Datenbank. Standard 1.')}
+      {field('light', 'Reviews und Antworten', 'Ein eigener Topf für Aufträge, die nur lesen. Standard 2.')}
+    </FormDialog>
+  );
+}
+
+type ActiveRun = Runner['active_runs'][number];
+
+function RunnerCard({ runner, onSlots, onRename, onRevoke, onCancelRun }: { runner: Runner; onSlots: () => void; onRename: () => void; onRevoke: () => void; onCancelRun: (run: ActiveRun) => void }) {
   const zone = useOrgZone();
   const titleId = `runner-${runner.id}`;
   return (
-    <article aria-labelledby={titleId} className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4 shadow-elev-1">
+    <article id={`runner-card-${runner.id}`} tabIndex={-1} aria-labelledby={titleId} className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4 shadow-elev-1">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-1 basis-64 items-start gap-3">
           <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-ctl bg-sunken text-muted" aria-hidden="true">
@@ -306,6 +403,9 @@ function RunnerCard({ runner, onRename, onRevoke }: { runner: Runner; onRename: 
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" icon={SlidersHorizontal} onClick={onSlots}>
+            Plätze <span className="sr-only">{runner.name}</span>
+          </Button>
           <Button variant="ghost" icon={Pencil} onClick={onRename}>
             Umbenennen <span className="sr-only">{runner.name}</span>
           </Button>
@@ -332,21 +432,9 @@ function RunnerCard({ runner, onRename, onRevoke }: { runner: Runner; onRename: 
         <dd className="text-ink">
           <Slots runner={runner} />
         </dd>
-        <dt className="text-muted">Projekte</dt>
+        <dt className="text-muted">Auslastung</dt>
         <dd className="text-ink">
-          {runner.projects.length === 0 ? (
-            <span className="text-muted">Keine Umgebung eingerichtet</span>
-          ) : (
-            <ul className="flex flex-wrap gap-1.5" aria-label="Projekte mit Umgebung">
-              {runner.projects.map((identifier) => (
-                <li key={identifier}>
-                  <Badge>
-                    <span translate="no">{identifier}</span>
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
+          <Load runner={runner} />
         </dd>
         <dt className="text-muted">Aufträge</dt>
         <dd className="min-w-0 text-ink">
@@ -355,7 +443,7 @@ function RunnerCard({ runner, onRename, onRevoke }: { runner: Runner; onRename: 
           ) : (
             <ul className="flex flex-col gap-1" aria-label={`Aufträge auf ${runner.name}`}>
               {runner.active_runs.map((run) => (
-                <li key={run.id} className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                <li key={run.id} className="flex min-w-0 flex-wrap items-center gap-x-2">
                   <a href={hrefOf(`/items/${run.item_key}`)} className="min-w-0 truncate font-medium text-accent-text underline-offset-2 hover:underline">
                     <span className="tabular-nums" translate="no">
                       {run.item_key}
@@ -363,6 +451,9 @@ function RunnerCard({ runner, onRename, onRevoke }: { runner: Runner; onRename: 
                     {run.item_title}
                   </a>
                   <span className="text-sm text-muted">{`${runName(run)}, ${statusLabel(run.status)}${run.started_at ? ` seit ${clockTime(run.started_at, zone)}` : ''}`}</span>
+                  <Button variant="ghost" size="sm" icon={CircleStop} disabledReason={run.status === 'canceling' ? 'Wird schon abgebrochen.' : null} onClick={() => onCancelRun(run)}>
+                    Abbrechen <span className="sr-only">{`${runName(run)} an ${run.item_key}`}</span>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -379,20 +470,48 @@ export default function Runners(_props: SectionProps) {
   const revoke = useRevokeRunner();
   const pairing = useDialogRound();
   const rename = useDialogRound<Runner>();
+  const slots = useDialogRound<Runner>();
+  const cancel = useCancelRun();
   const [revoking, setRevoking] = useState<Runner | null>(null);
+  const [canceling, setCanceling] = useState<{ runner: Runner; run: ActiveRun } | null>(null);
+  const connectButton = useRef<HTMLButtonElement>(null);
+  /** Where the focus goes when the revoke dialog closes: its trigger, after a revoke the next runner's card. */
+  const afterRevoke = useRef<HTMLElement | null>(null);
   const connect = (
-    <Button variant="primary" icon={Plus} onClick={() => pairing.show()}>
+    <Button ref={connectButton} variant="primary" icon={Plus} onClick={() => pairing.show()}>
       Runner verbinden
     </Button>
   );
 
+  function askRevoke(runner: Runner) {
+    afterRevoke.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setRevoking(runner);
+  }
+
   function runRevoke(runner: Runner) {
+    // the card goes with the revoke: the focus goes to the next runner's, or to „Runner verbinden“ for the last one
+    const trigger = document.getElementById(`runner-card-${runner.id}`);
+    const next = neighbourOf(trigger);
+    const target = next && next.id !== 'main' ? next : connectButton.current;
     settle(revoke.mutateAsync(runner.id), {
       onSuccess: ({ canceled }) => {
+        afterRevoke.current = target;
         setRevoking(null);
         toast({ title: `„${runner.name}“ widerrufen`, description: canceled > 0 ? `${counted(canceled, 'Auftrag', 'Aufträge')} abgebrochen. Wartende Aufträge gehen an die anderen Runner des Pools.` : 'Sein Token gilt nicht mehr.', tone: 'success' });
       },
       onError: (error) => notifyError(`„${runner.name}“ nicht widerrufen`, error, () => runRevoke(runner)),
+    });
+  }
+
+  function runCancel(runner: Runner, run: ActiveRun) {
+    settle(cancel.mutateAsync(run.id), {
+      onSuccess: () => {
+        setCanceling(null);
+        toast({ title: `${run.item_key}: Auftrag wird abgebrochen`, description: `„${runner.name}“ beendet das CLI beim nächsten Kontakt. Was nicht gepusht ist, bleibt im Worktree.`, tone: 'success' });
+        // the row goes once the run ended: the focus goes to the runner's card
+        focusWhenLost(() => document.getElementById(`runner-card-${runner.id}`), 10_000);
+      },
+      onError: (error) => notifyError('Auftrag nicht abgebrochen', error, () => runCancel(runner, run)),
     });
   }
 
@@ -420,7 +539,7 @@ export default function Runners(_props: SectionProps) {
               <ul className="flex flex-col gap-3">
                 {list.map((runner) => (
                   <li key={runner.id}>
-                    <RunnerCard runner={runner} onRename={() => rename.show(runner)} onRevoke={() => setRevoking(runner)} />
+                    <RunnerCard runner={runner} onSlots={() => slots.show(runner)} onRename={() => rename.show(runner)} onRevoke={() => askRevoke(runner)} onCancelRun={(run) => setCanceling({ runner, run })} />
                   </li>
                 ))}
               </ul>
@@ -429,6 +548,7 @@ export default function Runners(_props: SectionProps) {
         }}
       </Loaded>
       <PairingDialog key={`pairing-${pairing.round}`} open={pairing.open} onOpenChange={pairing.setOpen} />
+      <SlotsDialog key={`slots-${slots.round}`} runner={slots.target} open={slots.open} onOpenChange={slots.setOpen} />
       <RenameDialog key={`rename-${rename.round}`} runner={rename.target} open={rename.open} onOpenChange={rename.setOpen} />
       <AlertDialog
         open={revoking !== null}
@@ -441,7 +561,22 @@ export default function Runners(_props: SectionProps) {
         }
         confirmLabel="Widerrufen"
         pending={revoke.isPending}
+        finalFocus={afterRevoke}
         onConfirm={() => revoking && runRevoke(revoking)}
+      />
+      <AlertDialog
+        open={canceling !== null}
+        onOpenChange={(open) => !open && setCanceling(null)}
+        title={canceling ? `Auftrag „${runName(canceling.run)}“ an ${canceling.run.item_key} abbrechen?` : ''}
+        description={
+          canceling?.run.status === 'running'
+            ? 'Der Runner beendet das CLI. Was der Agent noch nicht gepusht hat, bleibt im Worktree; am Item lässt er sich erneut starten.'
+            : 'Der Auftrag kommt aus der Warteschlange. Am Item lässt er sich erneut starten.'
+        }
+        confirmLabel="Auftrag abbrechen"
+        cancelLabel="Weiterlaufen lassen"
+        pending={cancel.isPending}
+        onConfirm={() => canceling && runCancel(canceling.runner, canceling.run)}
       />
     </div>
   );

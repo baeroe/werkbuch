@@ -104,13 +104,21 @@ export function Section({ title, actions, aside, children, className }: SectionP
 
 /**
  * When the control that had the focus goes away (a deleted comment, relation or file), the focus would fall back to
- * the page: once React has drawn the change, it goes to `next` instead.
+ * the page: once React has drawn the change, it goes to `next` instead. With `watchMs` it keeps looking for that long,
+ * frame by frame: for a control that goes only when the reloaded data are drawn (a run that ended, a banner whose
+ * state passed). It acts once, and only while the focus is lost; a focus the person moved elsewhere stays.
  */
-export function focusWhenLost(next: () => HTMLElement | null | undefined): void {
-  requestAnimationFrame(() => {
+export function focusWhenLost(next: () => HTMLElement | null | undefined, watchMs = 0): void {
+  const until = performance.now() + watchMs;
+  const look = () => {
     const active = document.activeElement;
-    if (!active || active === document.body || !active.isConnected) next()?.focus();
-  });
+    if (!active || active === document.body || !active.isConnected) {
+      const target = next();
+      if (target) return target.focus();
+    }
+    if (performance.now() < until) requestAnimationFrame(look);
+  };
+  requestAnimationFrame(look);
 }
 
 /** While `active`, leaving or reloading the page asks first, so typed text is not lost on the way. */

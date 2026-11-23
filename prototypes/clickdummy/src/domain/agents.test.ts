@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentStep, User } from '@/types';
-import { afterFindings, mappingComplete, mappingErrors, pickModel, suggestMapping, whyNotAgent, whyNotHere } from './agents';
+import { afterFindings, followMapping, mappingComplete, mappingErrors, pickModel, suggestMapping, whyNotAgent, whyNotHere } from './agents';
 import { agency, standard } from './fixtures';
 
 const states = (working: string | null, review: string | null, correction: string | null, merged: string | null): Record<AgentStep, string | null> => ({ working, review, correction, merged });
@@ -30,35 +30,60 @@ describe('the status of each step (spec 7.4)', () => {
     expect(mappingComplete(standard, states('std_progress', null, null, null))).toBe(false);
   });
 
+  it('follows a change of workflow where the mapping fits the category, else the step needs a new status', () => {
+    const mapping = { std_progress: 'app_progress', std_pending: 'app_approval', std_todo: 'app_todo', std_done: 'app_done' };
+    const next = followMapping(states('std_progress', 'std_pending', 'std_todo', 'std_done'), mapping, agency);
+    expect(next).toEqual(states('app_progress', 'app_approval', 'app_todo', 'app_done'));
+    // In Arbeit lands on Done (Completed): no fit; steps without a status or a mapping have none
+    expect(followMapping(states('std_progress', null, 'std_todo', 'std_done'), { std_progress: 'app_done' }, agency)).toEqual(states(null, null, null, null));
+  });
+
   it('suggests a fitting status per step, "Review" by name where the workflow has one', () => {
     expect(suggestMapping(standard)).toEqual(states('std_progress', 'std_pending', 'std_todo', 'std_done'));
     expect(suggestMapping(agency)).toEqual(states('app_progress', 'app_review', 'app_todo', 'app_done'));
   });
 });
 
-describe('the model of a run: label, then project, then bot (spec 7.7)', () => {
+describe('the model of a run: model label, then project, then bot (spec 7.7)', () => {
   const agent = { model: 'sonnet', models: { review: 'opus' } };
-  const project = { label_models: [{ label_id: 'lb_a11y', model: 'opus' }, { label_id: 'lb_seo', model: 'haiku' }], models: { comment: 'haiku', task: '' } };
+  const project = { models: { comment: 'haiku', task: '' } };
+  // the catalog in its order; a model label is recognized by its field, never by its name
+  const catalog = [
+    { id: 'lb_seo', agent_model: null },
+    { id: 'lb_fable', agent_model: 'fable' },
+    { id: 'lb_named', agent_model: undefined },
+    { id: 'lb_opus', agent_model: 'opus' },
+    { id: 'lb_haiku', agent_model: 'haiku' },
+    { id: 'lb_blank', agent_model: '  ' },
+  ];
 
-  it('takes the first row of the label list the item matches, whatever kind of run', () => {
-    expect(pickModel({ type: 'task', labelIds: ['lb_seo', 'lb_a11y'], project, agent })).toEqual({ model: 'opus', source: 'label', label_id: 'lb_a11y' });
-    expect(pickModel({ type: 'comment', labelIds: ['lb_seo'], project, agent })).toEqual({ model: 'haiku', source: 'label', label_id: 'lb_seo' });
+  it('takes the model label of the item first, whatever kind of run', () => {
+    expect(pickModel({ type: 'task', catalog, labelIds: ['lb_seo', 'lb_opus'], project, agent })).toEqual({ model: 'opus', source: 'label', label_id: 'lb_opus' });
+    expect(pickModel({ type: 'comment', catalog, labelIds: ['lb_haiku'], project, agent })).toEqual({ model: 'haiku', source: 'label', label_id: 'lb_haiku' });
   });
 
-  it('lets a child of an epic without a matching label take the epic’s', () => {
-    expect(pickModel({ type: 'task', labelIds: ['lb_ux'], epicLabelIds: ['lb_a11y'], project, agent })).toMatchObject({ model: 'opus', source: 'label' });
-    // the child's own label wins over the epic's
-    expect(pickModel({ type: 'task', labelIds: ['lb_seo'], epicLabelIds: ['lb_a11y'], project, agent })).toMatchObject({ model: 'haiku' });
+  it('takes the first in the order of the catalog when the item has several, not the order on the item', () => {
+    expect(pickModel({ type: 'task', catalog, labelIds: ['lb_haiku', 'lb_opus', 'lb_fable'], project, agent })).toMatchObject({ model: 'fable', label_id: 'lb_fable' });
+  });
+
+  it('reads no name and no empty field', () => {
+    expect(pickModel({ type: 'task', catalog, labelIds: ['lb_named', 'lb_blank', 'lb_seo'], project, agent })).toEqual({ model: 'sonnet', source: 'bot', label_id: null });
+  });
+
+  it('lets a child of an epic without a model label take the epic’s', () => {
+    expect(pickModel({ type: 'task', catalog, labelIds: ['lb_seo'], epicLabelIds: ['lb_opus'], project, agent })).toMatchObject({ model: 'opus', source: 'label' });
+    // the child's own model label wins over the epic's
+    expect(pickModel({ type: 'task', catalog, labelIds: ['lb_haiku'], epicLabelIds: ['lb_opus'], project, agent })).toMatchObject({ model: 'haiku' });
   });
 
   it('then takes the project’s model for the kind of run, an empty one does not count', () => {
-    expect(pickModel({ type: 'comment', labelIds: [], project, agent })).toEqual({ model: 'haiku', source: 'project', label_id: null });
-    expect(pickModel({ type: 'task', labelIds: [], project, agent })).toEqual({ model: 'sonnet', source: 'bot', label_id: null });
+    expect(pickModel({ type: 'comment', catalog, labelIds: [], project, agent })).toEqual({ model: 'haiku', source: 'project', label_id: null });
+    expect(pickModel({ type: 'task', catalog, labelIds: [], project, agent })).toEqual({ model: 'sonnet', source: 'bot', label_id: null });
   });
 
   it('then the bot’s model for the kind of run, then its default; also without project settings', () => {
-    expect(pickModel({ type: 'review', labelIds: [], project, agent })).toEqual({ model: 'opus', source: 'bot', label_id: null });
-    expect(pickModel({ type: 'correction', labelIds: ['lb_a11y'], project: null, agent })).toEqual({ model: 'sonnet', source: 'bot', label_id: null });
+    expect(pickModel({ type: 'review', catalog, labelIds: [], project, agent })).toEqual({ model: 'opus', source: 'bot', label_id: null });
+    expect(pickModel({ type: 'correction', catalog, labelIds: ['lb_seo'], project: null, agent })).toEqual({ model: 'sonnet', source: 'bot', label_id: null });
   });
 });
 

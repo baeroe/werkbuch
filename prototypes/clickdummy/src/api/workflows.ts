@@ -4,6 +4,7 @@
  */
 
 import { resolutionAfterTransition } from '@/domain/resolution';
+import { followMapping } from '@/domain/agents';
 import { isClosedCategory, validateWorkflow } from '@/domain/workflow';
 import type { Project, StateIcon, Workflow } from '@/types';
 import { requireOrgAdmin, requireRole } from './access';
@@ -191,6 +192,9 @@ export function assignWorkflow(project_id: string, workflow_id: string, mapping:
     }
 
     for (const item of items) rewriteState(ctx, item, previous, next, mapping[item.state_id], 'Workflow gewechselt');
+    // the agents follow the mapping where it fits the category of a step; a step without one turns them off (spec 7.4)
+    const agents = db.project_agents.find((entry) => entry.project_id === project.id);
+    if (agents) agents.states = followMapping(agents.states, mapping, next);
     for (const automation of db.automations.filter((entry) => entry.project_id === project.id)) {
       if (automation.settings.state_id) {
         automation.settings = { ...automation.settings, state_id: next.states.find((state) => state.category === 'canceled')?.id };

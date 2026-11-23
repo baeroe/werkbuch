@@ -6,12 +6,13 @@
  */
 
 import { Check, ExternalLink, GitBranch, Lock, ShieldCheck, Unplug } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/components/ui/cx';
 import { toast } from '@/components/ui/toast';
+import { focusWhenLost } from '@/features/item-detail/shared';
 import { useConnectGithubApp, useDisconnectGithub, useGithub, useRepoOwners } from '@/hooks/agents';
 import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
@@ -20,6 +21,9 @@ import type { GithubApp, GithubConnection } from '@/types';
 import { formatDate, useOrgZone } from './format';
 import { Badge, FormSkeleton, Loaded, Panel, Row, Rows, SectionHeader } from './parts';
 import type { SectionProps } from './sections';
+
+/** The page title takes the focus when the view under it changes (disconnected, both apps there). */
+const GITHUB_TITLE = 'github-title';
 
 const AGENT_RIGHTS = ['Inhalte schreiben', 'Pull Requests schreiben', 'Checks lesen', 'Actions lesen', 'Metadaten lesen'];
 const REVIEW_RIGHTS = ['Pull Requests schreiben', 'Inhalte lesen', 'Metadaten lesen'];
@@ -42,7 +46,7 @@ type StepProps = {
 function Step({ number, title, text, rights, webhooks, app, waitsFor, pending, onStart }: StepProps) {
   const done = app !== null;
   return (
-    <li className="flex gap-3 px-4 py-4">
+    <li data-github-step={number} className="flex gap-3 px-4 py-4">
       <span
         className={cx('mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full border text-sm font-semibold tabular-nums', done ? 'border-transparent bg-accent text-on-accent' : 'border-line-strong text-ink')}
         aria-hidden="true"
@@ -88,6 +92,8 @@ function ConnectSteps({ github }: { github: GithubConnection }) {
       onSuccess: (next) => {
         const app = kind === 'agent' ? next.agent_app : next.review_app;
         toast({ title: `„${app?.name}“ angelegt`, description: kind === 'agent' ? 'Jetzt fehlt noch die Review-App.' : 'GitHub ist verbunden. Projekte können jetzt ein Repo wählen.', tone: 'success' });
+        // the button goes with its step: the focus goes on to step 2, or to the page once both are there
+        focusWhenLost(() => document.querySelector<HTMLElement>(kind === 'agent' ? '[data-github-step="2"] button' : `#${GITHUB_TITLE}`), 2000);
       },
       onError: (error) => notifyError('GitHub-App nicht angelegt', error, () => start(kind)),
     });
@@ -156,11 +162,14 @@ function Connected({ github }: { github: GithubConnection }) {
   const disconnect = useDisconnectGithub();
   const owners = useRepoOwners();
   const [asking, setAsking] = useState(false);
+  /** Where the focus goes when the question closes: back to „GitHub trennen“, after the disconnect to the page title. */
+  const afterDisconnect = useRef<HTMLElement | null>(null);
   const ownerOf = (repo: string) => owners.data?.find((entry) => entry.repo === repo);
 
   function run() {
     settle(disconnect.mutateAsync(undefined), {
       onSuccess: () => {
+        afterDisconnect.current = document.getElementById(GITHUB_TITLE);
         setAsking(false);
         toast({ title: 'GitHub getrennt', description: 'Lösche die beiden Apps bei GitHub, wenn du sie nicht mehr brauchst.', tone: 'success' });
       },
@@ -236,7 +245,14 @@ function Connected({ github }: { github: GithubConnection }) {
 
       <Panel title="Trennen" description="werkbuch vergisst beide Apps. Projekte verlieren ihr Repo, laufende Stränge halten an. Die Apps bleiben bei GitHub, bis du sie dort löschst.">
         <div className="p-4">
-          <Button variant="secondary" icon={Unplug} onClick={() => setAsking(true)}>
+          <Button
+            variant="secondary"
+            icon={Unplug}
+            onClick={(event) => {
+              afterDisconnect.current = event.currentTarget;
+              setAsking(true);
+            }}
+          >
             GitHub trennen
           </Button>
         </div>
@@ -245,9 +261,10 @@ function Connected({ github }: { github: GithubConnection }) {
         open={asking}
         onOpenChange={setAsking}
         title="GitHub trennen?"
-        description="Kein Agent kann danach pushen oder PRs öffnen, und werkbuch hört keine Webhooks von GitHub mehr. Zum Verbinden legst du die Apps neu an."
+        description="Kein Agent kann danach pushen oder PRs öffnen, und werkbuch hört keine Webhooks von GitHub mehr. Offene Stränge pausieren, laufende Aufträge werden abgebrochen; PRs und Branches bleiben bei GitHub. Zum Verbinden legst du die Apps neu an."
         confirmLabel="Trennen"
         pending={disconnect.isPending}
+        finalFocus={afterDisconnect}
         onConfirm={run}
       />
     </>
@@ -260,6 +277,7 @@ export default function Github(_props: SectionProps) {
   return (
     <div className="flex flex-col gap-4">
       <SectionHeader
+        titleId={GITHUB_TITLE}
         title="GitHub"
         description="Über zwei GitHub-Apps arbeiten Agenten an Repos: Sie pushen und öffnen PRs als App der Instanz, nie als eine Person. Tokens gelten je Auftrag für ein Repo und eine Stunde."
         actions={connected ? <Badge tone="accent" icon={Check}>Verbunden</Badge> : undefined}
