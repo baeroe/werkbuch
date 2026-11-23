@@ -581,6 +581,38 @@ jobs:
         run: test -f docs/.vitepress/dist/llms.txt
 
   # the clickdummy: domain tests, typecheck, review build and the Playwright flows. Not a required check.
+  # the runner in Go (runner/, WEBU-21): format, vet and the tests with the race detector, never the required check
+  runner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: runner
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: runner/go.mod
+          cache-dependency-path: runner/go.sum
+
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l .; exit 1)
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -race -count=1 ./...
+
+      # static binaries without cgo for both systems (spec 8.2)
+      - name: Build without cgo
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          GOOS=darwin GOARCH=arm64 go build -o /dev/null .
+          GOOS=linux GOARCH=amd64 go build -o /dev/null .
+
   clickdummy:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
