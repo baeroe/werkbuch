@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AgentConfigsController;
 use App\Http\Controllers\Api\AttachmentsController;
 use App\Http\Controllers\Api\AutomationsController;
 use App\Http\Controllers\Api\BotsController;
@@ -31,6 +32,9 @@ use App\Http\Controllers\Api\TokensController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UsersController;
 use App\Http\Controllers\Api\ViewsController;
+use App\Http\Controllers\Api\RunnerPairingsController;
+use App\Http\Controllers\Api\RunnersController;
+use App\Http\Controllers\Api\RunsController;
 use App\Http\Controllers\Api\WebhooksController;
 use App\Http\Controllers\Api\WorkflowsController;
 use App\Http\Controllers\Api\WorkItemsController;
@@ -235,10 +239,27 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::get('tokens', [TokensController::class, 'index']);
     Route::delete('tokens/{token}', [TokensController::class, 'destroy']);
 
+    // runners (spec 10.1, org admins), the agent configuration of bots (spec 10.4) and the runs of agents (spec 10.6,
+    // who sees the project); pairing a runner only from the session (below)
+    Route::get('runners', [RunnersController::class, 'index']);
+    Route::get('runners/{runner}', [RunnersController::class, 'show']);
+    Route::patch('runners/{runner}', [RunnersController::class, 'update']);
+    Route::delete('runners/{runner}', [RunnersController::class, 'destroy']);
+    Route::get('bots/{user}/agent', [AgentConfigsController::class, 'show']);
+    Route::put('bots/{user}/agent', [AgentConfigsController::class, 'update']);
+    Route::get('runs', [RunsController::class, 'index']);
+    Route::get('runs/{run}', [RunsController::class, 'show']);
+    Route::get('runs/{run}/events', [RunsController::class, 'events']);
+    Route::post('runs/{run}/cancel', [RunsController::class, 'cancel']);
+    Route::post('runs/{run}/retry', [RunsController::class, 'retry']);
+
     // only from the session of the interface, never with a token (P6): no token mints tokens (no wider abilities, no
     // tokens of bots, no longer life), and the own password and second factor stay out of a stolen token's reach
     Route::middleware(EnsureSession::class)->group(function () {
         Route::post('tokens', [TokensController::class, 'store']);
+        // a one-time code for a runner is as good as a token of it (A473)
+        Route::post('runner-pairings', [RunnerPairingsController::class, 'store']);
+        Route::get('runner-pairings/{pairing}', [RunnerPairingsController::class, 'show']);
     });
     Route::middleware(EnsureSession::class)->prefix('me')->group(function () {
         Route::put('password', [PasswordController::class, 'update'])->middleware('throttle:password-change');

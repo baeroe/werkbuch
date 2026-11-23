@@ -114,6 +114,16 @@ enum EventType: string
     // the system page put failed jobs back into their queues (A287)
     case SystemFailedJobsRetried = 'system.failed_jobs_retried';
 
+    // runners, agents and their runs (WEBU-20, spec 7.5): no webhook (A478)
+    case RunnerPaired = 'runner.paired';
+    case RunnerUpdated = 'runner.updated';
+    case RunnerRevoked = 'runner.revoked';
+    case AgentConfigUpdated = 'agent_config.updated';
+    case AgentRunQueued = 'agent_run.queued';
+    case AgentRunStarted = 'agent_run.started';
+    case AgentRunCanceled = 'agent_run.canceled';
+    case AgentRunFinished = 'agent_run.finished';
+
     /**
      * Whether webhooks can subscribe to this event.
      */

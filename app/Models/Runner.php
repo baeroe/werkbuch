@@ -5,10 +5,12 @@ namespace App\Models;
 use App\Domain\Agents\AgentCli;
 use App\Domain\Agents\Places;
 use App\Domain\Agents\Protocol;
+use App\Domain\Agents\RunStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\RunnerFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -41,6 +43,7 @@ use Illuminate\Support\Str;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read User $creator
+ * @property-read Collection<int, AgentRun> $busyRuns
  */
 #[Fillable(['name', 'token_hash', 'os', 'arch', 'version', 'protocol', 'slots_total', 'slots_per_repo', 'slots_light', 'load', 'clis', 'equipment', 'last_seen_at', 'revoked_at', 'created_by'])]
 #[Hidden(['token_hash'])]
@@ -109,6 +112,16 @@ final class Runner extends Model
     public function runs(): HasMany
     {
         return $this->hasMany(AgentRun::class);
+    }
+
+    /**
+     * The runs that hold a place on it now (running or being canceled).
+     *
+     * @return HasMany<AgentRun, $this>
+     */
+    public function busyRuns(): HasMany
+    {
+        return $this->hasMany(AgentRun::class)->whereIn('status', [RunStatus::Running->value, RunStatus::Canceling->value]);
     }
 
     public function places(): Places

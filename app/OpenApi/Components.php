@@ -74,7 +74,7 @@ final class Components implements DocumentTransformer
                 }
             }
         }
-        foreach ([...ContentSchemas::patches(), ...OperationsSchemas::patches()] as $name => $properties) {
+        foreach ([...ContentSchemas::patches(), ...OperationsSchemas::patches(), ...AgentSchemas::patches()] as $name => $properties) {
             $type = ($components->schemas[$name] ?? null)?->type;
 
             if ($type instanceof ObjectType) {

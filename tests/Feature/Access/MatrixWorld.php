@@ -10,6 +10,7 @@ use App\Models\Organization;
 use App\Models\Page;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
+use App\Models\Runner;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
@@ -146,6 +147,23 @@ final class MatrixWorld
         }
 
         return $factory->create();
+    }
+
+    /**
+     * A fresh run of the agent of the column `run_token` at a fresh item of the project of the column, queued unless
+     * the attributes say otherwise; through the factory: no events, no token.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public function run(string $column, array $attributes = []): AgentRun
+    {
+        return AgentRun::factory()->create(['bot_id' => $this->account('run_token')->id, 'work_item_id' => $this->item($column)->id, ...$attributes]);
+    }
+
+    /** A fresh runner with Claude Code signed in, of the org admin; through the factory: no events. */
+    public function runner(): Runner
+    {
+        return Runner::factory()->create(['created_by' => $this->account('org_admin')->id]);
     }
 
     /** A fresh page at the top of the wiki of the project of the column, by the project admin, through the factory: no events. */

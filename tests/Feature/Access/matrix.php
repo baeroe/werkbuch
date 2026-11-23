@@ -7,6 +7,20 @@ use App\Actions\Account\DisableTwoFactor;
 use App\Actions\Account\EnableTwoFactor;
 use App\Actions\Account\GetTwoFactor;
 use App\Actions\Account\RegenerateRecoveryCodes;
+use App\Actions\AgentRuns\CancelRun;
+use App\Actions\AgentRuns\ClaimRun;
+use App\Actions\AgentRuns\EnqueueRun;
+use App\Actions\AgentRuns\FinishRun;
+use App\Actions\AgentRuns\GetRun;
+use App\Actions\AgentRuns\ListRunEvents;
+use App\Actions\AgentRuns\ListRuns;
+use App\Actions\AgentRuns\PruneRunEvents;
+use App\Actions\AgentRuns\ReapLostRuns;
+use App\Actions\AgentRuns\RecordHeartbeat;
+use App\Actions\AgentRuns\RecordRunEvents;
+use App\Actions\AgentRuns\RetryRun;
+use App\Actions\Agents\GetAgentConfig;
+use App\Actions\Agents\SaveAgentConfig;
 use App\Actions\Attachments\DeleteAttachment;
 use App\Actions\Attachments\GetAttachment;
 use App\Actions\Attachments\IssueUploadUrl;
@@ -87,6 +101,12 @@ use App\Actions\Resolutions\ListResolutions;
 use App\Actions\Resolutions\SaveResolution;
 use App\Actions\RichText\ListMentionables;
 use App\Actions\RichText\ResolveReferences;
+use App\Actions\Runners\CreatePairingCode;
+use App\Actions\Runners\GetPairingCode;
+use App\Actions\Runners\GetRunner;
+use App\Actions\Runners\ListRunners;
+use App\Actions\Runners\RevokeRunner;
+use App\Actions\Runners\UpdateRunner;
 use App\Actions\Search\QuerySearch;
 use App\Actions\System\GetSystemStatus;
 use App\Actions\System\RetryFailedJobs;
@@ -162,6 +182,7 @@ use App\Actions\WorkItemTypes\DeleteWorkItemType;
 use App\Actions\WorkItemTypes\GetWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
+use App\Domain\Agents\RunStatus;
 use App\Domain\Automations\AutomationKey;
 use App\Domain\Workflow\StateCategory;
 use App\Events\EventType;
@@ -1408,5 +1429,133 @@ return [
         },
         'allowed' => $people,
         'event' => EventType::UserRecoveryCodesRegenerated,
+    ],
+
+    // runners (spec 10.1) and the agent configuration of bots (spec 10.4): accounts with `org.manage`, like webhooks
+    'ListRunners' => [
+        'action' => ListRunners::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListRunners::run($a, []),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'GetRunner' => [
+        'action' => GetRunner::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetRunner::run($a, $w->runner()),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'UpdateRunner' => [
+        'action' => UpdateRunner::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => UpdateRunner::run($a, $w->runner(), ['name' => 'Matrix Mac']),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::RunnerUpdated,
+    ],
+    'RevokeRunner' => [
+        'action' => RevokeRunner::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RevokeRunner::run($a, $w->runner()),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::RunnerRevoked,
+    ],
+    'CreatePairingCode' => [
+        'action' => CreatePairingCode::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CreatePairingCode::run($a),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'GetPairingCode' => [
+        'action' => GetPairingCode::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetPairingCode::run($a, CreatePairingCode::run(actor($w->account('org_admin')))['pairing']),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'GetAgentConfig' => [
+        'action' => GetAgentConfig::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetAgentConfig::run($a, $w->bot),
+        'allowed' => ['org_admin', 'default_bot'],
+    ],
+    'SaveAgentConfig' => [
+        'action' => SaveAgentConfig::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveAgentConfig::run($a, $w->bot, [
+            'enabled' => true, 'runner_ids' => [], 'cli' => 'claude', 'model' => 'opus', 'models' => ['review' => 'haiku'],
+        ]),
+        'allowed' => ['org_admin', 'default_bot'],
+        'event' => EventType::AgentConfigUpdated,
+    ],
+    // the runs of agents (spec 6.4, 10.6): who sees the project reads them, who may change items (and org admins) steers
+    // them; the agent itself, through the token of its run, reads but never steers
+    'ListRuns' => [
+        'action' => ListRuns::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListRuns::run($a, ['filter' => ['work_item_id' => $w->run($column)->work_item_id]]),
+        'allowed' => $everyone,
+    ],
+    'GetRun' => [
+        'action' => GetRun::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetRun::run($a, $w->run($column)),
+        'allowed' => $everyone,
+        'hidden' => ['outsider_private'],
+    ],
+    'ListRunEvents' => [
+        'action' => ListRunEvents::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListRunEvents::run($a, $w->run($column), []),
+        'allowed' => $everyone,
+        'hidden' => ['outsider_private'],
+    ],
+    'CancelRun' => [
+        'action' => CancelRun::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CancelRun::run($a, $w->run($column)),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::AgentRunCanceled,
+    ],
+    'RetryRun' => [
+        'action' => RetryRun::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RetryRun::run($a, $w->run($column, ['status' => RunStatus::Failed, 'finished_at' => now()])),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::AgentRunQueued,
+    ],
+    // the work of the runner protocol and of jobs (WEBU-20): the runner is no account, the actor is the system
+    'EnqueueRun' => [
+        'action' => EnqueueRun::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => EnqueueRun::run($a, $w->account('run_token'), $w->web, $w->item('project_admin'), 'task', null),
+        'system' => true,
+        'event' => EventType::AgentRunQueued,
+    ],
+    'ClaimRun' => [
+        'action' => ClaimRun::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->run('project_admin');
+
+            return ClaimRun::run($a, $w->runner(), ['protocol' => '1']);
+        },
+        'system' => true,
+        'event' => EventType::AgentRunStarted,
+    ],
+    'RecordHeartbeat' => [
+        'action' => RecordHeartbeat::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RecordHeartbeat::run($a, $runner = $w->runner(), $w->run('project_admin', ['status' => RunStatus::Running, 'runner_id' => $runner->id])->id, ['attempt' => 1]),
+        'system' => true,
+    ],
+    'RecordRunEvents' => [
+        'action' => RecordRunEvents::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => RecordRunEvents::run($a, $runner = $w->runner(), $w->run('project_admin', ['status' => RunStatus::Running, 'runner_id' => $runner->id])->id, [
+            'attempt' => 1, 'events' => [['kind' => 'text', 'text' => 'Matrix']],
+        ]),
+        'system' => true,
+    ],
+    'FinishRun' => [
+        'action' => FinishRun::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => FinishRun::run($a, $runner = $w->runner(), $w->run('project_admin', ['status' => RunStatus::Running, 'runner_id' => $runner->id])->id, [
+            'attempt' => 1, 'status' => 'succeeded',
+        ]),
+        'system' => true,
+        'event' => EventType::AgentRunFinished,
+    ],
+    // the reaper (every minute) and the tidying up of the logs of runs (every hour), without an event of their own
+    'ReapLostRuns' => [
+        'action' => ReapLostRuns::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ReapLostRuns::run($a),
+        'system' => true,
+    ],
+    'PruneRunEvents' => [
+        'action' => PruneRunEvents::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PruneRunEvents::run($a),
+        'system' => true,
     ],
 ];

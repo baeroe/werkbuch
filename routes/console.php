@@ -1,8 +1,10 @@
 <?php
 
 use App\Jobs\PruneNotificationsJob;
+use App\Jobs\PruneRunEventsJob;
 use App\Jobs\PruneUnownedAttachmentsJob;
 use App\Jobs\PruneWebhookDeliveriesJob;
+use App\Jobs\ReapLostRunsJob;
 use App\Jobs\RunDailyAutomationsJob;
 use App\Jobs\SendDueRemindersJob;
 use Illuminate\Foundation\Inspiring;
@@ -41,3 +43,7 @@ Schedule::job(new RunDailyAutomationsJob(now()->utc()->startOfHour()->toImmutabl
 
 // the webhook log after 30 days, and deliveries whose job got lost (K15); the lock expires after an hour
 Schedule::job(new PruneWebhookDeliveriesJob)->hourly()->withoutOverlapping(60);
+
+// the runs of agents (WEBU-20): leases, time limits and the reasons of waiting runs every minute; their logs after 30 days
+Schedule::job(new ReapLostRunsJob)->everyMinute()->withoutOverlapping(5);
+Schedule::job(new PruneRunEventsJob)->hourly()->withoutOverlapping(60);

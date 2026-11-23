@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $created_by
  * @property CarbonImmutable|null $created_at
  * @property-read Runner|null $runner
+ * @property-read User $creator
  */
 #[Fillable(['code_hash', 'expires_at', 'redeemed_at', 'runner_id', 'created_by', 'created_at'])]
 #[Hidden(['code_hash'])]
@@ -29,6 +30,9 @@ final class RunnerPairingCode extends Model
     use HasUlids;
 
     public const UPDATED_AT = null;
+
+    /** The code itself, only on the model that made it (the answer of creating, never stored). */
+    public ?string $plain = null;
 
     /** How long a code holds. */
     public const MINUTES = 10;
@@ -62,6 +66,12 @@ final class RunnerPairingCode extends Model
         $upper = strtoupper(trim($code));
 
         return preg_match(self::PATTERN, $upper) === 1 ? hash('sha256', str_replace('-', '', $upper)) : null;
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     /** @return BelongsTo<Runner, $this> */

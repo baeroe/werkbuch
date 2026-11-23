@@ -2,11 +2,14 @@
 
 namespace App\Providers;
 
+use App\Models\AgentRun;
 use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Notification;
 use App\Models\Page;
 use App\Models\PageVersion;
+use App\Models\Runner;
+use App\Models\RunnerPairingCode;
 use App\Models\Template;
 use App\Models\View;
 use App\Models\Webhook;
@@ -58,6 +61,11 @@ final class RouteBindingServiceProvider extends ServiceProvider
 
         // a delivery of a webhook by its ULID (any case; anything else is none); whether it belongs to the webhook of the route,
         // the action decides
+        // runners, their pairing codes and runs of agents by ULID only (WEBU-20); the protocol under /api/runner names its run
+        // `{runId}` and resolves it itself
+        Route::bind('runner', fn (string $ref) => References::ulid(Runner::class, $ref));
+        Route::bind('pairing', fn (string $ref) => References::ulid(RunnerPairingCode::class, $ref));
+        Route::bind('run', fn (string $ref) => References::ulid(AgentRun::class, $ref));
         Route::bind('delivery', fn (string $ref) => References::ulid(WebhookDelivery::class, $ref));
     }
 }

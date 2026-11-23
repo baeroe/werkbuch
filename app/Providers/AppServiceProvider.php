@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Access\RoleIndex;
 use App\Access\Visibility;
 use App\Http\Api\RateKey;
+use App\Http\Api\RunnerKey;
 use App\Models\AgentConfig;
 use App\Models\AgentRun;
 use App\Models\Attachment;
@@ -54,6 +55,9 @@ use Meilisearch\Client;
 
 class AppServiceProvider extends ServiceProvider
 {
+    /** The requests of one runner a minute (A487). */
+    public const RUNNER_PER_MINUTE = 3000;
+
     /**
      * Register any application services.
      */
@@ -146,6 +150,11 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('test-mail', fn (Request $request) => Limit::perMinute(6)->by(RateKey::account($request)));
         // a wiki page as PDF: Gotenberg starts a Chromium for each, ten a minute per account (WEBU-4)
         RateLimiter::for('pdf', fn (Request $request) => Limit::perMinute(10)->by(RateKey::account($request)));
+        // the runner protocol (A487): a runner polls, beats and sends its log per run, so 3000 a minute per runner; an
+        // unknown token counts per address like any stranger; pairing ten a minute per address (a code has 40 bits)
+        RateLimiter::for('runner', fn (Request $request) => str_starts_with($key = RunnerKey::for($request), 'runner:')
+            ? Limit::perMinute(self::RUNNER_PER_MINUTE)->by($key) : Limit::perMinute(60)->by($key));
+        RateLimiter::for('runner-pair', fn (Request $request) => Limit::perMinute(10)->by(RateKey::IP.$request->ip()));
 
         // the index is written by the search consumer only, never when a model is saved (P1)
         WorkItem::disableSearchSyncing();

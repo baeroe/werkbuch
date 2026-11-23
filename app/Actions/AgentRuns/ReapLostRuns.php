@@ -1,0 +1,116 @@
+<?php
+
+namespace App\Actions\AgentRuns;
+
+use App\Domain\Agents\Protocol;
+use App\Domain\Agents\RunStatus;
+use App\Events\EventRecorder;
+use App\Events\EventType;
+use App\Models\AgentConfig;
+use App\Models\AgentRun;
+use App\Models\Runner;
+use App\Support\Actor;
+use App\Support\RunQueue;
+use App\Support\RunTokens;
+use Illuminate\Support\Facades\DB;
+use Lorisleiva\Actions\Concerns\AsAction;
+
+/**
+ * The reaper (every minute, spec 6.4, A475, A486). A busy run past its time limit and one more lease without a result
+ * is `timed_out`. A busy run whose lease ran out (the machine slept, lost the net, the runner crashed) is lost: the first
+ * time it goes back to the queue as a new attempt (the runner of the old one gets 409 `run_replaced`), the second time
+ * it ends as `lost`; one being canceled ends as `canceled`. Waiting runs get their reason anew: `no_cli` while no runner of the pool has the CLI,
+ * `runner_offline` while the runner of their strand is offline, none once a runner could take them.
+ */
+final class ReapLostRuns
+{
+    use AsAction;
+
+    /** The shortest time limit of a kind, after which a busy run may be past its own. */
+    private const SHORTEST_LIMIT = 10;
+
+    /**
+     * @return array{timed_out: int, canceled: int, requeued: int, lost: int, waiting: int}
+     */
+    public function handle(Actor $actor): array
+    {
+        $counts = ['timed_out' => 0, 'canceled' => 0, 'requeued' => 0, 'lost' => 0, 'waiting' => 0];
+
+        $suspects = AgentRun::query()->whereIn('status', [RunStatus::Running->value, RunStatus::Canceling->value])
+            ->where(fn ($query) => $query->where('lease_expires_at', '<', now())->orWhere('started_at', '<', now()->subMinutes(self::SHORTEST_LIMIT)))
+            ->pluck('id');
+
+        foreach ($suspects as $id) {
+            $outcome = DB::transaction(function () use ($id): ?string {
+                $run = AgentRun::query()->lockForUpdate()->find($id);
+                if ($run === null || ! $run->status->busy()) {
+                    return null;
+                }
+
+                if ($run->pastLimit()) {
+                    FinishRun::end($run, RunStatus::TimedOut, ['error' => 'timed_out']);
+
+                    return 'timed_out';
+                }
+
+                if ($run->lease_expires_at !== null && $run->lease_expires_at->isFuture()) {
+                    return null;
+                }
+
+                // a run being canceled whose runner went quiet: nobody needs it any more
+                if ($run->status === RunStatus::Canceling) {
+                    FinishRun::end($run, RunStatus::Canceled);
+
+                    return 'canceled';
+                }
+
+                if ($run->attempt >= Protocol::MAX_ATTEMPTS) {
+                    FinishRun::end($run, RunStatus::Lost, ['error' => AgentRun::LOST]);
+
+                    return 'lost';
+                }
+
+                $run->forceFill([
+                    'status' => RunStatus::Queued,
+                    'attempt' => $run->attempt + 1, 'runner_id' => null, 'lease_expires_at' => null, 'started_at' => null, 'error' => AgentRun::LOST,
+                ])->save();
+                RunTokens::revoke($run);
+                EventRecorder::record(EventType::AgentRunQueued, Actor::agent($run->bot)->withReason(AgentRun::LOST), $run, $run->project, [
+                    'status' => ['old' => RunStatus::Running->value, 'new' => RunStatus::Queued->value],
+                ], ['item_id' => $run->work_item_id, 'type' => $run->type->value, 'attempt' => $run->attempt]);
+
+                return 'requeued';
+            }, 3);
+
+            if ($outcome !== null) {
+                $counts[$outcome]++;
+            }
+        }
+
+        $counts['waiting'] = $this->reason();
+
+        return $counts;
+    }
+
+    /** Gives the waiting runs their reason anew; how many wait now. */
+    private function reason(): int
+    {
+        $pending = AgentRun::query()->whereIn('status', [RunStatus::Queued->value, RunStatus::Waiting->value])->with('thread.runner')->get();
+        $runners = Runner::query()->whereNull('revoked_at')->get();
+        $configs = AgentConfig::query()->whereIn('bot_id', $pending->pluck('bot_id')->unique()->values())->get()->keyBy('bot_id');
+        $waiting = 0;
+
+        foreach ($pending as $run) {
+            $reason = RunQueue::waitingReason($run, $configs->get($run->bot_id), $runners);
+            $status = $reason === null ? RunStatus::Queued : RunStatus::Waiting;
+            $waiting += $reason === null ? 0 : 1;
+
+            if ($run->status !== $status || $run->waiting_reason !== $reason) {
+                AgentRun::query()->whereKey($run->id)->whereIn('status', [RunStatus::Queued->value, RunStatus::Waiting->value])
+                    ->update(['status' => $status->value, 'waiting_reason' => $reason, 'updated_at' => now()]);
+            }
+        }
+
+        return $waiting;
+    }
+}
