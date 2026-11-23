@@ -39,7 +39,12 @@ export function disconnectGithub(): Promise<GithubConnection> {
     // only strands of projects with a repo need GitHub; a project without one works in a folder and goes on
     const withRepo = new Set(db.project_agents.filter((settings) => settings.repo !== null).map((settings) => settings.project_id));
     db.github = { app: null, repos: [] };
-    for (const settings of db.project_agents) settings.repo = null;
+    for (const settings of db.project_agents) {
+      settings.repo = null;
+      // without GitHub there is no base branch to guard: strands an unauthorized merge paused wait for GitHub instead
+      settings.guard = null;
+    }
+    for (const thread of db.agent_threads) if (thread.status === 'paused' && thread.pause_reason === 'guard') thread.pause_reason = 'github';
     for (const thread of db.agent_threads) {
       const projectId = db.items.find((item) => item.id === thread.item_id)?.project_id;
       if (thread.status !== 'open' || !projectId || !withRepo.has(projectId)) continue;

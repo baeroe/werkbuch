@@ -432,4 +432,56 @@ describe('an unauthorized merge (spec 7.1)', () => {
   it('needs a repo', async () => {
     expect((await failure(simulateUnauthorizedMerge('p_ops'))).reason).toBe('no_repo');
   });
+
+  it('says so at the item the push came from and tells the org admins (spec 11.3)', async () => {
+    await simulateUnauthorizedMerge('p_web');
+    const comment = getDb().comments.filter((entry) => entry.work_item_id === 'wi_web_51').at(-1)!;
+    expect(comment.author_id).toBe('u_automation');
+    expect(JSON.stringify(comment.body)).toContain('Push der App erkannt');
+    const admins = getDb().users.filter((user) => user.type === 'person' && user.org_role === 'admin' && user.disabled_at === null).map((user) => user.id);
+    const told = getDb().notifications.filter((entry) => entry.data.comment_id === comment.id).map((entry) => entry.user_id);
+    expect(told.length).toBeGreaterThan(0);
+    expect(told.every((id) => admins.includes(id))).toBe(true);
+  });
+
+  it('pulls the brake on a confirm: a strand without corrections left goes to the responsible person', async () => {
+    const db = getDb();
+    db.agent_threads.find((thread) => thread.id === 'th_web51')!.corrections = db.project_agents.find((settings) => settings.project_id === 'p_web')!.max_corrections;
+    saveDb();
+    await simulateUnauthorizedMerge('p_web');
+    await confirmMergeGuard('p_web');
+    const state = await getItemAgents('WEB-51');
+    expect(state.thread).toMatchObject({ status: 'paused' });
+    expect(state.runs.some((run) => run.type === 'correction' && run.status === 'queued')).toBe(false);
+    expect(getDb().items.find((item) => item.key === 'WEB-51')?.assignee_id).toBe('u_mara');
+  });
+
+  it('starts after the confirm what an assignment during the pause would have started', async () => {
+    await simulateUnauthorizedMerge('p_web');
+    // WEB-50 goes to Kira; WEB-53 to Mara and back to Kira: nothing runs while the project is paused
+    await updateWorkItem('wi_web_50', { assignee_id: 'u_kira' });
+    await updateWorkItem('wi_web_53', { assignee_id: 'u_mara' });
+    await updateWorkItem('wi_web_53', { assignee_id: 'u_kira' });
+    expect((await getItemAgents('WEB-50')).runs).toEqual([]);
+    await confirmMergeGuard('p_web');
+    expect((await getItemAgents('WEB-50')).runs.at(-1)).toMatchObject({ type: 'task', status: 'queued' });
+    const web53 = await getItemAgents('WEB-53');
+    expect(web53.thread).toMatchObject({ status: 'open' });
+    expect(web53.runs.at(-1)).toMatchObject({ type: 'correction', status: 'queued' });
+  });
+
+  it('gives way to a disconnect of GitHub: the guard goes and the strands wait for GitHub', async () => {
+    await simulateUnauthorizedMerge('p_web');
+    await disconnectGithub();
+    expect((await getProjectAgents('p_web')).guard).toBeNull();
+    expect(getDb().agent_threads.find((thread) => thread.id === 'th_web51')).toMatchObject({ status: 'paused', pause_reason: 'github' });
+  });
+
+  it('lets the strands wait for GitHub when the project has no repo any more on a confirm', async () => {
+    await simulateUnauthorizedMerge('p_web');
+    await saveProjectAgents({ ...(await getProjectAgents('p_web')), repo: null });
+    expect((await getProjectAgents('p_web')).guard).not.toBeNull();
+    expect(await confirmMergeGuard('p_web')).toEqual({ resumed: 0 });
+    expect(getDb().agent_threads.find((thread) => thread.id === 'th_web51')).toMatchObject({ status: 'paused', pause_reason: 'github' });
+  });
 });

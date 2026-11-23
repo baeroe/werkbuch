@@ -1,8 +1,8 @@
 /*
  * GitHub (WEBU-18, spec 10.2 and 11.3). Not connected: one step, the manifest flow of the one app at GitHub (name,
  * rights, webhook address and the way back are filled in) and its installation on the repos. Connected: the state of
- * the app, the repos with whether a ruleset protects the base branch (only shown: werkbuch detects an unauthorized
- * merge either way), and "Trennen". Private key and webhook secret stay on the server and never show.
+ * the app, the repos with whether a ruleset protects the base branch, and "Trennen". The ruleset is only shown: it
+ * keeps pushes off the base branch, and werkbuch detects an unauthorized merge either way, with or without one. Private key and webhook secret stay on the server and never show.
  */
 
 import { Check, ExternalLink, GitBranch, Lock, ShieldAlert, ShieldCheck, Unplug } from 'lucide-react';
@@ -16,6 +16,8 @@ import { useConnectGithub, useDisconnectGithub, useGithub, useRepoOwners } from 
 import { useSettle } from '@/hooks/mutation';
 import { notifyError } from '@/lib/errors';
 import { DEMO_ORIGIN } from '@/lib/links';
+import { github as seededGithub } from '@/api/seed/agents';
+import { useOrganization } from '@/hooks/organization';
 import type { GithubApp, GithubConnection } from '@/types';
 import { formatDate, useOrgZone } from './format';
 import { Badge, FormSkeleton, Loaded, Panel, Row, Rows, SectionHeader } from './parts';
@@ -24,13 +26,15 @@ import type { SectionProps } from './sections';
 /** The page title takes the focus when the view under it changes (connected, disconnected). */
 const GITHUB_TITLE = 'github-title';
 
-const RIGHTS = ['Inhalte schreiben', 'Pull Requests schreiben', 'Checks lesen', 'Actions lesen', 'Metadaten lesen'];
+/** What the manifest asks for: the rights of the app it creates. */
+const RIGHTS = seededGithub.app?.permissions ?? [];
 
 /* -------------------------------------------------------------------------- connect */
 
 function Connect() {
   const settle = useSettle();
   const connect = useConnectGithub();
+  const organization = useOrganization();
 
   function start() {
     settle(connect.mutateAsync(undefined), {
@@ -47,8 +51,8 @@ function Connect() {
     <Panel title="Mit GitHub verbinden" description="Eine App, einmalig: GitHub führt durch Anlegen und Installieren und kommt danach hierher zurück. Wähle dabei die Repos, an denen Agenten arbeiten sollen.">
       <div className="flex flex-col gap-3 p-4">
         <p className="max-w-[65ch] text-ui text-pretty text-ink">
-          Die App pusht, öffnet Pull Requests, schreibt Reviews und mergt, wenn CI grün ist und das Review keine Befunde hat. Sie meldet werkbuch Pushes, PRs und Checks. Vorgeschlagener Name: Feldwerk
-          werkbuch.
+          Die App pusht, öffnet Pull Requests, schreibt Reviews und mergt, wenn CI grün ist und das Review keine Befunde hat. Sie meldet werkbuch Pushes, PRs und Checks.
+          {organization.data ? ` Vorgeschlagener Name: ${organization.data.name} werkbuch.` : null}
         </p>
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
           <dt className="text-muted">Rechte</dt>
@@ -176,9 +180,8 @@ function Connected({ github }: { github: GithubConnection }) {
 
       <Banner tone="info" icon={ShieldCheck} title="Ruleset empfohlen">
         <span className="block max-w-[65ch]">
-          werkbuch mergt, wenn CI grün ist und das Review keine Befunde hat; die App ist dabei der einzige Weg auf den Basis-Branch. Ein Ruleset (Pull Request nötig, Check „tests“ grün, nur die App als
-          Bypass) verhindert, dass ein Agent, der sich etwas einreden lässt, selbst auf main pusht. Ohne Ruleset erkennt werkbuch einen eigenmächtigen Merge und pausiert alle Stränge des Projekts, bis
-          ein Projekt-Admin bestätigt.
+          Ruleset: Pull Request nötig, Check „tests“ grün, ohne Bypass. werkbuch mergt über den PR und braucht keinen Bypass. Verlangt das Ruleset eine Freigabe, scheitert der Merge. Ob mit Ruleset oder
+          ohne: Pusht die App auf den Basis-Branch, ohne dass werkbuch gemergt hat, erkennt werkbuch das und pausiert alle Stränge des Projekts, bis ein Projekt-Admin bestätigt.
         </span>
       </Banner>
 

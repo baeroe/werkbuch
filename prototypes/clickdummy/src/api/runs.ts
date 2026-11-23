@@ -11,6 +11,7 @@
 
 import { afterFindings, CLI_NAMES, isActive, LIGHT_RUNS, pickModel, RUN_TYPE_NAMES, whyNotHere } from '@/domain/agents';
 import { now as clockNow } from '@/lib/clock';
+import { textDoc } from '@/lib/richtext';
 import type { AgentCli, AgentRun, AgentThread, ItemAgentState, RunnerSlots, RunType, User, WorkItemRecord } from '@/types';
 import { canSeeProject, requireWritable } from './access';
 import { conflict, makeCtx, newId, notFound, read, write, type Ctx } from './client';
@@ -18,6 +19,7 @@ import { saveDb, type Db } from './db';
 import { moveItem, patchItem } from './itemRules';
 import { LOG_TEMPLATES, TASK_LOGS, type StoredRun, type StoredRunner } from './seed/agents';
 import { findProject } from './lookup';
+import { notifyPeople, recordEvent } from './events';
 import { requireItem } from './workItems';
 
 /** A queued run starts this long after it was queued, when a runner is free. */
@@ -441,6 +443,16 @@ export function simulateUnauthorizedMerge(projectId: string): Promise<{ paused: 
     const pusher = db.agent_runs.find((run) => run.status === 'running' && CODE_RUNS.includes(run.type) && threads.some((thread) => thread.id === run.thread_id));
     const item = pusher ? db.items.find((entry) => entry.id === pusher.item_id) : undefined;
     settings.guard = { detected_at: stamp, branch: settings.base_branch, sha: 'a41c9e7', item_id: item?.id ?? null, item_key: item?.key ?? null, bot_id: pusher?.bot_id ?? null };
+    // werkbuch says so at the item the push came from and tells the org admins (spec 11.3)
+    if (item && pusher) {
+      const system = db.users.find((user) => user.is_default_bot)!;
+      const text = `werkbuch hat auf ${settings.base_branch} einen Push der App erkannt (a41c9e7), den kein Merge von werkbuch erklärt, aus dem Auftrag ${RUN_TYPE_NAMES[pusher.type]} dieses Items. Alle Stränge von ${project.identifier} pausieren, bis ein Projekt-Admin den Merge in den Projekteinstellungen unter Agenten bestätigt.`;
+      const comment = { id: newId('c'), work_item_id: item.id, author_id: system.id, body: textDoc(text), created_at: stamp, edited_at: null, reactions: [], run_id: pusher.id };
+      db.comments.push(comment);
+      const event = recordEvent(ctx, { type: 'comment.created', actor_id: system.id, subject: { type: 'work_item', id: item.id }, project_id: project.id, changes: { comment_id: { old: null, new: comment.id } } });
+      const admins = db.users.filter((user) => user.type === 'person' && user.org_role === 'admin').map((user) => user.id);
+      notifyPeople(ctx, { event: 'comment', actor_id: system.id, event_id: event.id, item, recipients: admins, data: { excerpt: text, comment_id: comment.id } });
+    }
     let paused = 0;
     for (const thread of threads) {
       if (thread.status !== 'open') continue;
@@ -454,9 +466,11 @@ export function simulateUnauthorizedMerge(projectId: string): Promise<{ paused: 
 }
 
 /**
- * A project admin confirms the unauthorized merge was looked at (spec 7.1): the guard goes, and every strand it paused
- * goes on where the item is still with its agent, with a correction on the strand (the brake counts on); the others
- * stay paused and are given back as usual.
+ * A project admin confirms the unauthorized merge was looked at (spec 7.1). The guard goes; then every item of the
+ * project that is with an agent and has no run gets what an assignment would have started meanwhile: a strand the
+ * guard paused goes on with a correction (the brake counts on: used up, the item goes to the responsible person); a
+ * strand of the same bot paused by a person going back and forth goes on as after an assignment; an item without its
+ * bot's strand starts one with a task. Strands GitHub paused wait for "Weitermachen"; other paused strands stay.
  */
 export function confirmMergeGuard(projectId: string): Promise<{ resumed: number }> {
   return write((ctx) => {
@@ -467,15 +481,35 @@ export function confirmMergeGuard(projectId: string): Promise<{ resumed: number 
     const settings = db.project_agents.find((entry) => entry.project_id === project.id);
     if (!settings?.guard) throw conflict('nothing_to_confirm', 'Es gibt keinen eigenmächtigen Merge zu bestätigen.');
     settings.guard = null;
+    // without a repo (chosen away meanwhile) the paused strands wait as after a disconnect of GitHub
+    if (!settings.repo) {
+      for (const thread of threadsOf(db, project.id)) if (thread.pause_reason === 'guard') thread.pause_reason = 'github';
+      return { resumed: 0 };
+    }
     let resumed = 0;
-    for (const thread of threadsOf(db, project.id)) {
-      if (thread.status !== 'paused' || thread.pause_reason !== 'guard') continue;
-      delete thread.pause_reason;
-      const item = db.items.find((entry) => entry.id === thread.item_id)!;
-      const bot = agentBot(db, thread.bot_id);
-      if (!bot || item.assignee_id !== bot.id || whyAssigneeIsNoAgent(db, item)) continue;
-      thread.status = 'open';
-      queueRun(ctx, bot, item, thread, 'correction');
+    for (const item of db.items.filter((entry) => entry.project_id === project.id)) {
+      const guarded = db.agent_threads.find((entry) => entry.item_id === item.id && entry.status === 'paused' && entry.pause_reason === 'guard');
+      if (guarded) delete guarded.pause_reason;
+      const bot = agentBot(db, item.assignee_id ?? '');
+      if (bot?.type !== 'bot' || whyAssigneeIsNoAgent(db, item) !== null) continue;
+      // a run the guard canceled may still be stopping: it does not hold the strand back
+      if (db.agent_runs.some((run) => run.item_id === item.id && isActive(run) && run.status !== 'canceling')) continue;
+      const thread = db.agent_threads.find((entry) => entry.item_id === item.id && (entry.status === 'open' || entry.status === 'paused')) ?? null;
+      if (thread?.pause_reason === 'github') continue;
+      if (thread && thread.bot_id === bot.id && thread === guarded) {
+        const decision = afterFindings(thread, settings, 'correction');
+        if (decision.next === 'paused') {
+          const owner = db.users.find((user) => user.id === bot.owner_id);
+          if (owner) patchItem(ctx, bot, item, { assignee_id: owner.id }, { reason: `Agent: Bremse nach ${decision.max} Korrekturen` });
+          continue;
+        }
+        thread.status = 'open';
+        thread.corrections = decision.used;
+        queueRun(ctx, bot, item, thread, 'correction');
+      } else {
+        // what onAssigneeChanged would have done while the guard held the project
+        onAssigneeChanged(ctx, me, item, null);
+      }
       resumed += 1;
     }
     return { resumed };

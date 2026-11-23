@@ -450,9 +450,14 @@ describe('an unauthorized merge in a project', () => {
     renderSettings('/projects/WEB/settings/agents');
     expect(await screen.findByText('Eigenmächtiger Merge erkannt: WEB pausiert')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'WEB-51' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Bestätigen und fortsetzen' }));
+    expect(screen.getByRole('alert', { name: '' }).textContent).toContain('Eigenmächtiger Merge erkannt: WEB pausiert');
+    const confirm = screen.getByRole('button', { name: 'Bestätigen und fortsetzen' });
+    expect(confirm.getAttribute('aria-describedby')).toBe('merge-guard-title');
+    await user.click(confirm);
     await waitFor(async () => expect((await getProjectAgents('p_web')).guard).toBeNull());
     await waitFor(() => expect(screen.queryByText('Eigenmächtiger Merge erkannt: WEB pausiert')).toBeNull());
+    // the banner went: the focus goes to the heading of the first sheet under it
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Repository' })));
   });
 
   it('lets readers see it without the button', async () => {

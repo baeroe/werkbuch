@@ -170,7 +170,8 @@ export function saveProjectAgents(input: ProjectAgents): Promise<ProjectAgents> 
     const previous = db.project_agents.find((settings) => settings.project_id === project.id);
     const stored: ProjectAgents = {
       ...fields,
-      // a detected unauthorized merge is werkbuch's to set and a project admin's to confirm, never a save's
+      // a detected unauthorized merge is werkbuch's to set and a project admin's to confirm, never a save's: it
+      // survives a change of repo or base branch (the push happened, someone has to look at it)
       guard: previous?.guard ?? null,
       base_branch: input.base_branch.trim(),
       setup_command: input.setup_command.trim(),

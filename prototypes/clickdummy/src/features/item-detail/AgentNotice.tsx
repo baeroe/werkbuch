@@ -165,7 +165,7 @@ export function AgentNotice({ item }: { item: WorkItem }) {
         <span className="block max-w-[65ch]">
           {guard
             ? guard.item_id === item.id
-              ? `Auf ${guard.branch} kam ein Push der App (${guard.sha}), den kein Merge von werkbuch erklärt, aus dem Auftrag dieses Items. Alle Stränge von ${project?.identifier ?? 'diesem Projekt'} pausieren, bis ein Projekt-Admin den Merge prüft und bestätigt. Ein Ruleset auf ${guard.branch} hätte den Push verhindert.`
+              ? `Auf ${guard.branch} kam ein Push der App (${guard.sha}), den kein Merge von werkbuch erklärt, aus dem Auftrag dieses Items. Alle Stränge von ${project?.identifier ?? 'diesem Projekt'} pausieren, bis ein Projekt-Admin den Merge prüft und bestätigt.`
               : `Auf ${guard.branch} kam ein Push der App (${guard.sha}), den kein Merge von werkbuch erklärt${guard.item_key ? `, aus dem Auftrag von ${guard.item_key}` : ''}. Alle Stränge des Projekts pausieren, bis ein Projekt-Admin bestätigt; danach macht ${bot.name} hier mit einer Korrektur weiter.`
             : github
             ? `Der Strang ist pausiert; PR${thread.pr_number ? ` #${thread.pr_number}` : ''} und Branch bleiben bei GitHub. Sobald GitHub wieder verbunden ist und das Projekt sein Repo hat, macht ${bot.name} mit „Weitermachen“ als Korrektur weiter; die Bremse zählt weiter und greift, wenn keine Korrektur mehr frei ist.`

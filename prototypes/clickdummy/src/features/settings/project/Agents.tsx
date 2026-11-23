@@ -1,7 +1,7 @@
 /*
  * Project → Agenten (WEBU-18, spec 10.3): how agents work in this project. One form, saved as a whole from the bar at
  * the bottom (⌘↵), in six sheets:
- * - Repository: the repo (1:1, only repos with both GitHub apps), base branch, merge method, the review agent (a bot
+ * - Repository: the repo (1:1, with the hint whether a ruleset protects it), base branch, merge method, the review agent (a bot
  *   that works as an agent; the others stand greyed with the reason), reviews of PRs by people, the comment on the PR.
  * - Worktree: the setup and teardown commands the runner runs around a worktree (spec 8.4). MCP servers, skills and
  *   plugins are equipment of the machine, not set here (spec 8.7).
@@ -177,7 +177,7 @@ function ModelLabels({ labels, canManage }: { labels: readonly Label[]; canManag
  * werkbuch detected a push of the app to the base branch that no merge of werkbuch explains (spec 7.1): every strand
  * of the project pauses until a project admin confirms; the strands then go on with a correction.
  */
-function MergeGuardBanner({ project, guard, canManage }: { project: SectionProps['project']; guard: MergeGuard; canManage: boolean }) {
+function MergeGuardBanner({ project, guard, canManage, unprotected }: { project: SectionProps['project']; guard: MergeGuard; canManage: boolean; unprotected: boolean }) {
   const settle = useSettle();
   const confirm = useConfirmMergeGuard();
   const zone = useOrgZone();
@@ -185,8 +185,8 @@ function MergeGuardBanner({ project, guard, canManage }: { project: SectionProps
     settle(confirm.mutateAsync(project.id), {
       onSuccess: ({ resumed }) => {
         toast({ title: 'Merge bestätigt', description: resumed > 0 ? `${resumed === 1 ? 'Ein Strang macht' : `${resumed} Stränge machen`} mit einer Korrektur weiter.` : 'Die Agenten arbeiten wieder; pausiert war kein Strang mehr beim Bot.', tone: 'success' });
-        // the banner goes with the confirm: the focus moves to the first field of the page
-        focusWhenLost(() => document.querySelector<HTMLElement>('[data-agents-form] button, [data-agents-form] input'), 2000);
+        // the banner goes with the confirm: the focus moves to the heading of the first sheet under it
+        focusWhenLost(() => document.querySelector<HTMLElement>('[data-agents-form] [data-card-heading]'), 2000);
       },
       onError: (error) => notifyError('Nicht bestätigt', error, run),
     });
@@ -194,11 +194,12 @@ function MergeGuardBanner({ project, guard, canManage }: { project: SectionProps
   return (
     <Banner
       tone="danger"
+      role="alert"
       icon={ShieldAlert}
-      title={`Eigenmächtiger Merge erkannt: ${project.identifier} pausiert`}
+      title={<span id="merge-guard-title">{`Eigenmächtiger Merge erkannt: ${project.identifier} pausiert`}</span>}
       action={
         canManage ? (
-          <Button variant="secondary" size="sm" pending={confirm.isPending} onClick={run} data-confirm-guard="">
+          <Button variant="secondary" size="sm" pending={confirm.isPending} onClick={run} aria-describedby="merge-guard-title" data-confirm-guard="">
             Bestätigen und fortsetzen
           </Button>
         ) : undefined
@@ -216,7 +217,7 @@ function MergeGuardBanner({ project, guard, canManage }: { project: SectionProps
         ) : null}
         {'. Alle Stränge des Projekts pausieren. '}
         {canManage
-          ? 'Prüfe den Commit bei GitHub, mach ihn bei Bedarf rückgängig und bestätige dann; die Stränge machen mit einer Korrektur weiter. Ein Ruleset auf dem Basis-Branch verhindert solche Pushes.'
+          ? `Prüfe den Commit bei GitHub, mach ihn bei Bedarf rückgängig und bestätige dann; die Stränge machen mit einer Korrektur weiter.${unprotected ? ` Ein Ruleset auf ${guard.branch} (Pull Request nötig, ohne Bypass) hält solche Pushes fern.` : ''}`
           : 'Ein Admin des Projekts prüft den Commit und bestätigt; danach machen die Stränge weiter.'}
       </span>
     </Banner>
@@ -350,7 +351,9 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds,
 
   return (
     <form ref={form} noValidate onSubmit={(event) => void submit(event)} data-agents-form="" className="flex flex-col gap-6">
-      {settings.guard && <MergeGuardBanner project={project} guard={settings.guard} canManage={canManage} />}
+      {settings.guard && (
+        <MergeGuardBanner project={project} guard={settings.guard} canManage={canManage} unprotected={github.repos.find((repo) => repo.full_name === settings.repo)?.protected === false} />
+      )}
       {canManage && <UnsavedGuard dirty={draft.dirty} saving={save.isPending} />}
       {settings.configured === false && (
         <Banner tone="info" title={`Agenten in ${project.identifier} noch nicht eingerichtet`}>
@@ -376,7 +379,7 @@ function AgentsForm({ project, canManage, settings, workflow, bots, agentBotIds,
         </Banner>
       )}
 
-      <SettingsCard title="Repository" description="Ein Repo je Projekt, damit der Agent das ganze Projekt kennt. Ohne Repo arbeiten Agenten in einem Ordner und antworten mit einer Zusammenfassung.">
+      <SettingsCard focusableHeading title="Repository" description="Ein Repo je Projekt, damit der Agent das ganze Projekt kennt. Ohne Repo arbeiten Agenten in einem Ordner und antworten mit einer Zusammenfassung.">
         {!connected && (
           <Banner tone="neutral" icon={CircleAlert} title="GitHub ist nicht verbunden">
             {can('org.manage') ? (

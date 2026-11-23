@@ -107,18 +107,20 @@ type CardProps = {
   tone?: 'neutral' | 'danger';
   /** The content ends with a `RuledList`: it runs down to the bottom edge of the sheet instead of leaving a gap. */
   flush?: boolean;
+  /** The heading takes the focus when what stood above it goes (a banner that was dealt with). */
+  focusableHeading?: boolean;
   className?: string;
   children?: ReactNode;
 };
 
 /** A group of settings on one sheet: title, what it is for, the controls, and the buttons that save them. */
-export function SettingsCard({ title, description, actions, footer, tone = 'neutral', flush = false, className, children }: CardProps) {
+export function SettingsCard({ title, description, actions, footer, tone = 'neutral', flush = false, focusableHeading = false, className, children }: CardProps) {
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className={cx('rounded-card border bg-surface shadow-elev-1', tone === 'danger' ? 'border-danger/40' : 'border-line', className)}>
       <header className="flex flex-wrap items-start gap-x-4 gap-y-2 px-4 pt-4 md:px-5">
         <div className="min-w-0 flex-1">
-          <h2 id={headingId} className={cx('scroll-mt-20 font-display text-lg font-bold tracking-title break-words', tone === 'danger' ? 'text-danger' : 'text-ink')}>
+          <h2 id={headingId} tabIndex={focusableHeading ? -1 : undefined} data-card-heading={focusableHeading ? '' : undefined} className={cx('scroll-mt-20 font-display text-lg font-bold tracking-title break-words', tone === 'danger' ? 'text-danger' : 'text-ink')}>
             {title}
           </h2>
           {description && <p className="mt-1 max-w-[65ch] text-ui text-pretty text-muted">{description}</p>}
