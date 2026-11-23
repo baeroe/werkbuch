@@ -16,6 +16,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Support\Actor;
+use Illuminate\Support\Facades\DB;
 use Tests\Support\AgentWorld;
 
 /*
@@ -308,4 +309,20 @@ it('says agent_off for the waiting runs of an agent switched off and hands them 
     $this->putJson("/api/v1/bots/{$this->agent->id}/agent", $config(true))->assertOk();
     expect([$run->fresh()?->status, $run->fresh()?->waiting_reason])->toBe([RunStatus::Queued, null])
         ->and($claim($token)->json('run.id'))->toBe($run->id);
+});
+
+it('leaves a run whose agent was switched off while the claim looked (A488)', function () use ($claim) {
+    [, $token] = AgentWorld::runner();
+    $run = AgentWorld::run($this->agent, $this->project);
+    $switched = false;
+    DB::connection()->beforeExecuting(function (string $query) use (&$switched) {
+        if (! $switched && str_starts_with($query, 'select * from `agent_configs`') && str_ends_with($query, 'lock in share mode')) {
+            $switched = true;
+            DB::table('agent_configs')->where('bot_id', test()->agent->id)->update(['enabled' => false]);
+        }
+    });
+
+    expect($claim($token)->json('run'))->toBeNull()
+        ->and($switched)->toBeTrue()
+        ->and($run->fresh()?->status->pending())->toBeTrue();
 });
