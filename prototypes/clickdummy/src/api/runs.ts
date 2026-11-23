@@ -310,7 +310,13 @@ export function onAssigneeChanged(ctx: Ctx, actor: User, item: WorkItemRecord, p
     delete thread.pause_reason;
   }
   const bot = db.users.find((user) => user.id === item.assignee_id);
-  if (bot?.type !== 'bot' || whyAssigneeIsNoAgent(db, item) !== null) return;
+  if (bot?.type !== 'bot') return;
+  if (whyAssigneeIsNoAgent(db, item) !== null) {
+    // an unauthorized merge holds the project: the assignment is remembered and started when it is confirmed
+    const guard = db.project_agents.find((settings) => settings.project_id === item.project_id)?.guard;
+    if (guard && !guard.held_item_ids.includes(item.id)) guard.held_item_ids.push(item.id);
+    return;
+  }
   if (thread && thread.bot_id === bot.id) {
     thread.status = 'open';
     delete thread.pause_reason;
@@ -442,7 +448,7 @@ export function simulateUnauthorizedMerge(projectId: string): Promise<{ paused: 
     const threads = threadsOf(db, project.id);
     const pusher = db.agent_runs.find((run) => run.status === 'running' && CODE_RUNS.includes(run.type) && threads.some((thread) => thread.id === run.thread_id));
     const item = pusher ? db.items.find((entry) => entry.id === pusher.item_id) : undefined;
-    settings.guard = { detected_at: stamp, branch: settings.base_branch, sha: 'a41c9e7', item_id: item?.id ?? null, item_key: item?.key ?? null, bot_id: pusher?.bot_id ?? null };
+    settings.guard = { detected_at: stamp, branch: settings.base_branch, sha: 'a41c9e7', item_id: item?.id ?? null, item_key: item?.key ?? null, bot_id: pusher?.bot_id ?? null, held_item_ids: [] };
     // werkbuch says so at the item the push came from and tells the org admins (spec 11.3)
     if (item && pusher) {
       const system = db.users.find((user) => user.is_default_bot)!;
@@ -480,6 +486,9 @@ export function confirmMergeGuard(projectId: string): Promise<{ resumed: number 
     requireWritable(db, me, project, 'admin', 'Einen eigenmächtigen Merge bestätigen nur Admins des Projekts.');
     const settings = db.project_agents.find((entry) => entry.project_id === project.id);
     if (!settings?.guard) throw conflict('nothing_to_confirm', 'Es gibt keinen eigenmächtigen Merge zu bestätigen.');
+    // only what the guard held back: strands it paused and items assigned to an agent meanwhile; a merged or closed
+    // item that stays with its bot (spec 7.2) gets nothing
+    const held = new Set([...settings.guard.held_item_ids, ...threadsOf(db, project.id).filter((thread) => thread.pause_reason === 'guard').map((thread) => thread.item_id)]);
     settings.guard = null;
     // without a repo (chosen away meanwhile) the paused strands wait as after a disconnect of GitHub
     if (!settings.repo) {
@@ -487,7 +496,7 @@ export function confirmMergeGuard(projectId: string): Promise<{ resumed: number 
       return { resumed: 0 };
     }
     let resumed = 0;
-    for (const item of db.items.filter((entry) => entry.project_id === project.id)) {
+    for (const item of db.items.filter((entry) => held.has(entry.id))) {
       const guarded = db.agent_threads.find((entry) => entry.item_id === item.id && entry.status === 'paused' && entry.pause_reason === 'guard');
       if (guarded) delete guarded.pause_reason;
       const bot = agentBot(db, item.assignee_id ?? '');

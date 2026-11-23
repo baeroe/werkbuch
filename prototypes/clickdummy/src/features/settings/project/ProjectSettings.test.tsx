@@ -450,7 +450,7 @@ describe('an unauthorized merge in a project', () => {
     renderSettings('/projects/WEB/settings/agents');
     expect(await screen.findByText('Eigenmächtiger Merge erkannt: WEB pausiert')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'WEB-51' })).toBeTruthy();
-    expect(screen.getByRole('alert', { name: '' }).textContent).toContain('Eigenmächtiger Merge erkannt: WEB pausiert');
+    expect(screen.getByRole('alert', { name: /Eigenmächtiger Merge/ }).textContent).toContain('Eigenmächtiger Merge erkannt: WEB pausiert');
     const confirm = screen.getByRole('button', { name: 'Bestätigen und fortsetzen' });
     expect(confirm.getAttribute('aria-describedby')).toBe('merge-guard-title');
     await user.click(confirm);

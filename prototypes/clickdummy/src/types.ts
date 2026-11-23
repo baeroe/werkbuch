@@ -905,6 +905,8 @@ export interface MergeGuard {
   item_id: string | null;
   item_key: string | null;
   bot_id: string | null;
+  /** Items assigned to an agent while the guard held the project: what an assignment would have started, on confirm. */
+  held_item_ids: string[];
 }
 
 export type RunStatus = 'queued' | 'waiting' | 'running' | 'canceling' | 'succeeded' | 'failed' | 'canceled' | 'timed_out' | 'lost';

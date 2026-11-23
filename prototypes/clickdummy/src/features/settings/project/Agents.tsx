@@ -184,7 +184,7 @@ function MergeGuardBanner({ project, guard, canManage, unprotected }: { project:
   function run() {
     settle(confirm.mutateAsync(project.id), {
       onSuccess: ({ resumed }) => {
-        toast({ title: 'Merge bestätigt', description: resumed > 0 ? `${resumed === 1 ? 'Ein Strang macht' : `${resumed} Stränge machen`} mit einer Korrektur weiter.` : 'Die Agenten arbeiten wieder; pausiert war kein Strang mehr beim Bot.', tone: 'success' });
+        toast({ title: 'Merge bestätigt', description: resumed > 0 ? `${resumed === 1 ? 'Ein Strang macht' : `${resumed} Stränge machen`} weiter.` : 'Die Agenten arbeiten wieder; kein Strang wartete mehr beim Bot.', tone: 'success' });
         // the banner goes with the confirm: the focus moves to the heading of the first sheet under it
         focusWhenLost(() => document.querySelector<HTMLElement>('[data-agents-form] [data-card-heading]'), 2000);
       },
@@ -195,6 +195,7 @@ function MergeGuardBanner({ project, guard, canManage, unprotected }: { project:
     <Banner
       tone="danger"
       role="alert"
+      aria-labelledby="merge-guard-title"
       icon={ShieldAlert}
       title={<span id="merge-guard-title">{`Eigenmächtiger Merge erkannt: ${project.identifier} pausiert`}</span>}
       action={

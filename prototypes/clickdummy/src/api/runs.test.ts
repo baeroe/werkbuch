@@ -470,7 +470,20 @@ describe('an unauthorized merge (spec 7.1)', () => {
     expect(web53.runs.at(-1)).toMatchObject({ type: 'correction', status: 'queued' });
   });
 
-  it('gives way to a disconnect of GitHub: the guard goes and the strands wait for GitHub', async () => {
+  it('starts nothing on a confirm for a merged item that stays with its bot', async () => {
+    // WEB-50 was done by Kira and merged; the item stays with her (spec 7.2)
+    const db = getDb();
+    const item = db.items.find((entry) => entry.id === 'wi_web_50')!;
+    item.assignee_id = 'u_kira';
+    db.agent_threads.push({ id: 'th_web50_done', item_id: item.id, bot_id: 'u_kira', runner_id: 'rn_studio', branch: 'agent/WEB-50-fertig', status: 'merged', corrections: 0, conflicts: 0, pr_number: 220 });
+    saveDb();
+    const before = getDb().agent_runs.filter((run) => run.item_id === item.id).length;
+    await simulateUnauthorizedMerge('p_web');
+    await confirmMergeGuard('p_web');
+    expect(getDb().agent_runs.filter((run) => run.item_id === item.id)).toHaveLength(before);
+  });
+
+    it('gives way to a disconnect of GitHub: the guard goes and the strands wait for GitHub', async () => {
     await simulateUnauthorizedMerge('p_web');
     await disconnectGithub();
     expect((await getProjectAgents('p_web')).guard).toBeNull();
