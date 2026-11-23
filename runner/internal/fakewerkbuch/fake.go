@@ -113,7 +113,12 @@ func (s *Server) Paths() []string {
 func problem(w http.ResponseWriter, status int, reason, detail string) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]any{"type": "about:blank", "title": http.StatusText(status), "status": status, "reason": reason, "detail": detail})
+	body := map[string]any{"type": "urn:werkbuch:problem:" + reason, "title": http.StatusText(status), "status": status, "reason": reason, "detail": detail}
+	if status == 422 {
+		// werkbuch names the field of a validation error (ProblemResponse)
+		body["errors"] = map[string][]string{"code": {detail}}
+	}
+	json.NewEncoder(w).Encode(body)
 }
 
 func (s *Server) answer() map[string]any {
