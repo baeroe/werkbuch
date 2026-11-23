@@ -2,6 +2,7 @@
 
 use App\Access\ProjectRole;
 use App\Actions\Attachments\UploadAttachment;
+use App\Actions\Projects\DeleteProject;
 use App\Actions\WorkItems\AddRelation;
 use App\Actions\WorkItems\BulkUpdateWorkItems;
 use App\Actions\WorkItems\ChangeWorkItemType;
@@ -86,6 +87,8 @@ it('retries the transaction after a deadlock', function (Closure $run, EventType
         'source_id' => $item->id,
         'target_id' => WorkItem::factory()->for($web)->create()->id,
     ])), EventType::WorkItemRelationRemoved, 2],
+    // a deletion locks the project and then the runs of its agents (A489)
+    'delete project' => [fn (User $mara, Project $web) => DeleteProject::run(actor($mara), $web), EventType::ProjectDeleted],
 ]);
 
 it('retries an upload after a deadlock: one row, one file, nothing left of the first attempt (T6-M1)', function () use ($deadlockOnce) {

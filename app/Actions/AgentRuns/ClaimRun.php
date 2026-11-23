@@ -12,6 +12,7 @@ use App\Exceptions\Problem;
 use App\Models\AgentConfig;
 use App\Models\AgentRun;
 use App\Models\AgentThread;
+use App\Models\Project;
 use App\Models\Runner;
 use App\Support\Actor;
 use App\Support\RunnerProtocol;
@@ -70,10 +71,22 @@ final class ClaimRun
         $running = RunnerProtocol::running($runner);
         $candidates = self::candidates($runner, $clis)->with('thread.runner')->get();
         $configs = AgentConfig::query()->whereIn('bot_id', $candidates->pluck('bot_id')->unique()->values())->get()->keyBy('bot_id');
+        // strands a run of which could not start: their other runs wait too (two claims never lock two runs of one
+        // strand each and then wait for each other's strand)
+        $left = [];
 
         foreach ($candidates as $candidate) {
-            if (! RunQueue::eligible($candidate, $configs->get($candidate->bot_id), $runner)
+            $strand = $candidate->type === RunType::Review ? null : $candidate->thread_id;
+            if (($strand !== null && isset($left[$strand]))
+                || ! RunQueue::eligible($candidate, $configs->get($candidate->bot_id), $runner)
                 || ! $runner->places()->fits($candidate->type, $candidate->project_id, $running)) {
+                continue;
+            }
+
+            // the project first (shared, read fresh): a deletion holds it and ends the runs (A489), a claim waits for
+            // it and then finds the project being deleted, never a lock the other way round
+            $project = Project::query()->sharedLock()->find($candidate->project_id);
+            if ($project === null || $project->deleting_at !== null) {
                 continue;
             }
 
@@ -84,6 +97,10 @@ final class ClaimRun
 
             if (($started = $this->start($locked, $runner)) !== null) {
                 return $started;
+            }
+
+            if ($strand !== null) {
+                $left[$strand] = true;
             }
         }
 
@@ -132,7 +149,8 @@ final class ClaimRun
     }
 
     /**
-     * Starts a run read `for update`, or none when it may not start after all. Locks Runner → run → strand (spec 9): the
+     * Starts a run read `for update`, or none when it may not start after all. Locks Runner → project (shared, read in
+     * `take`, A489) → run → strand (spec 9): the
      * strand row `for update`, then everything that decides again under it, read fresh (a locking read sees what others
      * committed meanwhile): the agent still on, pool and CLI, the binding of the strand and no other run at the strand.
      * Two runners taking two runs of one strand at once: the second waits for the strand and then leaves its run.

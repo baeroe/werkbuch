@@ -37,9 +37,11 @@ final class DeleteProject
         DB::transaction(function () use ($actor, $project): void {
             // a second deletion at the same time finds the first one's mark (or no project any more): no second event,
             // no second job
-            ProjectLock::lock($project);
-
-            $project->update(['deleting_at' => now()]);
+            // the fresh row: a retry after a deadlock (3 attempts) starts from what the database holds, not from the
+            // model of the attempt before
+            $locked = ProjectLock::lock($project);
+            $locked->update(['deleting_at' => now()]);
+            $project->setRawAttributes($locked->getAttributes(), true);
 
             // the runs of the project end now (A489): a pending one never starts, a busy one is canceled like a revoked
             // runner's (its runner gets 409 on its next call), and their tokens go before the project does
@@ -55,7 +57,7 @@ final class DeleteProject
             ]);
 
             PurgeProjectJob::dispatch($project->id, $actor->user->id)->afterCommit();
-        });
+        }, 3);
 
         // nobody sees the project any more, from the next check of this request on (P33)
         Visibility::forget();

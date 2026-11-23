@@ -326,3 +326,42 @@ it('leaves a run whose agent was switched off while the claim looked (A488)', fu
         ->and($switched)->toBeTrue()
         ->and($run->fresh()?->status->pending())->toBeTrue();
 });
+
+it('leaves a run whose project is deleted while the claim looked, reading the project under a lock (A489)', function () use ($claim) {
+    [, $token] = AgentWorld::runner();
+    $run = AgentWorld::run($this->agent, $this->project);
+    $deleted = false;
+    DB::connection()->beforeExecuting(function (string $query) use (&$deleted) {
+        if (! $deleted && str_starts_with($query, 'select * from `projects`') && str_ends_with($query, 'lock in share mode')) {
+            $deleted = true;
+            DB::table('projects')->where('id', test()->project->id)->update(['deleting_at' => now()]);
+        }
+    });
+
+    expect($claim($token)->json('run'))->toBeNull()
+        ->and($deleted)->toBeTrue()
+        ->and($run->fresh()?->status->pending())->toBeTrue();
+});
+
+it('passes over the other runs of a strand once one of them could not start (A488)', function () use ($claim, $system) {
+    [, $token] = AgentWorld::runner(['slots_total' => 4, 'slots_per_repo' => 4]);
+    $item = WorkItem::factory()->create(['project_id' => $this->project->id]);
+    $thread = AgentThread::factory()->create(['bot_id' => $this->agent->id, 'work_item_id' => $item->id, 'project_id' => $this->project->id]);
+    EnqueueRun::run($system(), $this->agent, $this->project, $item, 'correction', $thread);
+    EnqueueRun::run($system(), $this->agent, $this->project, $item, 'conflict', $thread);
+    $switched = false;
+    $locked = 0;
+    DB::connection()->beforeExecuting(function (string $query) use (&$switched, &$locked) {
+        if (str_starts_with($query, 'select * from `agent_runs`') && str_ends_with($query, 'for update')) {
+            $locked++;
+        }
+        // the agent goes off while the claim holds the first run of the strand
+        if (! $switched && str_starts_with($query, 'select * from `agent_configs`') && str_ends_with($query, 'lock in share mode')) {
+            $switched = true;
+            DB::table('agent_configs')->where('bot_id', test()->agent->id)->update(['enabled' => false]);
+        }
+    });
+
+    expect($claim($token)->json('run'))->toBeNull()
+        ->and($locked)->toBe(1);
+});
