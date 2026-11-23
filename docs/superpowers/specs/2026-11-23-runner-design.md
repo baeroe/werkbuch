@@ -99,7 +99,7 @@ Ein abgelaufener oder benutzter Code ist eine klare Meldung im Terminal. Ein Run
 
 ### 6.3 Abholen
 
-`POST /api/runner/claim` mit dem freien Platz des Runners: gesamt, je Repo, leichte Aufträge (siehe 9) und die Projekte, für die er eine Umgebung hat (aus seiner Config, 8.4). werkbuch wählt in einer Transaktion den nächsten passenden Auftrag (Reihenfolge und Regeln 9), setzt ihn auf `running` mit Lease (Ablauf = jetzt + Heartbeat-Fenster) und antwortet mit allem, was der Runner braucht:
+`POST /api/runner/claim` mit dem freien Platz des Runners (gesamt, je Repo, leichte Aufträge; Plätze aus werkbuch, siehe 9) und seiner Auslastung (8.6). Ein Runner nimmt Aufträge aller Projekte *(Rafael: keine Einschränkung)*. werkbuch wählt in einer Transaktion den nächsten passenden Auftrag (Reihenfolge und Regeln 9), setzt ihn auf `running` mit Lease (Ablauf = jetzt + Heartbeat-Fenster) und antwortet mit allem, was der Runner braucht:
 
 - Auftrag: ID, Typ, Item (ID, Key, Titel), Projekt (Kennung), Strang (ID, Branch, Basis-Branch, Session-ID falls vorhanden), Zeitlimit.
 - Prompt und System-Prompt, fertig gebaut von werkbuch (7.3).
@@ -254,37 +254,43 @@ Ohne Einstellung sind die Agenten im Projekt aus (kein Auftrag startet, die Zuwe
 - Eine Build-Stage im `Dockerfile` (Go-Image per Tag und Digest wie die anderen Basen, auf `$BUILDPLATFORM`) baut die vier Binaries mit der Version per `-ldflags`; die App-Stage kopiert sie samt Prüfsummen an einen festen Ort außerhalb von `public/`. `ImageTest` hält Stage, Pins und Ort fest, der Smoke lädt Skript und Binary herunter und prüft die Summe.
 - Selbst-Update: meldet werkbuch eine andere Version, lädt der Runner sein neues Binary von der Instanz, prüft die Summe, ersetzt sich atomar und startet neu, sobald keine Aufträge laufen; neue Aufträge holt er bis dahin nicht. Ein gescheitertes Update lässt den alten Runner weiterlaufen und zeigt es in TUI und Oberfläche.
 
-### 8.4 Config
+### 8.4 Konfiguration: in werkbuch, nicht im Runner
 
-- Instanz-URL, Name, Plätze (gesamt, je Repo Standard 1, leichte Aufträge Standard 2).
-- Projekte, für die der Runner eine Umgebung hat (Kennung), je mit optionalem Setup- und Teardown-Hook, die nach dem Anlegen bzw. vor dem Entfernen eines Worktrees laufen (für werkbuch etwa ein eigener DDEV-Projektname je Worktree und `ddev start`, `ddev delete -Oy`). Projekte ohne Repo brauchen keinen Eintrag, sie laufen in einem Ordner je Strang.
-- Pfad zu `claude`/`codex`, zusätzliche MCP-Server, Umgebungsvariablen.
-- Die TUI bearbeitet die Config; Änderungen gelten ohne Neustart (Hot Reload wie skilltri).
+*(Rafael: alles einfach halten; konfiguriert wird in werkbuch)*
+
+- **Auf dem Runner** liegt nur, was an der Maschine hängt: Instanz-URL und Runner-Token (aus `login`, Token im Keychain). `claude`/`codex` findet er über `PATH`; „Doctor“ meldet, wenn eins fehlt oder nicht angemeldet ist.
+- **In werkbuch** (Runner-Seite, 10.1): Name, Plätze (gesamt Standard 2, je Repo Standard 1, leichte Aufträge Standard 2). Der Runner bekommt sie mit jeder Antwort auf Abholen bzw. Heartbeat; Änderungen gelten ohne Neustart.
+- **In werkbuch je Projekt** (10.3): optionale Setup- und Teardown-Befehle, die der Runner nach dem Anlegen bzw. vor dem Entfernen eines Worktrees ausführt (für werkbuch etwa ein eigener DDEV-Projektname je Worktree, `ddev start`, `ddev delete -Oy`); weitere MCP-Server für die Agenten des Projekts (Befehl und Argumente, etwa Playwright). Projekte ohne Repo laufen in einem Ordner je Strang.
+- Keine Einschränkung auf Projekte: jeder Runner nimmt Aufträge aller Projekte.
 
 ### 8.5 TUI
 
 - Bubble Tea, Bubbles, Lip Gloss wie skilltri und tussh; dieselbe 16-Farben-Palette (`styles.go` als Vorbild), Tabs, Tastenhilfe *(Rafael: einheitlich; Claude: Lesart „gleicher Stil“)*. Kein gemeinsames Go-Modul der drei Tools in v1.
-- Tabs (Vorschlag): **Status** (Verbindung, Instanz, Version, Plätze, laufende Aufträge), **Aufträge** (laufende und letzte, Protokoll live, Abbrechen), **Projekte** (Umgebungen, Hooks), **Einstellungen**, **Doctor** (Claude/Codex installiert und angemeldet, Git, Keychain, Erreichbarkeit der Instanz, Hooks ausführbar).
+- Tabs (Vorschlag): **Status** (Verbindung, Instanz, Version, Plätze aus werkbuch, laufende Aufträge, **Auslastung** 8.6 mit kleinen Verläufen der letzten Minuten), **Aufträge** (laufende und letzte, Protokoll live, Abbrechen), **Doctor** (Claude/Codex installiert und angemeldet, Git, Keychain, Erreichbarkeit der Instanz). Keine Einstellungen in der TUI außer Abmelden; ein Hinweis zeigt, wo in werkbuch konfiguriert wird.
+
+### 8.6 Auslastung
+
+*(Rafael)* Der Runner misst CPU (gesamt in Prozent), GPU (Auslastung in Prozent, wo das System sie ohne Root liefert, auf Apple Silicon über IOKit; sonst „nicht verfügbar“), RAM (belegt/gesamt) und Speicher (frei/gesamt des Datenträgers seines Datenordners), alle 5 s. Er zeigt sie in der TUI und schickt den letzten Stand mit jedem Heartbeat bzw. Abholen an werkbuch, das ihn auf der Runner-Seite zeigt (10.1). werkbuch speichert nur den letzten Stand, keinen Verlauf. Messung ohne cgo (Builder wählt die Bibliothek, etwa gopsutil, oder Systembefehle). *(Claude: auch in werkbuch, weil es dort ohne Zugriff auf die Maschine nützt.)*
 
 ## 9. Parallelität
 
 | Ebene | Wo | Standard |
 |---|---|---|
-| Runner gesamt | Runner-Config | 2 |
-| je Repo auf dem Runner | Runner-Config | 1 (DDEV teilt die Test-Datenbank) |
-| leichte Aufträge (`comment`, `review`) | Runner-Config, eigener Topf | 2 |
+| Runner gesamt | werkbuch, Runner-Seite | 2 |
+| je Repo auf dem Runner | werkbuch, Runner-Seite | 1 (DDEV teilt die Test-Datenbank) |
+| leichte Aufträge (`comment`, `review`) | werkbuch, Runner-Seite, eigener Topf | 2 |
 | je Agent | Agenten-Konfiguration des Bots | 2 |
 
 - Ein Epic läuft in sich nacheinander.
 - `review` gilt als leicht, solange es keine Tests gegen die Datenbank fährt (Prompt). *(Claude)*
 - Reihenfolge der Vergabe: `correction` und `review` vor `task` und `comment`, dann Priorität des Items, dann Alter *(Claude)*.
-- **Mehrere Runner je Agent:** ein Pool. `task`, `review` und `comment` an einem Item ohne offenen Strang nimmt der erste freie Runner, der das Projekt kann; `correction` und `comment` an einem offenen Strang gehen an dessen Runner. Ist er länger als eine einstellbare Frist offline (Standard 30 Minuten), übernimmt ein anderer mit frischer Session auf dem Branch, der Strang zieht um *(Claude)*. Solange wartet der Auftrag (`waiting`).
+- **Mehrere Runner je Agent:** ein Pool. `task`, `review` und `comment` an einem Item ohne offenen Strang nimmt der erste freie Runner; `correction` und `comment` an einem offenen Strang gehen an dessen Runner. Ist er länger als eine einstellbare Frist offline (Standard 30 Minuten), übernimmt ein anderer mit frischer Session auf dem Branch, der Strang zieht um *(Claude)*. Solange wartet der Auftrag (`waiting`).
 
 ## 10. Oberfläche in werkbuch
 
 ### 10.1 Organisation → Betrieb → „Runner“
 
-Liste der Runner (Name, online/offline nach letztem Kontakt, Version, System, Plätze belegt/gesamt, Projekte, laufende Aufträge mit Item), „Runner verbinden“ (Dialog mit Befehl, Kopieren, Ablauf des Codes), Umbenennen, Widerrufen mit Rückfrage. Nur Org-Admins, wie Webhooks.
+Liste der Runner (Name, online/offline nach letztem Kontakt, Version, System, Plätze belegt/gesamt, Auslastung CPU/GPU/RAM/Speicher (8.6), laufende Aufträge mit Item und Abbrechen), Plätze bearbeiten (gesamt, je Repo, leichte Aufträge), „Runner verbinden“ (Dialog mit Befehl, Kopieren, Ablauf des Codes), Umbenennen, Widerrufen mit Rückfrage. Nur Org-Admins, wie Webhooks.
 
 ### 10.2 Organisation → Betrieb → „GitHub“
 
@@ -292,7 +298,7 @@ Liste der Runner (Name, online/offline nach letztem Kontakt, Version, System, Pl
 
 ### 10.3 Projekt → „Agenten“ (neuer Abschnitt der Projekteinstellungen)
 
-Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Review-Agent (ein Bot, für PRs von Menschen und Bots), Status-Zuordnung (7.4), Bremsen (Korrektur, Konflikt), Modell je Auftragstyp (7.7), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
+Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Setup- und Teardown-Befehle des Worktrees und weitere MCP-Server (8.4), Review-Agent (ein Bot, für PRs von Menschen und Bots), Status-Zuordnung (7.4), Bremsen (Korrektur, Konflikt), Modell je Auftragstyp (7.7), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
 
 ### 10.4 Organisation → Bots → Agent
 
