@@ -16,6 +16,7 @@ const Blank = "[token]"
 
 var patterns = []*regexp.Regexp{
 	regexp.MustCompile(`\b[0-9A-Za-z]{26}\|wb_[A-Za-z0-9]{20,}`),
+	regexp.MustCompile(`\bwb_[A-Za-z0-9]{20,}`),
 	regexp.MustCompile(`\bwbr_[A-Za-z0-9]{20,}`),
 	regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{20,}`),
 	regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{20,}`),

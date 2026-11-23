@@ -15,6 +15,7 @@ func TestPatterns(t *testing.T) {
 		"push ghs_abcdefghijklmnopqrstuvwxyz":                    "push [token]",
 		"github_pat_abcdefghijklmnopqrstuvwxyz_1":                "[token]",
 		"Authorization: Bearer secret-value":                     "Authorization: Bearer [token]",
+		"bare wb_abcdefghijklmnopqrstuvwx":                       "bare [token]",
 		"nothing here":                                           "nothing here",
 	}
 	for in, want := range cases {
