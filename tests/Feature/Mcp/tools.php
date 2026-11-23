@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Agents\RunStatus;
+use App\Models\AgentRunEvent;
 use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Label;
@@ -264,4 +266,26 @@ return [
 
         return ['webhook' => $webhook->id, 'delivery' => WebhookDelivery::factory()->for($webhook)->create()->id];
     }],
+    'agents:list-runners' => ['arguments' => function (MatrixWorld $w) {
+        $w->runner();
+
+        return ['sort' => 'name', 'per_page' => 5];
+    }],
+    'agents:get-runner' => ['arguments' => fn (MatrixWorld $w) => ['runner' => $w->runner()->id]],
+    'agents:list-runs' => ['arguments' => fn (MatrixWorld $w) => ['filter' => ['work_item_id' => $w->run('org_admin')->work_item_id, 'status' => ['queued']], 'per_page' => 5]],
+    'agents:get-run' => ['arguments' => fn (MatrixWorld $w) => ['run' => $w->run('org_admin')->id]],
+    'agents:run-events' => ['arguments' => function (MatrixWorld $w) {
+        $run = $w->run('org_admin');
+        AgentRunEvent::query()->create(['run_id' => $run->id, 'attempt' => 1, 'kind' => 'text', 'text' => 'Matrix', 'bytes' => 6, 'at' => now()]);
+
+        return ['run' => $run->id, 'per_page' => 5];
+    }],
+    'agents:get-config' => ['arguments' => fn (MatrixWorld $w) => ['bot' => $w->account('run_token')->id]],
+    'manage-agents:update-runner' => ['arguments' => fn (MatrixWorld $w) => ['runner' => $w->runner()->id, 'input' => ['name' => 'Matrix Mac', 'slots' => ['total' => 3, 'per_repo' => 1, 'light' => 2]]]],
+    'manage-agents:revoke-runner' => ['arguments' => fn (MatrixWorld $w) => ['runner' => $w->runner()->id]],
+    'manage-agents:cancel-run' => ['arguments' => fn (MatrixWorld $w) => ['run' => $w->run('org_admin')->id]],
+    'manage-agents:retry-run' => ['arguments' => fn (MatrixWorld $w) => ['run' => $w->run('org_admin', ['status' => RunStatus::Failed])->id]],
+    'manage-agents:save-config' => ['arguments' => fn (MatrixWorld $w) => ['bot' => $w->bot->id, 'input' => [
+        'enabled' => true, 'runner_ids' => [], 'cli' => 'claude', 'model' => 'opus', 'models' => ['review' => 'haiku'],
+    ]]],
 ];

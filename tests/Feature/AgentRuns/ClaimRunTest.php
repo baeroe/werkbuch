@@ -1,12 +1,13 @@
 <?php
 
+use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
 use App\Actions\AgentRuns\EnqueueRun;
 use App\Actions\AgentRuns\ReapLostRuns;
 use App\Domain\Agents\Contract;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
 use App\Events\EventType;
-use App\Models\AgentRun;
 use App\Models\AgentThread;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
@@ -141,7 +142,7 @@ it('claims only runs within the free places set in werkbuch', function () use ($
     $other = Project::factory()->create();
     $third = Project::factory()->create();
     foreach ([$other, $third] as $project) {
-        app(App\Access\RoleAssignments::class)->setProjectRole($this->agent, $project, App\Access\ProjectRole::Member);
+        app(RoleAssignments::class)->setProjectRole($this->agent, $project, ProjectRole::Member);
     }
     $web = [AgentWorld::run($this->agent, $this->project), AgentWorld::run($this->agent, $this->project)];
     $ops = AgentWorld::run($this->agent, $other);

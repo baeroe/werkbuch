@@ -8,6 +8,7 @@ use App\Domain\Agents\Protocol;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
 use App\Events\EventType;
+use App\Exceptions\Problem;
 use App\Jobs\PruneRunEventsJob;
 use App\Jobs\ReapLostRunsJob;
 use App\Models\AgentRun;
@@ -190,7 +191,7 @@ it('cancels a waiting run at once and refuses to cancel one that ended', functio
 
     $canceled = CancelRun::run(actor($admin), $run);
     expect([$canceled->status, $canceled->canceled_by, $canceled->finished_at !== null])->toBe([RunStatus::Canceled, $admin->id, true])
-        ->and(fn () => CancelRun::run(actor($admin), $run))->toThrow(App\Exceptions\Problem::class);
+        ->and(fn () => CancelRun::run(actor($admin), $run))->toThrow(Problem::class);
     expect(ReapLostRuns::run($system())['waiting'])->toBe(0);
 });
 

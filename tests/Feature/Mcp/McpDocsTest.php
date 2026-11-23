@@ -63,7 +63,7 @@ $table = function (string $language): array {
 
 it('names every tool and action in the docs', function () use ($tools, $table) {
     $server = $tools();
-    expect($server)->toHaveCount(29)->toHaveKey('manage-work-items');
+    expect($server)->toHaveCount(31)->toHaveKey('manage-work-items');
 
     foreach (['en', 'de'] as $language) {
         $rows = $table($language);

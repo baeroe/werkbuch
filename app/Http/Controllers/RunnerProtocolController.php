@@ -73,9 +73,7 @@ final class RunnerProtocolController extends Controller
     /** The runner AuthenticateRunner let through. */
     private static function runner(Request $request): Runner
     {
-        $runner = RunnerKey::runner($request);
-        assert($runner instanceof Runner);
-
-        return $runner;
+        /** @var Runner */
+        return RunnerKey::runner($request);
     }
 }
