@@ -1,6 +1,6 @@
 # Runner und GitHub-Integration: Design
 
-Stand: 2026-11-23 · Status: Entwurf, wartet auf Rafaels Abnahme
+Stand: 2026-11-23 · Status: von Rafael abgenommen am 2026-11-23 · Plan: `docs/superpowers/plans/2026-11-23-runner.md`
 
 Dieses Dokument beschreibt den **werkbuch-Runner** (ein Go-Daemon mit TUI, der Aufträge aus werkbuch auf einer eigenen Maschine mit Claude Code oder Codex ausführt) und die **GitHub-Integration** (GitHub-App je Instanz: Repo je Projekt, Tokens je Auftrag, PR-Verknüpfung, CI und Merge). Beides ist ein Vorhaben: Der Runner braucht die App für Git, und der Ablauf eines Tickets (PR, CI, Review, Merge) hängt an beiden. Markierungen: *(Rafael)* hat Rafael entschieden, *(Claude)* ist ein Vorschlag aus dem Gespräch, den Rafael mit der Abnahme bestätigt, *(Builder)* entscheidet, wer umsetzt.
 
