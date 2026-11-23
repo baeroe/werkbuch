@@ -119,7 +119,7 @@ export function AgentNotice({ item }: { item: WorkItem }) {
             ? `Der Strang ist pausiert; PR${thread.pr_number ? ` #${thread.pr_number}` : ''} und Branch bleiben bei GitHub. Sobald GitHub wieder verbunden ist und das Projekt sein Repo hat, geht es weiter, wenn das Item ${bot.name} neu zugewiesen wird.`
             : brake
               ? `Der Strang ist pausiert: PR${thread.pr_number ? ` #${thread.pr_number}` : ''}, Branch und Session bleiben. Das Item ging an ${owner?.name ?? 'die verantwortliche Person'}, die Befunde stehen im letzten Kommentar. Weist du es wieder ${bot.name} zu, beginnt eine Korrektur mit den Kommentaren seit dem letzten Auftrag, und die Bremse zählt von vorn.`
-              : `Das Item wurde ${assignee?.name ?? 'jemand anderem'} zugewiesen; der Strang ist pausiert, der PR bleibt. Weist du es wieder ${bot.name} zu, macht ${bot.name} mit einer Korrektur weiter.`}
+              : `Das Item wurde ${assignee?.name ?? 'jemand anderem'} zugewiesen; der Strang ist pausiert${thread.pr_number ? `, PR #${thread.pr_number} bleibt` : ', Branch und Worktree bleiben'}. Weist du es wieder ${bot.name} zu, macht ${bot.name} mit einer Korrektur weiter.`}
         </span>
       </Banner>,
     );
