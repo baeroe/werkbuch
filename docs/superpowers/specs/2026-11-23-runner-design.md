@@ -238,7 +238,7 @@ Ohne Einstellung sind die Agenten im Projekt aus (kein Auftrag startet, die Zuwe
 - Befehle (Vorschlag, Builder): `login`, `daemon`, `status`, `doctor`, `logout`, `update`, `version`.
 - Dateien wie tussh und skilltri: Config `~/.config/werkbuch-runner/config.yaml`, Zustand und Logs `~/.local/state/werkbuch-runner`, Repos und Worktrees `~/.local/share/werkbuch-runner`, Geheimnisse im Keychain.
 - Adapter je CLI hinter einer Schnittstelle: v1 Claude Code und Codex (Codex darf als zweites folgen, wenn er den ersten Wurf sprengt, Builder). Ein Adapter baut den Aufruf, liest das Protokoll in Ereignisse, holt Session-ID und Nutzung heraus.
-- MCP für den Agenten: der Runner schreibt je Auftrag eine MCP-Konfiguration in ein privates Temp-Verzeichnis (0600) mit werkbuch (`<APP_URL>/mcp`, Bearer Run-Token) und startet Claude mit `--mcp-config` und `--strict-mcp-config` *(Claude)*: der Agent sieht werkbuch nie mit Rafaels Token aus skilltri. Weitere MCP-Server (etwa Playwright für Nachweis-Screenshots) nennt die Runner-Config; skilltri darf darunter stehen, wenn eine skilltri-Regel dessen werkbuch-Server unter dem Datenordner des Runners abschaltet (Doku). Skills kommen aus dem normalen Setup der Maschine.
+- MCP für den Agenten: der Runner schreibt je Auftrag eine MCP-Konfiguration in ein privates Temp-Verzeichnis (0600) mit werkbuch (`<APP_URL>/mcp`, Bearer Run-Token) und startet Claude mit `--mcp-config` und `--strict-mcp-config` *(Claude)*: der Agent sieht werkbuch nie mit Rafaels Token aus skilltri. Dazu kommen die MCP-Server, die das Projekt aus dem Katalog der Organisation gewählt hat (8.7), im Format des jeweiligen CLI (der Adapter übersetzt; Claude `--mcp-config`, Codex `config.toml` usw.). Skills kommen aus dem normalen Setup der Maschine.
 - Git: je Repo ein Bare-Mirror, je Strang ein Worktree; Klonen und Push über HTTPS mit dem Installations-Token (Credential-Helper bzw. Umgebung des Auftrags, nie in `.git/config` geschrieben). `gh` bekommt `GH_TOKEN` desselben Tokens. Commit-Identität: der Bot (Name, `<bot-handle>@users.noreply.<host>` o. ä., Builder) bzw. die App.
 - Aufräumen: Worktree eines beendeten Strangs nach einer Frist (Standard 3 Tage) entfernen, samt Teardown-Hook.
 
@@ -260,7 +260,7 @@ Ohne Einstellung sind die Agenten im Projekt aus (kein Auftrag startet, die Zuwe
 
 - **Auf dem Runner** liegt nur, was an der Maschine hängt: Instanz-URL und Runner-Token (aus `login`, Token im Keychain). `claude`/`codex` findet er über `PATH`; „Doctor“ meldet, wenn eins fehlt oder nicht angemeldet ist.
 - **In werkbuch** (Runner-Seite, 10.1): Name, Plätze (gesamt Standard 2, je Repo Standard 1, leichte Aufträge Standard 2). Der Runner bekommt sie mit jeder Antwort auf Abholen bzw. Heartbeat; Änderungen gelten ohne Neustart.
-- **In werkbuch je Projekt** (10.3): optionale Setup- und Teardown-Befehle, die der Runner nach dem Anlegen bzw. vor dem Entfernen eines Worktrees ausführt (für werkbuch etwa ein eigener DDEV-Projektname je Worktree, `ddev start`, `ddev delete -Oy`); weitere MCP-Server für die Agenten des Projekts (Befehl und Argumente, etwa Playwright). Projekte ohne Repo laufen in einem Ordner je Strang.
+- **In werkbuch je Projekt** (10.3): optionale Setup- und Teardown-Befehle, die der Runner nach dem Anlegen bzw. vor dem Entfernen eines Worktrees ausführt (für werkbuch etwa ein eigener DDEV-Projektname je Worktree, `ddev start`, `ddev delete -Oy`); welche MCP-Server aus dem Katalog der Organisation die Agenten des Projekts bekommen (8.7). Projekte ohne Repo laufen in einem Ordner je Strang.
 - Keine Einschränkung auf Projekte: jeder Runner nimmt Aufträge aller Projekte.
 
 ### 8.5 TUI
@@ -271,6 +271,16 @@ Ohne Einstellung sind die Agenten im Projekt aus (kein Auftrag startet, die Zuwe
 ### 8.6 Auslastung
 
 *(Rafael)* Der Runner misst CPU (gesamt in Prozent), GPU (Auslastung in Prozent, wo das System sie ohne Root liefert, auf Apple Silicon über IOKit; sonst „nicht verfügbar“), RAM (belegt/gesamt) und Speicher (frei/gesamt des Datenträgers seines Datenordners), alle 5 s. Er zeigt sie in der TUI und schickt den letzten Stand mit jedem Heartbeat bzw. Abholen an werkbuch, das ihn auf der Runner-Seite zeigt (10.1). werkbuch speichert nur den letzten Stand, keinen Verlauf. Messung ohne cgo (Builder wählt die Bibliothek, etwa gopsutil, oder Systembefehle). *(Claude: auch in werkbuch, weil es dort ohne Zugriff auf die Maschine nützt.)*
+
+### 8.7 MCP-Server für Agenten
+
+*(Rafael: Katalog in der Organisation, im Projekt anhaken)*
+
+- **Katalog** unter Organisation → Betrieb → „MCP-Server“ (10.7), nur Org-Admins: Name (eindeutig, Kleinbuchstaben, Ziffern, `-`, nicht `werkbuch`), Befehl, Argumente, Umgebungsvariablen. Nur stdio-Server in v1 (Streamable HTTP später).
+- **Geheimnisse nur schreiben:** die Werte der Umgebungsvariablen liegen verschlüsselt mit `APP_KEY` (wie die Secrets der Webhooks); nach dem Speichern zeigt keine Antwort, kein Event und kein Log sie, die Oberfläche zeigt „gesetzt“ und „ersetzen“. Der Runner bekommt sie nur in der Antwort auf das Abholen eines Auftrags, schreibt sie in die MCP-Konfiguration des Auftrags (0600, privates Temp-Verzeichnis) und löscht sie mit dem Auftrag.
+- **Auswahl je Projekt** in Projekt → Agenten (10.3): Häkchen je Server des Katalogs; werkbuch selbst (mit dem Run-Token) ist immer dabei und steht nicht im Katalog.
+- **Prüfung auf der Maschine:** der Runner prüft beim Abholen bzw. Heartbeat, ob die Befehle der Server, die er für ein Projekt bekäme, ausführbar sind, und meldet fehlende; „Doctor“ und die Runner-Karte zeigen „fehlt auf dieser Maschine“. Ein Auftrag, dessen Server fehlen, scheitert sofort mit diesem Grund statt mittendrin.
+- Agenten laufen strikt mit dieser Liste (`--strict-mcp-config` bzw. das Gegenstück des CLI): sie sehen nie die MCP-Server der Maschine (etwa skilltri mit Rafaels Token).
 
 ## 9. Parallelität
 
@@ -298,7 +308,7 @@ Liste der Runner (Name, online/offline nach letztem Kontakt, Version, System, Pl
 
 ### 10.3 Projekt → „Agenten“ (neuer Abschnitt der Projekteinstellungen)
 
-Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Setup- und Teardown-Befehle des Worktrees und weitere MCP-Server (8.4), Review-Agent (ein Bot, für PRs von Menschen und Bots), Status-Zuordnung (7.4), Bremsen (Korrektur, Konflikt), Modell je Auftragstyp (7.7), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
+Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Setup- und Teardown-Befehle des Worktrees (8.4), MCP-Server aus dem Katalog als Häkchen (8.7), Review-Agent (ein Bot, für PRs von Menschen und Bots), Status-Zuordnung (7.4), Bremsen (Korrektur, Konflikt), Modell je Auftragstyp (7.7), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
 
 ### 10.4 Organisation → Bots → Agent
 
@@ -320,6 +330,10 @@ Tastatur (jede neue Aktion mit Kürzel bzw. Weg im Tastatur-Manifest), axe für 
 ### 11.1 Maschine
 
 Der Agent läuft unbeaufsichtigt mit den Rechten des Nutzers, unter dem der Runner läuft (Claude mit `--permission-mode` für unbeaufsichtigte Läufe, Builder wählt den engsten, der den Flow trägt). Die Maschine ist die Grenze; die Doku empfiehlt einen eigenen macOS-Benutzer ohne Admin-Rechte und ohne Zugang zu privaten Daten. Texte aus Items, Kommentaren, Wiki und PRs sind Daten (Prompt-Injection: der Prompt sagt es; die Tokens begrenzen, was ein überlisteter Agent tun kann).
+
+### 10.7 Organisation → Betrieb → „MCP-Server“
+
+Liste des Katalogs (Name, Befehl, welche Projekte ihn nutzen, auf welchen Runnern er fehlt), anlegen und bearbeiten im Dialog (Umgebungswerte nur schreiben, „ersetzen“), löschen mit Rückfrage (nennt die Projekte, die ihn nutzen). Nur Org-Admins.
 
 ### 11.2 werkbuch-Tokens
 
