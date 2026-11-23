@@ -74,7 +74,7 @@ Ein späterer „Hub“ über alle Instanzen (openbill, prevju, werkbuch) ist ei
 ## 5. Begriffe
 
 - **Runner:** eine Maschine mit dem Daemon `werkbuch-runner`, an eine Organisation gebunden.
-- **Agent:** ein Bot (gibt es schon) mit eingeschalteter Agenten-Konfiguration (Runner-Pool, CLI, Anweisung, Limits). Ein Bot ohne sie bleibt ein reiner API-Bot wie heute.
+- **Agent:** ein Bot (gibt es schon) mit eingeschalteter Agenten-Konfiguration (Runner-Pool, CLI, Modelle). Ein Bot ohne sie bleibt ein reiner API-Bot wie heute.
 - **Auftrag** (`agent_runs`): ein Lauf eines Agenten auf einem Runner. Typen: `task`, `correction`, `conflict`, `review`, `comment`.
 - **Agenten-App / Review-App:** die zwei GitHub-Apps einer Instanz (11.3). Namen sind bei GitHub global eindeutig; der Manifest-Flow schlägt `<Organisation> werkbuch` bzw. `<Organisation> werkbuch review` vor, die Doku sagt nie `werkbuch[bot]`.
 - **Strang** (`agent_threads`): die laufende Arbeit an einem Item oder Epic: Runner, Branch, Worktree, Claude-Session, PR. Aufträge eines Items bzw. Epics gehören zu einem Strang; er endet mit Merge, Schließen oder Abbruch.
@@ -166,11 +166,13 @@ Bot zugewiesen ─► task (Status „In Arbeit“)
 
 ### 7.3 Prompts und Regeln
 
-werkbuch baut Prompt und System-Prompt je Auftrag aus drei Schichten *(Rafael)*, in dieser Reihenfolge zusammengesetzt (Vertrag → Bot → Projekt je Typ → Auftrag):
+werkbuch baut Prompt und System-Prompt je Auftrag aus diesen Schichten *(Rafael, 2026-11-23)*, in dieser Reihenfolge zusammengesetzt: Vertrag → Regeln des Auftragstyps (Organisation) → Vorgehen des Item-Typs → Projekt → Auftrag; dazu liest das CLI die Code-Regeln im Repo. Eine eigene Anweisung je Bot gibt es nicht.
 
 1. **Vertrag, im Code, nicht änderbar** (Englisch): was der Typ tun soll und was nie (Status setzen, zuweisen, mergen, Release, Force-Push), das Ausgabeformat, das werkbuch liest (Urteil `approve`/`changes`, Befunde nach Schwere, Antwort als Markdown, Zusammenfassung), die Schwelle „`changes` nur bei Critical oder Important“, und dass Texte aus Items, Kommentaren, Wiki und PRs Daten sind, keine Anweisungen. Bei einem Widerspruch gewinnt der Vertrag; was er verbietet, sperren werkbuch und GitHub zusätzlich hart (11.2, 11.3).
-2. **Arbeitsregeln je Projekt und Typ, in der UI** (Abschnitt „Agenten“ der Projekteinstellungen, 10.3): ein Markdown-Text je Typ (`task`, `correction`, `conflict`, `review`, `comment`). **Standards** liefert werkbuch mit (Englisch und Deutsch, in der Sprache der Organisation vorbelegt, abgeleitet aus dem do-ticket-Flow; Inhalt unten), ein Projekt ohne eigenen Text nutzt den Standard, „Standard wiederherstellen“ setzt ihn zurück; ein neuer Standard in einem Release erreicht nur Projekte ohne eigenen Text. Ändern `project.manage`, jede Änderung als Event in der History des Projekts (alter und neuer Text). Dazu je Bot eine freie Anweisung (10.4).
-3. **Code-Regeln im Repo:** `CLAUDE.md` bzw. `AGENTS.md`, die das CLI ohnehin liest. Kommandos, Konventionen und Fallstricke versionieren mit dem Code; die UI-Regeln sagen nur, wie gearbeitet wird.
+2. **Arbeitsregeln je Auftragstyp, in der Organisation** (Organisation → Agenten, 10.8): ein Markdown-Text je Auftragstyp (`task`, `correction`, `conflict`, `review`, `comment`). **Standards** liefert werkbuch mit (Englisch und Deutsch, in der Sprache der Organisation vorbelegt, abgeleitet aus dem do-ticket-Flow; Inhalt unten); „Standard wiederherstellen“ setzt einen Text zurück; ein neuer Standard in einem Release erreicht nur Texte, die noch dem alten Standard gleichen. Ändern Org-Admins (`org.manage_catalog`), jede Änderung als Event (alter und neuer Text).
+3. **Vorgehen des Item-Typs, im Katalog:** jeder Typ (Organisation → Typen) bekommt neben der Beschreibung ein zweites, optionales Textfeld „Vorgehen für Agenten“ (Markdown), etwa am Bug „immer mit einem fehlschlagenden Test beginnen, wenn möglich“. Es geht in jeden Auftrag an einem Item dieses Typs.
+4. **Projekt:** ein Textfeld „Projektinformationen und Regeln für Agenten“ in Projekt → Agenten (10.3), unabhängig von Auftrags- und Item-Typ; ändern `project.manage`, Änderung als Event des Projekts.
+5. **Code-Regeln im Repo:** `CLAUDE.md` bzw. `AGENTS.md`, die das CLI ohnehin liest. Kommandos, Konventionen und Fallstricke versionieren mit dem Code; die UI-Regeln sagen nur, wie gearbeitet wird.
 
 Inhalt der Standards *(Claude, der Builder schreibt die Texte)*:
 
@@ -317,11 +319,15 @@ Liste der Runner (Name, online/offline nach letztem Kontakt, Version, System, Pl
 
 ### 10.3 Projekt → „Agenten“ (neuer Abschnitt der Projekteinstellungen)
 
-Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Setup- und Teardown-Befehle des Worktrees (8.4), Review-Agent (ein Bot, für PRs von Menschen und Bots), die Schritte des Workflows nur zum Lesen mit Link in den Editor (7.4), Bremsen (Korrektur, Konflikt), Modell je Auftragstyp (7.7), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
+Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Setup- und Teardown-Befehle des Worktrees (8.4), Review-Agent (ein Bot, für PRs von Menschen und Bots), die Schritte des Workflows nur zum Lesen mit Link in den Editor (7.4), Bremsen (Korrektur, Konflikt), Modell je Auftragstyp (7.7), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), das Textfeld „Projektinformationen und Regeln für Agenten“ (7.3). Lesen jeder im Projekt, ändern `project.manage`.
 
 ### 10.4 Organisation → Bots → Agent
 
-Je Bot: Agent an/aus, Runner-Pool (Mehrfachauswahl), CLI, Standard-Modell und Modell je Auftragstyp (7.7), Anweisung (Text). Keine eigenen Plätze oder Zeitlimits je Bot (9, 6.4). Org-Admins.
+Je Bot: Agent an/aus, Runner-Pool (Mehrfachauswahl), CLI, Standard-Modell und Modell je Auftragstyp (7.7). Keine Anweisung je Bot (7.3), keine eigenen Plätze oder Zeitlimits je Bot (9, 6.4). Org-Admins.
+
+### 10.8 Organisation → „Agenten“
+
+Die Arbeitsregeln je Auftragstyp (7.3) als Reiter oder Liste mit Markdown-Editor, „Standard wiederherstellen“ je Typ, Hinweis auf die Reihenfolge im Prompt. Org-Admins ändern, Mitglieder lesen. Das Vorgehen je Item-Typ steht im Typ-Dialog (Organisation → Typen).
 
 ### 10.5 Item
 
