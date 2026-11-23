@@ -132,7 +132,8 @@ Ohne passenden Auftrag: `204`. Zwei Runner, die gleichzeitig abholen, bekommen n
 - Typen *(Rafael)*, Rechte *(Claude)*. Was ein Auftrag tun darf, erzwingen werkbuch und GitHub (11.2, 11.3), nicht nur der Prompt.
 - **Was nie einen Auftrag auslöst** *(Claude, gegen Schleifen)*: Änderungen, die werkbuch im Ablauf selbst macht (Status, Zuweisung, die Selbstzuweisung der Epic-Kinder; erkannt am Actor `agent`, 7.2), Kommentare von Bots, Erwähnungen in Beschreibung oder Feldern (`bot.mentioned` mit `source` `description`/`values`), bearbeitete Kommentare, PRs und Pushes der Agenten-App selbst außer über die Regeln dieses Abschnitts.
 - `conflict` *(Rafael: eigener Typ; Claude: Ausgestaltung)*: werkbuch prüft offene Bot-PRs nach jedem Push auf deren Basis-Branch (GitHub rechnet `mergeable` verzögert, werkbuch fragt nach) und vor jedem Merge-Versuch. Ein Konflikt geht vor CI und Review. Der Agent mergt die Basis in den Branch (kein Rebase, kein Force-Push; beim Squash-Merge stört der Merge-Commit nicht), löst die Konflikte, lässt die betroffenen Tests laufen und pusht; danach laufen CI und Review neu. Eigene Bremse: höchstens 2 `conflict` je Strang, zählen nicht zur Korrektur-Bremse. Bei PRs von Menschen kein Auftrag, nur ein Hinweis am PR und am Item.
-- `review` startet immer mit frischer Session ohne Kontext der Umsetzung *(Claude)*. Gilt für jeden PR eines verknüpften Repos, auch von Menschen *(Claude)*; bei PRs von Menschen ändert werkbuch weder Status noch startet es Korrekturen oder mergt, es kommentiert nur (am PR, und am Item, falls verknüpft).
+- `review` startet immer mit frischer Session ohne Kontext der Umsetzung *(Claude)*.
+- **PRs von Personen werden ebenso reviewt** *(Rafael)*, standardmäßig an (je Projekt abschaltbar), mit demselben Review-Agenten und denselben Arbeitsregeln, sobald CI auf dem Head-Commit grün ist; ein Entwurf nicht. Ergebnis *(Claude)*: `approve` → Freigabe über die Review-App (die Person kann danach ohne `--admin` mergen) und Kommentar am PR und an verknüpften Items; `changes` → GitHub-Review als Kommentar mit den Befunden (kein „Request changes“, das den Merge sperren würde) und Kommentar an verknüpften Items. werkbuch startet bei PRs von Personen keine Korrektur, keinen `conflict` und mergt nicht; den Status schaltet nur die PR-Zuordnung aus 12.
 - `comment`: eine Erwähnung startet immer einen `comment`, nie Code-Änderungen. Wer Änderungen will, stellt das Ticket zurück (löst `correction` aus) *(Claude)*. Hat das Item einen offenen Strang, setzt der `comment` dessen Session fort (Kontext), sonst frisch.
 - Projekte ohne Repo: `task` läuft in einem Arbeitsordner ohne Git, endet mit einer Zusammenfassung als Kommentar und dem Status „Nach Abschluss“ (7.4); kein PR, kein CI, kein Review *(Claude)*.
 
@@ -278,7 +279,7 @@ Liste der Runner (Name, online/offline nach letztem Kontakt, Version, System, Pl
 
 ### 10.3 Projekt → „Agenten“ (neuer Abschnitt der Projekteinstellungen)
 
-Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Review-Agent (ein Bot, für PRs von Menschen und Bots), Status-Zuordnung (7.4), Bremsen (Korrektur, Konflikt), Review für PRs von Menschen an/aus, die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
+Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Review-Agent (ein Bot, für PRs von Menschen und Bots), Status-Zuordnung (7.4), Bremsen (Korrektur, Konflikt), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
 
 ### 10.4 Organisation → Bots → Agent
 
@@ -320,11 +321,34 @@ Der Agent läuft unbeaufsichtigt mit den Rechten des Nutzers, unter dem der Runn
 
 ## 12. PR-Verknüpfung
 
-- Erkennung des Items aus Branch-Name, PR-Titel und PR-Body: Keys des Projekts des Repos (auch frühere Kennungen); `Fixes|Closes|Resolves KEY-n` markiert den PR als „schließt“. PRs des Bots sind über ihren Strang ohnehin verknüpft.
-- `work_item_links`: Item, Art (`pull_request`), Repo, Nummer, Titel, Zustand, Head-Commit, CI-Zustand, Review-Urteil, `closes`, Stempel. Aktualisiert durch die Webhooks.
+Vorbild sind itsaplan (feste Wörter, Checks je Link) und Plane (Status je PR-Zustand); deren Sync von Issues und Kommentaren mit GitHub, persönliche GitHub-Accounts und Admin-Tokens übernimmt werkbuch nicht *(Rafael)*.
+
+**Erkennung** *(Rafael)*: werkbuch liest Titel und Beschreibung des PRs und den Namen seines Head-Branches, bei jedem Öffnen, Bearbeiten und Push. Es zählen nur Keys des Projekts, zu dem das Repo gehört (auch frühere Kennungen); groß oder klein egal.
+
+| Im PR | Wirkung |
+|---|---|
+| `fix`/`fixes`/`fixed`/`fixing`, `close`/`closes`/`closed`/`closing`, `resolve`/`resolves`/`resolved`/`resolving` vor einem oder mehreren Keys | verknüpft, **schließt** beim Merge |
+| `ref`/`refs`/`references`, `part of`, `relates to`/`related to` vor Keys | verknüpft, schließt nie |
+| `skip`/`ignore` vor Keys | nicht verknüpfen (hebt eine Verknüpfung aus Branch oder anderem Text auf) |
+| ein Key ohne Wort, im Text oder im Branch-Namen | verknüpft, schließt nie |
+
+- Syntax: Wort, optional Doppelpunkt, dann Keys getrennt durch Komma oder `and` (`Fixes WEBU-12, WEBU-13`, `Closes: WEBU-12 and WEBU-14`). Die Wortliste steht im Code (Englisch, wie GitHubs eigene Schlüsselwörter), nicht in der UI. Nicht in Code-Blöcken des Bodys.
+- PRs des Agenten verknüpft ihr Strang ohnehin; ihr Body trägt `Fixes KEY-n` (Standard der Arbeitsregeln).
+- Eine Verknüpfung, deren Key aus Titel, Body und Branch verschwindet, bleibt (wie bei Relationen), außer `skip` hebt sie auf.
+
+**Wirkung und Status** *(Rafael: auch für PRs von Personen)*:
+- **Entwürfe lösen nichts aus** (weder Status noch Review), sie werden nur verknüpft und angezeigt.
+- **PR geöffnet bzw. aus dem Entwurf bereit:** jedes verknüpfte Item in einem Backlog- oder Unstarted-Status geht auf „In Review“ (7.4). Items in Started bleiben (wer schon arbeitet, verliert nichts), Completed/Canceled bleiben.
+- **PR in den Basis-Branch des Projekts gemergt:** Items, die der PR **schließt**, gehen auf „Gemergt“, aber nur, wenn am Item kein anderer offener (auch Entwurfs-)PR hängt; Completed/Canceled bleiben. Items, die er nur verknüpft, bleiben.
+- **PR ohne Merge geschlossen:** bei PRs von Personen keine Statusänderung; bei PRs des Agenten 7.2.
+- Statuswechsel mit Actor `agent` des Review-Agenten des Projekts (7.2) bzw. eines eigenen Systems-Actors, wenn das Projekt keinen hat (Builder); mit Übergangsprüfung wie 7.2. Ohne Status-Zuordnung (7.4) wird nur verknüpft.
+- **Kommentar am PR** *(Rafael)*: bei einer neuen Verknüpfung schreibt die Agenten-App einen Kommentar mit Link auf die Items (einer je PR, wird aktualisiert), je Projekt abschaltbar, standardmäßig an.
+
+**Daten** *(Rafael: Checks als eigene Tabelle)*:
+- `work_item_links`: Item, Art (`pull_request`), Repo, Nummer, Titel, URL, Zustand (`open`, `merged`, `closed`), Entwurf, Head- und Basis-Branch, Head-Commit, `closes`, Review-Urteil (je Head-Commit), Stempel; eindeutig je Item, Repo und Nummer. Aktualisiert durch die Webhooks.
+- `work_item_link_checks`: je Verknüpfung und Check-Run Name, App, Status, Ergebnis, URL, Head-Commit; daraus der CI-Zustand für 7.2 und die Anzeige am Item (10.5).
 - Ein Event am Item bei neuer Verknüpfung und bei Merge (History); Benachrichtigungen folgen den bestehenden Regeln (`item_changed`) *(Builder: neue Art nötig?)*.
-- Ein PR eines Menschen mit `Fixes KEY-n` setzt das Item beim Merge nicht automatisch auf Done (das ist eine eigene Automatisierung, später) *(Claude)*.
-- REST: Verknüpfungen am Item lesen (`include=links` o. ä.) und über MCP (A397-Regel).
+- REST: Verknüpfungen samt Checks am Item lesen (`include=links` o. ä.) und über MCP (A397-Regel).
 
 ## 13. REST, MCP, Doku
 
