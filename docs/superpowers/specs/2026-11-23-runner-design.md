@@ -216,11 +216,11 @@ Ohne Einstellung sind die Agenten im Projekt aus (kein Auftrag startet, die Zuwe
 
 *(Rafael: nicht jeder Auftrag braucht das stärkste Modell; Claude: über Labels)*. werkbuch wählt das Modell beim Einreihen, das erste passende gewinnt:
 
-1. **Label des Items:** die Agenten-Einstellungen des Projekts ordnen Labels Modellen zu (etwa `klein` → `haiku`, `knifflig` → `fable`); trägt das Item mehrere zugeordnete Labels, gewinnt die erste Zeile der Zuordnung. Ein Kind eines Epics ohne zugeordnetes Label nimmt das des Epics.
+1. **Modell-Label des Items:** systemweit *(Rafael, 2026-11-23, ersetzt die Zuordnung je Projekt)*. Ein Label des Katalogs der Organisation kann ein Modell tragen (optionales Feld „Modell für Agenten“, etwa `haiku`); wer im Label-Dialog ein Modell wählt, bekommt den Namen `<Modell> Agent` vorgeschlagen („Haiku Agent“, „Opus Agent“, „Fable Agent“). Erkannt wird über das Feld, nie über den Namen (umbenennen oder übersetzen bricht nichts). Trägt ein Item mehrere Modell-Labels, gewinnt das erste in Katalog-Reihenfolge. Ein Kind eines Epics ohne Modell-Label nimmt das des Epics.
 2. **Projekt je Auftragstyp** (etwa `review` → `opus`, `comment` → `haiku`).
 3. **Bot je Auftragstyp**, dann der Standard des Bots.
 
-- Labels statt eines eigenen Felds am Item: sie lassen sich schon beim Anlegen, aus Vorlagen, per Mehrfachbearbeitung und per MCP setzen und filtern; ein neues Item-Feld liefe durch Resource, REST, Vorlagen und das ausgeschöpfte MCP-Budget von `work-items`.
+- Labels statt eines eigenen Felds am Item: sie gelten in allen Projekten, lassen sich schon beim Anlegen, aus Vorlagen, per Mehrfachbearbeitung und per MCP setzen und filtern; ein neues Item-Feld liefe durch Resource, REST, Vorlagen und das ausgeschöpfte MCP-Budget von `work-items`.
 - Das Modell ist ein freier Text je CLI (Claude Code: Kurzformen `haiku`, `sonnet`, `opus`, `fable` oder volle IDs; Codex: dessen Namen). Die UI schlägt bekannte vor; der Runner reicht es durch (`--model` bzw. `-m`); „Doctor“ und ein abgelehnter Lauf melden ein Modell, das das CLI nicht kennt (Auftrag `failed` mit Grund).
 - Am Auftrag stehen das gewählte Modell und woher es kam (Label, Projekt, Bot) und, falls gemeldet, der Verbrauch.
 - Eine automatische Wahl (ein kleines Modell schätzt das Ticket ein) ist ein Nicht-Ziel von v1.
@@ -292,7 +292,7 @@ Liste der Runner (Name, online/offline nach letztem Kontakt, Version, System, Pl
 
 ### 10.3 Projekt → „Agenten“ (neuer Abschnitt der Projekteinstellungen)
 
-Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Review-Agent (ein Bot, für PRs von Menschen und Bots), Status-Zuordnung (7.4), Bremsen (Korrektur, Konflikt), Modell je Auftragstyp und die Zuordnung Label → Modell (7.7), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
+Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Review-Agent (ein Bot, für PRs von Menschen und Bots), Status-Zuordnung (7.4), Bremsen (Korrektur, Konflikt), Modell je Auftragstyp (7.7), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
 
 ### 10.4 Organisation → Bots → Agent
 
