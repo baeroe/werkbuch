@@ -104,7 +104,7 @@ Ein abgelaufener oder benutzter Code ist eine klare Meldung im Terminal. Ein Run
 - Auftrag: ID, Typ, Item (ID, Key, Titel), Projekt (Kennung), Strang (ID, Branch, Basis-Branch, Session-ID falls vorhanden), Zeitlimit.
 - Prompt und System-Prompt, fertig gebaut von werkbuch (7.3).
 - Run-Token für werkbuch-MCP (11.2) und, bei Projekten mit Repo, das GitHub-Installations-Token mit Repo-URL (11.3).
-- CLI und Modell des Agenten.
+- CLI des Agenten und das Modell des Auftrags (7.8).
 
 Ohne passenden Auftrag: `204`. Zwei Runner, die gleichzeitig abholen, bekommen nie denselben Auftrag (Zeilensperre, ein Test mit zwei Verbindungen).
 
@@ -212,6 +212,19 @@ Ohne Einstellung sind die Agenten im Projekt aus (kein Auftrag startet, die Zuwe
 - Ein einzeln zugewiesener Task in einem Epic ist ein normaler Task mit eigenem Branch und PR *(Rafael)*.
 - Ein Epic läuft in sich immer nacheinander (ein Branch, ein Worktree).
 
+### 7.8 Modell je Auftrag
+
+*(Rafael: nicht jeder Auftrag braucht das stärkste Modell; Claude: über Labels)*. werkbuch wählt das Modell beim Einreihen, das erste passende gewinnt:
+
+1. **Label des Items:** die Agenten-Einstellungen des Projekts ordnen Labels Modellen zu (etwa `klein` → `haiku`, `knifflig` → `fable`); trägt das Item mehrere zugeordnete Labels, gewinnt die erste Zeile der Zuordnung. Ein Kind eines Epics ohne zugeordnetes Label nimmt das des Epics.
+2. **Projekt je Auftragstyp** (etwa `review` → `opus`, `comment` → `haiku`).
+3. **Bot je Auftragstyp**, dann der Standard des Bots.
+
+- Labels statt eines eigenen Felds am Item: sie lassen sich schon beim Anlegen, aus Vorlagen, per Mehrfachbearbeitung und per MCP setzen und filtern; ein neues Item-Feld liefe durch Resource, REST, Vorlagen und das ausgeschöpfte MCP-Budget von `work-items`.
+- Das Modell ist ein freier Text je CLI (Claude Code: Kurzformen `haiku`, `sonnet`, `opus`, `fable` oder volle IDs; Codex: dessen Namen). Die UI schlägt bekannte vor; der Runner reicht es durch (`--model` bzw. `-m`); „Doctor“ und ein abgelehnter Lauf melden ein Modell, das das CLI nicht kennt (Auftrag `failed` mit Grund).
+- Am Auftrag stehen das gewählte Modell und woher es kam (Label, Projekt, Bot) und, falls gemeldet, der Verbrauch.
+- Eine automatische Wahl (ein kleines Modell schätzt das Ticket ein) ist ein Nicht-Ziel von v1.
+
 ### 7.7 Session
 
 - Claude Code headless: `claude -p --output-format stream-json --verbose`, Session fortsetzen mit `--resume <session-id>`; Codex: `codex exec` bzw. `codex exec resume <id>`. Sessions liegen auf der Maschine und hängen am Arbeitsordner: der Worktree lebt je Strang bis zu dessen Ende.
@@ -279,11 +292,11 @@ Liste der Runner (Name, online/offline nach letztem Kontakt, Version, System, Pl
 
 ### 10.3 Projekt → „Agenten“ (neuer Abschnitt der Projekteinstellungen)
 
-Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Review-Agent (ein Bot, für PRs von Menschen und Bots), Status-Zuordnung (7.4), Bremsen (Korrektur, Konflikt), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
+Repo (aus den freigegebenen Repos, oder keins; ein Repo gehört höchstens einem Projekt, eindeutig in der Datenbank), Basis-Branch, Merge-Methode, Review-Agent (ein Bot, für PRs von Menschen und Bots), Status-Zuordnung (7.4), Bremsen (Korrektur, Konflikt), Modell je Auftragstyp und die Zuordnung Label → Modell (7.8), Review für PRs von Personen an/aus (Standard an), Kommentar am PR an/aus (Standard an), die Arbeitsregeln je Typ (7.3, mit Standard und „Standard wiederherstellen“). Lesen jeder im Projekt, ändern `project.manage`.
 
 ### 10.4 Organisation → Bots → Agent
 
-Je Bot: Agent an/aus, Runner-Pool (Mehrfachauswahl), CLI und Modell, Anweisung (Text), Plätze, Zeitlimits je Typ. Org-Admins.
+Je Bot: Agent an/aus, Runner-Pool (Mehrfachauswahl), CLI, Standard-Modell und Modell je Auftragstyp (7.8), Anweisung (Text), Plätze, Zeitlimits je Typ. Org-Admins.
 
 ### 10.5 Item
 
