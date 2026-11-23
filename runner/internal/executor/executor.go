@@ -44,11 +44,11 @@ const Drain = 2 * time.Second
 type Executor struct {
 	Client *client.Client
 	Git    *git.Manager
-	// Repos maps a project identifier to a repository for projects werkbuch sends none for (A488).
+	// Repos maps a project identifier to a repository for projects werkbuch sends none for (A491).
 	Repos  func() map[string]string
 	Report func() protocol.Report
 	Log    *slog.Logger
-	// Werkbuch hears of an MCP server other than werkbuch-run that offered werkbuch's tools (A492).
+	// Werkbuch hears of an MCP server other than werkbuch-run that offered werkbuch's tools (A495).
 	Werkbuch func(server string)
 	// Procs is the folder of the records of running CLIs ("" keeps none).
 	Procs string
@@ -412,7 +412,7 @@ var (
 )
 
 // Verdict reads the verdict of a review out of its answer: an explicit line `Verdict: approve|approved|changes` first,
-// else the first line that starts with one of the words (Markdown marks allowed), else none (A495).
+// else the first line that starts with one of the words (Markdown marks allowed), else none (A498).
 func Verdict(answer string) string {
 	m := verdictLine.FindStringSubmatch(answer)
 	if m == nil {

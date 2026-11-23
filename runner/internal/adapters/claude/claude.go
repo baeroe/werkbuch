@@ -2,7 +2,7 @@
 // standard input, the contract appended to the system prompt from a private file, `--model`, `--resume <session>`, the
 // server `werkbuch-run` through `--mcp-config` in addition to the machine's own servers (no `--strict-mcp-config`, spec
 // 8.1, 8.7). Runs that change code bypass the permission prompts; light runs (`review`, `comment`) only get reading
-// tools (A490).
+// tools (A493).
 package claude
 
 import (

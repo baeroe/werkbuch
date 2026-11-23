@@ -1,8 +1,8 @@
 // Package codex runs Codex headless (spec 7.8): `codex exec --json`, the prompt on standard input (`-`), `-m`, `resume
 // <session>`, the server `werkbuch-run` through `-c mcp_servers.werkbuch-run.*` with the token in an environment
 // variable (never an argument), in addition to the machine's servers (spec 8.1). Codex has no flag for a system prompt:
-// the contract goes in front of the prompt (A491). Runs that change code bypass approvals and sandbox, light runs run in
-// the read-only sandbox (A490).
+// the contract goes in front of the prompt (A494). Runs that change code bypass approvals and sandbox, light runs run in
+// the read-only sandbox (A493).
 package codex
 
 import (

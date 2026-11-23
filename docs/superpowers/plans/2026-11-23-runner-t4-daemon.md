@@ -6,7 +6,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-23-runner-design.md` auf `main` (6, 7.7, 7.8, 8, 9, 11.1, 11.2, 14). Plan: `2026-11-23-runner.md` Task 4. **Server-Referenz:** PR #65 (WEBU-20), `routes/runner.php`, `RunnerProtocolController`, `ClaimRun`, `RecordHeartbeat`, `RecordRunEvents`, `FinishRun`, `RunnerProtocol`, `Protocol`, Rulings A472–A487. Nicht hier: TUI (WEBU-22), Installer, Downloads, Image, Dienst-Dateien (WEBU-23), GitHub-Tokens (WEBU-24), Prompts (WEBU-26).
 
-**Rulings:** ab A488 in `2026-10-30-werkbuch-app-rulings.md`.
+**Rulings:** ab A491 in `2026-10-30-werkbuch-app-rulings.md`.
 
 ## Entscheidungen
 
@@ -29,7 +29,7 @@ Fehler sind Problem Details (`reason`): 401 `unauthenticated` (Token widerrufen)
 `runner/main.go` (Befehle), `runner/internal/`:
 
 - `paths` (Config `~/.config/werkbuch-runner`, Zustand `~/.local/state/werkbuch-runner`, Daten `~/.local/share/werkbuch-runner`, Socket; Env-Overrides für Tests)
-- `config` (YAML: `instance`, dazu bis WEBU-24 `repos` als Entwicklungs-Hilfe, A488)
+- `config` (YAML: `instance`, dazu bis WEBU-24 `repos` als Entwicklungs-Hilfe, A491)
 - `keyring` (Dienst `werkbuch-runner`, Konto = Instanz-URL; in Tests `keyring.MockInit`)
 - `redact` (Tokens wie `App\Support\Secrets` → `[token]`; slog-Handler, der jede Ausgabe filtert)
 - `client` (Protokoll, Problem Details als `*ProblemError`, Downloads)
@@ -89,8 +89,8 @@ Befehle: `login <url> --code <CODE> [--name]`, `daemon`, `status`, `doctor`, `lo
 
 ## Abweichungen und Stand (nach der Umsetzung)
 
-- PR #65 schickt im Claim noch kein `git` und keine Setup-/Teardown-Befehle (`null`); der Runner nimmt beide Formen (WEBU-24 liefert `git {repo_url, token, expires_at}`), bis dahin `repos` aus A488. Die Erneuerung des Git-Tokens (`POST runs/{id}/git-token`) kommt mit WEBU-24.
+- PR #65 schickt im Claim noch kein `git` und keine Setup-/Teardown-Befehle (`null`); der Runner nimmt beide Formen (WEBU-24 liefert `git {repo_url, token, expires_at}`), bis dahin `repos` aus A491. Die Erneuerung des Git-Tokens (`POST runs/{id}/git-token`) kommt mit WEBU-24.
 - Adapter: statt `Session(events)` ein `Stream` je Lauf (`Feed`, `Outcome`), weil Session, Nutzung und Antwort beim Lesen anfallen.
 - Codex kommt im ersten Wurf mit (Aufruf und Parser getestet, kein echter Lauf).
 - Die Abnahme mit Claude Code selbst ist Teil von WEBU-29; hier lief der Runner gegen das DDEV des Worktrees mit dem falschen CLI und einem lokalen Repo.
-- Nach dem Review von PR #66: Lease ab dem Claim bis zur Antwort auf das Ergebnis (Heartbeat auch während Klon, Setup und Zustellung, Abbruch und Zeitlimit auch dort), leichte Läufe eingeschränkt (A490), Teardown im Sweep, Sperre je Klon und je Ordner, `procs` gegen verwaiste CLIs, `http` nur für Loopback, Update nur über HTTPS, Bericht im Hintergrund, Rückfall-Datei für Linux ohne Secret Service, `gomod` in Dependabot.
+- Nach dem Review von PR #66: Lease ab dem Claim bis zur Antwort auf das Ergebnis (Heartbeat auch während Klon, Setup und Zustellung, Abbruch und Zeitlimit auch dort), leichte Läufe eingeschränkt (A493), Teardown im Sweep, Sperre je Klon und je Ordner, `procs` gegen verwaiste CLIs, `http` nur für Loopback, Update nur über HTTPS, Bericht im Hintergrund, Rückfall-Datei für Linux ohne Secret Service, `gomod` in Dependabot.

@@ -26,7 +26,7 @@ import (
 // TokenEnv carries the git token to the credential helper.
 const TokenEnv = "WERKBUCH_GIT_TOKEN"
 
-// KeepFor is how long a worktree stays after its last run (A494).
+// KeepFor is how long a worktree stays after its last run (A497).
 const KeepFor = 72 * time.Hour
 
 // Manager lays out the data folder. Every git command on a bare clone (clone, fetch, worktree add, remove, prune) runs
@@ -295,7 +295,7 @@ func (m *Manager) Remove(ctx context.Context, dir string, teardown Teardown) err
 	return os.RemoveAll(dir)
 }
 
-// Sweep removes worktrees and folders whose last run is older than keep (A494); the names of runs still busy stay.
+// Sweep removes worktrees and folders whose last run is older than keep (A497); the names of runs still busy stay.
 func (m *Manager) Sweep(ctx context.Context, keep time.Duration, busy map[string]bool, teardown Teardown) []string {
 	var removed []string
 	for _, area := range []string{"worktrees", "work"} {

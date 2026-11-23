@@ -24,7 +24,7 @@ type Job struct {
 	TokenEnv string
 }
 
-// ReadOnlyTools are what a light run (`review`, `comment`) may use in Claude Code (A490): reading files, reading git,
+// ReadOnlyTools are what a light run (`review`, `comment`) may use in Claude Code (A493): reading files, reading git,
 // and werkbuch through `werkbuch-run`.
 var ReadOnlyTools = []string{"Read", "Grep", "Glob", "Bash(git log:*)", "Bash(git diff:*)", "Bash(git show:*)", "Bash(git status:*)", "mcp__werkbuch-run__*"}
 
@@ -38,7 +38,7 @@ type Outcome struct {
 	Answer    string // the last answer of the agent (summary, findings, reply)
 	IsError   bool
 	Error     string
-	// Werkbuch lists MCP servers other than werkbuch-run that offered werkbuch's tools (A492).
+	// Werkbuch lists MCP servers other than werkbuch-run that offered werkbuch's tools (A495).
 	Werkbuch []string
 }
 

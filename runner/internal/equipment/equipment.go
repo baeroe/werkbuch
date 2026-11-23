@@ -4,7 +4,7 @@
 //
 // Servers come from `claude mcp list` and `codex mcp list --json`; a server counts as access to werkbuch when its
 // address or command names the host of the instance. A run adds what the CLI itself shows: a server with werkbuch's
-// tools (`manage-work-items`) that is not `werkbuch-run` (Seen, A492).
+// tools (`manage-work-items`) that is not `werkbuch-run` (Seen, A495).
 package equipment
 
 import (

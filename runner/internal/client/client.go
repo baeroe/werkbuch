@@ -156,11 +156,11 @@ func (c *Client) Result(ctx context.Context, runID string, result protocol.Resul
 	return c.do(ctx, http.MethodPost, "/api/runner/runs/"+runID+"/result", result, nil, true)
 }
 
-// noRun is a ULID no run has: the probe of the token (A493).
+// noRun is a ULID no run has: the probe of the token (A496).
 const noRun = "00000000000000000000000000"
 
 // Probe checks the token without touching any run: a heartbeat of a run that cannot exist answers 404 to a valid
-// token and 401 to a refused one (A493).
+// token and 401 to a refused one (A496).
 func (c *Client) Probe(ctx context.Context) error {
 	_, err := c.Heartbeat(ctx, noRun, 1, protocol.Report{})
 	if Reason(err, http.StatusNotFound, "") {

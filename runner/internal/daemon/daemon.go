@@ -2,7 +2,7 @@
 // reports load, CLIs and equipment and hears its places and the expected version), every 3 s without work and every
 // 10 s after a minute without, at once after it got a run. Runs execute side by side; their places count in werkbuch.
 // When werkbuch names another version, the daemon takes no new runs, updates once none is left and starts again.
-// Worktrees of strands without a run for three days go (A494).
+// Worktrees of strands without a run for three days go (A497).
 package daemon
 
 import (
