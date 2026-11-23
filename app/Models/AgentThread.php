@@ -31,7 +31,6 @@ use Illuminate\Support\Str;
  * @property int $conflicts
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @property-read WorkItem|null $workItem
  * @property-read Runner|null $runner
  */
 #[Fillable(['bot_id', 'project_id', 'work_item_id', 'runner_id', 'branch', 'base_branch', 'worktree', 'session_id', 'pr_number', 'status', 'pause_reason', 'corrections', 'conflicts'])]
@@ -61,12 +60,6 @@ final class AgentThread extends Model
         $slug = implode('-', array_slice(explode('-', Str::slug(Str::ascii($item->title))), 0, 5));
 
         return rtrim('agent/'.$item->key.'-'.$slug, '-');
-    }
-
-    /** @return BelongsTo<WorkItem, $this> */
-    public function workItem(): BelongsTo
-    {
-        return $this->belongsTo(WorkItem::class);
     }
 
     /** @return BelongsTo<Runner, $this> */

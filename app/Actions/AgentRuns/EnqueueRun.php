@@ -53,7 +53,6 @@ final class EnqueueRun
                 throw Problem::conflict('agent_off');
             }
 
-            $own = $config->models[$kind->value] ?? null;
             $headSha = $context['head_sha'] ?? null;
             $trigger = $context['trigger_event_id'] ?? null;
 
@@ -62,8 +61,8 @@ final class EnqueueRun
                 'status' => RunStatus::Queued,
                 'bot_id' => $bot->id,
                 'cli' => $config->cli,
-                'model' => $own ?? $config->model,
-                'model_source' => $own === null ? 'default' : 'bot',
+                'model' => $config->modelFor($kind),
+                'model_source' => isset($config->models[$kind->value]) ? 'bot' : 'default',
                 'project_id' => $project->id,
                 'work_item_id' => $item?->id,
                 'thread_id' => $thread?->id,

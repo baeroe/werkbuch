@@ -91,7 +91,7 @@ final class AgentSchemas
             'runner_ids' => ['type' => 'array', 'items' => ['type' => 'string', 'pattern' => self::ULID], 'description' => 'The runner pool: active runners; empty is every runner of the organization.'],
             'cli' => ['type' => 'string', 'enum' => AgentCli::VALUES],
             'model' => [...self::models(), 'description' => 'The default model, one of the CLI.'],
-            'models' => ['type' => 'object', 'properties' => array_fill_keys(RunType::VALUES, self::models()), 'additionalProperties' => false, 'description' => 'A model per kind of run; a kind left out takes `model`.'],
+            'models' => ['type' => ['object', 'array'], 'maxItems' => 0, 'properties' => array_fill_keys(RunType::VALUES, self::models()), 'additionalProperties' => false, 'description' => 'A model per kind of run; a kind left out takes `model`. An empty map may come as `[]`.'],
             'bot_id' => ['type' => 'string', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
             'updated_at' => ['type' => ['string', 'null'], 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
         ], SaveAgentConfig::FIELDS);

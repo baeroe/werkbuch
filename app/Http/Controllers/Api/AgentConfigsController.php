@@ -10,6 +10,7 @@ use App\Http\Resources\AgentConfigResource;
 use App\Models\User;
 use App\OpenApi\AgentSchemas;
 use App\Support\Actor;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
@@ -33,8 +34,9 @@ final class AgentConfigsController extends Controller
      * As a whole; switching it on needs an active bot with a responsible person, not the default bot.
      */
     #[Body(AgentSchemas::class, 'agentConfig')]
-    public function update(Request $request, User $user): AgentConfigResource
+    public function update(Request $request, User $user): JsonResponse
     {
-        return new AgentConfigResource(SaveAgentConfig::run(Actor::fromRequest($request), $user, $request->all()));
+        // 200 also for the first configuration of a bot: it had one without a row
+        return (new AgentConfigResource(SaveAgentConfig::run(Actor::fromRequest($request), $user, $request->all())))->response()->setStatusCode(200);
     }
 }
