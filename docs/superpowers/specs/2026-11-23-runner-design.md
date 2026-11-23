@@ -327,7 +327,7 @@ Je Bot: Agent an/aus, Runner-Pool (Mehrfachauswahl), CLI, Standard-Modell und Mo
 
 ### 10.8 Organisation → „Agenten“
 
-Die Arbeitsregeln je Auftragstyp (7.3) als Reiter oder Liste mit Markdown-Editor, „Standard wiederherstellen“ je Typ, Hinweis auf die Reihenfolge im Prompt. Org-Admins ändern, Mitglieder lesen. Das Vorgehen je Item-Typ steht im Typ-Dialog (Organisation → Typen).
+Die Arbeitsregeln je Auftragstyp (7.3) als Reiter oder Liste mit Markdown-Editor, „Standard wiederherstellen“ je Typ, Hinweis auf die Reihenfolge im Prompt. Über den Regeln jedes Typs steht der Vertrag dieses Typs (7.3, Schicht 1) nur zum Lesen und aufklappbar („Gibt werkbuch immer vor“): der echte Text aus dem Code, so wie er in den Prompt geht (Englisch), damit niemand ihn in den Regeln wiederholt *(Rafael)*. REST liefert ihn mit den Regeln aus (Lesezugriff). Org-Admins ändern, Mitglieder lesen. Das Vorgehen je Item-Typ steht im Typ-Dialog (Organisation → Typen).
 
 ### 10.5 Item
 
