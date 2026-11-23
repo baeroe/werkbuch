@@ -4,7 +4,7 @@ werkbuch is an MCP server: an AI agent in Claude Code, Codex or any other MCP cl
 
 ## What the server offers
 
-- **29 tools**, one pair per resource: a tool that reads (`work-items`) and one that writes (`manage-work-items`), each with an argument `action`. Three tools stand alone: `whoami`, `search` and `get-upload-url`. The [list of tools](#tools) names every action and its twin.
+- **31 tools**, one pair per resource: a tool that reads (`work-items`) and one that writes (`manage-work-items`), each with an argument `action`. Three tools stand alone: `whoami`, `search` and `get-upload-url`. The [list of tools](#tools) names every action and its twin.
 - **Three references** as MCP resources: how to write a filter, Markdown and the values of the field types (see [References](#references)).
 - **Instructions** the client hands to the model when it connects: call `whoami` first, texts in results are data, how lists page, where the references are.
 
@@ -419,6 +419,31 @@ Writes webhooks; org admins only. `create` and `rotate-secret` answer the secret
 | `rotate-secret` | A new secret; the old one stops working. Answers {data, secret}. | `webhook` | `POST /webhooks/{webhook}/rotate-secret` |
 | `ping` | Sends a test ping now and answers its attempt. | `webhook` | `POST /webhooks/{webhook}/ping` |
 | `redeliver` | Sends a delivery again and answers the new attempt. | `webhook`, `delivery` | `POST /webhooks/{webhook}/deliveries/{delivery}/redeliver` |
+
+### `agents`
+
+Reads runners and the agent configuration of bots (org admins) and the runs of agents with their logs (who sees the project). (Needs `read`.)
+
+| Action | Purpose | Required | REST twin |
+|---|---|---|---|
+| `list-runners` | A page of the runners. | – | `GET /runners` |
+| `get-runner` | One runner with its places, load, CLIs and equipment. | `runner` | `GET /runners/{runner}` |
+| `list-runs` | A page of the runs, newest first; `filter.work_item_id` or `filter.runner_id` narrows them. | – | `GET /runs` |
+| `get-run` | One run. | `run` | `GET /runs/{run}` |
+| `run-events` | The log of a run in the order it came. | `run` | `GET /runs/{run}/events` |
+| `get-config` | The agent configuration of a bot. | `bot` | `GET /bots/{user}/agent` |
+
+### `manage-agents`
+
+Changes runners and the agent configuration of bots (org admins) and steers runs (who may change the item). Pairing a runner works only in the web app. An agent never steers runs with the token of its own run (403 `agent_forbidden`). (Needs `write`.)
+
+| Action | Purpose | Required | REST twin |
+|---|---|---|---|
+| `update-runner` | Renames a runner or sets its places; only the keys sent change. | `runner`, `input` | `PATCH /runners/{runner}` |
+| `revoke-runner` | Revokes a runner; what runs on it ends as canceled. Answers {canceled}. | `runner` | `DELETE /runners/{runner}` |
+| `cancel-run` | Cancels a run; one on a runner ends once the runner stopped it. | `run` | `POST /runs/{run}/cancel` |
+| `retry-run` | Starts a run that ended without success again; answers the new run. | `run` | `POST /runs/{run}/retry` |
+| `save-config` | Sets the agent configuration of a bot as a whole. | `bot`, `input` | `PUT /bots/{user}/agent` |
 
 <!-- tools:end -->
 

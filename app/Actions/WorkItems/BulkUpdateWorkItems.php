@@ -3,6 +3,7 @@
 namespace App\Actions\WorkItems;
 
 use App\Access\Authorize;
+use App\Access\RunTokenGuard;
 use App\Domain\WorkItems\DateRange;
 use App\Domain\WorkItems\ItemKey;
 use App\Domain\WorkItems\Priority;
@@ -55,6 +56,8 @@ final class BulkUpdateWorkItems
      */
     public function handle(Actor $actor, array $input): array
     {
+        // werkbuch keeps this to itself, an agent never does it (spec 11.2)
+        RunTokenGuard::refuse($actor);
         $errors = [];
         $fail = function (string $field, string $message) use (&$errors): void {
             $errors[$field] ??= [$message];

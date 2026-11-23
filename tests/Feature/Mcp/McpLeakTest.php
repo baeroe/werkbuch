@@ -4,6 +4,9 @@ use App\Access\ProjectRole;
 use App\Actions\Pages\CreatePage;
 use App\Actions\WorkItems\AddRelation;
 use App\Actions\WorkItems\UpdateWorkItem;
+use App\Domain\Agents\RunStatus;
+use App\Models\AgentConfig;
+use App\Models\AgentRun;
 use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Favorite;
@@ -102,6 +105,9 @@ $world = function (): array {
         'webTemplate' => Template::factory()->create(['project_id' => $web->id, 'name' => 'Öffentliche Vorlage', 'created_by' => $mara->id]),
         'opsRelation' => WorkItemRelation::factory()->create(['source_id' => $opsItem->id, 'target_id' => $opsOther->id]),
         'opsView' => $opsView,
+        // a run of an agent at an item of OPS (WEBU-20), and one that failed
+        'opsRun' => AgentRun::factory()->create(['bot_id' => $agent = AgentConfig::factory()->create()->bot_id, 'work_item_id' => $opsItem->id]),
+        'opsFailedRun' => AgentRun::factory()->create(['bot_id' => $agent, 'work_item_id' => $opsOther->id, 'status' => RunStatus::Failed]),
         'opsNote' => $notify($opsItem),
         'webNote' => $notify($webItem),
     ];
@@ -167,6 +173,8 @@ $refusals = fn (): array => [
     'automations' => ['automations', fn ($w, $hide) => ['project' => $hide('OPS')]],
     'organization state-usage' => ['organization', fn ($w, $hide) => ['action' => 'state-usage', 'project' => $hide('OPS')]],
     'people mentionable' => ['people', fn ($w, $hide) => ['action' => 'mentionable', 'project' => $hide('OPS'), 'q' => 'o']],
+    'agents get-run' => ['agents', fn ($w, $hide) => ['action' => 'get-run', 'run' => $hide($w['opsRun']->id)]],
+    'agents run-events' => ['agents', fn ($w, $hide) => ['action' => 'run-events', 'run' => $hide($w['opsRun']->id)]],
 
     // write tools
     'get-upload-url' => ['get-upload-url', fn ($w, $hide) => ['input' => ['project_id' => $hide('OPS'), 'kind' => 'inline']]],
@@ -224,6 +232,8 @@ $refusals = fn (): array => [
     'manage-projects archive' => ['manage-projects', fn ($w, $hide) => ['action' => 'archive', 'project' => $hide(Project::factory()->private()->member($w['mara'], ProjectRole::Admin)->create()->identifier)]],
     'manage-projects restore' => ['manage-projects', fn ($w, $hide) => ['action' => 'restore', 'project' => $hide(Project::factory()->private()->archived()->member($w['mara'], ProjectRole::Admin)->create()->identifier)]],
     'manage-projects delete' => ['manage-projects', fn ($w, $hide) => ['action' => 'delete', 'project' => $hide(Project::factory()->private()->member($w['mara'], ProjectRole::Admin)->create()->identifier)]],
+    'manage-agents cancel-run' => ['manage-agents', fn ($w, $hide) => ['action' => 'cancel-run', 'run' => $hide($w['opsRun']->id)]],
+    'manage-agents retry-run' => ['manage-agents', fn ($w, $hide) => ['action' => 'retry-run', 'run' => $hide($w['opsFailedRun']->id)]],
     'manage-notifications delete' => ['manage-notifications', fn ($w, $hide) => ['action' => 'delete', 'notification' => $hide($w['opsNote']->id)],
         'positive' => fn ($w) => ['ida', ['action' => 'delete', 'notification' => $w['webNote']->id]]],
 ];
@@ -270,7 +280,7 @@ it('answers an outsider on everything of a private project as on an unknown id',
     expect(array_keys($tools))->toEqualCanonicalizing([
         'work-items', 'relations', 'comments', 'attachments', 'pages', 'templates', 'projects', 'automations', 'organization', 'people',
         'get-upload-url', 'manage-work-items', 'manage-relations', 'manage-comments', 'manage-attachments', 'manage-pages', 'manage-templates',
-        'manage-automations', 'manage-projects', 'manage-notifications',
+        'manage-automations', 'manage-projects', 'manage-notifications', 'agents', 'manage-agents',
     ]);
 });
 
@@ -528,6 +538,7 @@ it('probes every tool of the server', function () use ($world) {
         'get-upload-url', 'manage-work-items', 'manage-relations', 'manage-comments', 'manage-attachments', 'manage-pages', 'manage-templates',
         'manage-automations', 'manage-projects', 'manage-notifications',
         'search', 'manage-views', 'views', 'notifications', 'webhooks', 'manage-webhooks', 'manage-organization', 'whoami', 'manage-people',
+        'agents', 'manage-agents',
     ];
     $w = $world();
     $mcp = McpClient::for($this, apiToken($w['admin'], ['read', 'write', 'mcp']));

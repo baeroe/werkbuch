@@ -46,7 +46,7 @@ final class LiveMessage implements ShouldBroadcastNow
      * stands in their meta, the page is the subject of `page.*` (A318), the template the subject of `template.*` and the
      * one a run made an item from (`meta.template.id` of its `work_item.created`, A352): the browser loads that
      * template's log and next run again and leaves a deleted one alone (T14-I1/I2); `automation.updated` names only its
-     * project (A347). `page.deleted` adds `page_ids`, the whole subtree from `meta.page_ids`
+     * project (A347); `agent_run.*` names the item of the run (`meta.item_id`, A478), whose activity shows it. `page.deleted` adds `page_ids`, the whole subtree from `meta.page_ids`
      * (the root first); a subtree of more than PAGE_IDS_MAX pages is too large to name and comes as `null`, as does an
      * event that names none: the browser loads the tree again and takes what is no longer in it as gone. The same
      * message may go to several channels at once (the own channels of the people who see a project, A451).
@@ -55,6 +55,10 @@ final class LiveMessage implements ShouldBroadcastNow
     {
         $group = $event->type->group();
         $item = in_array($group, ['work_item', 'comment'], true) ? $event->subject_id : null;
+        if ($group === 'agent_run') {
+            $named = $event->meta['item_id'] ?? null;
+            $item = is_string($named) ? $named : null;
+        }
         $comment = $event->meta['comment_id'] ?? null;
         $socket = $event->meta['socket'] ?? null;
         $template = $group === 'template' ? $event->subject_id : null;

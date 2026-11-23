@@ -82,7 +82,7 @@ final class LiveConsumer implements EventConsumer, RetriesConsumption
             $event->type === EventType::WorkItemSubscribed, $event->type === EventType::WorkItemUnsubscribed => $user($event->actor_id),
             $event->type === EventType::ProjectMemberAdded => [...$project, ...$user(data_get($event->changes, 'member.new.user_id'))],
             $event->type === EventType::UserRoleChanged => $user($event->subject_id),
-            in_array($event->type->group(), ['work_item', 'project', 'page', 'template', 'automation'], true) => $project,
+            in_array($event->type->group(), ['work_item', 'project', 'page', 'template', 'automation', 'agent_run'], true) => $project,
             $event->type->group() === 'comment' => [new PrivateChannel("work-item.{$event->subject_id}")],
             default => [],
         };

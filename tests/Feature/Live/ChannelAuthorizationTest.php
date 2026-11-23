@@ -76,7 +76,8 @@ it('lets a person join only their own channel, present under their id', function
 
     $own = $listen('presence-user.'.$account->id);
 
-    if ($column === 'default_bot') {
+    // bots never listen, the agent of the column run_token neither
+    if (in_array($column, ['default_bot', 'run_token'], true)) {
         $refused($own);
     } else {
         expect(json_decode($own->assertOk()->json('channel_data'), true))->toBe(['user_id' => $account->id, 'user_info' => ['id' => $account->id]]);

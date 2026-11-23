@@ -38,6 +38,7 @@ use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Routing\Middleware\ThrottleRequestsWithRedis;
 use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -47,6 +48,8 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: 'api/v1',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        // the runner protocol (WEBU-20): outside the groups web and api, under /api/runner
+        then: fn () => Route::group([], base_path('routes/runner.php')),
     )
     // the channels (routes/channels.php) authorize through /broadcasting/auth: a signed-in, active account (spec 7.2)
     ->withBroadcasting(__DIR__.'/../routes/channels.php', ['middleware' => ['web', 'auth', EnsureAccountIsActive::class, GuardChannelAuthorization::class]])

@@ -3,6 +3,7 @@
 namespace App\Actions\WorkItems;
 
 use App\Access\Authorize;
+use App\Access\RunTokenGuard;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
@@ -44,6 +45,9 @@ final class UpdateWorkItem
 {
     use AsAction;
 
+    /** What the token of a run may change of an item (spec 11.2): its description and the values of its properties. */
+    public const AGENT_KEYS = ['description', 'description_json', 'base_description_version', 'values'];
+
     /** The keys of the body (the OpenAPI document names them, K15); others are passed over. */
     public const FIELDS = ['title', 'description', 'description_json', 'base_description_version', 'priority', 'label_ids', 'start_date', 'due_date', 'assignee_id', 'parent_id', 'values', 'rank', 'state_id', 'resolution_id'];
 
@@ -55,6 +59,11 @@ final class UpdateWorkItem
      */
     public function handle(Actor $actor, WorkItem $item, array $input): WorkItem
     {
+        // an agent writes only its proof: the description and values (spec 11.2); status, assignee and the rest are werkbuch's
+        if (array_diff(array_keys($input), self::AGENT_KEYS) !== []) {
+            RunTokenGuard::refuse($actor);
+        }
+
         Authorize::check($actor, 'update', $item);
 
         // reading Markdown is the expensive step: never under a lock

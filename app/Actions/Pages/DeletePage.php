@@ -3,6 +3,7 @@
 namespace App\Actions\Pages;
 
 use App\Access\Authorize;
+use App\Access\RunTokenGuard;
 use App\Domain\Wiki\PageTree;
 use App\Events\EventRecorder;
 use App\Events\EventType;
@@ -43,6 +44,8 @@ final class DeletePage
      */
     public function handle(Actor $actor, Page $page): int
     {
+        // werkbuch keeps this to itself, an agent never does it (spec 11.2)
+        RunTokenGuard::refuse($actor);
         Authorize::check($actor, 'update', $page);
 
         return ReadCommitted::run(fn () => DB::transaction(function () use ($actor, $page): int {

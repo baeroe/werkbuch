@@ -46,7 +46,7 @@ it('lets exactly the allowed accounts run each action', function (array $row, st
     $recorded = fn () => isset($row['event']) ? Event::query()->where('type', $row['event'])->where('actor_id', $account->id)->count() : 0;
     $before = $recorded();
 
-    $outcome = matrixOutcome(fn () => ($row['run'])(actor($account), $w, $column));
+    $outcome = matrixOutcome(fn () => ($row['run'])($w->actor($column), $w, $column));
 
     if (in_array($column, $row['hidden'] ?? [], true)) {
         expect($outcome)->toBe(404, "{$column} must not see what it acts on");

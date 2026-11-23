@@ -1,5 +1,7 @@
 <?php
 
+use App\Actions\Runners\CreatePairingCode;
+use App\Domain\Agents\RunStatus;
 use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Label;
@@ -185,6 +187,19 @@ return [
 
         return ['webhook' => $webhook->id, 'delivery' => WebhookDelivery::factory()->for($webhook)->create()->id];
     }],
+    'list runners' => ['GET', '/api/v1/runners'],
+    'show a runner' => ['GET', '/api/v1/runners/{runner}', 'params' => fn (MatrixWorld $w) => ['runner' => $w->runner()->id]],
+    'change a runner' => ['PATCH', '/api/v1/runners/{runner}', 'params' => fn (MatrixWorld $w) => ['runner' => $w->runner()->id]],
+    'revoke a runner' => ['DELETE', '/api/v1/runners/{runner}', 'params' => fn (MatrixWorld $w) => ['runner' => $w->runner()->id]],
+    'make a pairing code' => ['POST', '/api/v1/runner-pairings', 'session' => true],
+    'show a pairing code' => ['GET', '/api/v1/runner-pairings/{pairing}', 'session' => true, 'params' => fn (MatrixWorld $w) => ['pairing' => CreatePairingCode::run(actor($w->account('org_admin')))['pairing']->id]],
+    'show the agent of a bot' => ['GET', '/api/v1/bots/{user}/agent', 'params' => fn (MatrixWorld $w) => ['user' => $w->bot->id]],
+    'set the agent of a bot' => ['PUT', '/api/v1/bots/{user}/agent', 'params' => fn (MatrixWorld $w) => ['user' => $w->bot->id]],
+    'list runs' => ['GET', '/api/v1/runs'],
+    'show a run' => ['GET', '/api/v1/runs/{run}', 'params' => fn (MatrixWorld $w) => ['run' => $w->run('org_admin')->id]],
+    'show the log of a run' => ['GET', '/api/v1/runs/{run}/events', 'params' => fn (MatrixWorld $w) => ['run' => $w->run('org_admin')->id]],
+    'cancel a run' => ['POST', '/api/v1/runs/{run}/cancel', 'params' => fn (MatrixWorld $w) => ['run' => $w->run('org_admin')->id]],
+    'start a run again' => ['POST', '/api/v1/runs/{run}/retry', 'params' => fn (MatrixWorld $w) => ['run' => $w->run('org_admin', ['status' => RunStatus::Failed])->id]],
     'list tokens' => ['GET', '/api/v1/tokens'],
     'create a token' => ['POST', '/api/v1/tokens', 'session' => true],
     'revoke a token' => ['DELETE', '/api/v1/tokens/{token}', 'params' => fn (MatrixWorld $w) => ['token' => $w->bot->createToken('Matrix', ['read'])->accessToken->id]],

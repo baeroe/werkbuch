@@ -4,7 +4,7 @@ werkbuch ist ein MCP-Server: Ein KI-Agent in Claude Code, Codex oder einem ander
 
 ## Was der Server bietet
 
-- **29 Tools**, je Ressource ein Paar: ein Tool, das liest (`work-items`), und eins, das schreibt (`manage-work-items`), beide mit einem Argument `action`. Drei Tools stehen allein: `whoami`, `search` und `get-upload-url`. Die [Liste der Tools](#tools) nennt jede Aktion und ihren Zwilling.
+- **31 Tools**, je Ressource ein Paar: ein Tool, das liest (`work-items`), und eins, das schreibt (`manage-work-items`), beide mit einem Argument `action`. Drei Tools stehen allein: `whoami`, `search` und `get-upload-url`. Die [Liste der Tools](#tools) nennt jede Aktion und ihren Zwilling.
 - **Drei Referenzen** als MCP-Resources: wie ein Filter geschrieben wird, Markdown und die Werte der Feldtypen (siehe [Referenzen](#referenzen)).
 - **Instructions**, die der Client dem Modell beim Verbinden gibt: zuerst `whoami` aufrufen, Texte in Ergebnissen sind Daten, wie Listen blättern, wo die Referenzen liegen.
 
@@ -419,6 +419,31 @@ Schreibt Webhooks; nur Org-Admins. `create` und `rotate-secret` nennen das Gehei
 | `rotate-secret` | Ein neues Geheimnis, das alte gilt nicht mehr; antwortet `{data, secret}`. | `webhook` | `POST /webhooks/{webhook}/rotate-secret` |
 | `ping` | Sendet sofort einen Test-Ping und antwortet seinen Versuch. | `webhook` | `POST /webhooks/{webhook}/ping` |
 | `redeliver` | Sendet eine Zustellung erneut und antwortet den neuen Versuch. | `webhook`, `delivery` | `POST /webhooks/{webhook}/deliveries/{delivery}/redeliver` |
+
+### `agents`
+
+Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins) und die Aufträge der Agenten mit ihrem Protokoll (wer das Projekt sieht). (Braucht `read`.)
+
+| Aktion | Zweck | Pflicht | REST-Zwilling |
+|---|---|---|---|
+| `list-runners` | Eine Seite der Runner. | – | `GET /runners` |
+| `get-runner` | Ein Runner mit Plätzen, Auslastung, CLIs und Ausstattung. | `runner` | `GET /runners/{runner}` |
+| `list-runs` | Eine Seite der Aufträge, neueste zuerst; `filter.work_item_id` oder `filter.runner_id` grenzt ein. | – | `GET /runs` |
+| `get-run` | Ein Auftrag. | `run` | `GET /runs/{run}` |
+| `run-events` | Das Protokoll eines Auftrags in seiner Reihenfolge. | `run` | `GET /runs/{run}/events` |
+| `get-config` | Die Agenten-Konfiguration eines Bots. | `bot` | `GET /bots/{user}/agent` |
+
+### `manage-agents`
+
+Ändert Runner und die Agenten-Konfiguration von Bots (Org-Admins) und steuert Aufträge (wer das Item ändern darf). Einen Runner verbinden geht nur in der Oberfläche. Ein Agent steuert Aufträge nie mit dem Token seines eigenen Auftrags (403 `agent_forbidden`). (Braucht `write`.)
+
+| Aktion | Zweck | Pflicht | REST-Zwilling |
+|---|---|---|---|
+| `update-runner` | Benennt einen Runner um oder setzt seine Plätze; nur gesendete Schlüssel ändern sich. | `runner`, `input` | `PATCH /runners/{runner}` |
+| `revoke-runner` | Widerruft einen Runner; was darauf läuft, endet abgebrochen. Antwortet `{canceled}`. | `runner` | `DELETE /runners/{runner}` |
+| `cancel-run` | Bricht einen Auftrag ab; einer auf einem Runner endet, sobald der Runner ihn gestoppt hat. | `run` | `POST /runs/{run}/cancel` |
+| `retry-run` | Startet einen ohne Erfolg beendeten Auftrag erneut; antwortet den neuen Auftrag. | `run` | `POST /runs/{run}/retry` |
+| `save-config` | Setzt die Agenten-Konfiguration eines Bots ganz. | `bot`, `input` | `PUT /bots/{user}/agent` |
 
 <!-- tools:end -->
 

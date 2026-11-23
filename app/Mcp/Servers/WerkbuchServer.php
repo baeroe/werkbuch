@@ -11,10 +11,12 @@ use App\Mcp\Resources\FieldTypeReference;
 use App\Mcp\Resources\FilterReference;
 use App\Mcp\Resources\MarkdownReference;
 use App\Mcp\Support\McpAction;
+use App\Mcp\Tools\AgentsTool;
 use App\Mcp\Tools\AttachmentsTool;
 use App\Mcp\Tools\AutomationsTool;
 use App\Mcp\Tools\CommentsTool;
 use App\Mcp\Tools\GetUploadUrlTool;
+use App\Mcp\Tools\ManageAgentsTool;
 use App\Mcp\Tools\ManageAttachmentsTool;
 use App\Mcp\Tools\ManageAutomationsTool;
 use App\Mcp\Tools\ManageCommentsTool;
@@ -119,6 +121,8 @@ final class WerkbuchServer extends Server
         ManageNotificationsTool::class,
         WebhooksTool::class,
         ManageWebhooksTool::class,
+        AgentsTool::class,
+        ManageAgentsTool::class,
     ];
 
     protected array $resources = [

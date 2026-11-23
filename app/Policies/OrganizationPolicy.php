@@ -36,6 +36,22 @@ final class OrganizationPolicy
             : Response::deny(__('problem.detail.webhooks_admins_only'));
     }
 
+    /** The runners of the organization (spec 10.1): like webhooks, accounts with `org.manage`. */
+    public function manageRunners(User $user): Response
+    {
+        return Visibility::can($user, Permission::OrgManage)
+            ? Response::allow()
+            : Response::deny(__('problem.detail.runners_admins_only'));
+    }
+
+    /** The agent configuration of bots (spec 10.4): accounts with `org.manage`. */
+    public function manageAgents(User $user): Response
+    {
+        return Visibility::can($user, Permission::OrgManage)
+            ? Response::allow()
+            : Response::deny(__('problem.detail.agents_admins_only'));
+    }
+
     public function viewSystem(User $user): Response
     {
         return $user->isPerson() && Visibility::can($user, Permission::OrgManage)

@@ -18,7 +18,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * The tokens of an account (the own ones, or a bot's for an org admin; `filter[user_id]` names it), the oldest first;
- * never their plain text.
+ * never their plain text, never the tokens of runs (they come and go with their runs, spec 11.2).
  */
 final class ListTokens
 {
@@ -46,7 +46,7 @@ final class ListTokens
         $owner = TokenOwner::of(is_array($filter) ? ($filter['user_id'] ?? null) : null, $actor);
         Authorize::check($actor, 'manageTokens', $owner);
 
-        [$query, $signature] = ListQuery::apply(PersonalAccessToken::query()->whereMorphedTo('tokenable', $owner), $input, self::spec());
+        [$query, $signature] = ListQuery::apply(PersonalAccessToken::query()->whereMorphedTo('tokenable', $owner)->whereNull('personal_access_tokens.agent_run_id'), $input, self::spec());
 
         return ListResult::of($query, PageArgs::from($input), $signature);
     }
