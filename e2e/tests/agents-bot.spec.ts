@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, createE2eRunner, pressMod, removeE2eRunner, runId, tabTo, tr, variant } from '../helpers';
+import { api, arrowTo, createE2eRunner, pressMod, removeE2eRunner, runId, tabTo, tr, variant } from '../helpers';
 
 // Bot → Agent and the steps of the agents in a workflow (WEBU-27, spec 7.4, 10.4) as the e2e person (Erik Ende, org
 // admin), in English, keyboard only. Each test makes what it changes over the API: a bot `E2E …` with Erik as its
@@ -50,9 +50,13 @@ test('sets up a bot as an agent with the keyboard: on, one runner as its pool, C
     await expect(page.getByText(label('settings.bot_agent.pool.chosen.one'))).toBeVisible();
 
     // Codex: the default model follows, and the page says so; the runner reports no CLI
-    const codex = page.getByRole('button', { name: 'Codex', exact: true });
-    await tabTo(page, codex);
+    // the segments are one tab stop (the pressed one); the arrows move between them
+    const clis = page.getByRole('group', { name: label('settings.bot_agent.cli.label'), exact: true });
+    await tabTo(page, clis.getByRole('button', { name: 'Claude Code', exact: true }));
+    const codex = clis.getByRole('button', { name: 'Codex', exact: true });
+    await arrowTo(page, codex, 'ArrowRight', 3);
     await page.keyboard.press('Enter');
+    await expect(codex).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByText(label('settings.bot_agent.models_adjusted.title'))).toBeVisible();
     await expect(page.getByText(label('settings.bot_agent.cli.missing', { cli: 'Codex' }))).toBeVisible();
 

@@ -235,13 +235,9 @@ function RepoRow({ repo }: { repo: GitHubRepository }) {
   );
 }
 
-function Connected({ github }: { github: GitHubStatus }) {
+function Connected({ github, onDisconnect }: { github: GitHubStatus; onDisconnect: (trigger: HTMLElement) => void }) {
   const settle = useSettle();
   const sync = useSyncGitHub();
-  const disconnect = useDisconnectGitHub();
-  const [asking, setAsking] = useState(false);
-  /** Where the focus goes when the question closes: back to „GitHub trennen“, after the disconnect to the page title. */
-  const afterDisconnect = useRef<HTMLElement | null>(null);
   const app = github.app!;
   const live = github.installations.filter((installation) => !installation.removed_at);
   const installed = live.some((installation) => !installation.suspended_at);
@@ -253,20 +249,6 @@ function Connected({ github }: { github: GitHubStatus }) {
         toast({ title: t('settings.github.sync.done'), description: tn('settings.github.sync.repos', count), tone: 'success' });
       },
       onError: (error) => notifyError(t('settings.github.sync.failed'), error, readAgain),
-    });
-  }
-
-  function run() {
-    settle(disconnect.mutateAsync(undefined), {
-      onSuccess: ({ canceled }) => {
-        afterDisconnect.current = document.getElementById(GITHUB_TITLE);
-        setAsking(false);
-        const hint = t('settings.github.disconnect.done_hint');
-        toast({ title: t('settings.github.disconnect.done'), description: canceled > 0 ? `${tn('settings.github.disconnect.canceled', canceled)} ${hint}` : hint, tone: 'success' });
-        // the view under the title changes: the title keeps the focus when the dialog gave it somewhere that went
-        focusWhenLost(() => document.getElementById(GITHUB_TITLE), 2000);
-      },
-      onError: (error) => notifyError(t('settings.github.disconnect.failed'), error, run),
     });
   }
 
@@ -326,32 +308,43 @@ function Connected({ github }: { github: GitHubStatus }) {
           <Button
             variant="secondary"
             icon={Unplug}
-            onClick={(event) => {
-              afterDisconnect.current = event.currentTarget;
-              setAsking(true);
-            }}
+            onClick={(event) => onDisconnect(event.currentTarget)}
           >
             {t('settings.github.disconnect.button')}
           </Button>
         </div>
       </Panel>
-      <AlertDialog
-        open={asking}
-        onOpenChange={setAsking}
-        title={t('settings.github.disconnect.question')}
-        description={t('settings.github.disconnect.consequence')}
-        confirmLabel={t('settings.github.disconnect.confirm')}
-        pending={disconnect.isPending}
-        finalFocus={afterDisconnect}
-        onConfirm={run}
-      />
     </>
   );
 }
 
+/**
+ * Disconnecting lives here and not in the connected view: that view goes as soon as the status is read anew, before the
+ * answer of the call comes back, and what the call says must still reach the person.
+ */
 export default function GitHub(_props: SectionProps) {
   const github = useGitHub();
   const connected = github.data?.app != null;
+  const settle = useSettle();
+  const disconnect = useDisconnectGitHub();
+  const [asking, setAsking] = useState(false);
+  /** Where the focus goes when the question closes: back to „GitHub trennen“, after the disconnect to the page title. */
+  const afterDisconnect = useRef<HTMLElement | null>(null);
+
+  function run() {
+    settle(disconnect.mutateAsync(undefined), {
+      onSuccess: ({ canceled }) => {
+        afterDisconnect.current = document.getElementById(GITHUB_TITLE);
+        setAsking(false);
+        const hint = t('settings.github.disconnect.done_hint');
+        toast({ title: t('settings.github.disconnect.done'), description: canceled > 0 ? `${tn('settings.github.disconnect.canceled', canceled)} ${hint}` : hint, tone: 'success' });
+        // the view under the title changes: the title keeps the focus when the dialog gave it somewhere that went
+        focusWhenLost(() => document.getElementById(GITHUB_TITLE), 2000);
+      },
+      onError: (error) => notifyError(t('settings.github.disconnect.failed'), error, run),
+    });
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <SectionHeader
@@ -367,8 +360,30 @@ export default function GitHub(_props: SectionProps) {
         }
       />
       <Loaded queries={[github]} keepData failure={t('settings.github.load_failed')} skeleton={<FormSkeleton label={t('settings.github.loading')} />}>
-        {() => (connected ? <Connected github={github.data!} /> : <Connect />)}
+        {() =>
+          connected ? (
+            <Connected
+              github={github.data!}
+              onDisconnect={(trigger) => {
+                afterDisconnect.current = trigger;
+                setAsking(true);
+              }}
+            />
+          ) : (
+            <Connect />
+          )
+        }
       </Loaded>
+      <AlertDialog
+        open={asking}
+        onOpenChange={setAsking}
+        title={t('settings.github.disconnect.question')}
+        description={t('settings.github.disconnect.consequence')}
+        confirmLabel={t('settings.github.disconnect.confirm')}
+        pending={disconnect.isPending}
+        finalFocus={afterDisconnect}
+        onConfirm={run}
+      />
     </div>
   );
 }

@@ -84,24 +84,11 @@ function RunItem({ id }: { id: string }) {
  * werkbuch detected a push of the app to the base branch that no merge of werkbuch explains (spec 11.3): every strand
  * of the project pauses until a project admin confirms; the strands then go on with a correction.
  */
-function MergeGuardBanner({ project, guard, canManage, unprotected }: { project: Project; guard: MergeGuard; canManage: boolean; unprotected: boolean }) {
-  const settle = useSettle();
-  const confirm = useConfirmMergeGuard();
+function MergeGuardBanner({ project, guard, canManage, unprotected, pending, onConfirm }: { project: Project; guard: MergeGuard; canManage: boolean; unprotected: boolean; pending: boolean; onConfirm: () => void }) {
   const zone = useOrgZone();
   const items = [...new Set(guard.runs.flatMap((run) => (run.item_id ? [run.item_id] : [])))];
   const branch = guard.branch ?? '';
   const sha = (guard.sha ?? '').slice(0, 7);
-
-  function run() {
-    settle(confirm.mutateAsync(project.id), {
-      onSuccess: () => {
-        toast({ title: t('settings.project.agents.guard.confirmed'), description: t('settings.project.agents.guard.confirmed_text'), tone: 'success' });
-        // the banner goes with the confirm: the focus moves to the heading of the first sheet under it
-        focusWhenLost(() => document.querySelector<HTMLElement>('[data-agents-form] [data-card-heading]'), 2000);
-      },
-      onError: (error) => notifyError(t('settings.project.agents.guard.not_confirmed'), error, run),
-    });
-  }
 
   return (
     <Banner
@@ -112,7 +99,7 @@ function MergeGuardBanner({ project, guard, canManage, unprotected }: { project:
       title={<span id="merge-guard-title">{t('settings.project.agents.guard.title', { identifier: project.identifier })}</span>}
       action={
         canManage ? (
-          <Button variant="secondary" size="sm" pending={confirm.isPending} onClick={run} aria-describedby="merge-guard-title" data-confirm-guard="">
+          <Button variant="secondary" size="sm" pending={pending} onClick={onConfirm} aria-describedby="merge-guard-title" data-confirm-guard="">
             {t('settings.project.agents.guard.confirm')}
           </Button>
         ) : undefined
@@ -174,6 +161,8 @@ type FormProps = ProjectSectionProps & { link: ProjectRepository | null; github:
 function AgentsForm({ project, canManage, readOnlyReason, link, github, workflow }: FormProps) {
   const form = useRef<HTMLFormElement>(null);
   const save = useSetProjectRepository();
+  const settle = useSettle();
+  const confirm = useConfirmMergeGuard();
   const { can } = usePermissions();
   const draft = useDraft(useMemo(() => fieldsOf(link), [link]));
   const problems = useFieldErrors(form);
@@ -185,6 +174,19 @@ function AgentsForm({ project, canManage, readOnlyReason, link, github, workflow
   const none = missingSteps(workflow.agent_states).length === AGENT_STEPS.length;
   const catalog = can('org.manage_catalog');
   const connected = github.app !== null;
+
+  // here and not in the banner: the banner goes before the answer of the call comes back (the repo is read anew
+  // first), and what the call says must still reach the person
+  function confirmGuard() {
+    settle(confirm.mutateAsync(project.id), {
+      onSuccess: () => {
+        toast({ title: t('settings.project.agents.guard.confirmed'), description: t('settings.project.agents.guard.confirmed_text'), tone: 'success' });
+        // the banner went with the confirm: the focus moves to the heading of the first sheet under it
+        focusWhenLost(() => document.querySelector<HTMLElement>('[data-agents-form] [data-card-heading]'), 2000);
+      },
+      onError: (error) => notifyError(t('settings.project.agents.guard.not_confirmed'), error, confirmGuard),
+    });
+  }
 
   function edit(patch: Partial<Fields>) {
     draft.set(patch);
@@ -239,7 +241,7 @@ function AgentsForm({ project, canManage, readOnlyReason, link, github, workflow
   return (
     <form ref={form} noValidate onSubmit={(event) => void submit(event)} data-agents-form="" className="flex flex-col gap-6">
       {canManage && <LeaveGuard dirty={draft.dirty} what={t('settings.project.agents.leave_what')} />}
-      {link?.guard && <MergeGuardBanner project={project} guard={link.guard} canManage={canManage} unprotected={link.protected === false} />}
+      {link?.guard && <MergeGuardBanner project={project} guard={link.guard} canManage={canManage} unprotected={link.protected === false} pending={confirm.isPending} onConfirm={confirmGuard} />}
       {!complete && (
         <Banner tone="info" title={t(none ? 'settings.project.agents.off.none' : 'settings.project.agents.off.some', { workflow: workflow.name })}>
           <Measure>

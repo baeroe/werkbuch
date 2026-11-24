@@ -175,7 +175,8 @@ test('disconnects GitHub with the keyboard', async ({ page }) => {
 
     await expect(page.getByText(label('settings.github.disconnect.done'), { exact: true })).toBeVisible();
     await expect(page.getByRole('region', { name: label('settings.github.connect.title') })).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2, name: label('settings.org.section.github') })).toBeFocused();
+    // exact: the question "Disconnect GitHub?" is a heading too while it fades out
+    await expect(page.getByRole('heading', { level: 2, name: label('settings.org.section.github'), exact: true })).toBeFocused();
     expect(await currentApp(page)).toBeNull();
   } finally {
     // gone with the disconnect; deleting what is gone does nothing
