@@ -228,6 +228,7 @@
     "field.admin_password.placeholder": "ADMIN_PASSWORD is still the placeholder change-me: choose your own password before the first start.",
     "field.agent_states.category": "The step “:step” needs a state of the category :categories.",
     "field.agent_states.invalid": "Name a state for each step of the agents.",
+    "field.agent_states.same": "In progress and in review need two different states.",
     "field.agent_states.step": "The agents have no such step.",
     "field.agent_states.unknown": "Choose a state of this workflow.",
     "field.arch.runner": "The architecture is one of :allowed.",

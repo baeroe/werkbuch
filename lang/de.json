@@ -228,6 +228,7 @@
     "field.admin_password.placeholder": "ADMIN_PASSWORD ist noch der Platzhalter change-me: wähle vor dem ersten Start ein eigenes Passwort.",
     "field.agent_states.category": "Der Schritt „:step“ braucht einen Status der Kategorie :categories.",
     "field.agent_states.invalid": "Nenne je Schritt der Agenten einen Status.",
+    "field.agent_states.same": "In Arbeit und In Review brauchen zwei verschiedene Status.",
     "field.agent_states.step": "Diesen Schritt der Agenten gibt es nicht.",
     "field.agent_states.unknown": "Wähle einen Status dieses Workflows.",
     "field.arch.runner": "Die Architektur ist eins von :allowed.",

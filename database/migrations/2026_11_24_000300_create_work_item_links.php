@@ -34,6 +34,8 @@ return new class extends Migration
             $table->char('review_sha', 40)->nullable();
             $table->timestamp('merged_at')->nullable();
             $table->timestamp('closed_at')->nullable();
+            // `updated_at` of the PR in the delivery the link holds: an older delivery writes no field
+            $table->timestamp('pr_updated_at')->nullable();
             $table->timestamps();
 
             $table->unique(['work_item_id', 'repository_github_id', 'number']);
@@ -56,6 +58,12 @@ return new class extends Migration
             $table->unique(['work_item_link_id', 'check_run_id']);
         });
 
+        // the repo a strand works in (WEBU-26 sets it): only a strand of the repo of the PR makes it an agent's
+        Schema::table('agent_threads', function (Blueprint $table) {
+            $table->unsignedBigInteger('repository_github_id')->nullable()->after('runner_id');
+            $table->index(['repository_github_id', 'pr_number']);
+        });
+
         Schema::create('github_pull_request_comments', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->unsignedBigInteger('repository_github_id');
@@ -71,6 +79,10 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('github_pull_request_comments');
+        Schema::table('agent_threads', function (Blueprint $table) {
+            $table->dropIndex(['repository_github_id', 'pr_number']);
+            $table->dropColumn('repository_github_id');
+        });
         Schema::dropIfExists('work_item_link_checks');
         Schema::dropIfExists('work_item_links');
     }

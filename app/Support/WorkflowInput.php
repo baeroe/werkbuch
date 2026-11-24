@@ -156,7 +156,7 @@ final class WorkflowInput
      * step left out of a sent object is empty); without `agent_states` (or `null`) the stored ones stay, a state that
      * goes hands its step to the state that takes over its items when that state fits the step, else the step is
      * empty. A step on a state of the wrong category is 422 at the step when it was sent, at the category of the state
-     * when it was kept.
+     * when it was kept. In progress and in review (both Started) need two states.
      *
      * @param  array{states: list<array{index: array-key, key: string, existing: ?string, category: StateCategory}>, state_mapping: array<array-key, mixed>, agent_states: ?array<array-key, mixed>}  $valid
      * @return array{working: ?string, review: ?string, correction: ?string, merged: ?string}
@@ -207,6 +207,11 @@ final class WorkflowInput
                 $state = is_string($target) ? ($byKey[$target] ?? null) : null;
                 $steps[$step->value] = $state !== null && $step->fits($state['category']) ? $state['key'] : null;
             }
+        }
+
+        // two steps of the same category on one state would make the agents' steps indistinguishable (A540)
+        if ($errors === [] && $steps['working'] !== null && $steps['working'] === $steps['review']) {
+            $errors['agent_states.review'] = [__('field.agent_states.same')];
         }
 
         if ($errors !== []) {

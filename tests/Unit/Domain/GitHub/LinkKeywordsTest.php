@@ -73,3 +73,34 @@ it('names its hits in the order they first appear', function () {
 
     expect(array_map(fn (KeywordHit $hit) => [$hit->number, $hit->kind], $hits))->toBe([[3, KeywordHit::LINKS], [1, KeywordHit::CLOSES], [2, KeywordHit::LINKS]]);
 });
+
+it('pairs inline code within a paragraph only and reads a fence in a list item', function () use ($read) {
+    // a backtick left open in one paragraph does not hide the next one
+    expect($read("A stray ` here.\n\nFixes WEBU-1 and `WEBU-2`"))->toBe([1 => KeywordHit::CLOSES])
+        ->and($read('``Fixes WEBU-3`` ` Fixes WEBU-4 ``` x'))->toBe([4 => KeywordHit::CLOSES])
+        ->and($read("- item\n      ```\n      Fixes WEBU-5\n      ```\n- Fixes WEBU-6"))->toBe([6 => KeywordHit::CLOSES])
+        // a backtick in the info string is no fence; a shorter closing fence closes nothing
+        ->and($read("``` a`b\nFixes WEBU-7"))->toBe([7 => KeywordHit::CLOSES])
+        ->and($read("````\nFixes WEBU-8\n```\nFixes WEBU-9\n````\nRefs WEBU-10"))->toBe([10 => KeywordHit::LINKS])
+        ->and($read('<!-- a --> Fixes WEBU-11 <!-- Fixes WEBU-12'))->toBe([11 => KeywordHit::CLOSES]);
+});
+
+it('reads a large body with many backticks and comments in linear time', function () use ($read) {
+    $body = str_repeat('a ` b `` c <!-- d --> ', 5_000)."\n\nFixes WEBU-13 ".str_repeat('x`', 5_000);
+    $started = hrtime(true);
+
+    expect(strlen($body))->toBeGreaterThan(65_000)
+        ->and($read($body))->toBe([13 => KeywordHit::CLOSES])
+        ->and((hrtime(true) - $started) / 1e9)->toBeLessThan(1.0);
+});
+
+it('fails loudly when PCRE gives up instead of reading an empty text', function () {
+    $limit = ini_get('pcre.backtrack_limit');
+    ini_set('pcre.backtrack_limit', '1');
+
+    try {
+        expect(fn () => LinkKeywords::parse(str_repeat('Fixes WEBU-1, ', 50), '', ['WEBU']))->toThrow(RuntimeException::class, 'Reading the words of a PR failed');
+    } finally {
+        ini_set('pcre.backtrack_limit', (string) $limit);
+    }
+});

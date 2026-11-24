@@ -96,8 +96,8 @@ it('records a change of the steps and clears one sent as null', function () use 
     $before = $workflow->agentStates();
     $ids = $workflow->states->pluck('id', 'name');
 
-    $saved = SaveWorkflow::run($actor, $workflow, [...WorkflowFixtures::inputOf($workflow), 'agent_states' => ['working' => $ids['In Progress'], 'review' => $ids['In Progress'], 'correction' => $ids['Backlog']]]);
-    $after = ['working' => $ids['In Progress'], 'review' => $ids['In Progress'], 'correction' => $ids['Backlog'], 'merged' => null];
+    $saved = SaveWorkflow::run($actor, $workflow, [...WorkflowFixtures::inputOf($workflow), 'agent_states' => ['working' => $ids['Pending'], 'review' => $ids['In Progress'], 'correction' => $ids['Backlog']]]);
+    $after = ['working' => $ids['Pending'], 'review' => $ids['In Progress'], 'correction' => $ids['Backlog'], 'merged' => null];
 
     expect($saved->agentStates())->toBe($after)
         ->and(eventsOf(EventType::WorkflowUpdated, $workflow)->sole()->changes)->toBe(['agent_states' => ['old' => $before, 'new' => $after]]);
@@ -151,7 +151,7 @@ it('refuses to change the category of a state a kept step names, at the state', 
 
     // sent along with steps that no longer name it, the change goes through
     $ids = $workflow->states->pluck('id', 'name');
-    $input['agent_states'] = ['working' => $ids['In Progress'], 'review' => $ids['In Progress'], 'correction' => $ids['Pending'], 'merged' => $ids['Done']];
+    $input['agent_states'] = ['working' => $ids['In Progress'], 'review' => null, 'correction' => $ids['Pending'], 'merged' => $ids['Done']];
 
     expect(SaveWorkflow::run($actor, $workflow, $input)->agentStates()['correction'])->toBe($ids['Pending']);
 });
@@ -164,4 +164,22 @@ it('never lets the steps of one workflow name a state of another', function () u
 
     expect($errorsOf(fn () => SaveWorkflow::run($actor, null, [...WorkflowFixtures::standardInput('Fremd'), 'agent_states' => ['correction' => $other]])))
         ->toBe(['agent_states.correction' => [__('field.agent_states.unknown')]]);
+});
+
+it('wants two states for in progress and in review, sent or kept', function () use ($steps, $errorsOf) {
+    $actor = actor(User::factory()->admin()->create());
+    $same = [...WorkflowFixtures::standardInput('Gleich'), 'agent_states' => $steps('std_progress', 'std_progress', 'std_todo', 'std_done')];
+
+    expect($errorsOf(fn () => SaveWorkflow::run($actor, null, $same)))->toBe(['agent_states.review' => [__('field.agent_states.same')]]);
+
+    // both states go to the same one: the steps would be one
+    $workflow = SaveWorkflow::run($actor, null, [...WorkflowFixtures::standardInput('Zusammen'), 'agent_states' => $steps('std_progress', 'std_pending', 'std_todo', 'std_done')]);
+    $ids = $workflow->states->pluck('id', 'name');
+    $input = WorkflowFixtures::inputOf($workflow);
+    unset($input['agent_states']);
+    $input['states'] = array_values(array_filter($input['states'], fn (array $state) => ! in_array($state['name'], ['In Progress', 'Pending'], true)));
+    $input['states'][] = ['id' => 'new_doing', 'name' => 'Doing', 'icon' => 'half', 'category' => 'started'];
+    $input['state_mapping'] = [$ids['In Progress'] => 'new_doing', $ids['Pending'] => 'new_doing'];
+
+    expect($errorsOf(fn () => SaveWorkflow::run($actor, $workflow, $input)))->toBe(['agent_states.review' => [__('field.agent_states.same')]]);
 });

@@ -17,7 +17,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * The comment of werkbuch at a PR of a person (spec 12): one per PR, naming its items (key with a link into werkbuch,
  * whether the PR closes it), in the language of the organization, written by the app. A second call writes only when
  * the text changed: the first one at a PR creates the comment, later ones change it (a comment someone deleted is
- * written anew). Keys only, no titles: the readers of a repo need not be readers of the project (A545). No comment at
+ * written anew). Only items of the project the repo belongs to now. Keys only, no titles: the readers of a repo need not be readers of the project (A545). No comment at
  * a PR of an agent (spec 7.1: a run writes no comment). The token may comment and nothing more. HTTP happens outside of
  * any transaction; the job (PostPullRequestComment) runs one call per PR at a time. Answers `posted`, `updated`,
  * `unchanged` or `skipped`.
@@ -38,7 +38,9 @@ final class PostLinkback
     {
         $repo = ProjectRepository::query()->with('repository.installation')
             ->whereHas('repository', fn ($query) => $query->where('github_id', $repositoryGithubId))->first();
-        $links = WorkItemLink::query()->with('workItem.project')->where('repository_github_id', $repositoryGithubId)->where('number', $number)->get()
+        // only the items of the project the repo belongs to now (a former project keeps its links, the comment names none)
+        $links = WorkItemLink::query()->with('workItem.project')->where('repository_github_id', $repositoryGithubId)->where('number', $number)
+            ->whereHas('workItem', fn ($query) => $query->where('project_id', $repo?->project_id))->get()
             ->sortBy(fn (WorkItemLink $link) => [$link->workItem->number])->values();
         $row = GitHubPullRequestComment::query()->where('repository_github_id', $repositoryGithubId)->where('number', $number)->first();
         $agent = $links->contains(fn (WorkItemLink $link) => AgentPullRequests::isAgent(null, $link->author) || $link->thread_id !== null);

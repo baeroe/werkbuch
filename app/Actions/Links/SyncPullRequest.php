@@ -43,7 +43,13 @@ use RuntimeException;
  * each of its items in a Backlog or Unstarted state to „In Review“; a draft sets off nothing. A PR merged into the base
  * branch of the project moves the items it closes to „Gemergt“, unless another PR (a draft too) is still open at the
  * item; closed items stay. A move the workflow does not allow leaves the state and says so in a comment at the item. The
- * moves are the default bot's (`Actor::automation('pr_link')`, A543). An archived item or project moves nothing.
+ * moves are the default bot's (`Actor::automation('pr_link')`, A543). An archived item or project moves nothing. A PR
+ * closed without a merge lets an item it was holding back go to „Gemergt“ when another PR merged and closed it before.
+ *
+ * Order (A550): GitHub sends out of order and again; a delivery whose `updated_at` is older than what the links of the
+ * PR hold writes no field (it only names items, a new link takes the PR as the newest delivery told it), and a merged
+ * PR stays merged. Only links to items of the project the repo belongs to now count: a former project keeps its links
+ * untouched.
  *
  * PRs of agents (AgentPullRequests: the app opened them, or a strand has them) are linked as any other, with their
  * strand; what they set off is the flow's (WEBU-26), which takes them where this answers `agent`. The comment at a PR of
@@ -74,7 +80,7 @@ final class SyncPullRequest
         /** @var list<string> $identifiers */
         $identifiers = [$link->project->identifier, ...$link->project->identifiers->pluck('identifier')->all()];
         $hits = LinkKeywords::parse($pr['title']."\n\n".$pr['body'], $pr['head_branch'], $identifiers);
-        $thread = AgentPullRequests::threadOf($link->project_id, $pr['number'], $pr['head_branch']);
+        $thread = AgentPullRequests::threadOf($link->project_id, $pr['repository_github_id'], $pr['number'], $pr['head_branch']);
         $agent = AgentPullRequests::isAgent($thread, $pr['author']);
         $pr['thread_id'] = $thread?->id;
 
@@ -92,7 +98,7 @@ final class SyncPullRequest
     }
 
     /**
-     * @param  array{repository_github_id: int, repository: string, number: int, title: string, body: string, url: string, state: string, draft: bool, head_branch: string, base_branch: string, head_sha: string, author: string, merged_at: ?Carbon, closed_at: ?Carbon, thread_id: ?string}  $pr
+     * @param  array{repository_github_id: int, repository: string, number: int, title: string, body: string, url: string, state: string, draft: bool, head_branch: string, base_branch: string, head_sha: string, author: string, merged_at: ?Carbon, closed_at: ?Carbon, pr_updated_at: ?Carbon, thread_id: ?string}  $pr
      * @param  list<KeywordHit>  $hits
      * @return list<array{item: WorkItem, from: string, to: string}>|null the moves the workflow refused, null for a project that is gone
      */
@@ -110,21 +116,30 @@ final class SyncPullRequest
         $numbers = array_map(fn (KeywordHit $hit) => $hit->number, $hits);
         $kinds = array_combine($numbers, array_map(fn (KeywordHit $hit) => $hit->kind, $hits));
         $named = WorkItem::query()->where('project_id', $project->id)->whereIn('number', $numbers)->pluck('id', 'number')->all();
-        $linked = WorkItemLink::query()->where('repository_github_id', $pr['repository_github_id'])->where('number', $pr['number'])->pluck('work_item_id')->all();
+        // only links to items of this project: the repo may have belonged to another project before, whose links stay
+        // as they are and never move with this one (nor show in its comment)
+        $ofProject = WorkItem::query()->select('id')->where('project_id', $project->id);
+        $linked = WorkItemLink::query()->where('repository_github_id', $pr['repository_github_id'])->where('number', $pr['number'])
+            ->whereIn('work_item_id', $ofProject)->pluck('work_item_id')->all();
 
         // the items first, in the order of their IDs, as every change of an item locks them; then the links of the PR
         $items = WorkItem::query()->whereKey(array_unique([...array_values($named), ...$linked]))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
         $links = WorkItemLink::query()->where('repository_github_id', $pr['repository_github_id'])->where('number', $pr['number'])
-            ->lockForUpdate()->get()->keyBy('work_item_id');
+            ->whereIn('work_item_id', $items->modelKeys())->lockForUpdate()->get()->keyBy('work_item_id');
         $kindOf = [];
         foreach ($named as $number => $itemId) {
             $kindOf[$itemId] = $kinds[$number];
         }
 
-        $fields = array_diff_key($pr, ['body' => true]);
-        $fields['kind'] = WorkItemLink::PULL_REQUEST;
+        // a delivery older than what the links hold (GitHub sends out of order, and again) writes no field: it only
+        // names items; a new link then takes the PR as the newest delivery told it. Merged is the end of a PR.
+        $newest = $links->sortByDesc(fn (WorkItemLink $link) => $link->pr_updated_at?->getTimestamp() ?? 0)->first();
+        $stale = $newest?->pr_updated_at !== null && $pr['pr_updated_at'] !== null && $pr['pr_updated_at']->lt($newest->pr_updated_at);
+        $fields = $stale ? self::fieldsOf($newest) : [...array_diff_key($pr, ['body' => true]), 'kind' => WorkItemLink::PULL_REQUEST];
+        $events = $actor->withReason(self::REASON);
         $review = [];
         $merged = [];
+        $released = [];
         $changed = false;
 
         foreach ($items as $item) {
@@ -134,7 +149,7 @@ final class SyncPullRequest
             if ($kind === KeywordHit::SKIP) {
                 if ($existing !== null) {
                     $existing->delete();
-                    EventRecorder::record(EventType::WorkItemLinkRemoved, $actor, $item, $project, ['pull_request' => ['old' => self::snapshot($existing), 'new' => null]]);
+                    EventRecorder::record(EventType::WorkItemLinkRemoved, $events, $item, $project, ['pull_request' => ['old' => self::snapshot($existing), 'new' => null]]);
                     $changed = true;
                 }
 
@@ -143,31 +158,36 @@ final class SyncPullRequest
 
             if ($existing === null) {
                 $added = WorkItemLink::query()->create([...$fields, 'work_item_id' => $item->id, 'closes' => $kind === KeywordHit::CLOSES]);
-                EventRecorder::record(EventType::WorkItemLinkAdded, $actor, $item, $project, ['pull_request' => ['old' => null, 'new' => self::snapshot($added)]]);
+                EventRecorder::record(EventType::WorkItemLinkAdded, $events, $item, $project, ['pull_request' => ['old' => null, 'new' => self::snapshot($added)]]);
                 $changed = true;
                 $review[$item->id] = $added->active();
-                $merged[$item->id] = $added->state === WorkItemLink::MERGED && $added->closes;
+                $merged[$item->id] = $added->state === WorkItemLink::MERGED && $added->closes && $added->base_branch === $repo->base_branch;
 
                 continue;
             }
 
             $before = self::snapshot($existing);
             $wasActive = $existing->active();
+            $wasOpen = $existing->open();
             $wasMerged = $existing->state === WorkItemLink::MERGED;
             $closes = $kind === null ? $existing->closes : $kind === KeywordHit::CLOSES;
             $changed = $changed || $closes !== $existing->closes;
 
-            if ($existing->head_sha !== $pr['head_sha']) {
+            if (! $stale && $existing->head_sha !== $pr['head_sha']) {
                 // a push: the checks of the commit before no longer say anything about the PR
                 WorkItemLinkCheck::query()->where('work_item_link_id', $existing->id)->delete();
             }
 
-            $existing->fill([...$fields, 'closes' => $closes])->save();
+            // a merged PR stays merged, whatever a later delivery says of its state
+            $kept = $wasMerged ? $existing->only(['state', 'draft', 'merged_at', 'closed_at']) : [];
+            $existing->fill([...($stale ? [] : $fields), ...$kept, 'closes' => $closes])->save();
             $review[$item->id] = ! $wasActive && $existing->active();
-            $merged[$item->id] = ! $wasMerged && $existing->state === WorkItemLink::MERGED && $existing->closes;
+            $merged[$item->id] = ! $wasMerged && $existing->state === WorkItemLink::MERGED && $existing->closes && $existing->base_branch === $repo->base_branch;
+            // closed without a merge: a PR merged before may now merge the item it closes (no other PR open any more)
+            $released[$item->id] = $wasOpen && $existing->state === WorkItemLink::CLOSED;
 
             if (! $wasMerged && $existing->state === WorkItemLink::MERGED) {
-                EventRecorder::record(EventType::WorkItemLinkMerged, $actor, $item, $project, ['pull_request' => ['old' => $before, 'new' => self::snapshot($existing)]]);
+                EventRecorder::record(EventType::WorkItemLinkMerged, $events, $item, $project, ['pull_request' => ['old' => $before, 'new' => self::snapshot($existing)]]);
             }
         }
 
@@ -180,11 +200,16 @@ final class SyncPullRequest
             return [];
         }
 
+        foreach ($items as $item) {
+            $merged[$item->id] = ($merged[$item->id] ?? false) || (($released[$item->id] ?? false) && WorkItemLink::query()
+                ->where('work_item_id', $item->id)->where('state', WorkItemLink::MERGED)->where('closes', true)->where('base_branch', $repo->base_branch)->exists());
+        }
+
         $refused = [];
         $mover = Actor::automation(self::REASON);
         foreach ($items as $item) {
             $step = match (true) {
-                ($merged[$item->id] ?? false) && $pr['base_branch'] === $repo->base_branch => AgentStep::Merged,
+                $merged[$item->id] => AgentStep::Merged,
                 $review[$item->id] ?? false => AgentStep::Review,
                 default => null,
             };
@@ -255,6 +280,16 @@ final class SyncPullRequest
     }
 
     /**
+     * The fields of the PR as a link holds them: what a new link of a delivery older than the links takes.
+     *
+     * @return array<string, mixed>
+     */
+    private static function fieldsOf(WorkItemLink $link): array
+    {
+        return $link->only(['kind', 'repository_github_id', 'repository', 'number', 'title', 'url', 'state', 'draft', 'head_branch', 'base_branch', 'head_sha', 'author', 'thread_id', 'merged_at', 'closed_at', 'pr_updated_at']);
+    }
+
+    /**
      * What an event tells of a link.
      *
      * @return array{repository: string, number: int, title: string, url: string, state: string, draft: bool, closes: bool}
@@ -271,7 +306,7 @@ final class SyncPullRequest
      * The PR of a delivery as a link holds it, null for a payload that is not one.
      *
      * @param  array<array-key, mixed>  $payload
-     * @return array{repository_github_id: int, repository: string, number: int, title: string, body: string, url: string, state: string, draft: bool, head_branch: string, base_branch: string, head_sha: string, author: string, merged_at: ?Carbon, closed_at: ?Carbon}|null
+     * @return array{repository_github_id: int, repository: string, number: int, title: string, body: string, url: string, state: string, draft: bool, head_branch: string, base_branch: string, head_sha: string, author: string, merged_at: ?Carbon, closed_at: ?Carbon, pr_updated_at: ?Carbon}|null
      */
     private static function read(array $payload): ?array
     {
@@ -305,6 +340,7 @@ final class SyncPullRequest
             'author' => mb_substr(is_string($user['login'] ?? null) ? $user['login'] : '', 0, 100),
             'merged_at' => $merged ? $stamp($pr['merged_at'] ?? null) : null,
             'closed_at' => $stamp($pr['closed_at'] ?? null),
+            'pr_updated_at' => $stamp($pr['updated_at'] ?? null),
         ];
     }
 }

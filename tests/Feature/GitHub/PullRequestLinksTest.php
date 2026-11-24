@@ -8,10 +8,12 @@ use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Models\AgentThread;
 use App\Models\Comment;
+use App\Models\Event;
 use App\Models\GitHubDelivery;
 use App\Models\Notification;
 use App\Models\Project;
 use App\Models\ProjectIdentifier;
+use App\Models\ProjectRepository;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItem;
@@ -214,13 +216,26 @@ it('leaves a check suite to the flow', function () {
 it('links a PR of an agent with its strand and leaves what it sets off to the flow', function () use ($item, $deliver, $stateOf) {
     $a = $item($this, 'Todo');
     $b = $item($this, 'Todo');
-    $thread = AgentThread::factory()->create(['project_id' => $this->project->id, 'work_item_id' => $b->id, 'branch' => "agent/WEBU-{$b->number}-thing"]);
+    $c = $item($this, 'Todo');
+    $strand = ['project_id' => $this->project->id, 'repository_github_id' => 700_000_001];
+    $thread = AgentThread::factory()->create([...$strand, 'work_item_id' => $b->id, 'branch' => "agent/WEBU-{$b->number}-thing"]);
+    // by its number before a branch, and only open or paused strands of the repo of the PR
+    $numbered = AgentThread::factory()->create([...$strand, 'work_item_id' => $b->id, 'branch' => 'agent/other', 'pr_number' => 19, 'status' => AgentThread::PAUSED]);
+    AgentThread::factory()->create([...$strand, 'work_item_id' => $c->id, 'branch' => 'agent/closed', 'status' => AgentThread::MERGED]);
+    AgentThread::factory()->create([...$strand, 'repository_github_id' => 700_000_099, 'work_item_id' => $c->id, 'branch' => 'agent/elsewhere']);
 
     expect($deliver($this, 'opened', 18, ['author' => 'feldwerk-werkbuch[bot]', 'body' => "Fixes WEBU-{$a->number}"]))->toBe('agent')
         ->and($deliver($this, 'opened', 19, ['body' => "Fixes WEBU-{$b->number}", 'head' => ['ref' => "agent/WEBU-{$b->number}-thing", 'sha' => str_repeat('d', 40)]]))->toBe('agent')
+        ->and($deliver($this, 'opened', 20, ['body' => "Fixes WEBU-{$b->number}", 'head' => ['ref' => "agent/WEBU-{$b->number}-thing", 'sha' => str_repeat('d', 40)]]))->toBe('agent')
         ->and([$stateOf($this, $a), $stateOf($this, $b)])->toBe(['Todo', 'Todo'])
-        ->and(WorkItemLink::query()->where('number', 19)->value('thread_id'))->toBe($thread->id)
+        ->and(WorkItemLink::query()->where('number', 19)->value('thread_id'))->toBe($numbered->id)
+        ->and(WorkItemLink::query()->where('number', 20)->value('thread_id'))->toBe($thread->id)
         ->and($this->github->comments)->toBe([]);
+
+    // a merged strand and a strand of another repo make no PR an agent's
+    expect($deliver($this, 'opened', 21, ['body' => "Fixes WEBU-{$c->number}", 'head' => ['ref' => 'agent/closed', 'sha' => str_repeat('d', 40)]]))->toBe('linked')
+        ->and($deliver($this, 'opened', 22, ['body' => "Refs WEBU-{$c->number}", 'head' => ['ref' => 'agent/elsewhere', 'sha' => str_repeat('d', 40)]]))->toBe('linked')
+        ->and($stateOf($this, $c))->toBe('Pending');
 });
 
 it('ignores a PR of a repo of no project and a project in deletion', function () use ($item, $deliver) {
@@ -277,4 +292,71 @@ it('answers the links of an item with their checks over REST and MCP', function 
     $mcp = McpClient::for($this, apiToken($mara, ['read', 'mcp']));
     $answer = $mcp->call('work-items', ['action' => 'get', 'item' => "WEBU-{$a->number}", 'include' => ['links']]);
     expect($answer['structuredContent']['data']['links'][0]['number'])->toBe(24);
+});
+
+it('keeps the newer state of a PR when deliveries come out of order or again', function () use ($item, $deliver, $stateOf) {
+    $a = $item($this, 'Todo');
+    $b = $item($this, 'Todo');
+    $merged = ['state' => 'closed', 'merged' => true, 'merged_at' => '2026-11-24T10:00:00Z', 'updated_at' => '2026-11-24T10:00:00Z', 'body' => "Fixes WEBU-{$a->number}"];
+
+    // closed before opened: the late opened changes nothing, the item is merged once
+    $deliver($this, 'closed', 31, $merged);
+    $deliver($this, 'opened', 31, ['updated_at' => '2026-11-24T09:00:00Z', 'title' => 'Old title', 'body' => "Fixes WEBU-{$a->number}"]);
+    $deliver($this, 'closed', 31, $merged);
+
+    expect(WorkItemLink::query()->where('number', 31)->sole()->only(['state', 'title']))->toBe(['state' => 'merged', 'title' => 'Change things'])
+        ->and($stateOf($this, $a))->toBe('Done')
+        ->and(eventsOf(EventType::WorkItemStateChanged, $a))->toHaveCount(1)
+        ->and(eventsOf(EventType::WorkItemLinkMerged, $a))->toHaveCount(0)
+        ->and(eventsOf(EventType::WorkItemLinkAdded, $a))->toHaveCount(1);
+
+    // ready after a close without merge: the late ready does not open the PR again, but a newer reopen does
+    $deliver($this, 'opened', 32, ['draft' => true, 'updated_at' => '2026-11-24T09:00:00Z', 'body' => "Refs WEBU-{$b->number}"]);
+    $deliver($this, 'closed', 32, ['state' => 'closed', 'closed_at' => '2026-11-24T10:00:00Z', 'updated_at' => '2026-11-24T10:00:00Z', 'draft' => true, 'body' => "Refs WEBU-{$b->number}"]);
+    $deliver($this, 'ready_for_review', 32, ['updated_at' => '2026-11-24T09:30:00Z', 'body' => "Refs WEBU-{$b->number}"]);
+    expect(WorkItemLink::query()->where('number', 32)->value('state'))->toBe('closed')->and($stateOf($this, $b))->toBe('Todo');
+
+    // an old delivery still names items: a new link takes the PR as the newest delivery told it
+    $c = $item($this, 'Todo');
+    $deliver($this, 'edited', 32, ['updated_at' => '2026-11-24T09:45:00Z', 'body' => "Refs WEBU-{$b->number} and WEBU-{$c->number}"]);
+    expect(WorkItemLink::query()->where('work_item_id', $c->id)->value('state'))->toBe('closed');
+
+    $deliver($this, 'reopened', 32, ['updated_at' => '2026-11-24T11:00:00Z', 'body' => "Refs WEBU-{$b->number}"]);
+    expect(WorkItemLink::query()->where('number', 32)->where('work_item_id', $b->id)->value('state'))->toBe('open')->and($stateOf($this, $b))->toBe('Pending');
+});
+
+it('never moves or records links of a project the repo belonged to before', function () use ($item, $deliver, $stateOf) {
+    $a = $item($this, 'Todo');
+    $deliver($this, 'opened', 33, ['draft' => true, 'body' => "Fixes WEBU-{$a->number}"]);
+
+    // the repo moves to another project with a workflow without steps
+    ProjectRepository::query()->where('project_id', $this->project->id)->update(['project_id' => ($other = Project::factory()->create(['identifier' => 'NEU']))->id]);
+    $neu = WorkItem::factory()->for($other)->create();
+    $last = Event::query()->max('id');
+
+    $deliver($this, 'ready_for_review', 33, ['body' => "Fixes WEBU-{$a->number} and NEU-{$neu->number}"]);
+    $deliver($this, 'closed', 33, ['state' => 'closed', 'merged' => true, 'merged_at' => '2026-11-24T12:00:00Z', 'body' => "Fixes WEBU-{$a->number} and NEU-{$neu->number}"]);
+
+    expect($stateOf($this, $a))->toBe('Todo')
+        ->and(WorkItemLink::query()->where('work_item_id', $a->id)->sole()->only(['state', 'draft']))->toBe(['state' => 'open', 'draft' => true])
+        ->and(Event::query()->where('id', '>', $last)->where('subject_id', $a->id)->exists())->toBeFalse()
+        ->and(WorkItemLink::query()->where('work_item_id', $neu->id)->value('state'))->toBe('merged')
+        ->and(collect($this->github->comments)->last()['body'])->toContain("NEU-{$neu->number}")->not->toContain("WEBU-{$a->number}");
+});
+
+it('merges an item when the PR that held it back closes without a merge', function () use ($item, $deliver, $stateOf) {
+    $a = $item($this, 'In Progress');
+    $deliver($this, 'opened', 34, ['draft' => true, 'body' => "Fixes WEBU-{$a->number}"]);
+    $deliver($this, 'opened', 35, ['body' => "Fixes WEBU-{$a->number}"]);
+    $deliver($this, 'closed', 35, ['state' => 'closed', 'merged' => true, 'merged_at' => '2026-11-24T10:00:00Z', 'body' => "Fixes WEBU-{$a->number}"]);
+    expect($stateOf($this, $a))->toBe('In Progress');
+
+    $deliver($this, 'closed', 34, ['state' => 'closed', 'draft' => true, 'closed_at' => '2026-11-24T11:00:00Z', 'body' => "Fixes WEBU-{$a->number}"]);
+    expect($stateOf($this, $a))->toBe('Done');
+
+    // a PR closed without a merge where nothing merged before leaves the item
+    $b = $item($this, 'In Progress');
+    $deliver($this, 'opened', 36, ['body' => "Fixes WEBU-{$b->number}"]);
+    $deliver($this, 'closed', 36, ['state' => 'closed', 'closed_at' => '2026-11-24T11:00:00Z', 'body' => "Fixes WEBU-{$b->number}"]);
+    expect($stateOf($this, $b))->toBe('In Progress');
 });
