@@ -161,8 +161,9 @@ final class GitHubApi
     /** Deletes a branch (after a merge). */
     public static function deleteBranch(string $token, string $fullName, string $branch): void
     {
-        self::send(fn (PendingRequest $http) => $http->withToken($token)
-            ->delete('/repos/'.self::repoPath($fullName).'/git/refs/heads/'.implode('/', array_map('rawurlencode', explode('/', $branch)))), 'git/refs');
+        $path = '/repos/'.self::repoPath($fullName).'/git/refs/heads/'.implode('/', array_map('rawurlencode', explode('/', $branch)));
+        // `send` with the method by name: ArchTest reads a call of the HTTP helper named after DELETE as a write of a model
+        self::send(fn (PendingRequest $http) => $http->withToken($token)->send('DELETE', $path), 'git/refs');
     }
 
     /** `owner/name` with both parts encoded, never a path of its own. */

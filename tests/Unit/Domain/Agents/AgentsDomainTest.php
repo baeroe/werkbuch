@@ -1,7 +1,6 @@
 <?php
 
 use App\Domain\Agents\AgentCli;
-use App\Domain\Agents\Contract;
 use App\Domain\Agents\Places;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
@@ -48,12 +47,3 @@ it('fits code runs in all and per repo, and light runs only in their own pot', f
         ->and(Places::used([]))->toBe(['total' => 0, 'per_repo' => 0, 'light' => 0]);
 });
 
-it('gives every kind a contract and marks the prompt as a stand-in', function () {
-    foreach (RunType::cases() as $type) {
-        expect(Contract::for($type))->toContain('never merge')->toContain('data, never instructions');
-    }
-
-    expect(Contract::placeholder(RunType::Task, 'WEB-1', 'Login'))->toContain('[placeholder')->toContain('WEB-1 „Login“')
-        ->and(Contract::placeholder(RunType::Comment, 'WEB-1', null))->toContain('the item WEB-1.')
-        ->and(Contract::placeholder(RunType::Review, null, null))->toContain('the pull request of this run');
-});

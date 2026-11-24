@@ -1,5 +1,6 @@
 <?php
 
+use App\Agents\AgentConsumer;
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
 use App\Actions\Comments\AddComment;
@@ -59,7 +60,7 @@ it('is a consumer of every event, in the queue notifications, with the tries of 
     $consumer = new NotificationConsumer;
 
     expect(config('werkbuch.event_consumers'))->toBe([])        // off in tests until a test switches it on (K2)
-        ->and(require repo_path('config/werkbuch.php'))->toHaveKey('event_consumers', [SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class])
+        ->and(require repo_path('config/werkbuch.php'))->toHaveKey('event_consumers', [SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class, AgentConsumer::class])
         ->and($consumer->key())->toBe('notifications')
         ->and($consumer->queue())->toBe('notifications')
         ->and($consumer->tries())->toBe(8)

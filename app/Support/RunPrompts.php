@@ -41,18 +41,19 @@ final class RunPrompts
         $subject = $item === null ? 'no item' : "the item {$item->key} ".self::title($item);
         $project = $run->project->identifier;
         $context = $run->context;
+        $say = fn (string $key, string $otherwise) => is_string($context[$key] ?? null) ? $context[$key] : $otherwise;
 
         return match ($run->type) {
             RunType::Task => "Run `task` for {$subject} of the project {$project}.\n\n".self::where($thread).self::epic($thread, $item),
             RunType::Correction => "Run `correction` for {$subject} of the project {$project}.\n\n".self::where($thread)
-                ."Findings to work through (from {$context['source']}):\n\n".RunPrompt::quote((string) $context['findings']),
+                ."Findings to work through (from {$say('source', 'werkbuch')}):\n\n".RunPrompt::quote($say('findings', 'Look at the item and the pull request again.')),
             RunType::Conflict => "Run `conflict` for {$subject} of the project {$project}.\n\n".self::where($thread)
                 ."The pull request has conflicts with its base branch `{$thread?->base_branch}`: merge it into your branch, resolve them and push.",
-            RunType::Review => "Run `review` of the pull request #{$run->pr_number} of `{$context['repository']}` at the commit `{$run->head_sha}` (base branch `{$context['base_branch']}`).\n\n"
+            RunType::Review => "Run `review` of the pull request #{$run->pr_number} of `{$say('repository', 'the repository')}` at the commit `{$run->head_sha}` (base branch `{$say('base_branch', $thread?->base_branch ?? 'main')}`).\n\n"
                 .($item === null ? 'It names no item of the project.' : "Its item is {$item->key} ".self::title($item).'; read it with `werkbuch-run`.')
                 ."\n\nRead the pull request with `gh pr view {$run->pr_number}` and `gh pr diff {$run->pr_number}` in the worktree you are given (checked out at that commit).",
-            RunType::Comment => "Run `comment` at {$subject} of the project {$project}.\n\n{$context['author']} asked you in a comment:\n\n"
-                .RunPrompt::quote((string) $context['question'])."\n\nAnswer the question. werkbuch posts your answer as your comment at the item.",
+            RunType::Comment => "Run `comment` at {$subject} of the project {$project}.\n\n{$say('author', 'Someone')} asked you in a comment:\n\n"
+                .RunPrompt::quote($say('question', ''))."\n\nAnswer the question. werkbuch posts your answer as your comment at the item.",
         };
     }
 

@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use Illuminate\Support\Facades\DB;
+use App\Support\RunPrompts;
 use Tests\Support\AgentWorld;
 
 /*
@@ -64,9 +65,11 @@ it('hands a queued run with everything the runner needs and starts it', function
         'thread' => ['id' => $thread->id, 'branch' => "agent/{$item->key}-login-mit-passkey", 'base_branch' => 'main', 'worktree' => null, 'session_id' => null],
         'head_sha' => null, 'setup_command' => null, 'teardown_command' => null, 'git' => null,
         'commit_identity' => ['name' => 'Kira', 'email' => $this->agent->handle.'@users.noreply.'.parse_url(config('app.url'), PHP_URL_HOST)],
-        'system_prompt' => Contract::for(RunType::Task),
-        'prompt' => Contract::placeholder(RunType::Task, $item->key, 'Login mit Passkey'),
+        'system_prompt' => RunPrompts::for($run)['system_prompt'],
+        'prompt' => RunPrompts::for($run)['prompt'],
     ])
+        ->and($answer['run']['system_prompt'])->toStartWith("# Contract\n\n".Contract::for(RunType::Task))
+        ->and($answer['run']['prompt'])->toContain("Run `task` for the item {$item->key} „Login mit Passkey“")
         ->and($answer['run']['werkbuch'])->toMatchArray(['mcp_url' => url('/mcp'), 'server_name' => 'werkbuch-run'])
         ->and(PersonalAccessToken::findToken($plain)?->agent_run_id)->toBe($run->id)
         ->and($answer['places']['used'])->toBe(['total' => 1, 'per_repo' => 1, 'light' => 0])
@@ -89,7 +92,7 @@ it('gives a review no strand and takes the models of the agent', function () use
     $answer = $claim($token)->assertOk()->json('run');
 
     expect($answer)->toMatchArray(['id' => $review->id, 'type' => 'review', 'model' => 'haiku', 'model_source' => 'bot', 'item' => null, 'thread' => null, 'head_sha' => 'abc1234', 'timeout_minutes' => 20])
-        ->and($answer['prompt'])->toBe(Contract::placeholder(RunType::Review, null, null))
+        ->and($answer['prompt'])->toContain('It names no item of the project.')
         ->and($review->fresh()->context)->toBe(['pr' => 12])
         ->and(PersonalAccessToken::findToken($answer['werkbuch']['token'])?->abilities)->toBe(['read', 'mcp']);
 });

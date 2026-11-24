@@ -276,7 +276,7 @@ it('lets a client send every key the document names', function () use ($bodies, 
     $effort = Property::query()->where('key', 'effort')->firstOrFail();
 
     // catalogs: create with every key, then take the answer back with a PUT
-    $label = $this->postJson('/api/v1/labels', ['name' => 'Docs', 'color' => 'sky'])->assertCreated()->json('data');
+    $label = $this->postJson('/api/v1/labels', ['name' => 'Docs', 'color' => 'sky', 'agent_model' => 'claude:haiku'])->assertCreated()->json('data');
     $this->putJson("/api/v1/labels/{$label['id']}", $label)->assertOk();
     $relation = $this->postJson('/api/v1/relation-types', ['name' => 'Fixes', 'outward_label' => 'fixes', 'inward_label' => 'is fixed by'])->assertCreated()->json('data');
     $this->putJson("/api/v1/relation-types/{$relation['id']}", $relation)->assertOk();
@@ -293,7 +293,7 @@ it('lets a client send every key the document names', function () use ($bodies, 
     ])->assertOk();
 
     $type = $this->postJson('/api/v1/work-item-types', [
-        'name' => 'Idea', 'icon' => 'lightbulb', 'tone' => 'plum', 'description' => 'A thought.', 'is_epic' => false, 'archived_at' => null,
+        'name' => 'Idea', 'icon' => 'lightbulb', 'tone' => 'plum', 'description' => 'A thought.', 'agent_guidance' => 'Write it down first.', 'is_epic' => false, 'archived_at' => null,
         'properties' => [['property_id' => $property['id'], 'required' => true]],
     ])->assertCreated()->json('data');
     $this->putJson("/api/v1/work-item-types/{$type['id']}", $type)->assertOk();

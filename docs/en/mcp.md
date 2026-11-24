@@ -422,7 +422,7 @@ Writes webhooks; org admins only. `create` and `rotate-secret` answer the secret
 
 ### `agents`
 
-Reads runners and the agent configuration of bots (org admins), the runs of agents with their logs (who sees the project), the GitHub app and the repo of a project. (Needs `read`.)
+Reads runners and the agent configuration of bots (org admins), the runs of agents with their logs (who sees the project), the GitHub app, the repo and the agent settings of a project and the working rules of the agents. (Needs `read`.)
 
 | Action | Purpose | Required | REST twin |
 |---|---|---|---|
@@ -434,10 +434,12 @@ Reads runners and the agent configuration of bots (org admins), the runs of agen
 | `get-config` | The agent configuration of a bot. | `bot` | `GET /bots/{user}/agent` |
 | `get-github` | The GitHub app of the instance, its installations and repos with their project; never a key. | – | `GET /github` |
 | `get-repository` | The repo of a project with its base branch, the ruleset hint and the guard against an unauthorized merge; `data` null without one. | `project` | `GET /projects/{project}/repository` |
+| `list-rules` | The working rules of the organization per kind of run, each with the contract of the kind. | – | `GET /agent-rules` |
+| `get-project-agents` | The agent settings of a project: review agent, text for agents, models, brakes, switches. | `project` | `GET /projects/{project}/agents` |
 
 ### `manage-agents`
 
-Changes runners and the agent configuration of bots (org admins), steers runs (who may change the item), syncs the GitHub app and sets the repo of a project. Pairing a runner and connecting or disconnecting GitHub work only in the web app. An agent never steers runs with the token of its own run (403 `agent_forbidden`). (Needs `write`.)
+Changes runners and the agent configuration of bots (org admins), steers runs (who may change the item), syncs the GitHub app, sets the repo and the agent settings of a project and changes the working rules of the agents (org admins). Pairing a runner and connecting or disconnecting GitHub work only in the web app. An agent never steers runs with the token of its own run (403 `agent_forbidden`). (Needs `write`.)
 
 | Action | Purpose | Required | REST twin |
 |---|---|---|---|
@@ -449,6 +451,8 @@ Changes runners and the agent configuration of bots (org admins), steers runs (w
 | `sync-github` | Reads the installations of the GitHub app and their repos from GitHub again (org admins). | – | `POST /github/sync` |
 | `set-repository` | Gives a project its repo (one the app reaches, at most one project per repo) and base branch, or none; admins of the project. | `project`, `input` | `PUT /projects/{project}/repository` |
 | `confirm-merge-guard` | Confirms an unauthorized merge: the guard goes and the paused strands of the project are open again; admins of the project. | `project` | `POST /projects/{project}/repository/confirm-guard` |
+| `save-rule` | Sets the working rules of a kind of run; `null` restores the standard (org admins). | `kind`, `input` | `PUT /agent-rules/{kind}` |
+| `save-project-agents` | Sets the agent settings of a project as a whole (admins of the project). | `project`, `input` | `PUT /projects/{project}/agents` |
 
 <!-- tools:end -->
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Agents\AgentConsumer;
 use App\Events\Outbox;
 use App\Jobs\ConsumeEvent;
 use App\Live\LiveConsumer;
@@ -20,7 +21,7 @@ it('is a consumer of every event, in the queue webhooks, with the tries of the s
 
     expect(config('werkbuch.event_consumers'))->toBe([])        // off in tests until a test switches it on (K2)
         ->and((require repo_path('config/werkbuch.php'))['event_consumers'])
-        ->toBe([SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class])
+        ->toBe([SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class, AgentConsumer::class])
         ->and($consumer->key())->toBe('webhooks')
         ->and($consumer->queue())->toBe('webhooks')
         ->and($consumer->tries())->toBe(8)
