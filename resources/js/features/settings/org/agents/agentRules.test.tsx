@@ -33,7 +33,7 @@ const rule = (type: RunType, own?: string): AgentRule => ({ type, body: own ?? s
 
 let api: MockApi | undefined;
 
-function renderRules({ user = mara, own = { review: 'Review gently.' } as Partial<Record<RunType, string>>, put }: { user?: User; own?: Partial<Record<RunType, string>>; put?: (type: RunType, body: string | null) => ReturnType<MockRoute> } = {}) {
+function renderRules({ user = mara, own = { review: 'Review gently.' } as Partial<Record<RunType, string>>, put }: { user?: User; own?: Partial<Record<RunType, string>>; put?: (type: RunType, body: string | null) => ReturnType<MockRoute> | undefined } = {}) {
   who.user = user;
   let stored = { ...own };
   api = mockApi({
