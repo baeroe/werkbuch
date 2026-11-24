@@ -4,7 +4,7 @@
  * as it stands in the prompt, so nobody writes it again. A port of the click dummy's `RulesEditor`.
  */
 
-import { RotateCcw } from 'lucide-react';
+import { CircleAlert, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Tab, Tabs, TabsList, TabsPanel } from '@/components/ui/Tabs';
 import { Textarea } from '@/components/ui/Textarea';
@@ -42,6 +42,8 @@ export function RulesEditor({ value, rules, onChange, readOnly, errors = {}, tab
           <Tab key={type} value={type} data-error={errors[`rules.${type}`] ? '' : undefined} className="data-error:text-danger">
             {runName(type)}
             {value[type] !== null && <span className="size-1.5 rounded-full bg-accent" aria-label={t('settings.agent_rules.own_mark')} role="img" />}
+            {/* a refused kind is told by its icon and its name, not by the colour alone */}
+            {errors[`rules.${type}`] && <CircleAlert className="size-3.5" role="img" aria-label={t('settings.agent_rules.refused_mark')} />}
           </Tab>
         ))}
       </TabsList>

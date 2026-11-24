@@ -421,6 +421,47 @@ describe('BotAgent', () => {
     expect(puts()[0]!.body).toMatchObject({ models: { task: 'opus' } });
   });
 
+  it('keeps the models per kind in their order, so a model chosen and chosen back is no change', async () => {
+    const user = userEvent.setup();
+    // the server answers them sorted by name
+    renderAgent({ configs: { u_kira: config('u_kira', { models: { review: 'haiku', task: 'opus' } }) } });
+
+    const task = await screen.findByRole('combobox', { name: /^Umsetzen/ });
+    await user.click(task);
+    await user.click(await screen.findByRole('option', { name: 'sonnet' }));
+    expect(screen.getByText('Nicht gespeicherte Änderungen')).toBeTruthy();
+    await user.click(task);
+    await user.click(await screen.findByRole('option', { name: 'opus' }));
+    expect(screen.queryByText('Nicht gespeicherte Änderungen')).toBeNull();
+
+    await user.click(screen.getByRole('combobox', { name: /^Antwort/ }));
+    await user.click(await screen.findByRole('option', { name: 'haiku' }));
+    await user.click(save());
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(Object.keys((puts()[0]!.body as AgentConfig).models)).toEqual(['task', 'review', 'comment']);
+  });
+
+  it('says that an org admin bot reviews in every project, and its role as a member does not hold it back', async () => {
+    const complete = { ...agency, agent_states: { working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: 'app_done' } };
+    const boss = bot('u_kira', 'Kira', { org_role: 'admin' });
+    renderAgent({
+      bots: [boss, otto, automation, orphan],
+      routes: {
+        'GET /api/v1/projects': (_body, requested) => ({ body: list(requested.searchParams.get('include') === 'members' ? [project('OPS', 'admin', { id: 'p_ops', name: 'Ops', workflow_id: complete.id, members: [{ project_id: 'p_ops', user_id: 'u_kira', role: 'viewer' }] })] : []) }),
+        'GET /api/v1/workflows': () => ({ body: list([complete]) }),
+      },
+    });
+
+    expect(await screen.findByText('Kira ist Org-Admin: Er darf die PRs in jedem Projekt reviewen. Items übernimmt er nur, wo er Mitglied ist.')).toBeTruthy();
+    expect(within(screen.getByRole('list', { name: 'Projekte von Kira' })).getByRole('listitem').textContent).toContain('Arbeitet hier');
+  });
+
+  it('says it for an org admin bot in no project too', async () => {
+    renderAgent({ bots: [bot('u_kira', 'Kira', { org_role: 'admin' }), otto, automation, orphan], routes: { 'GET /api/v1/workflows': () => ({ body: list([standard]) }) } });
+    expect(await screen.findByText(/Kira ist in keinem Projekt Mitglied/)).toBeTruthy();
+    expect(screen.getByText(/Kira ist Org-Admin/)).toBeTruthy();
+  });
+
   it('lists the projects of the agent with whether it works there and why not', async () => {
     const complete = { ...agency, agent_states: { working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: 'app_done' } };
     const member = (role: 'member' | 'viewer') => [{ project_id: 'x', user_id: 'u_kira', role }];

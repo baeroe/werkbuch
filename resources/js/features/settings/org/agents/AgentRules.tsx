@@ -12,16 +12,19 @@ import { toast } from '@/components/ui/toast';
 import { RUN_TYPES } from '@/domain/agents';
 import { useAgentRules, useSaveAgentRule } from '@/hooks/agents';
 import { notifyError } from '@/lib/errors';
-import { t, tx } from '@/lib/i18n';
+import { intlLocale, t, tx } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import type { AgentRule, RunType } from '@/types';
 import { RulesEditor, type RulesValue } from '../../agents/RulesEditor';
+import { runName } from '../../agents/runTypes';
 import { SaveBar } from '../../agents/SaveBar';
 import { ReadOnlyNotice } from '../../frame/access';
 import { fieldErrors, useDraft, useFieldErrors, useSaveShortcut } from '../../frame/form';
 import { LeaveGuard } from '../../frame/LeaveGuard';
 import { FormSkeleton, Loaded, SectionHeader, SettingsCard } from '../../frame/parts';
 import type { SectionProps } from '../sections';
+
+const listOf = (names: string[]) => new Intl.ListFormat(intlLocale(), { type: 'conjunction' }).format(names.map((name) => t('settings.agents.quoted', { text: name })));
 
 const linkClass = 'font-medium text-accent-text underline-offset-2 hover:underline';
 
@@ -76,11 +79,15 @@ function RulesForm({ rules, readOnly }: { rules: AgentRule[]; readOnly: boolean 
     const changed = RUN_TYPES.filter((type) => draft.value[type] !== source[type]);
     if (changed.length === 0) return draft.tellNothingToSave();
     setSaving(true);
+    const saved: RunType[] = [];
     for (const type of changed) {
       try {
         await save.mutateAsync({ type, body: draft.value[type] });
+        saved.push(type);
       } catch (error) {
         setSaving(false);
+        // what went before the refusal is saved: say so, the refused kind and the rest wait at the form
+        if (saved.length > 0) toast({ title: t('settings.agent_rules.partly_saved', { types: listOf(saved.map(runName)) }), description: t('settings.agent_rules.partly_saved_text'), tone: 'success' });
         const fields = fieldErrors(error);
         if (error instanceof ApiError && error.status === 422 && Object.keys(fields).length > 0) {
           setTab(type);

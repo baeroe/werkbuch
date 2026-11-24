@@ -58,7 +58,7 @@ const formOf = (config: AgentConfig): Form => ({
   runner_ids: [...config.runner_ids].sort(),
   cli: config.cli,
   model: config.model,
-  models: config.models,
+  models: modelsWith(config.models),
 });
 
 const CLIS: { value: AgentCli; label: string }[] = [
@@ -75,13 +75,17 @@ const REASONS: Record<NotAgentReason, TranslationKey> = {
 /** The fields a 422 is shown at; everything else is a toast. */
 const PLACED = ['enabled', 'runner_ids', 'cli', 'model'] as const;
 
-/** The models per kind with one changed; `''` ("Wie Standard") leaves the kind out. */
-const modelsWith = (models: AgentConfig['models'], type: RunType, model: string): AgentConfig['models'] => {
-  const next = { ...models };
-  if (model === '') delete next[type];
-  else next[type] = model;
-  return next;
-};
+/**
+ * The models per kind in the order of the kinds, one of them changed; `''` ("Wie Standard") leaves the kind out. The
+ * server answers them sorted by name: in one order on both sides, a model chosen and chosen back is no change.
+ */
+const modelsWith = (models: AgentConfig['models'], type?: RunType, model = ''): AgentConfig['models'] =>
+  Object.fromEntries(
+    RUN_TYPES.flatMap((kind) => {
+      const value = kind === type ? model : models[kind];
+      return value ? [[kind, value]] : [];
+    }),
+  );
 
 export type CliState = 'ready' | 'not_logged_in' | 'not_installed';
 

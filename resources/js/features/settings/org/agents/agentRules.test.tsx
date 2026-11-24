@@ -157,8 +157,10 @@ describe('AgentRules', () => {
     const text = await screen.findByRole('textbox', { name: 'Arbeitsregeln für „Konflikt lösen“' });
     expect(await screen.findByText('Höchstens 20000 Zeichen.')).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(text));
-    // the first kind is saved, the refused one waits
+    // the first kind is saved, the refused one waits, and both are said
     expect(puts().map((call) => call.url)).toEqual(['/api/v1/agent-rules/task', '/api/v1/agent-rules/conflict']);
+    expect(toastNamed('Gespeichert: „Umsetzen“')!.description).toBe('Der abgelehnte Typ und die danach sind noch nicht gespeichert.');
+    expect(within(screen.getByRole('tab', { name: /Konflikt/ })).getByRole('img', { name: 'nicht gespeichert' })).toBeTruthy();
 
     await user.type(text, '?');
     expect(screen.queryByText('Höchstens 20000 Zeichen.')).toBeNull();

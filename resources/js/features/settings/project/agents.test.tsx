@@ -94,6 +94,7 @@ const guard: MergeGuard = {
 const kira = { ...lene, id: 'u_kira', name: 'Kira', handle: 'kira', type: 'bot' as const, owner_id: 'u_mara' };
 const rita = { ...lene, id: 'u_rita', name: 'Rita', handle: 'rita', type: 'bot' as const, owner_id: 'u_mara' };
 const vera = { ...lene, id: 'u_vera', name: 'Vera', handle: 'vera', type: 'bot' as const, owner_id: 'u_mara' };
+const gabi = { ...lene, id: 'u_gone', name: 'Gabi', handle: 'gabi', type: 'bot' as const, owner_id: 'u_mara', disabled_at: '2026-11-01T00:00:00.000Z' };
 
 const defaults: ProjectAgents = {
   project_id: 'p_web',
@@ -156,7 +157,7 @@ function renderAgents({
       return { body: { data: settings } };
     },
     'GET /api/v1/labels': () => ({ body: list(catalog) }),
-    'GET /api/v1/users': () => ({ body: list([mara, ida, lene, kira, rita, vera]) }),
+    'GET /api/v1/users': () => ({ body: list([mara, ida, lene, kira, rita, vera, gabi]) }),
     'GET /api/v1/references': () => ({ body: { data: { items: [makeWorkItem({ id: 'i_web47', key: 'WEB-47' }), makeWorkItem({ id: 'i_web48', key: 'WEB-48' })], pages: [] } } }),
     ...overrides,
   });
@@ -535,6 +536,24 @@ describe('Agents: settings (WEBU-32)', () => {
       teardown_command: null,
     });
     await waitFor(() => expect(screen.queryByText('Nicht gespeicherte Änderungen')).toBeNull());
+  });
+
+  it('names a deactivated saved review agent as such, and locks the review of PRs of persons without a review agent', async () => {
+    const user = userEvent.setup();
+    signedIn = mara;
+    renderAgents({ agents: { ...defaults, review_bot_id: 'u_gone', bots: [...defaults.bots, { bot_id: 'u_gone', enabled: true, reviews: false, cli: 'claude', model: 'sonnet', models: {} }] } });
+
+    const reviewer = await screen.findByRole('combobox', { name: /Review-Agent/ });
+    await waitFor(() => expect(reviewer.textContent).toContain('Gabi (deaktiviert)'));
+    const persons = screen.getByRole('switch', { name: 'PRs von Personen reviewen' });
+    expect(persons.hasAttribute('data-disabled')).toBe(false);
+
+    await user.click(reviewer);
+    await user.click(await screen.findByRole('option', { name: /Der Bot des Strangs/ }));
+    expect(screen.getByText(/Nur mit einem Review-Agenten des Projekts/)).toBeTruthy();
+    expect(persons.hasAttribute('data-disabled')).toBe(true);
+    expect(persons.getAttribute('aria-describedby')).toBeTruthy();
+    expect(document.getElementById(persons.getAttribute('aria-describedby')!)!.textContent).toContain('Nur mit einem Review-Agenten des Projekts');
   });
 
   it('saves the repo and the settings in one press, each only once', async () => {

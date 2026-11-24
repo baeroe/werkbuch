@@ -252,7 +252,11 @@ function ModelLabels({ labels, canManage }: { labels: readonly Label[]; canManag
 }
 
 /** A setting that is on or off, with its sentence; read only, the switch is disabled like the automations. */
-function SwitchRow({ title, text, checked, readOnly, onChange }: { title: string; text: string; checked: boolean; readOnly: boolean; onChange: (on: boolean) => void }) {
+/**
+ * A setting that is on or off, with its sentence; read only, the switch is disabled like the automations. `reason` locks
+ * it for something else on the page, said below the sentence (a disabled switch takes no focus, so the reason is text).
+ */
+function SwitchRow({ title, text, checked, readOnly, reason = null, onChange }: { title: string; text: string; checked: boolean; readOnly: boolean; reason?: string | null; onChange: (on: boolean) => void }) {
   const id = useId();
   return (
     <div className="flex items-start justify-between gap-4">
@@ -260,9 +264,10 @@ function SwitchRow({ title, text, checked, readOnly, onChange }: { title: string
         <p className="text-ui font-semibold text-ink">{title}</p>
         <p id={id} className="mt-0.5 max-w-[60ch] text-sm text-pretty text-muted">
           {text}
+          {reason && <span className="mt-1 block font-medium text-ink">{reason}</span>}
         </p>
       </div>
-      <Switch label={<span className="sr-only">{title}</span>} className="min-w-11 justify-center md:min-w-0" aria-describedby={id} checked={checked} disabled={readOnly} onCheckedChange={onChange} />
+      <Switch label={<span className="sr-only">{title}</span>} className="min-w-11 justify-center md:min-w-0" aria-describedby={id} checked={checked} disabled={readOnly || reason !== null} onCheckedChange={onChange} />
     </div>
   );
 }
@@ -399,7 +404,13 @@ function AgentsForm({ project, canManage, readOnlyReason, link, settings, github
     { value: NO_BOT, label: t('settings.project.agents.review_bot.none') },
     ...settings.bots.map((bot) => {
       const user = users.get(bot.bot_id);
-      const why = !bot.reviews ? 'settings.project.agents.review_bot.cannot' : !bot.enabled ? 'settings.project.agents.review_bot.off' : null;
+      const why = user?.disabled_at
+        ? 'settings.project.agents.review_bot.disabled'
+        : !bot.reviews
+          ? 'settings.project.agents.review_bot.cannot'
+          : !bot.enabled
+            ? 'settings.project.agents.review_bot.off'
+            : null;
       return {
         value: bot.bot_id,
         label: why ? t(why, { name: nameOf(bot.bot_id) }) : nameOf(bot.bot_id),
@@ -536,6 +547,8 @@ function AgentsForm({ project, canManage, readOnlyReason, link, settings, github
             text={t('settings.project.agents.review_person_prs.text')}
             checked={value.review_person_prs}
             readOnly={!canManage}
+            // without a review agent of the project the bot of the strand reviews, and PRs of persons get no review
+            reason={value.review_bot_id === NO_BOT ? t('settings.project.agents.review_person_prs.no_reviewer') : null}
             onChange={(review_person_prs) => edit({ review_person_prs })}
           />
           <SwitchRow
