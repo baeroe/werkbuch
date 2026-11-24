@@ -1,8 +1,9 @@
 /*
  * The statuses of a workflow in the editor: shape, name and category of each, in an order to drag or move with the
  * keyboard, and a way to remove one. The start status cannot be removed (the button says why). A refusal of the server
- * stands at the row it belongs to; so does the mark of a status the start cannot reach. The divider lines run across
- * the whole row.
+ * stands at the row it belongs to; so does the mark of a status the start cannot reach. A status that holds a step of
+ * the agents keeps a category the step accepts: the error stands at its category. The divider lines run across the
+ * whole row.
  */
 
 import { CircleAlert, Trash2 } from 'lucide-react';
@@ -23,6 +24,9 @@ import type { DraftState } from './draft';
 
 /** The id of the name field of a status, for the focus. */
 export const stateNameId = (id: string) => `state-name-${id}`;
+
+/** The id of the category select of a status, for the focus. */
+export const stateCategoryId = (id: string) => `state-category-${id}`;
 
 function ShapeMenu({ state, name, disabled, onChange }: { state: DraftState; name: string; disabled: boolean; onChange: (icon: StateIcon) => void }) {
   const shape = t(STATE_ICON_LABELS[state.icon]);
@@ -62,11 +66,13 @@ type StateRowProps = {
   isStart: boolean;
   unreachable: boolean;
   error: string | undefined;
+  /** The category does not fit the step of the agents the status holds. */
+  categoryError: string | undefined;
   onChange: (partial: Partial<DraftState>) => void;
   onRemove: () => void;
 };
 
-function StateRow({ state, index, handle, readOnly, isStart, unreachable, error, onChange, onRemove }: StateRowProps) {
+function StateRow({ state, index, handle, readOnly, isStart, unreachable, error, categoryError, onChange, onRemove }: StateRowProps) {
   const errorId = useId();
   const number = index + 1;
   const name = state.name.trim() || t('settings.workflows.state.fallback', { number });
@@ -97,8 +103,10 @@ function StateRow({ state, index, handle, readOnly, isStart, unreachable, error,
       {/* on a phone the category and the trash button share the second line */}
       <div className="flex basis-full items-start gap-2 sm:basis-auto">
         <Select
+          id={stateCategoryId(state.id)}
           aria-label={t('settings.workflows.state.category_of', { name })}
           hint={t(CATEGORY_HINTS[state.category])}
+          error={categoryError}
           className="min-w-0 flex-1 sm:w-52 sm:flex-none"
           disabled={readOnly}
           value={state.category}
@@ -141,11 +149,13 @@ type StateRowsProps = {
   onRemove: (id: string) => void;
   /** The message for a status: a name left empty, or the server's refusal of its row. */
   errorOf: (id: string) => string | undefined;
+  /** The message at the category of a status that holds a step of the agents it no longer fits. */
+  categoryErrorOf: (id: string) => string | undefined;
   onChange: (states: DraftState[]) => void;
   onPatch: (id: string, partial: Partial<DraftState>) => void;
 };
 
-export function StateRows({ states, initialStateId, readOnly, unreachable, errorOf, onChange, onPatch, onRemove }: StateRowsProps) {
+export function StateRows({ states, initialStateId, readOnly, unreachable, errorOf, categoryErrorOf, onChange, onPatch, onRemove }: StateRowsProps) {
   return (
     <SortableList
       items={states}
@@ -163,6 +173,7 @@ export function StateRows({ states, initialStateId, readOnly, unreachable, error
           isStart={state.id === initialStateId}
           unreachable={unreachable.has(state.id)}
           error={errorOf(state.id)}
+          categoryError={categoryErrorOf(state.id)}
           onChange={(partial) => onPatch(state.id, partial)}
           onRemove={() => onRemove(state.id)}
         />

@@ -62,7 +62,8 @@ function heldKeys(event: LiveEvent): readonly QueryKey[] {
  * `template_id` goes, T14-M3), the automations on `automation.*`, the templates and their runs on a `work_item.created` a run made (it names its template, T14-I1:
  * the log, the count and the next run change; an item made by hand leaves them alone), the wiki on `page.*` (on `page.updated` and `page.moved` the references
  * too: a reference shows the title of its page, K15; on `page.deleted` as well: a reference to a deleted page loads and
- * finds it missing, T18-M5), the projects on a new org role (K14: the channels follow the list; the
+ * finds it missing, T18-M5), the repo of a project on `project.repository_changed` and `project.merge_guard_*`, the runs
+ * and the runners on `agent_run.*` (WEBU-27), the projects on a new org role (K14: the channels follow the list; the
  * shell reloads the shared props `auth` for it, M2), the inbox on `notifications.changed`; everything after the connection was
  * back (`live.reconnected`); what a channel carries once Reverb holds it (`live.subscribed`, `heldKeys`). A refused
  * channel (`live.refused`) loads everything as well (A281: access lost; what the person may not see any more answers
@@ -92,7 +93,13 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (event.type === 'project.ranks_redistributed') return [qk.workItems.all];
   // a page of the deleted project may name an item of another one: the wiki pages of an item load again (no 404: the server leaves them out)
   if (event.type === 'project.deleted') return [qk.projects.all, qk.members.all, ITEM_PAGES];
+  // the repo of a project and the guard against an unauthorized merge (WEBU-24): the agent settings and the GitHub page read them
+  if (event.type === 'project.repository_changed' || event.type === 'project.merge_guard_detected' || event.type === 'project.merge_guard_confirmed') {
+    return [qk.projects.all, qk.members.all, qk.repository.all, qk.github.all];
+  }
   if (group === 'project') return [qk.projects.all, qk.members.all];
+  // a run of an agent (A478): what runs where on the runner cards and their places
+  if (group === 'agent_run') return [qk.runs.all, qk.runners.all];
   if (event.type === 'page.updated' || event.type === 'page.moved' || event.type === 'page.deleted') return [...WIKI, qk.references.all];
   if (group === 'page') return WIKI;
   return [];

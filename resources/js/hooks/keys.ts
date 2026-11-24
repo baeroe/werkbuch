@@ -87,6 +87,16 @@ export const qk = {
   automations: { ...resource('automations'), save: (project: string, key: string) => ['automations', 'save', project, key] as const },
   webhooks: resource('webhooks'),
   deliveries: resource('deliveries'),
+  /** Runners (`qk.runners.list({ pages: 'all' })`) and a pairing code while its dialog waits (`qk.pairings.detail(id)`). */
+  runners: resource('runners'),
+  pairings: resource('pairings'),
+  /** The runs of agents that still have to happen or happen now: `qk.runs.list({ active: true })`. */
+  runs: resource('runs'),
+  /** The agent configuration of a bot: `qk.agentConfigs.detail(botId)`. */
+  agentConfigs: resource('agent-configs'),
+  /** The GitHub connection (`qk.github.detail('status')`) and the repo of a project (`qk.repository.detail(projectId)`). */
+  github: resource('github'),
+  repository: resource('repository'),
   system: resource('system'),
   search: resource('search'),
 } as const;

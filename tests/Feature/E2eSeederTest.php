@@ -14,6 +14,8 @@ use App\Events\EventType;
 use App\Models\Attachment;
 use App\Models\Automation;
 use App\Models\Favorite;
+use App\Models\GitHubApp;
+use App\Models\GitHubRepository;
 use App\Models\Invitation;
 use App\Models\Label;
 use App\Models\Notification;
@@ -21,9 +23,11 @@ use App\Models\NotificationMail;
 use App\Models\NotificationPreference;
 use App\Models\Organization;
 use App\Models\Project;
+use App\Models\ProjectRepository;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
+use App\Models\Runner;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
@@ -381,4 +385,37 @@ it('removes the webhooks of earlier runs through the delete action', function ()
     expect(Webhook::query()->where('name', 'like', 'E2E %')->count())->toBe(0)
         ->and(Webhook::query()->where('name', 'Other')->count())->toBe(1)
         ->and(eventsOf(EventType::WebhookDeleted)->map(fn ($e) => $e->meta['name'])->all())->toBe(['E2E Empfänger']);
+});
+
+it('revokes the runners of earlier runs through the revoke action', function () {
+    $this->seed(DemoSeeder::class);
+    $erik = User::factory()->admin()->create();
+    $old = Runner::factory()->create(['name' => 'E2E desktop-light abc connect', 'created_by' => $erik->id]);
+    $other = Runner::factory()->create(['name' => 'mac-studio', 'created_by' => $erik->id]);
+
+    $this->seed(E2eSeeder::class);
+
+    expect($old->refresh()->revoked_at)->not->toBeNull()
+        ->and($other->refresh()->revoked_at)->toBeNull()
+        ->and(eventsOf(EventType::RunnerRevoked)->map(fn ($e) => $e->meta['name'])->all())->toBe(['E2E desktop-light abc connect']);
+});
+
+it('disconnects the GitHub app of an earlier run and leaves one of the instance', function () {
+    $this->seed(DemoSeeder::class);
+    $erik = User::factory()->admin()->create();
+    GitHubApp::factory()->create(['slug' => 'feldwerk-werkbuch', 'created_by' => $erik->id]);
+
+    $this->seed(E2eSeeder::class);
+    expect(GitHubApp::query()->count())->toBe(1);
+
+    GitHubApp::query()->delete();
+    GitHubApp::factory()->create(['slug' => 'e2e-werkbuch', 'created_by' => $erik->id]);
+    $link = ProjectRepository::factory()->create(['project_id' => Project::query()->where('identifier', 'WEB')->value('id')]);
+
+    $this->seed(E2eSeeder::class);
+
+    expect(GitHubApp::query()->count())->toBe(0)
+        ->and(GitHubRepository::query()->whereKey($link->repository_id)->exists())->toBeFalse()
+        ->and(ProjectRepository::query()->count())->toBe(0)
+        ->and(eventsOf(EventType::GitHubDisconnected)->count())->toBe(1);
 });

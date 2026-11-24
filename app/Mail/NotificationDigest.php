@@ -139,7 +139,7 @@ final class NotificationDigest extends Mailable
     {
         return new Content(view: 'mail.notifications.guard', text: 'mail.notifications.guard-text', with: [
             'subject' => $this->guardSubject($guard),
-            'projectUrl' => "{$base}/projects/".rawurlencode($guard->project->identifier).'/settings',
+            'projectUrl' => "{$base}/projects/".rawurlencode($guard->project->identifier).'/settings/agents',
             'settingsUrl' => "{$base}/me/notifications",
             'entries' => array_map(fn (array $line) => [
                 'at' => $this->at($line['notification']),

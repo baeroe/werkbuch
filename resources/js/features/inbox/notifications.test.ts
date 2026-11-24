@@ -171,9 +171,9 @@ describe('hrefOf', () => {
     expect(hrefOf(notification('n2', { event: 'webhook_disabled', work_item_id: null, project_id: null, data: {} }), undefined)).toBe('/settings/webhooks');
   });
 
-  it('leads an unauthorized merge to the settings of its project, without the project to the projects', () => {
+  it('leads an unauthorized merge to the agent settings of its project, without the project to the projects', () => {
     const guard = notification('n1', { event: 'merge_guard_detected', work_item_id: null, project_id: 'p_web', data: { sha: 'a41c9e7', branch: 'main' } });
-    expect(hrefOf(guard, project('WEB', 'admin'))).toBe('/projects/WEB/settings');
+    expect(hrefOf(guard, project('WEB', 'admin'))).toBe('/projects/WEB/settings/agents');
     expect(hrefOf(guard, undefined)).toBe('/projects');
   });
 

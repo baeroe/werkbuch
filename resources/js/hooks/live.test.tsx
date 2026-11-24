@@ -260,6 +260,28 @@ describe('useLiveSync', () => {
     expect(items.fetches()).toBe(2);
   });
 
+  it('loads the repo of a project and the GitHub page again when the repo or its guard changes, the runners on a run (WEBU-27)', async () => {
+    const repository = await shown(qk.repository.detail('p_web'));
+    const github = await shown(qk.github.detail('status'));
+    const runners = await shown(qk.runners.list({ pages: 'all' }));
+    const runs = await shown(qk.runs.list({ active: true }));
+    renderHook(() => useLiveSync(), { wrapper });
+    const counts = () => [repository, github, runners, runs].map((query) => query.fetches());
+
+    send({ event_id: 'ev_1', type: 'project.merge_guard_detected', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([2, 2, 1, 1]);
+
+    send({ event_id: 'ev_2', type: 'project.repository_changed', item_id: null });
+    send({ event_id: 'ev_3', type: 'project.merge_guard_confirmed', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([3, 3, 1, 1]);
+
+    send({ event_id: 'ev_4', type: 'agent_run.started', item_id: 'wi_47' });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([3, 3, 2, 2]);
+  });
+
   it('loads the account and its rights of the page again on a new org role, nothing else of the page (M2)', async () => {
     inertia.reload.mockClear();
     renderHook(() => useLiveSync(), { wrapper });

@@ -5,10 +5,7 @@ use App\GitHub\AppJwt;
 use App\GitHub\GitHubApi;
 use App\GitHub\GitHubUnavailable;
 use App\Models\GitHubApp;
-use App\Models\GitHubInstallation;
 use App\Models\GitHubRepository;
-use App\Models\Project;
-use App\Models\ProjectRepository;
 use App\Models\User;
 use App\Support\Actor;
 use Illuminate\Http\Client\ConnectionException;
@@ -16,54 +13,20 @@ use Illuminate\Support\Facades\Http;
 use Tests\Support\FakeGitHub;
 
 /*
- * The plain page of the app (WEBU-24) and the two ways back from GitHub; the JWT the app signs itself in with.
+ * The ways between GitHub and Settings → GitHub (WEBU-27): the old address, the two ways back from GitHub, the way to
+ * the installation; the JWT the app signs itself in with.
  */
 
-it('shows an org admin the form that posts the manifest to GitHub, a member only the state', function () {
-    $this->actingAs(User::factory()->admin()->create());
-    $page = $this->get('/github?organization=feldwerk')->assertOk()
-        ->assertSee('action="https://github.com/organizations/feldwerk/settings/apps/new?state=', false)
-        ->assertSee('name="manifest"', false)
-        ->assertSee(__('github.page.connect'));
-    expect(html_entity_decode($page->getContent()))->toContain('"default_events":["pull_request","push","check_suite","check_run"]');
-
-    $this->get('/github?organization=a--b')->assertOk()->assertSee(__('field.organization.github_login'))
-        ->assertSee('action="https://github.com/settings/apps/new?state=', false);
-
+it('sends the old address of the page to the settings', function () {
     $this->actingAs(User::factory()->create());
-    $this->get('/github')->assertOk()->assertSee(__('github.page.none'))->assertSee(__('problem.detail.github_admins_only'))->assertDontSee('name="manifest"', false);
-});
-
-it('shows the app, its installations and repos with their project and never its key', function () {
-    FakeGitHub::connected();
-    $app = GitHubApp::query()->sole();
-    FakeGitHub::link(Project::factory()->identifier('WEB')->create(), 'feldwerk/website', 'main')->forceFill(['protected' => true, 'guard_detected_at' => now()])->save();
-    GitHubInstallation::query()->first()->forceFill(['suspended_at' => now()])->save();
-    GitHubInstallation::factory()->create(['account_login' => 'hauss', 'removed_at' => now()]);
-    GitHubRepository::factory()->create(['full_name' => 'feldwerk/frei', 'removed_at' => now()]);
-    $hidden = Project::factory()->identifier('OPS')->create(['visibility' => 'private']);
-    ProjectRepository::factory()->create(['project_id' => $hidden->id, 'protected' => false]);
-
-    $this->actingAs(User::factory()->admin()->create());
-    $this->get('/github')->assertOk()->assertSee('Feldwerk werkbuch')->assertSee('feldwerk/website')->assertSee('WEB')
-        ->assertSee(__('github.page.protected'))->assertSee(__('github.page.guarded'))->assertSee(__('github.page.install'))
-        ->assertSee(__('github.page.suspended'))->assertSee(__('github.page.removed'))->assertSee(__('github.page.unprotected'))
-        ->assertDontSee($app->webhook_secret)->assertDontSee('PRIVATE KEY');
-
-    $this->actingAs(User::factory()->create());
-    $this->get('/github')->assertOk()->assertSee(__('github.page.taken'))->assertDontSee(__('github.page.install'));
-
-    GitHubRepository::query()->delete();
-    GitHubInstallation::query()->delete();
-    $this->get('/github')->assertOk()->assertSee(__('github.page.no_installations'))->assertSee(__('github.page.no_repositories'));
+    $this->get('/github')->assertRedirect('/settings/github');
+    expect(route('github'))->toEndWith('/github');
 });
 
 it('turns the way back of GitHub into the app and sends the person on to the installation', function () {
     (new FakeGitHub)->fake();
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
-    $this->get('/github')->assertOk();
-    // the state of a start the person makes (the page shows another one)
     $state = StartManifest::run(Actor::system($admin, 'test'), [])['state'];
 
     $redirect = $this->get('/github/manifest?code=abc123&state='.$state)->assertRedirect()->headers->get('Location');
@@ -73,8 +36,22 @@ it('turns the way back of GitHub into the app and sends the person on to the ins
     parse_str((string) parse_url((string) $redirect, PHP_URL_QUERY), $query);
     expect(StartManifest::takeState($query['state'], $admin->id, 'setup'))->toBeTrue()
         ->and(StartManifest::takeState($query['state'], $admin->id, 'setup'))->toBeFalse();
+});
 
-    $this->get('/github/manifest?code=abc123&state=nope')->assertForbidden();
+it('brings a way back that fails to the settings with its sentence', function () {
+    (new FakeGitHub)->fake();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    // a state that is not the person's: the refusal of the problem
+    $this->get('/github/manifest?code=abc123&state=nope')->assertRedirect('/settings/github')->assertSessionHas('error', __('problem.detail.github_state'));
+    // a code GitHub never gives: the sentence of the field
+    $this->get('/github/manifest?code=no%20code&state=x')->assertRedirect('/settings/github')->assertSessionHas('error', __('field.code.github'));
+    // an app that is there already: the text of the reason
+    GitHubApp::factory()->create();
+    $state = StartManifest::issueState($admin->id);
+    $this->get('/github/manifest?code=abc123&state='.$state)->assertRedirect('/settings/github')->assertSessionHas('error', __('problem.reason.github_connected'));
+    expect(GitHubApp::query()->count())->toBe(1);
 });
 
 it('reads the installation again only with the state werkbuch gave for the way back from GitHub', function () {
@@ -86,23 +63,43 @@ it('reads the installation again only with the state werkbuch gave for the way b
 
     // no state, a state of somebody else, a state for another way: the address alone changes nothing (A518)
     $this->actingAs($member);
-    $this->get('/github/setup?installation_id=55000001&setup_action=update&state='.StartManifest::issueState($member->id, 'setup'))->assertRedirect('/github');
+    $this->get('/github/setup?installation_id=55000001&setup_action=update&state='.StartManifest::issueState($member->id, 'setup'))->assertRedirect('/settings/github');
     $this->actingAs($admin);
-    $this->get('/github/setup?installation_id=55000001&setup_action=update')->assertRedirect('/github');
-    $this->get('/github/setup?state='.StartManifest::issueState($member->id, 'setup'))->assertRedirect('/github');
-    $this->get('/github/setup?state='.StartManifest::issueState($admin->id))->assertRedirect('/github');
+    $this->get('/github/setup?installation_id=55000001&setup_action=update')->assertRedirect('/settings/github');
+    $this->get('/github/setup?state='.StartManifest::issueState($member->id, 'setup'))->assertRedirect('/settings/github');
+    $this->get('/github/setup?state='.StartManifest::issueState($admin->id))->assertRedirect('/settings/github');
     expect($fresh())->toBeFalse();
     Http::assertNothingSent();
 
-    // the page gives the admin the link to install with a state of their own: GitHub sends it back
-    $page = $this->get('/github')->assertOk()->getContent();
-    preg_match('#installations/new\?state=([A-Za-z0-9]+)#', (string) $page, $link);
-    $this->get('/github/setup?installation_id=55000001&setup_action=update&state='.$link[1])->assertRedirect('/github');
+    // the way to the installation gives the admin a state of their own: GitHub sends it back
+    $link = $this->get('/github/install')->assertRedirect()->headers->get('Location');
+    expect($link)->toStartWith('https://github.com/apps/feldwerk-werkbuch/installations/new?state=');
+    parse_str((string) parse_url((string) $link, PHP_URL_QUERY), $query);
+    $this->get('/github/setup?installation_id=55000001&setup_action=update&state='.$query['state'])->assertRedirect('/settings/github')->assertSessionMissing('error');
     expect($fresh())->toBeTrue();
     // once
     GitHubRepository::query()->where('full_name', 'feldwerk/neu')->delete();
-    $this->get('/github/setup?state='.$link[1])->assertRedirect('/github');
+    $this->get('/github/setup?state='.$query['state'])->assertRedirect('/settings/github');
     expect($fresh())->toBeFalse();
+});
+
+it('brings a way back from installing that GitHub does not answer to the settings with its sentence', function () {
+    $github = FakeGitHub::connected();
+    $github->refuse['/app/installations'] = 500;
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $this->get('/github/setup?state='.StartManifest::issueState($admin->id, 'setup'))
+        ->assertRedirect('/settings/github')->assertSessionHas('error', __('problem.reason.github_unavailable'));
+});
+
+it('sends only an org admin of a connected instance to the installation', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $this->get('/github/install')->assertRedirect('/settings/github')->assertSessionMissing('error');
+
+    FakeGitHub::connected();
+    $this->actingAs(User::factory()->create());
+    $this->get('/github/install')->assertRedirect('/settings/github')->assertSessionHas('error', __('problem.detail.github_admins_only'));
 });
 
 it('signs the app in with a JWT GitHub can check with the public key', function () {

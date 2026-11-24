@@ -117,7 +117,12 @@ export interface Workflow {
   initial_state_id: string;
   states: State[];
   transitions: Transition[];
+  /** The status werkbuch sets in each step of an agent (spec 7.4, WEBU-25); always all four keys, `null` for none. */
+  agent_states: Record<AgentStep, string | null>;
 }
+
+/** The steps of an agent's work that set a status (spec 7.4). */
+export type AgentStep = 'working' | 'review' | 'correction' | 'merged';
 
 /* ------------------------------------------------------------- types and properties */
 
@@ -900,4 +905,162 @@ export interface SearchResults {
 export interface WebhookSaved {
   webhook: Webhook;
   secret: string | null;
+}
+
+/* --------------------------------------------------------------- runners and agents */
+
+/** The CLIs an agent runs with (spec 7.7). */
+export type AgentCli = 'claude' | 'codex';
+
+/** The kinds of run (spec 6.4). */
+export type RunType = 'task' | 'correction' | 'conflict' | 'review' | 'comment';
+
+export type RunStatus = 'queued' | 'waiting' | 'running' | 'canceling' | 'succeeded' | 'failed' | 'canceled' | 'timed_out' | 'lost';
+
+/** The places of a runner, as set in werkbuch (spec 9): code runs in all and per repo, light runs in a pot of their own. */
+export interface RunnerSlots {
+  total: number;
+  per_repo: number;
+  light: number;
+}
+
+/** A machine that runs agents (spec 6.2, 8.6, 8.8, 10.1); org admins only. A revoked one is not listed. */
+export interface Runner {
+  id: string;
+  name: string;
+  os: 'darwin' | 'linux';
+  arch: 'arm64' | 'amd64';
+  version: string;
+  protocol: number;
+  /** A contact within the last minute. */
+  online: boolean;
+  last_seen_at: string | null;
+  slots: RunnerSlots;
+  /** What runs now: code runs in all, of the busiest repo, light runs. */
+  slots_used: RunnerSlots;
+  /** The last load the runner sent: percent, sizes in GB; `null` before its first report. */
+  load: { cpu: number; gpu: number | null; ram_used: number; ram_total: number; disk_free: number; disk_total: number; measured_at: string | null } | null;
+  clis: { cli: AgentCli; installed: boolean; version: string | null; logged_in: boolean; path: string | null }[];
+  /** What the harness of the machine offers, as the runner reports it; `null` before its first report. */
+  equipment: { mcp_servers: string[]; skills: string[]; plugins: string[]; werkbuch_access: string[] } | null;
+  created_by: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** A one-time code to connect a runner (spec 6.2): `code` and `command` only in the answer of making it. */
+export interface RunnerPairing {
+  id: string;
+  code?: string;
+  command?: string;
+  expires_at: string;
+  redeemed_at: string | null;
+  runner_id: string | null;
+}
+
+/** How a bot works as an agent (spec 10.4). A bot without a saved one answers the defaults, `updated_at` null. */
+export interface AgentConfig {
+  bot_id: string;
+  enabled: boolean;
+  /** The runner pool; empty is every runner of the organization. */
+  runner_ids: string[];
+  cli: AgentCli;
+  model: string;
+  /** A model per kind of run (WEBU-32 edits them; sent back as they are). */
+  models: Partial<Record<RunType, string>>;
+  updated_at: string | null;
+}
+
+/** A run of an agent, as the runner list needs it (spec 10.6). */
+export interface AgentRun {
+  id: string;
+  type: RunType;
+  status: RunStatus;
+  waiting_reason: string | null;
+  bot_id: string;
+  cli: AgentCli;
+  model: string;
+  runner_id: string | null;
+  runner_name: string | null;
+  runner_online: boolean;
+  project_id: string;
+  work_item_id: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string | null;
+}
+
+/* ----------------------------------------------------------------------------- GitHub */
+
+/** The one GitHub app of the instance (spec 10.2); never its private key or webhook secret. */
+export interface GitHubApp {
+  id: string;
+  app_id: number;
+  slug: string;
+  name: string;
+  owner_login: string;
+  owner_type: string;
+  html_url: string;
+  install_url: string;
+  /** Permission → `read` or `write`. */
+  permissions: Record<string, string>;
+  events: string[];
+  created_at: string | null;
+}
+
+export interface GitHubInstallation {
+  id: string;
+  installation_id: number;
+  account_login: string;
+  account_type: string;
+  repository_selection: string;
+  suspended_at: string | null;
+  removed_at: string | null;
+}
+
+export interface GitHubRepository {
+  id: string;
+  installation_id: string;
+  full_name: string;
+  private: boolean;
+  default_branch: string;
+  html_url: string;
+  removed_at: string | null;
+  /** Whether a project has it (`project` names it only when the reader sees that project). */
+  taken: boolean;
+  project: { id: string; identifier: string; name: string; base_branch: string; protected: boolean | null; guarded: boolean } | null;
+}
+
+/** The GitHub connection: the app (or none), its installations and the repos they reach. */
+export interface GitHubStatus {
+  app: GitHubApp | null;
+  installations: GitHubInstallation[];
+  repositories: GitHubRepository[];
+}
+
+/** What the browser posts to GitHub to register the app (the manifest flow). */
+export interface GitHubManifestStart {
+  url: string;
+  manifest: Record<string, unknown>;
+  state: string;
+}
+
+/** A push of the app to the base branch no merge of werkbuch explains (spec 11.3). */
+export interface MergeGuard {
+  detected_at: string | null;
+  sha: string | null;
+  branch: string | null;
+  runs: { run_id: string; item_id: string | null; bot_id: string | null }[];
+}
+
+/** The repo of a project (spec 10.3). */
+export interface ProjectRepository {
+  project_id: string;
+  repository: { id: string; full_name: string; private: boolean; default_branch: string; html_url: string; removed_at: string | null };
+  base_branch: string;
+  /** Whether a ruleset keeps a direct push off the base branch (a hint only); `null`: GitHub did not say. */
+  protected: boolean | null;
+  protected_checked_at: string | null;
+  guard: MergeGuard | null;
+  updated_at: string | null;
 }

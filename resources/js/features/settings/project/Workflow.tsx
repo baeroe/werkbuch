@@ -5,7 +5,9 @@
  * included; the button is pending meanwhile, a failed count is a toast with "Try again"); without items it
  * is a plain confirmation with an empty mapping. When items moved into another state meanwhile, the server's 422 at
  * `mapping.<id>` adds their rows to the open question. With Auto-Close on, the question says which Canceled status it
- * takes in the new workflow, or that it switches off there (A345, `autoCloseAfter`).
+ * takes in the new workflow, or that it switches off there (A345, `autoCloseAfter`). The question also says what the
+ * switch means for the agents (spec 7.4): the steps belong to the workflow, so the project takes those of the new one,
+ * and without all four of them agents are off there afterwards (`AgentsNote`).
  */
 
 import { Link } from '@inertiajs/react';
@@ -18,6 +20,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Select } from '@/components/ui/Select';
 import { StatusIcon } from '@/components/ui/StatusIcon';
 import { toast } from '@/components/ui/toast';
+import { AGENT_STEPS, stepsComplete } from '@/domain/agents';
 import { statesInOrder } from '@/domain/workflow';
 import { useAutomations } from '@/hooks/automations';
 import { useStateUsage } from '@/hooks/workItems';
@@ -26,11 +29,12 @@ import { notifyError } from '@/lib/errors';
 import { intlLocale, t, tn } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { usePermissions } from '@/lib/permissions';
-import type { StateUsage, Workflow as WorkflowRecord } from '@/types';
+import type { Project, StateUsage, Workflow as WorkflowRecord } from '@/types';
 import { mergeUsage, rowsFor } from '../catalog/mapping';
 import { markedPaths, refusedStates, StateMappingDialog } from '../catalog/StateMappingDialog';
 import { noticeOf } from '../frame/form';
 import { SettingsCard, SettingsError, SettingsSkeleton } from '../frame/parts';
+import { STEP_NAMES } from '../org/workflows/AgentSteps';
 import { autoCloseAfter } from './automationRules';
 import type { ProjectSectionProps } from './sectionProps';
 
@@ -82,6 +86,28 @@ function AutoCloseNote({ workflow, stateId, mapping }: { workflow: WorkflowRecor
       tone={state ? 'neutral' : 'danger'}
       title={state ? t('settings.project.workflow.auto_close_follows', { state: state.name }) : t('settings.project.workflow.auto_close_off', { name: workflow.name })}
     />
+  );
+}
+
+/**
+ * What the switch means for the agents (spec 7.4): the new workflow's statuses per step, or, when the old one had all
+ * four and the new one has not, that agents are off in the project afterwards. Nothing when neither had them.
+ */
+export function AgentsNote({ from, to, project }: { from: WorkflowRecord; to: WorkflowRecord; project: Pick<Project, 'identifier'> }) {
+  if (stepsComplete(to.states, to.agent_states)) {
+    const named = AGENT_STEPS.map((step) => t('settings.project.workflow.agents.step', { step: t(STEP_NAMES[step]), state: to.states.find((state) => state.id === to.agent_states[step])!.name }));
+    return (
+      <Banner role="status" tone="neutral" title={t('settings.project.workflow.agents.title')}>
+        {t('settings.project.workflow.agents.from', { name: to.name, steps: new Intl.ListFormat(intlLocale(), { type: 'conjunction' }).format(named) })}
+      </Banner>
+    );
+  }
+  if (!stepsComplete(from.states, from.agent_states)) return null;
+  const none = AGENT_STEPS.every((step) => to.agent_states[step] === null);
+  return (
+    <Banner role="status" tone="danger" title={t('settings.project.workflow.agents.off_title', { identifier: project.identifier })}>
+      {t(none ? 'settings.project.workflow.agents.off_none' : 'settings.project.workflow.agents.off_some', { name: to.name })}
+    </Banner>
   );
 }
 
@@ -248,7 +274,12 @@ export function Workflow({ project, canManage }: ProjectSectionProps) {
           notice={noticeOf(refusal, markedPaths(refusal, 'mapping'))}
           finalFocus={returnTo}
           onConfirm={(mapping) => void confirm(asking.to, mapping)}
-          aside={(mapping) => autoClose && <AutoCloseNote workflow={asking.to} stateId={autoClose.settings.state_id} mapping={mapping} />}
+          aside={(mapping) => (
+            <>
+              <AgentsNote from={current} to={asking.to} project={project} />
+              {autoClose && <AutoCloseNote workflow={asking.to} stateId={autoClose.settings.state_id} mapping={mapping} />}
+            </>
+          )}
         />
       )}
     </>

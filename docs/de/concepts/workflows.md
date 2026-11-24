@@ -70,7 +70,7 @@ Ein Workflow nennt den Status, den jeder Schritt der Agenten setzt, und jedes Pr
 | `correction` (Korrektur) | Backlog oder Unstarted | Todo |
 | `merged` (Gemergt) | Completed | Done |
 
-Org-Admins setzen sie über REST und MCP (`agent_states` des Workflows, Schritt → ID eines Status; der Editor zeigt sie später). Fehlen sie beim Speichern, bleiben die Schritte. Ein Schritt auf einem Status anderer Kategorie ist ein `422` am Schritt, und In Arbeit und In Review brauchen zwei verschiedene Status; ein Status, den ein Schritt nennt, behält seine Kategorie (`422` am Status). Geht ein Status, folgt sein Schritt dem Status, der seine Items übernimmt (`state_mapping`), wenn der passt, sonst ist der Schritt leer. Nur ein Workflow mit allen vier Schritten lässt Pull Requests Items bewegen.
+Org-Admins setzen sie im Workflow-Editor, Abschnitt **Agenten** (**Vorschlag übernehmen** füllt die leeren Schritte nach Name und Kategorie der Status), oder über REST und MCP (`agent_states` des Workflows, Schritt → ID eines Status). Die Agenten-Einstellungen eines Projekts zeigen die Schritte zum Lesen, und der Workflow-Wechsel eines Projekts sagt vorher, ob die Agenten an bleiben. Fehlen sie beim Speichern, bleiben die Schritte. Ein Schritt auf einem Status anderer Kategorie ist ein `422` am Schritt, und In Arbeit und In Review brauchen zwei verschiedene Status; ein Status, den ein Schritt nennt, behält seine Kategorie (`422` am Status). Geht ein Status, folgt sein Schritt dem Status, der seine Items übernimmt (`state_mapping`), wenn der passt, sonst ist der Schritt leer. Nur ein Workflow mit allen vier Schritten lässt Pull Requests Items bewegen.
 
 ### Pull Requests
 

@@ -198,7 +198,7 @@ it('guards without any run and tells the org admins, and in a project being dele
 
     SendNotificationMail::run(Actor::system(User::defaultBot(), 'test'), NotificationMail::query()->where('user_id', $this->admin->id)->sole()->id);
     Mail::assertSent(NotificationDigest::class, fn (NotificationDigest $mail) => $mail->hasTo($this->admin->email)
-        && str_contains($mail->render(), 'fffffff') && str_contains($mail->render(), '/projects/WEB/settings')
+        && str_contains($mail->render(), 'fffffff') && str_contains($mail->render(), '/projects/WEB/settings/agents')
         && $mail->envelope()->subject === __('mail.notifications.guard.subject', ['identifier' => 'WEB']));
 
     $deleting = Project::factory()->create(['deleting_at' => now()]);

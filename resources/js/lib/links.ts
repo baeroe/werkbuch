@@ -37,6 +37,8 @@ export const paths = {
   newWorkflow: (from?: string) => `/settings/workflows?workflow=new${from === undefined ? '' : `&from=${segment(from)}`}`,
   /** The log of deliveries of a webhook, a view of the webhooks section. */
   webhookDeliveries: (id: string) => `/settings/webhooks?deliveries=${segment(id)}`,
+  /** A bot as an agent, a view of the bots section (WEBU-27). */
+  botAgent: (id: string) => `/settings/bots?agent=${segment(id)}`,
   me: (section?: string) => below('/me', section),
   login: () => '/login',
   logout: () => '/logout',

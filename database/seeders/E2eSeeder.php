@@ -5,11 +5,13 @@ namespace Database\Seeders;
 use App\Access\OrgRole;
 use App\Access\RoleAssignments;
 use App\Actions\Attachments\PruneUnownedAttachments;
+use App\Actions\GitHub\DisconnectGitHub;
 use App\Actions\Labels\DeleteLabel;
 use App\Actions\Projects\PurgeProject;
 use App\Actions\Properties\DeleteProperty;
 use App\Actions\RelationTypes\DeleteRelationType;
 use App\Actions\Resolutions\DeleteResolution;
+use App\Actions\Runners\RevokeRunner;
 use App\Actions\Views\DeleteView;
 use App\Actions\Webhooks\DeleteWebhook;
 use App\Actions\Workflows\DeleteWorkflow;
@@ -19,6 +21,7 @@ use App\Domain\Notifications\NotificationKind;
 use App\Enums\AccountType;
 use App\Enums\Locale;
 use App\Models\Automation;
+use App\Models\GitHubApp;
 use App\Models\Invitation;
 use App\Models\Label;
 use App\Models\Notification;
@@ -29,6 +32,7 @@ use App\Models\Project;
 use App\Models\Property;
 use App\Models\RelationType;
 use App\Models\Resolution;
+use App\Models\Runner;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
@@ -108,6 +112,15 @@ class E2eSeeder extends Seeder
 
         // the webhooks earlier runs created (all named "E2E …"), through the delete action: before their projects go
         Webhook::query()->where('name', 'like', self::PROJECT_PREFIX.'%')->each(fn (Webhook $webhook) => DeleteWebhook::run(Actor::automation('e2e_reset'), $webhook));
+
+        // the runners earlier runs connected (all named "E2E …", e2e/tests/runners.spec.ts): revoked through the action
+        Runner::query()->whereNull('revoked_at')->where('name', 'like', self::PROJECT_PREFIX.'%')->each(fn (Runner $runner) => RevokeRunner::run(Actor::automation('e2e_reset'), $runner));
+
+        // the GitHub app an earlier run of e2e/tests/github.spec.ts made (slug `e2e-…`; an instance has one app, the spec
+        // makes it only when there is none): disconnected through the action, with its installations, repos and links
+        if (GitHubApp::query()->where('slug', 'like', 'e2e-%')->exists()) {
+            DisconnectGitHub::run(Actor::automation('e2e_reset'));
+        }
 
         // the demo webhooks stay off here (K8): the queue of DDEV would send every state change of every spec to hosts
         // that do not exist, and the system would switch "Deploy-Bot" off after a day and tell the org admins; only the

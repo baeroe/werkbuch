@@ -9,10 +9,14 @@ import type { Page, PageArgs } from './client';
 import { del, getPage, one, put, saveOne } from './http';
 import { projectPath } from './projects';
 
-/** A workflow as a client sends it: new workflows and new states come without an id. */
-export type WorkflowInput = Omit<Workflow, 'id' | 'states'> & {
+/**
+ * A workflow as a client sends it: new workflows and new states come without an id. Without `agent_states` the server
+ * keeps the stored steps of the agents, a removed status passing its step on along `state_mapping`.
+ */
+export type WorkflowInput = Omit<Workflow, 'id' | 'states' | 'agent_states'> & {
   id?: string;
   states: (Omit<State, 'id'> & { id?: string })[];
+  agent_states?: Workflow['agent_states'];
 };
 
 export function listWorkflows(args: PageArgs = {}): Promise<Page<Workflow>> {

@@ -33,6 +33,16 @@ An agent learns about its work through a [webhook](/en/webhooks) that is set to 
 
 The agent then works with a token of its bot over [MCP](/en/mcp#agent-scenario); the token needs `mcp`, `read` and, to change anything, `write`. `whoami` tells it which account the token belongs to, `work-items:get` reads the item (the description as Markdown), `manage-comments:add` reports what it did and `manage-work-items:transition` moves the item on. Every change shows up in the history under the name of the bot, with `via: mcp`. A script without an MCP client does the same over the [REST API](/en/api): `GET /api/v1/me`, `GET /api/v1/work-items/{item}`, a comment and a transition.
 
+## Work as an agent
+
+A bot can work as an agent: whoever assigns it an item starts a run on a **runner**, a Mac or Linux machine of yours with Claude Code or Codex. Org admins set this up in three places:
+
+- **Settings → Runners → Connect runner** shows a command with a one-time code (ten minutes, once). Run it in the terminal of the machine, best under a user of its own without admin rights; it installs the runner from this instance and starts it as a service, and the dialog says when the runner has connected. Each runner card shows whether it is online (a contact within the last minute), its places (how many runs at once, in all, per repo and for reviews and answers; set under **Places**), its last load, the CLIs it found, what its harness offers and what runs there, with **Cancel**. **Revoke** stops its token and cancels what runs on it.
+- **Settings → GitHub → Connect with GitHub** registers one GitHub app for the instance and installs it on the repos the agents work on; the app pushes and opens pull requests, never a person. The page lists the repos with their project and whether a ruleset protects the base branch. **Disconnect** makes werkbuch forget the app; open strands pause.
+- **Settings → Bots → Set up agent** at a bot: on or off, the runner pool (none ticked: every runner), the CLI with the runners that have it installed and signed in, and the default model. The default bot and a bot without a responsible person cannot be agents.
+
+A project picks its repo and base branch under **Project settings → Agents**, which also shows the [steps of the agents](/en/concepts/workflows#steps-of-the-agents) of its workflow. When the app pushes to the base branch without a merge of werkbuch, every strand of the project pauses and the page says so; a project admin checks the commit at GitHub and chooses **Confirm and continue**.
+
 ## The default bot
 
 Every organization has one default bot, named "Automation". Automations and the schedules of templates act on its behalf, so their changes show up in the history under its name.

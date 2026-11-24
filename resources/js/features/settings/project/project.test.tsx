@@ -923,6 +923,50 @@ describe('Workflow', () => {
     expect(autoCloseNote(plain)).toBeNull();
   });
 
+  it('says in the switch which states the agents take in the new workflow, and that they go off without all steps', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderSettings('workflow', switchable());
+
+    // Standard has no steps, Agentur-Freigabe all four
+    await chooseAgency(user);
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    let dialog = await screen.findByRole('dialog');
+    const steps = within(dialog).getByText(/^Die Status je Schritt kommen aus/);
+    expect(steps.textContent).toBe('Die Status je Schritt kommen aus „Agentur-Freigabe“: In Arbeit „In Progress“, In Review „Review“, Korrektur „Todo“ und Gemergt „Done“.');
+    expect(steps.closest('[role="status"]')!.textContent).toContain('Agenten');
+    unmount();
+    api?.restore();
+
+    // from Agentur-Freigabe to Standard, which has none, and to a workflow with only some
+    const some: WorkflowRecord = { ...standard, id: 'wf_some', name: 'Halb', is_default: false, agent_states: { working: 'std_progress', review: null, correction: null, merged: null } };
+    const onAgency = { ...web, workflow_id: 'wf_agency' };
+    const view = renderSettings('workflow', { 'GET /api/v1/workflows': () => ({ body: list([standard, agency, some]) }) }, { project: onAgency });
+    await user.click(await screen.findByRole('combobox', { name: /Neuer Workflow/ }));
+    await user.click(await screen.findByRole('option', { name: 'Standard (Standard)' }));
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Agenten sind danach in WEB aus')).toBeTruthy();
+    expect(within(dialog).getByText(/„Standard“ hat noch keine Agenten-Schritte/)).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    await user.click(screen.getByRole('combobox', { name: /Neuer Workflow/ }));
+    await user.click(await screen.findByRole('option', { name: 'Halb' }));
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/„Halb“ hat noch nicht alle Agenten-Schritte/)).toBeTruthy();
+    view.unmount();
+    api?.restore();
+
+    // neither had them: nothing about agents
+    renderSettings('workflow', { 'GET /api/v1/workflows': () => ({ body: list([standard, some]) }) });
+    await user.click(await screen.findByRole('combobox', { name: /Neuer Workflow/ }));
+    await user.click(await screen.findByRole('option', { name: 'Halb' }));
+    await user.click(screen.getByRole('button', { name: /Workflow wechseln …/ }));
+    dialog = await screen.findByRole('dialog');
+    expect(within(dialog).queryByText(/Agenten/)).toBeNull();
+  });
+
   /** The items of WEB per state of the standard workflow. */
   const counted = (usage: { state_id: string; items: number }[]) => ({ 'GET /api/v1/state-usage': () => ({ body: { data: usage } }) });
   const choice = (name: string) => screen.getByRole('combobox', { name: `Neuer Status für „${name}“` });
@@ -1013,7 +1057,7 @@ describe('Workflow', () => {
     ]);
     await user.click(choice('In Progress'));
     await user.click(await screen.findByRole('option', { name: 'Done' }));
-    expect(within(dialog).getByRole('status').textContent).toContain('3 offene Items gelten danach als geschlossen.');
+    expect(within(dialog).getByText(/3 offene Items gelten danach als geschlossen\./).closest('[role="status"]')).toBeTruthy();
     await user.click(within(dialog).getByRole('button', { name: /^Workflow wechseln/ }));
     await waitFor(() => expect(toastNamed('Workflow gewechselt')?.description).toBe('WEB nutzt jetzt „Agentur-Freigabe“. 5 Items haben einen neuen Status.'));
   });

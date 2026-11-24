@@ -286,6 +286,18 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'open the items of a project from the sidebar', file: 'projects.spec.ts', test: 'opens the items of a starred project from its name in the sidebar and folds its parts with the chevron' },
   { flow: 'make a table in a comment', file: 'comments.spec.ts', test: 'writes a comment with a table from /, adds a column with alt+F10 and sends it with mod+enter' },
   { flow: 'open the settings of a project without a star', file: 'projects.spec.ts', test: 'reaches the settings of a project without a star, with the keyboard' },
+  // runners (WEBU-27)
+  { flow: 'connect a runner', file: 'runners.spec.ts', test: 'connects a runner with the keyboard: the dialog shows the command and says when the runner is there' },
+  { flow: 'set the places of a runner', file: 'runners.spec.ts', test: 'sets the places, renames and revokes a runner with the keyboard' },
+  { flow: 'rename a runner', file: 'runners.spec.ts', test: 'sets the places, renames and revokes a runner with the keyboard' },
+  { flow: 'revoke a runner', file: 'runners.spec.ts', test: 'sets the places, renames and revokes a runner with the keyboard' },
+  { flow: 'cancel a run on a runner', file: 'runners.spec.ts', test: 'cancels a run on a runner with the keyboard; the focus goes to its card' },
+  { flow: 'connect GitHub', file: 'github.spec.ts', test: 'posts the manifest to GitHub when connecting, with the keyboard' },
+  { flow: 'choose the repo of a project', file: 'github.spec.ts', test: 'chooses the repo of a project with the keyboard' },
+  { flow: 'confirm an unauthorized merge', file: 'github.spec.ts', test: 'confirms an unauthorized merge with the keyboard' },
+  { flow: 'disconnect GitHub', file: 'github.spec.ts', test: 'disconnects GitHub with the keyboard' },
+  { flow: 'set up a bot as agent', file: 'agents-bot.spec.ts', test: 'sets up a bot as an agent with the keyboard: on, one runner as its pool, Codex, saved with mod+enter' },
+  { flow: 'set the agent steps of a workflow', file: 'agents-bot.spec.ts', test: 'sets the steps of the agents in a workflow with the keyboard: takes the proposal and saves it' },
 ];
 
 /**
@@ -311,6 +323,13 @@ export const API_AFTER: { file: string; test: string; call: string; reason: stri
     test: 'switches Assignee beim Start on with the keyboard; a person who starts an item becomes its assignee',
     call: "move(page, item.id, 'In Progress')",
     reason: 'starts the item over the API to show that the switched automation assigns it',
+  },
+  // the machine redeems the code the dialog shows: no person does that in werkbuch
+  {
+    file: 'runners.spec.ts',
+    test: 'connects a runner with the keyboard: the dialog shows the command and says when the runner is there',
+    call: "redeemRunnerCode(page, code, 'connect')",
+    reason: 'the machine redeems the code of the dialog (werkbuch-runner login); the flow is the dialog that waits for it',
   },
 ];
 

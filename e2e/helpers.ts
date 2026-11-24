@@ -878,3 +878,79 @@ export async function uploadViaApi(page: Page, projectId: string, file: TestFile
   const { data } = (await response.json()) as { data: { id: string } };
   return { id: data.id };
 }
+
+/**
+ * What the machine does with a code of "Runner verbinden" (`werkbuch-runner login`, spec 6.2): it redeems the code over
+ * the runner protocol (no session, the version and protocol in headers) and gets a runner of that name (`-2`, … when an
+ * active runner has it). The name is `E2E <variant> <run> <name>`; the E2eSeeder revokes what an aborted run left.
+ */
+export async function redeemRunnerCode(page: Page, code: string, name: string): Promise<{ id: string; name: string }> {
+  const response = await page.request.post(new URL('/api/runner/pair', test.info().project.use.baseURL!).toString(), {
+    data: { code, name: `E2E ${variant()} ${runId()} ${name}`.slice(0, 60), os: 'linux', arch: 'arm64', version: '0.4.0' },
+    headers: { Accept: 'application/json', 'X-Werkbuch-Runner-Version': '0.4.0', 'X-Werkbuch-Protocol': '1' },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  return ((await response.json()) as { runner: { id: string; name: string } }).runner;
+}
+
+/** A runner for a spec, connected before its first key: a code in the session, redeemed like the machine does. */
+export async function createE2eRunner(page: Page, name: string): Promise<{ id: string; name: string }> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'POST', '/api/v1/runner-pairings');
+  expect(response.status(), await response.text()).toBe(201);
+  const { data } = (await response.json()) as { data: { code: string } };
+  return redeemRunnerCode(page, data.code, name);
+}
+
+/** Revokes a runner of a spec (cleanup in `finally`): 200, or 404 for one that is revoked already. */
+export async function removeE2eRunner(page: Page, id: string): Promise<void> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'DELETE', `/api/v1/runners/${id}`);
+  expect([200, 404], await response.text()).toContain(response.status());
+}
+
+/** A run of an agent on a runner of a spec: running since now, or waiting for it (offline). */
+export type E2eRunnerRun = { itemId: string; status: 'running' | 'waiting' };
+
+/**
+ * A runner of a spec written straight into the database (`artisan tinker`), for what no protocol call of a spec makes
+ * quickly: a report (load, CLIs, equipment with a second way into werkbuch), offline for ten minutes (less than the 30
+ * after which its strands move), and runs of Kira on items of the spec. No pairing, so no throttle `runner-pair`. The
+ * name is `E2E <variant> <run> <name>`; revoke it in `finally` (`removeE2eRunner`), the E2eSeeder revokes what is left.
+ */
+export function createE2eRunnerRow(name: string, { online = true, runs = [] }: { online?: boolean; runs?: E2eRunnerRun[] } = {}): { id: string; name: string } {
+  const payload = {
+    name: `E2E ${variant()} ${runId()} ${name}`.slice(0, 60),
+    email: PEOPLE.e2e.email,
+    online,
+    runs,
+  };
+  const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const id = artisanEval(
+    [
+      `$p = json_decode('${json}', true);`,
+      "$erik = App\\Models\\User::query()->where('email', $p['email'])->value('id');",
+      "$kira = App\\Models\\User::query()->where('handle', 'kira')->value('id');",
+      '$runner = App\\Models\\Runner::query()->create([',
+      "  'name' => $p['name'], 'token_hash' => App\\Models\\Runner::hashToken(App\\Models\\Runner::newToken()),",
+      "  'os' => 'darwin', 'arch' => 'arm64', 'version' => '0.4.0', 'protocol' => 1, 'slots_total' => 2, 'slots_per_repo' => 1, 'slots_light' => 2,",
+      "  'load' => ['cpu' => 42, 'gpu' => 95, 'ram_used' => 12.5, 'ram_total' => 16, 'disk_free' => 200, 'disk_total' => 500],",
+      "  'clis' => [['cli' => 'claude', 'installed' => true, 'version' => '2.4.1', 'logged_in' => true, 'path' => '/usr/local/bin/claude'], ['cli' => 'codex', 'installed' => true, 'version' => null, 'logged_in' => false, 'path' => '/usr/local/bin/codex']],",
+      "  'equipment' => ['mcp_servers' => ['context7'], 'skills' => ['tdd', 'review'], 'plugins' => ['superpowers'], 'werkbuch_access' => ['werkbuch-prod']],",
+      "  'last_seen_at' => $p['online'] ? now() : now()->subMinutes(10), 'created_by' => $erik,",
+      ']);',
+      "foreach ($p['runs'] as $run) {",
+      "  $item = App\\Models\\WorkItem::query()->findOrFail($run['itemId']);",
+      "  $running = $run['status'] === 'running';",
+      '  App\\Models\\AgentRun::query()->create([',
+      "    'type' => 'task', 'status' => $run['status'], 'waiting_reason' => $running ? null : 'runner_offline', 'bot_id' => $kira, 'cli' => 'claude', 'model' => 'sonnet', 'model_source' => 'default',",
+      "    'runner_id' => $runner->id, 'project_id' => $item->project_id, 'work_item_id' => $item->id, 'context' => [], 'attempt' => 1,",
+      "    'started_at' => $running ? now() : null, 'lease_expires_at' => $running ? now()->addHour() : null,",
+      '  ]);',
+      '}',
+      'echo $runner->id, PHP_EOL;',
+    ].join('\n'),
+  );
+  expect(id).toMatch(/^[0-9a-z]{26}$/);
+  return { id, name: payload.name };
+}

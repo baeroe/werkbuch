@@ -22,6 +22,8 @@ import Bots from './Bots';
 import Labels from './catalogs/Labels';
 import RelationTypes from './catalogs/RelationTypes';
 import Resolutions from './catalogs/Resolutions';
+import Runners from './runners/Runners';
+import GitHub from './github/GitHub';
 import General from './General';
 import People from './People';
 import Properties from './properties/Properties';
@@ -42,6 +44,8 @@ const COMPONENTS: Record<SectionSlug, ComponentType<SectionProps>> = {
   'relation-types': RelationTypes,
   resolutions: Resolutions,
   webhooks: Webhooks,
+  runners: Runners,
+  github: GitHub,
   system: System,
 };
 
