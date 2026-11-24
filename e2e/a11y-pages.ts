@@ -11,7 +11,7 @@
  */
 
 import { expect, type Locator, type Page } from '@playwright/test';
-import { api, createE2eProject, createItem, login, PEOPLE, pngBytes, pressMod, removeE2eProject, removeE2eWebhook, runId, tr, uploadViaApi, variant } from './helpers';
+import { api, artisanEval, createE2eProject, createE2eRunner, createItem, login, PEOPLE, pngBytes, pressMod, removeE2eProject, removeE2eRunner, removeE2eWebhook, runId, tr, uploadViaApi, variant } from './helpers';
 
 /** What a path needs from the data of the run (A11Y ids, resolved over the API by the spec). */
 export type A11yIds = {
@@ -334,6 +334,33 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
     },
   }),
   state({
+    name: 'pairing dialog',
+    page: 'Settings/Organization',
+    path: () => '/settings/runners',
+    state: async (page) => {
+      await press(page, page.getByRole('button', { name: en('settings.runners.connect') }).first());
+      // a fresh code with its command (making it ends no runner; the code just runs out)
+      await expect(page.getByRole('dialog', { name: en('settings.runners.connect') }).getByText(en('settings.runners.pairing.waiting'))).toBeVisible();
+    },
+  }),
+  state({
+    name: 'runner places dialog',
+    page: 'Settings/Organization',
+    path: () => '/settings/runners',
+    // a runner of its own (the e2e data have none): connected over the protocol, then the list read anew
+    state: async (page) => {
+      const runner = await createE2eRunner(page, 'a11y');
+      await page.reload();
+      await press(page, page.getByRole('button', { name: en('settings.runners.action.places_named', { name: runner.name }) }));
+      await expect(page.getByRole('dialog', { name: en('settings.runners.slots.title', { name: runner.name }) }).getByRole('textbox', { name: en('settings.runners.pot.total') })).toBeVisible();
+    },
+    cleanup: async (page) => {
+      const response = await api(page, 'GET', '/api/v1/runners?per_page=100');
+      const { data } = (await response.json()) as { data: { id: string; name: string }[] };
+      for (const runner of data.filter((entry) => entry.name.startsWith(e2eName()))) await removeE2eRunner(page, runner.id);
+    },
+  }),
+  state({
     name: 'inbox with cards',
     page: 'Inbox/Index',
     person: 'mara',
@@ -353,6 +380,8 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
   settings('organization', 'relation-types'),
   settings('organization', 'resolutions'),
   settings('organization', 'webhooks'),
+  settings('organization', 'runners'),
+  settings('organization', 'github'),
   settings('organization', 'system', 'system page'),
   settings('personal', 'security'),
   settings('personal', 'notifications'),
@@ -361,4 +390,54 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
   settings('project', 'workflow'),
   settings('project', 'types'),
   settings('project', 'automations'),
+  settings('project', 'agents'),
+  state({
+    name: 'disconnect GitHub dialog',
+    page: 'Settings/Organization',
+    path: () => '/settings/github',
+    // the connected view needs an app: one named e2e-werkbuch when the instance has none (without an installation, so
+    // werkbuch asks GitHub nothing), taken away in `cleanup` (else by the E2eSeeder); an app of the instance stays
+    state: async (page) => {
+      a11yApp = JSON.parse(
+        artisanEval(
+          [
+            '$created = App\\Models\\GitHubApp::current() === null;',
+            "$erik = App\\Models\\User::query()->where('email', 'e2e@example.com')->firstOrFail();",
+            "if ($created) { App\\Models\\GitHubApp::factory()->create(['slug' => 'e2e-werkbuch', 'name' => 'E2E werkbuch', 'owner_login' => 'e2e', 'created_by' => $erik->id]); }",
+            "echo json_encode(['created' => $created]), PHP_EOL;",
+          ].join('\n'),
+        ),
+      ) as { created: boolean };
+      await page.reload();
+      await press(page, page.getByRole('button', { name: en('settings.github.disconnect.button') }));
+      await expect(page.getByRole('alertdialog', { name: en('settings.github.disconnect.question') })).toBeVisible();
+    },
+    cleanup: async () => {
+      if (a11yApp?.created) artisanEval("App\\Models\\GitHubApp::query()->where('slug', 'e2e-werkbuch')->delete(); echo 'ok', PHP_EOL;");
+      a11yApp = null;
+    },
+  }),
+  state({
+    name: 'workflow editor with agent steps',
+    page: 'Settings/Organization',
+    path: () => '/settings/workflows',
+    // the editor of a demo workflow, its section "Agents" with the steps included (WEBU-27)
+    state: async (page) => {
+      await press(page, page.getByRole('link', { name: new RegExp(`^${en('settings.workflows.edit')} `) }).first());
+      await expect(page.getByRole('region', { name: en('settings.workflows.agents.title') })).toBeVisible();
+    },
+  }),
+  state({
+    name: 'bot agent',
+    page: 'Settings/Organization',
+    path: () => '/settings/bots',
+    // Kira of the demo as an agent: Mara is responsible for it, so the form shows (WEBU-27)
+    state: async (page) => {
+      await press(page, page.getByRole('link', { name: new RegExp(`${en('settings.bots.agent.for', { name: 'Kira' })}$`) }));
+      await expect(page.getByRole('switch', { name: en('settings.bot_agent.enabled') })).toBeVisible();
+    },
+  }),
 ];
+
+/** The app the state "disconnect GitHub dialog" made, for its cleanup. */
+let a11yApp: { created: boolean } | null = null;

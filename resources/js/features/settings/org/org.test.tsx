@@ -88,6 +88,9 @@ function routes(overrides: Record<string, MockRoute> = {}): Record<string, MockR
     'GET /api/v1/organization': () => ({ body: { data: organization } }),
     'GET /api/v1/users': accounts([mara, lene, sven, automation, kira]),
     'GET /api/v1/invitations': () => ({ body: list([invitation()]) }),
+    // the bot cards say whether a bot is an agent (WEBU-27); the view itself is tested in bots/botAgent.test.tsx
+    'GET /api/v1/runners': () => ({ body: list([]) }),
+    'GET /api/v1/bots/u_kira/agent': () => ({ body: { data: { bot_id: 'u_kira', enabled: false, runner_ids: [], cli: 'claude', model: 'sonnet', models: {}, updated_at: null } } }),
     'GET /api/v1/tokens': (_body, url) => ({
       body: list(
         url.searchParams.get('filter[user_id]') === 'u_kira'
@@ -158,6 +161,8 @@ describe('OrgSettings', () => {
       ['Relationstypen', '/settings/relation-types'],
       ['Resolutions', '/settings/resolutions'],
       ['Webhooks', '/settings/webhooks'],
+      ['Runner', '/settings/runners'],
+      ['GitHub', '/settings/github'],
       ['System', '/settings/system'],
     ]);
     expect(screen.getByRole('heading', { level: 1, name: 'Einstellungen' })).toBeTruthy();

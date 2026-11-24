@@ -33,6 +33,16 @@ Ein Agent erfährt von seiner Arbeit über einen [Webhook](/de/webhooks) mit **N
 
 Der Agent arbeitet dann mit einem Token seines Bots über [MCP](/de/mcp#agent-szenario); das Token braucht `mcp`, `read` und, um etwas zu ändern, `write`. `whoami` sagt ihm, zu welchem Konto das Token gehört, `work-items:get` liest das Item (die Beschreibung als Markdown), `manage-comments:add` meldet, was er getan hat, und `manage-work-items:transition` zieht das Item weiter. Jede Änderung steht in der History unter dem Namen des Bots, mit `via: mcp`. Ein Skript ohne MCP-Client macht dasselbe über die [REST-API](/de/api): `GET /api/v1/me`, `GET /api/v1/work-items/{item}`, ein Kommentar und ein Statuswechsel.
 
+## Als Agent arbeiten
+
+Ein Bot kann als Agent arbeiten: Wer ihm ein Item zuweist, startet einen Auftrag auf einem **Runner**, einem eigenen Mac oder Linux-Rechner mit Claude Code oder Codex. Org-Admins richten das an drei Stellen ein:
+
+- **Einstellungen → Runner → Runner verbinden** zeigt einen Befehl mit einem Einmal-Code (zehn Minuten, einmal). Führ ihn im Terminal der Maschine aus, am besten unter einem eigenen Benutzer ohne Admin-Rechte; er installiert den Runner von dieser Instanz und startet ihn als Dienst, und der Dialog sagt, sobald der Runner verbunden ist. Jede Runner-Karte zeigt, ob er online ist (ein Kontakt in der letzten Minute), seine Plätze (wie viele Aufträge zugleich, gesamt, je Repo und für Reviews und Antworten; unter **Plätze**), seine letzte Auslastung, die gefundenen CLIs, was seine Ausstattung bietet und was dort läuft, mit **Abbrechen**. **Widerrufen** macht sein Token ungültig und bricht ab, was auf ihm läuft.
+- **Einstellungen → GitHub → Mit GitHub verbinden** legt eine GitHub-App für die Instanz an und installiert sie auf den Repos, an denen Agenten arbeiten; die App pusht und öffnet Pull Requests, nie eine Person. Die Seite nennt die Repos mit ihrem Projekt und ob ein Ruleset den Basis-Branch schützt. **GitHub trennen** lässt werkbuch die App vergessen; offene Stränge pausieren.
+- **Einstellungen → Bots → Agent einrichten** an einem Bot: an oder aus, der Runner-Pool (keiner angehakt: alle Runner), das CLI mit den Runnern, die es installiert und angemeldet haben, und das Standard-Modell. Der Standard-Bot und ein Bot ohne verantwortliche Person können keine Agenten sein.
+
+Ein Projekt wählt Repo und Basis-Branch unter **Projekteinstellungen → Agenten**; dort stehen auch die [Schritte der Agenten](/de/concepts/workflows#schritte-der-agenten) seines Workflows. Pusht die App auf den Basis-Branch, ohne dass werkbuch gemergt hat, pausieren alle Stränge des Projekts, und die Seite sagt es; ein Projekt-Admin prüft den Commit bei GitHub und wählt **Bestätigen und fortsetzen**.
+
 ## Der Standard-Bot
 
 Jede Organisation hat einen Standard-Bot mit dem Namen „Automation“. Automatisierungen und die Zeitpläne von Vorlagen handeln in seinem Namen, ihre Änderungen stehen in der History also unter seinem Namen.

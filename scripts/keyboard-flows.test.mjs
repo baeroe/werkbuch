@@ -121,6 +121,16 @@ const FLOWS = [
   'open the items of a project from the sidebar', // 5.1, WEBU-10
   'make a table in a comment', // 4.16, WEBU-11
   'open the settings of a project without a star', // 4.4, 5.2, WEBU-12
+  'connect a runner', // 6.2, 10.1, WEBU-27
+  'set the places of a runner', // 8.4, 10.1, WEBU-27
+  'rename a runner', // 10.1, WEBU-27
+  'revoke a runner', // 6.2, 10.1, WEBU-27
+  'connect GitHub', // 10.2, WEBU-27
+  'choose the repo of a project', // 10.3, WEBU-27
+  'confirm an unauthorized merge', // 11.3, WEBU-27
+  'disconnect GitHub', // 10.2, WEBU-27
+  'set up a bot as agent', // 10.4, WEBU-27
+  'set the agent steps of a workflow', // 7.4, WEBU-27
 ];
 /** A name of `GAPS` with a space is a flow, one without a key of the catalog or the widgets. */
 const isFlow = (name) => /\s/.test(name);

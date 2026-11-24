@@ -90,7 +90,7 @@ export function hrefOf(notification: Notification, project: Project | undefined)
   if (notification.event === 'webhook_disabled') {
     return notification.data.webhook_id ? paths.webhookDeliveries(notification.data.webhook_id) : paths.settings('webhooks');
   }
-  if (notification.event === 'merge_guard_detected') return project ? paths.projectSettings(project.identifier) : paths.projects();
+  if (notification.event === 'merge_guard_detected') return project ? paths.projectSettings(project.identifier, 'agents') : paths.projects();
   // a kind without an item that comes later leads to the settings, never to the webhooks (T14-M7)
   return paths.settings();
 }

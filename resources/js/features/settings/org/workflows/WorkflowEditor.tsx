@@ -12,6 +12,11 @@
  * save as `state_mapping`. Items that arrived meanwhile come back as 409 `state_in_use`, which opens the question (or
  * adds their rows to it). Leaving with unsaved changes asks first (`LeaveGuard`). Members get the same view without
  * any way to change it.
+ *
+ * "Agenten" (spec 7.4, `AgentSteps`): the status per step of the agents. A status that holds a step keeps a category
+ * the step accepts and "In Arbeit" and "In Review" need two statuses: both stop a save and take the focus, as do the
+ * server's refusals at `agent_states.<step>` and `states.<n>.category`. The steps go with a save only when they changed
+ * (`agentStatesToSend`), so a removed status passes its step on along `state_mapping`.
  */
 
 import { Link } from '@inertiajs/react';
@@ -27,6 +32,7 @@ import { StatusIcon } from '@/components/ui/StatusIcon';
 import { Switch } from '@/components/ui/Switch';
 import { Textarea } from '@/components/ui/Textarea';
 import { toast } from '@/components/ui/toast';
+import { AGENT_STEPS, boundStates, STEP_CATEGORIES } from '@/domain/agents';
 import { validateWorkflow, type WorkflowIssue } from '@/domain/workflow';
 import { useSettle } from '@/hooks/mutation';
 import { useProjects } from '@/hooks/projects';
@@ -35,7 +41,7 @@ import { useSaveWorkflow, useWorkflows } from '@/hooks/workflows';
 import { notifyError } from '@/lib/errors';
 import { t, tn } from '@/lib/i18n';
 import { paths } from '@/lib/links';
-import type { Project, StateUsage, Workflow } from '@/types';
+import type { AgentStep, Project, StateUsage, Workflow } from '@/types';
 import { CATEGORY_LABELS } from '../../catalog/choices';
 import { localId } from '../../catalog/localId';
 import { mergeUsage, rowsFor } from '../../catalog/mapping';
@@ -44,9 +50,10 @@ import { ReadOnlyNotice } from '../../frame/access';
 import { fieldMessage, hasReason, noticeOf, useSaveShortcut } from '../../frame/form';
 import { LeaveGuard } from '../../frame/LeaveGuard';
 import { FormSkeleton, Loaded, Measure, Panel, readOnlyField, SectionHeader } from '../../frame/parts';
+import { agentStepId, AgentSteps, categoriesText, sameStatus, STEP_NAMES } from './AgentSteps';
 import { allPairs, blankDraft, comparable, copyDraftOf, draftOf, toInput, toWorkflow, type Draft, type DraftState } from './draft';
 import { IssueList } from './IssueList';
-import { stateNameId, StateRows } from './StateRows';
+import { stateCategoryId, stateNameId, StateRows } from './StateRows';
 import { TransitionMatrix } from './TransitionMatrix';
 
 /** The id of the editor's title, which takes the focus after a new workflow moved to its own address. */
@@ -54,6 +61,9 @@ export const WORKFLOW_TITLE_ID = 'workflow-title';
 
 /** The fields of a status the server may refuse at its row. */
 const STATE_FIELDS = ['name', 'id', 'icon', 'category'] as const;
+
+/** Where the server refuses the steps of the agents: at the step. */
+const STEP_PATHS = ['agent_states', ...AGENT_STEPS.map((step) => `agent_states.${step}`)];
 
 function BackLink({ variant = 'ghost' }: { variant?: 'ghost' | 'secondary' }) {
   return (
@@ -130,7 +140,7 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
   const statePaths = sent.current.states.flatMap((_, index) => STATE_FIELDS.map((field) => `states.${index}.${field}`));
   const unplaced =
     save.error instanceof ApiError && save.error.status === 422 && !hasReason(save.error, 'invalid_workflow')
-      ? noticeOf(save.error, ['name', 'initial_state_id', 'state_mapping', ...statePaths, ...markedPaths(save.error, 'state_mapping')])
+      ? noticeOf(save.error, ['name', 'initial_state_id', 'state_mapping', ...STEP_PATHS, ...statePaths, ...markedPaths(save.error, 'state_mapping')])
       : null;
   const nameError = attempted && draft.name.trim() === '' ? t('settings.workflows.editor.name_required') : fieldMessage(save.error, 'name');
   const startError = issues.some((issue) => issue.code === 'no_initial_state') ? t('settings.workflows.editor.start_required') : fieldMessage(save.error, 'initial_state_id');
@@ -139,6 +149,21 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
     const index = sent.current.states.indexOf(id);
     return index < 0 ? undefined : fieldMessage(save.error, ...STATE_FIELDS.map((field) => `states.${index}.${field}`));
   };
+  // a status that holds a step of the agents keeps a category the step accepts: the error stands at its category
+  const bound = useMemo(() => boundStates(draft.states, draft.agent_states), [draft.states, draft.agent_states]);
+  const categoryError = (id: string): string | undefined => {
+    const step = bound[id];
+    if (!step) return undefined;
+    const index = draft.states.findIndex((state) => state.id === id);
+    return t('settings.workflows.agents.bound', {
+      name: draft.states[index]!.name.trim() || t('settings.workflows.state.fallback', { number: index + 1 }),
+      step: t(STEP_NAMES[step]),
+      categories: categoriesText(STEP_CATEGORIES[step]),
+    });
+  };
+  const same = sameStatus(draft.agent_states);
+  const stepError = (step: AgentStep): string | undefined =>
+    step === 'review' && same ? t('field.agent_states.same') : sent.current.draft === draft ? fieldMessage(save.error, `agent_states.${step}`, ...(step === 'working' ? ['agent_states'] : [])) : undefined;
 
   // a refusal takes the focus where it shows: the findings, the first marked field, or the notice
   useEffect(() => {
@@ -192,6 +217,15 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
       document.getElementById(stateNameId(blank.id))?.focus();
       return;
     }
+    const misfit = draft.states.find((state) => bound[state.id]);
+    if (misfit) {
+      document.getElementById(stateCategoryId(misfit.id))?.focus();
+      return;
+    }
+    if (same) {
+      document.getElementById(agentStepId('review'))?.focus();
+      return;
+    }
     if (localIssues.length > 0) {
       // the findings are listed above: they take the focus, so nobody has to look for what stops the save
       issueList.current?.focus();
@@ -221,7 +255,7 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
 
     const moved = stateMapping ? mappingRows.reduce((sum, row) => sum + row.items, 0) : 0;
     sent.current = { draft, states: draft.states.map((state) => state.id) };
-    settle(save.mutateAsync({ workflow: toInput(draft, base?.id), options: stateMapping ? { state_mapping: stateMapping } : undefined }), {
+    settle(save.mutateAsync({ workflow: toInput(draft, base, stateMapping), options: stateMapping ? { state_mapping: stateMapping } : undefined }), {
       onSuccess: (saved) => {
         setMapping((current) => current && { ...current, open: false });
         toast({
@@ -390,6 +424,7 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
           readOnly={readOnly}
           unreachable={unreachable}
           errorOf={stateError}
+          categoryErrorOf={categoryError}
           onChange={(states) => patch({ states })}
           onPatch={patchState}
           onRemove={removeState}
@@ -419,6 +454,8 @@ function EditorForm({ initial, existing, projects, readOnlyReason, focusTitle, m
           </div>
         )}
       </Panel>
+
+      <AgentSteps draft={draft} saved={base} readOnly={readOnly} errorOf={stepError} onChange={(agent_states) => patch({ agent_states })} />
 
       <LeaveGuard dirty={dirty && !readOnly} what={t('settings.workflows.editor.leave_what')} bypass={leaving} />
 

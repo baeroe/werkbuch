@@ -118,6 +118,7 @@ export const standard: Workflow = {
     { id: 'std_cancelled', name: 'Cancelled', icon: 'cross', category: 'canceled', position: 5 },
   ],
   transitions: [],
+  agent_states: { working: null, review: null, correction: null, merged: null },
 };
 
 /** An agency workflow with an internal review and a customer approval; only listed transitions are allowed. */
@@ -155,6 +156,7 @@ export const agency: Workflow = {
     ['app_done', 'app_todo'],
     ['app_cancelled', 'app_backlog'],
   ],
+  agent_states: { working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: 'app_done' },
 };
 
 /* ------------------------------------------------------- types, properties, catalogs */

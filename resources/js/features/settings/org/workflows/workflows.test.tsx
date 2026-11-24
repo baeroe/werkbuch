@@ -58,6 +58,7 @@ const spare: Workflow = {
   initial_state_id: 'sp_backlog',
   states: agency.states.map((state) => ({ ...state, id: state.id.replace('app_', 'sp_') })),
   transitions: [],
+  agent_states: { working: null, review: null, correction: null, merged: null },
 };
 
 const projects = [
@@ -80,6 +81,10 @@ function saved(input: WorkflowInput, id: string): Workflow {
     initial_state_id: mapped(input.initial_state_id),
     states: input.states.map((state) => ({ ...state, id: mapped(state.id!) })),
     transitions: input.transitions.map(([from, to]): Transition => [mapped(from), mapped(to)]),
+    // without steps the server keeps the stored ones
+    agent_states: input.agent_states
+      ? (Object.fromEntries(Object.entries(input.agent_states).map(([step, state]) => [step, state && mapped(state)])) as Workflow['agent_states'])
+      : (stored.find((entry) => entry.id === id)?.agent_states ?? { working: null, review: null, correction: null, merged: null }),
   };
 }
 
@@ -876,5 +881,216 @@ describe('the workflow editor', () => {
 
     expect(screen.getByText('Der Workflow wird geladen …')).toBeTruthy();
     expect(await screen.findByText('Die Workflows konnten nicht geladen werden')).toBeTruthy();
+  });
+});
+
+/* ------------------------------------------------------------------------ agents */
+
+describe('the steps of the agents in the workflow editor', () => {
+  const step = (name: string) => screen.getByRole('combobox', { name: new RegExp(`^Status für ${name}`) });
+  const panel = () => screen.getByRole('region', { name: 'Agenten' });
+  const sent = (path: string) => callsTo(path === '/api/v1/workflows' ? 'POST' : 'PUT', path)[0]!.body as WorkflowInput;
+
+  it('shows the status per step, and sends the steps only when they changed', async () => {
+    const user = userEvent.setup();
+    renderAt('/settings/workflows?workflow=wf_agency');
+
+    expect((await screen.findByRole('combobox', { name: /^Status für In Arbeit/ })).textContent).toContain('In Progress');
+    expect(step('In Review').textContent).toContain('Review');
+    expect(step('Korrektur').textContent).toContain('Todo');
+    expect(step('Gemergt').textContent).toContain('Done');
+    expect(within(panel()).getByText(/^Sobald ein Auftrag startet\. Kategorie Started\./)).toBeTruthy();
+    expect(within(panel()).getByText(/Kategorie Unstarted oder Backlog\./)).toBeTruthy();
+    // all four set: no proposal, no note
+    expect(within(panel()).queryByRole('button', { name: 'Vorschlag übernehmen' })).toBeNull();
+    expect(within(panel()).queryByText(/sind die Agenten in den Projekten/)).toBeNull();
+
+    // only the statuses of a fitting category are offered
+    await user.click(step('Korrektur'));
+    expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toEqual(['Kein Status', 'Backlog', 'Todo']);
+    await user.keyboard('{Escape}');
+
+    // a change elsewhere leaves the steps to the server
+    await user.type(document.getElementById('workflow-name')!, ' neu');
+    await user.click(save());
+    await waitFor(() => expect(callsTo('PUT', '/api/v1/workflows/wf_agency')).toHaveLength(1));
+    expect(sent('/api/v1/workflows/wf_agency')).not.toHaveProperty('agent_states');
+
+    // a changed step goes as all four
+    await user.click(step('Gemergt'));
+    await user.click(await screen.findByRole('option', { name: 'Kein Status' }));
+    expect(within(panel()).getByText('Ohne „Gemergt“ sind die Agenten in den Projekten dieses Workflows aus.')).toBeTruthy();
+    await user.click(save());
+    await waitFor(() => expect(callsTo('PUT', '/api/v1/workflows/wf_agency')).toHaveLength(2));
+    expect((callsTo('PUT', '/api/v1/workflows/wf_agency')[1]!.body as WorkflowInput).agent_states).toEqual({ working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: null });
+  });
+
+  it('proposes statuses by category and name, takes the proposal into the empty steps and saves them', async () => {
+    const user = userEvent.setup();
+    renderAt('/settings/workflows?workflow=wf_standard');
+
+    expect(await within(await screen.findByRole('region', { name: 'Agenten' })).findByText('Vorschlag: „In Progress“.')).toBeTruthy();
+    expect(within(panel()).getByText('Vorschlag: „Pending“.')).toBeTruthy();
+    expect(within(panel()).getByText('Vorschlag: „Todo“.')).toBeTruthy();
+    expect(within(panel()).getByText('Vorschlag: „Done“.')).toBeTruthy();
+    expect(within(panel()).getByText('Ohne Status je Schritt sind die Agenten in den Projekten dieses Workflows aus.')).toBeTruthy();
+
+    // a step set by hand keeps its status
+    await user.click(step('Korrektur'));
+    await user.click(await screen.findByRole('option', { name: 'Backlog' }));
+    await user.click(within(panel()).getByRole('button', { name: 'Vorschlag übernehmen' }));
+    await waitFor(() => expect(document.activeElement).toBe(step('In Arbeit')));
+    expect(step('In Arbeit').textContent).toContain('In Progress');
+    expect(step('Korrektur').textContent).toContain('Backlog');
+    expect(within(panel()).queryByRole('button', { name: 'Vorschlag übernehmen' })).toBeNull();
+
+    await user.click(save());
+    await waitFor(() => expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(1));
+    expect(sent('/api/v1/workflows/wf_standard').agent_states).toEqual({ working: 'std_progress', review: 'std_pending', correction: 'std_backlog', merged: 'std_done' });
+  });
+
+  it('keeps In Arbeit and In Review apart', async () => {
+    const user = userEvent.setup();
+    renderAt('/settings/workflows?workflow=wf_agency');
+
+    await user.click(await screen.findByRole('combobox', { name: /^Status für In Review/ }));
+    await user.click(await screen.findByRole('option', { name: 'In Progress' }));
+    expect(within(panel()).getByText('In Arbeit und In Review brauchen zwei verschiedene Status.')).toBeTruthy();
+    expect(step('In Review').getAttribute('aria-invalid')).toBe('true');
+    await user.click(save());
+    await waitFor(() => expect(document.activeElement).toBe(step('In Review')));
+    expect(callsTo('PUT', '/api/v1/workflows/wf_agency')).toHaveLength(0);
+  });
+
+  it('keeps the category of a status that holds a step, with the error at the status', async () => {
+    const user = userEvent.setup();
+    renderAt('/settings/workflows?workflow=wf_agency');
+
+    await user.click(await screen.findByRole('combobox', { name: 'Kategorie von Review' }));
+    await user.click(await screen.findByRole('option', { name: 'Completed' }));
+    const message = '„Review“ ist der Agenten-Schritt „In Review“ und braucht die Kategorie Started. Wähle für den Schritt unten zuerst einen anderen Status.';
+    expect(screen.getByText(message)).toBeTruthy();
+    // the step shows its status all the same
+    expect(step('In Review').textContent).toContain('Review');
+    await user.click(save());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Kategorie von Review' })));
+    expect(callsTo('PUT', '/api/v1/workflows/wf_agency')).toHaveLength(0);
+
+    // another status for the step, and the status may change
+    await user.click(step('In Review'));
+    await user.click(await screen.findByRole('option', { name: 'Kundenfreigabe' }));
+    expect(screen.queryByText(message)).toBeNull();
+  });
+
+  it('says what becomes of a step on a removed status, and lets it follow the status that takes over the items', async () => {
+    const user = userEvent.setup();
+    // the standard workflow with a second started status and all four steps
+    stored = [
+      {
+        ...standard,
+        states: [...standard.states, { id: 'std_check', name: 'Prüfung', icon: 'three-quarter', category: 'started', position: 6 }],
+        agent_states: { working: 'std_progress', review: 'std_pending', correction: 'std_todo', merged: 'std_done' },
+      },
+    ];
+    renderAt('/settings/workflows?workflow=wf_standard', {
+      overrides: { 'GET /api/v1/state-usage': () => ({ body: { data: [{ state_id: 'std_pending', items: 2 }] } }) },
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Pending entfernen' }));
+    expect(step('In Review').textContent).toContain('Pending (wird gelöscht)');
+    expect(
+      within(panel()).getByText('„Pending“ wird gelöscht. Liegen dort Items, folgt der Schritt beim Speichern dem Status, der sie übernimmt, wenn er die Kategorie hat; sonst ist er danach leer.'),
+    ).toBeTruthy();
+    // a removed status is no gap the proposal would fill
+    expect(within(panel()).queryByRole('button', { name: 'Vorschlag übernehmen' })).toBeNull();
+
+    // with another step changed, the steps go along, the removed one following the mapping
+    await user.click(step('Korrektur'));
+    await user.click(await screen.findByRole('option', { name: 'Backlog' }));
+    await user.click(save());
+    const dialog = await screen.findByRole('dialog', { name: 'Status ersetzen' });
+    await user.click(screen.getByRole('combobox', { name: 'Neuer Status für „Pending“' }));
+    await user.click(await screen.findByRole('option', { name: 'Prüfung' }));
+    await user.click(within(dialog).getByRole('button', { name: /^Ersetzen und speichern/ }));
+    await waitFor(() => expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(1));
+    const body = sent('/api/v1/workflows/wf_standard') as WorkflowInput & { state_mapping: Record<string, string> };
+    expect(body.state_mapping).toEqual({ std_pending: 'std_check' });
+    expect(body.agent_states).toEqual({ working: 'std_progress', review: 'std_check', correction: 'std_backlog', merged: 'std_done' });
+  });
+
+  it('shows the refusals of the server at the steps', async () => {
+    const user = userEvent.setup();
+    let refusal = invalid({ 'agent_states.merged': ['Wähle einen Status dieses Workflows.'] });
+    renderAt('/settings/workflows?workflow=wf_agency', { overrides: { 'PUT /api/v1/workflows/wf_agency': () => refusal } });
+
+    await user.click(await screen.findByRole('combobox', { name: /^Status für Korrektur/ }));
+    await user.click(await screen.findByRole('option', { name: 'Backlog' }));
+    await user.click(save());
+    expect(await within(panel()).findByText('Wähle einen Status dieses Workflows.')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(step('Gemergt')));
+    expect(screen.queryByText('Der Workflow wurde nicht gespeichert')).toBeNull();
+
+    // the next edit takes it away
+    await user.click(step('Korrektur'));
+    await user.click(await screen.findByRole('option', { name: 'Todo' }));
+    expect(within(panel()).queryByText('Wähle einen Status dieses Workflows.')).toBeNull();
+
+    // a refusal of the steps as a whole stands at the first
+    refusal = invalid({ agent_states: ['Nenne je Schritt der Agenten einen Status.'] });
+    await user.click(step('Korrektur'));
+    await user.click(await screen.findByRole('option', { name: 'Backlog' }));
+    await user.click(save());
+    expect(await within(panel()).findByText('Nenne je Schritt der Agenten einen Status.')).toBeTruthy();
+    expect(step('In Arbeit').getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('proposes for a new workflow what it can, names statuses without a name, and sends the steps', async () => {
+    const user = userEvent.setup();
+    renderAt('/settings/workflows?workflow=new');
+
+    // one started status only: In Review needs a second one
+    expect(await within(await screen.findByRole('region', { name: 'Agenten' })).findByText('Braucht einen zweiten Status der Kategorie Started: In Arbeit und In Review teilen sich keinen.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Done entfernen' }));
+    expect(within(panel()).getByText('Der Workflow hat keinen Status der Kategorie Completed.')).toBeTruthy();
+    // a new started status without a name is the proposal for review
+    await user.click(screen.getByRole('button', { name: 'Status hinzufügen' }));
+    expect(within(panel()).getByText('Vorschlag: „Status 5“.')).toBeTruthy();
+    await user.click(within(panel()).getByRole('button', { name: 'Vorschlag übernehmen' }));
+    expect(within(panel()).getByText('Ohne „Gemergt“ sind die Agenten in den Projekten dieses Workflows aus.')).toBeTruthy();
+
+    // that status changes its category: the error names it by its number
+    await user.click(screen.getByRole('combobox', { name: 'Kategorie von Status 5' }));
+    await user.click(await screen.findByRole('option', { name: 'Unstarted' }));
+    expect(screen.getByText(/^„Status 5“ ist der Agenten-Schritt „In Review“/)).toBeTruthy();
+    await user.click(screen.getByRole('combobox', { name: 'Kategorie von Status 5' }));
+    await user.click(await screen.findByRole('option', { name: 'Started' }));
+
+    // a status of the draft removed again: its step says so, without a name from before
+    await user.click(screen.getByRole('button', { name: 'Status 5 entfernen' }));
+    expect(step('In Review').textContent).toContain('Ein gelöschter Status (wird gelöscht)');
+    await user.click(step('In Review'));
+    await user.click(await screen.findByRole('option', { name: 'Kein Status' }));
+
+    // a workflow needs a Completed status again; the step stays empty until it is taken
+    await user.click(screen.getByRole('button', { name: 'Status hinzufügen' }));
+    await user.type(nameOf(5), 'Fertig');
+    await user.click(screen.getByRole('combobox', { name: 'Kategorie von Fertig' }));
+    await user.click(await screen.findByRole('option', { name: 'Completed' }));
+    expect(within(panel()).getByText('Vorschlag: „Fertig“.')).toBeTruthy();
+    await user.type(document.getElementById('workflow-name')!, 'Agentisch');
+    await user.click(save());
+    await waitFor(() => expect(callsTo('POST', '/api/v1/workflows')).toHaveLength(1));
+    const steps = sent('/api/v1/workflows').agent_states!;
+    expect(steps.review).toBeNull();
+    expect(steps.merged).toBeNull();
+    expect(steps.working).toMatch(/^st_/);
+    expect(steps.correction).toMatch(/^st_/);
+  });
+
+  it('shows the steps to a member, locked', async () => {
+    renderAt('/settings/workflows?workflow=wf_agency', { reason: MEMBER });
+
+    expect((await screen.findByRole('combobox', { name: /^Status für In Arbeit/ })).getAttribute('data-disabled')).not.toBeNull();
+    expect(within(panel()).queryByRole('button', { name: 'Vorschlag übernehmen' })).toBeNull();
   });
 });

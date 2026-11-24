@@ -878,3 +878,33 @@ export async function uploadViaApi(page: Page, projectId: string, file: TestFile
   const { data } = (await response.json()) as { data: { id: string } };
   return { id: data.id };
 }
+
+/**
+ * What the machine does with a code of "Runner verbinden" (`werkbuch-runner login`, spec 6.2): it redeems the code over
+ * the runner protocol (no session, the version and protocol in headers) and gets a runner of that name (`-2`, … when an
+ * active runner has it). The name is `E2E <variant> <run> <name>`; the E2eSeeder revokes what an aborted run left.
+ */
+export async function redeemRunnerCode(page: Page, code: string, name: string): Promise<{ id: string; name: string }> {
+  const response = await page.request.post(new URL('/api/runner/pair', test.info().project.use.baseURL!).toString(), {
+    data: { code, name: `E2E ${variant()} ${runId()} ${name}`.slice(0, 60), os: 'linux', arch: 'arm64', version: '0.4.0' },
+    headers: { Accept: 'application/json', 'X-Werkbuch-Runner-Version': '0.4.0', 'X-Werkbuch-Protocol': '1' },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  return ((await response.json()) as { runner: { id: string; name: string } }).runner;
+}
+
+/** A runner for a spec, connected before its first key: a code in the session, redeemed like the machine does. */
+export async function createE2eRunner(page: Page, name: string): Promise<{ id: string; name: string }> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'POST', '/api/v1/runner-pairings');
+  expect(response.status(), await response.text()).toBe(201);
+  const { data } = (await response.json()) as { data: { code: string } };
+  return redeemRunnerCode(page, data.code, name);
+}
+
+/** Revokes a runner of a spec (cleanup in `finally`): 200, or 404 for one that is revoked already. */
+export async function removeE2eRunner(page: Page, id: string): Promise<void> {
+  await ensureCsrfCookie(page);
+  const response = await api(page, 'DELETE', `/api/v1/runners/${id}`);
+  expect([200, 404], await response.text()).toContain(response.status());
+}

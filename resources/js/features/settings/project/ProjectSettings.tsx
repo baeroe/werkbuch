@@ -25,13 +25,14 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { NotFound } from '@/shell/PageStates';
 import { ReadOnlyBanner, SettingsError, SettingsSkeleton } from '../frame/parts';
 import { SectionNav, SectionNavSkeleton, SettingsFrame } from '../frame/SettingsFrame';
+import { Agents } from './Agents';
 import { Automations } from './Automations';
 import { General } from './General';
 import { Members } from './Members';
 import { Types } from './Types';
 import { Workflow } from './Workflow';
 
-const SECTIONS = ['general', 'members', 'workflow', 'types', 'automations'] as const;
+const SECTIONS = ['general', 'members', 'workflow', 'types', 'automations', 'agents'] as const;
 type Section = (typeof SECTIONS)[number];
 
 const isSection = (slug: string): slug is Section => (SECTIONS as readonly string[]).includes(slug);
@@ -136,6 +137,7 @@ export function ProjectSettings({ identifier, section }: { identifier: string; s
             {current === 'workflow' && <Workflow {...props} />}
             {current === 'types' && <Types {...props} />}
             {current === 'automations' && <Automations {...props} />}
+            {current === 'agents' && <Agents {...props} />}
           </Fragment>
         </>
       )}

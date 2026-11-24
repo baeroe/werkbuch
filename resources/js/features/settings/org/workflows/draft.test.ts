@@ -1,13 +1,13 @@
 /*
  * The draft of the workflow editor: what a copy is, how a new workflow starts, what counts as a change, the body of the
- * save, and where a matrix starts.
+ * save with the steps of the agents only when they changed, and where a matrix starts.
  */
 
 import { describe, expect, it } from 'vitest';
 import { validateWorkflow } from '@/domain/workflow';
 import { agency, standard } from '@/test/fixtures';
 import type { Transition, Workflow } from '@/types';
-import { allPairs, blankDraft, comparable, copyDraftOf, draftOf, toInput, toWorkflow } from './draft';
+import { agentStatesToSend, allPairs, blankDraft, comparable, copyDraftOf, draftOf, toInput, toWorkflow } from './draft';
 
 // the agency workflow with its states out of order: the draft goes by position
 const shuffled: Workflow = { ...agency, states: [...agency.states].reverse() };
@@ -102,13 +102,38 @@ describe('toInput', () => {
     const draft = { ...draftOf(shuffled), name: ' Agentur ', description: ' Mit Prüfung ' };
     draft.states[1] = { ...draft.states[1]!, name: ' Todo ' };
 
-    const input = toInput(draft, 'wf_agency');
+    const input = toInput(draft, agency);
 
     expect(input).toMatchObject({ id: 'wf_agency', name: 'Agentur', description: 'Mit Prüfung', is_default: false, is_free: false, initial_state_id: 'app_backlog' });
     expect(input.states.map((state) => [state.id, state.name, state.position])).toEqual(agency.states.map((state) => [state.id, state.id === 'app_todo' ? 'Todo' : state.name, state.position]));
     expect(input.transitions).toEqual(agency.transitions);
     expect(input).not.toHaveProperty('state_mapping');
+    // the steps of the agents did not change: the server keeps them
+    expect(input).not.toHaveProperty('agent_states');
     expect(toInput(blankDraft()).id).toBeUndefined();
+    expect(toInput(blankDraft()).agent_states).toEqual({ working: null, review: null, correction: null, merged: null });
+  });
+});
+
+describe('agentStatesToSend', () => {
+  it('sends the steps of a new workflow, and of a saved one only when they changed', () => {
+    expect(agentStatesToSend(draftOf(agency), null)).toEqual(agency.agent_states);
+    expect(agentStatesToSend(draftOf(agency), agency)).toBeUndefined();
+    const changed = { ...draftOf(agency), agent_states: { ...agency.agent_states, review: 'app_approval' } };
+    expect(agentStatesToSend(changed, agency)).toEqual({ ...agency.agent_states, review: 'app_approval' });
+    // a workflow the server has not given steps yet reads as none
+    expect(agentStatesToSend(draftOf(standard), { ...standard, agent_states: undefined as never })).toBeUndefined();
+  });
+
+  it('lets a changed step on a removed status follow the status that takes over its items, when that one fits', () => {
+    const draft = draftOf(agency);
+    // In Review is removed, and the merged step changes
+    const removed = { ...draft, states: draft.states.filter((state) => state.id !== 'app_review'), agent_states: { ...draft.agent_states, merged: null } };
+
+    expect(agentStatesToSend(removed, agency, { app_review: 'app_approval' })).toEqual({ working: 'app_progress', review: 'app_approval', correction: 'app_todo', merged: null });
+    // a target of another category, or none: the step goes empty
+    expect(agentStatesToSend(removed, agency, { app_review: 'app_done' })?.review).toBeNull();
+    expect(agentStatesToSend(removed, agency)?.review).toBeNull();
   });
 });
 

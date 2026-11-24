@@ -4,13 +4,16 @@
  * in the token dialog (the same as under "Personal"). The default bot ("Automation") is the one automations act as: it
  * has a badge, can be renamed but neither deactivated nor deleted, and since it is an admin its tokens are too, which
  * the page says every time they come up. Admins manage the tokens of all bots; people manage their own under "Personal".
- * Every other bot is a "Bot", whoever is responsible for it (spec, changes of 2026-10-29).
+ * Every other bot is a "Bot", whoever is responsible for it (spec, changes of 2026-10-29). Each card says in a line
+ * whether the bot works as an agent and links to that view (`?agent=<id>`, `BotAgent`, WEBU-27).
  */
 
-import { Bot as BotIcon, Pencil, Plus, Trash2, UserRoundCheck, UserRoundX } from 'lucide-react';
+import { Link } from '@inertiajs/react';
+import type { UseQueryResult } from '@tanstack/react-query';
+import { Bot as BotIcon, BotMessageSquare, Pencil, Plus, Trash2, UserRoundCheck, UserRoundX } from 'lucide-react';
 import { useState } from 'react';
 import { Avatar } from '@/components/ui/Avatar';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FormDialog } from '@/components/ui/FormDialog';
 import { IconButton } from '@/components/ui/IconButton';
@@ -18,12 +21,16 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { toast } from '@/components/ui/toast';
+import { CLI_NAMES, whyNotAgent } from '@/domain/agents';
+import { useAgentConfigs } from '@/hooks/agents';
 import { useSettle } from '@/hooks/mutation';
+import { useRunners } from '@/hooks/runners';
 import { useRevokeToken, useTokens } from '@/hooks/tokens';
 import { useAllUsers, useCreateBot, useCurrentUser, useDeactivateUser, useReactivateUser, useUpdateUser } from '@/hooks/users';
 import { notifyError } from '@/lib/errors';
-import { t } from '@/lib/i18n';
-import type { Token, User } from '@/types';
+import { intlLocale, t } from '@/lib/i18n';
+import { paths, useSearchParam } from '@/lib/links';
+import type { AgentConfig, Token, User } from '@/types';
 import { fieldMessage, noticeOf } from '../frame/form';
 import { formatDate, relativeTime, useOrgZone } from '../frame/format';
 import { Badge, Loaded, Row, Rows, RowsSkeleton, SectionHeader } from '../frame/parts';
@@ -31,6 +38,7 @@ import { useDialogRound } from '../frame/useDialogRound';
 import { useRemoval } from '../frame/useRemoval';
 import { AdminWarning } from '../tokens/AdminWarning';
 import { TokenDialog } from '../tokens/TokenDialog';
+import { BotAgent } from './bots/BotAgent';
 import type { SectionProps } from './sections';
 
 /** "Rita Prüfer" becomes "rita-pruefer": the handle a name suggests (a–z, 0–9 and hyphens, at most 32). */
@@ -253,13 +261,33 @@ function BotTokens({ bot }: { bot: User }) {
 
 /* -------------------------------------------------------------------------- bots */
 
+/** The agent of a bot in a line, for its card: off, or on with CLI, model and pool (empty: every runner). */
+export function agentSummary(config: AgentConfig, runnerNames: Map<string, string>): string {
+  if (!config.enabled) return t('settings.bots.agent.off');
+  const runners =
+    config.runner_ids.length === 0
+      ? t('settings.bots.agent.all_runners')
+      : new Intl.ListFormat(intlLocale(), { type: 'conjunction' }).format(config.runner_ids.map((id) => runnerNames.get(id) ?? t('settings.bots.agent.unknown_runner')));
+  return t('settings.bots.agent.on', { cli: CLI_NAMES[config.cli], model: config.model, runners });
+}
+
 type BotCardProps = {
   bot: User;
   owner: User | undefined;
   onEdit: () => void;
+  /** The agent configuration of the bot; undefined for a bot that cannot be an agent. */
+  agent: UseQueryResult<AgentConfig> | undefined;
+  runnerNames: Map<string, string>;
 };
 
-function BotCard({ bot, owner, onEdit }: BotCardProps) {
+/** What the card says about the agent: why not, the summary, or that it loads or failed. */
+function agentLine(bot: User, agent: BotCardProps['agent'], runnerNames: Map<string, string>) {
+  if (whyNotAgent(bot).length > 0 || !agent) return <span className="text-muted">{t('settings.bots.agent.cannot')}</span>;
+  if (agent.data) return agentSummary(agent.data, runnerNames);
+  return <span className="text-muted">{agent.isError ? t('settings.bots.agent.failed') : t('settings.bots.agent.loading')}</span>;
+}
+
+function BotCard({ bot, owner, onEdit, agent, runnerNames }: BotCardProps) {
   const settle = useSettle();
   const deactivate = useDeactivateUser();
   const reactivate = useReactivateUser();
@@ -312,11 +340,20 @@ function BotCard({ bot, owner, onEdit }: BotCardProps) {
               <dd className="text-ink">{bot.is_default_bot ? t('settings.bots.responsible_org') : (owner?.name ?? t('settings.bots.responsible_none'))}</dd>
               <dt className="text-muted">{t('settings.bots.role')}</dt>
               <dd className="text-ink">{t(`roles.org.${bot.org_role}`)}</dd>
+              <dt className="text-muted">{t('settings.bots.agent.label')}</dt>
+              <dd className="text-ink">{agentLine(bot, agent, runnerNames)}</dd>
             </dl>
             {bot.is_default_bot && <p className="mt-2 text-sm text-pretty text-muted">{t('settings.bots.default_note')}</p>}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link href={paths.botAgent(bot.id)} className={buttonClass({ variant: 'secondary' })}>
+            <BotMessageSquare className="size-4 text-muted" aria-hidden="true" />
+            {/* one inline run, so the space before the hidden words stays in the name of the link */}
+            <span>
+              {agent?.data?.enabled ? t('settings.bots.agent.edit') : t('settings.bots.agent.set_up')} <span className="sr-only">{t('settings.bots.agent.for', { name: bot.name })}</span>
+            </span>
+          </Link>
           <Button variant="secondary" icon={Pencil} onClick={onEdit}>
             {t('settings.bots.edit')} <span className="sr-only">{bot.name}</span>
           </Button>
@@ -337,7 +374,12 @@ function BotCard({ bot, owner, onEdit }: BotCardProps) {
   );
 }
 
-export default function Bots(_props: SectionProps) {
+export default function Bots(props: SectionProps) {
+  const agent = useSearchParam('agent');
+  return agent ? <BotAgent key={agent} botId={agent} /> : <BotList {...props} />;
+}
+
+function BotList(_props: SectionProps) {
   const botList = useAllUsers({ type: 'bot' });
   const personList = useAllUsers({ type: 'person' });
   const me = useCurrentUser();
@@ -345,6 +387,11 @@ export default function Bots(_props: SectionProps) {
   const people = personList.data?.items ?? [];
   // the default bot first, deactivated bots last
   const bots = [...(botList.data?.items ?? [])].sort((a, b) => Number(b.is_default_bot) - Number(a.is_default_bot) || Number(a.disabled_at !== null) - Number(b.disabled_at !== null));
+  // the agent configurations only of bots that can be one; the runner names for their pools
+  const agentBots = bots.filter((bot) => whyNotAgent(bot).length === 0).map((bot) => bot.id);
+  const agents = useAgentConfigs(agentBots);
+  const runners = useRunners({ enabled: agentBots.length > 0 });
+  const runnerNames = new Map((runners.data?.items ?? []).map((runner) => [runner.id, runner.name]));
 
   return (
     <div className="flex flex-col gap-4">
@@ -374,7 +421,13 @@ export default function Bots(_props: SectionProps) {
             <ul className="flex flex-col gap-3">
               {bots.map((bot) => (
                 <li key={bot.id}>
-                  <BotCard bot={bot} owner={people.find((user) => user.id === bot.owner_id)} onEdit={() => dialog.show(bot)} />
+                  <BotCard
+                    bot={bot}
+                    owner={people.find((user) => user.id === bot.owner_id)}
+                    onEdit={() => dialog.show(bot)}
+                    agent={agents[agentBots.indexOf(bot.id)]}
+                    runnerNames={runnerNames}
+                  />
                 </li>
               ))}
             </ul>

@@ -121,12 +121,12 @@ afterEach(() => {
 /* -------------------------------------------------------------------------- tests */
 
 describe('Webhooks', () => {
-  it('sits in the group "Betrieb" before System', async () => {
+  it('sits in the group "Betrieb" before Runner, GitHub and System', async () => {
     renderWebhooks();
 
     const nav = screen.getByRole('navigation', { name: 'Bereiche der Einstellungen' });
     const links = within(nav).getAllByRole('link').map((link) => link.textContent);
-    expect(links.indexOf('Webhooks')).toBe(links.indexOf('System') - 1);
+    expect(links.slice(links.indexOf('Webhooks'))).toEqual(['Webhooks', 'Runner', 'GitHub', 'System']);
     expect(within(nav).getByRole('link', { name: 'Webhooks' }).getAttribute('href')).toBe('/settings/webhooks');
     expect(await screen.findByRole('heading', { level: 2, name: 'Webhooks' })).toBeTruthy();
     expect(document.title).toBe('Webhooks – Einstellungen – werkbuch');
