@@ -62,6 +62,9 @@ use App\Actions\Labels\DeleteLabel;
 use App\Actions\Labels\GetLabel;
 use App\Actions\Labels\ListLabels;
 use App\Actions\Labels\SaveLabel;
+use App\Actions\Links\PostLinkback;
+use App\Actions\Links\SyncChecks;
+use App\Actions\Links\SyncPullRequest;
 use App\Actions\Media\ShowMedia;
 use App\Actions\Notifications\DeleteNotification;
 use App\Actions\Notifications\DispatchDueMails;
@@ -219,6 +222,7 @@ use App\Models\WebhookAttempt;
 use App\Models\WebhookDelivery;
 use App\Models\Workflow;
 use App\Models\WorkItem;
+use App\Models\WorkItemLink;
 use App\Models\WorkItemRelation;
 use App\Models\WorkItemType;
 use App\Pdf\Gotenberg;
@@ -1683,6 +1687,38 @@ return [
         },
         'system' => true,
         'event' => EventType::ProjectMergeGuardDetected,
+    ],
+    // a PR of a person links its item (WEBU-25): the event of the link is the account's
+    'SyncPullRequest' => [
+        'action' => SyncPullRequest::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->github('project_admin');
+            $item = $w->item('project_admin');
+
+            return SyncPullRequest::run($a, FakeGitHub::pullRequest('opened', 501, ['draft' => true, 'body' => "Refs {$item->key}"]));
+        },
+        'system' => true,
+        'event' => EventType::WorkItemLinkAdded,
+    ],
+    'SyncChecks' => [
+        'action' => SyncChecks::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->github('project_admin');
+            WorkItemLink::factory()->create(['work_item_id' => $w->item('project_admin')->id]);
+
+            return SyncChecks::run($a, FakeGitHub::checkRun(str_repeat('a', 40), 'completed', 'success'));
+        },
+        'system' => true,
+    ],
+    'PostLinkback' => [
+        'action' => PostLinkback::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->github('project_admin');
+            WorkItemLink::factory()->create(['work_item_id' => $w->item('project_admin')->id, 'number' => 502]);
+
+            return PostLinkback::run($a, 700_000_001, 502);
+        },
+        'system' => true,
     ],
     'PruneGitHubDeliveries' => [
         'action' => PruneGitHubDeliveries::class,

@@ -30,7 +30,8 @@ final class NotificationFacts
      */
     public const TELLING = [
         EventType::WorkItemCreated, EventType::WorkItemUpdated, EventType::WorkItemStateChanged, EventType::WorkItemAssigned,
-        EventType::WorkItemRelationAdded, EventType::WorkItemRelationRemoved, EventType::CommentCreated, EventType::CommentUpdated,
+        EventType::WorkItemRelationAdded, EventType::WorkItemRelationRemoved, EventType::WorkItemLinkAdded, EventType::WorkItemLinkMerged,
+        EventType::CommentCreated, EventType::CommentUpdated,
         EventType::TemplateRunFailed, EventType::WebhookDisabled, EventType::ProjectMergeGuardDetected,
     ];
 

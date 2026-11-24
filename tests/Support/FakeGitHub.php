@@ -55,6 +55,15 @@ final class FakeGitHub
     /** @var array<string, mixed> keys of the conversion answer to change (`null` removes one), for an answer GitHub should not give */
     public array $conversionChanges = [];
 
+    /** @var list<array{id: int, number: int, body: string, repository: string}> the comments werkbuch wrote at PRs */
+    public array $comments = [];
+
+    /** @var array<string, mixed>|null an answer to a new comment GitHub should not give */
+    public ?array $commentAnswer = null;
+
+    /** @var list<int> comment IDs GitHub no longer knows (someone deleted them) */
+    public array $deletedComments = [];
+
     /** Runs before every answer with the request (something that happens while GitHub answers). */
     public ?Closure $meanwhile = null;
 
@@ -111,6 +120,8 @@ final class FakeGitHub
             Str::is('/app/installations/*/access_tokens', $path) => Http::response($this->token($request), 201),
             $path === '/installation/repositories' => Http::response($this->repositoriesFor($request), 200),
             Str::is('/repos/*/*/rules/branches/*', $path) => Http::response($this->rulesFor($path), 200),
+            Str::is('/repos/*/*/issues/*/comments', $path) && $request->method() === 'POST' => Http::response($this->commentAnswer ?? $this->comment($path, $request), 201),
+            Str::is('/repos/*/*/issues/comments/*', $path) && $request->method() === 'PATCH' => $this->editComment($path, $request),
             default => Http::response(['message' => 'Not Found'], 404),
         };
     }
@@ -130,6 +141,32 @@ final class FakeGitHub
             'client_id' => 'Iv23liFake', 'client_secret' => 'client-secret-'.Str::random(20),
             'webhook_secret' => 'whsec-fake-'.Str::random(24), 'pem' => $this->conversionPem,
         ], ...$this->conversionChanges], fn (mixed $value) => $value !== null);
+    }
+
+    /** @return array<string, mixed> a comment at a PR as GitHub answers it */
+    private function comment(string $path, Request $request): array
+    {
+        $parts = explode('/', $path);
+        $id = 900_000_000 + count($this->comments) + 1;
+        $this->comments[] = ['id' => $id, 'number' => (int) $parts[5], 'body' => (string) ($request->data()['body'] ?? ''), 'repository' => $parts[2].'/'.$parts[3]];
+
+        return ['id' => $id, 'html_url' => "https://github.com/{$parts[2]}/{$parts[3]}/pull/{$parts[5]}#issuecomment-{$id}", 'body' => $request->data()['body'] ?? ''];
+    }
+
+    private function editComment(string $path, Request $request): mixed
+    {
+        $id = (int) last(explode('/', $path));
+        if (in_array($id, $this->deletedComments, true)) {
+            return Http::response(['message' => 'Not Found'], 404);
+        }
+
+        foreach ($this->comments as $index => $comment) {
+            if ($comment['id'] === $id) {
+                $this->comments[$index]['body'] = (string) ($request->data()['body'] ?? '');
+            }
+        }
+
+        return Http::response(['id' => $id, 'body' => $request->data()['body'] ?? ''], 200);
     }
 
     /** @return array<string, mixed> */
@@ -214,6 +251,60 @@ final class FakeGitHub
             'pusher' => ['name' => $sender, 'email' => null],
             'sender' => ['login' => $sender, 'id' => 123_456, 'type' => str_ends_with($sender, '[bot]') ? 'Bot' : 'User'],
             'installation' => ['id' => 55_000_001, 'node_id' => 'MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uNTU='],
+        ];
+    }
+
+    /**
+     * A `pull_request` payload as GitHub sends it: `$pr` changes keys of the PR (`title`, `body`, `draft`, `state`,
+     * `merged`, `merged_at`, `head` …).
+     *
+     * @param  array<string, mixed>  $pr
+     * @return array<string, mixed>
+     */
+    public static function pullRequest(string $action, int $number, array $pr = [], int $repositoryId = 700_000_001, string $fullName = 'feldwerk/website'): array
+    {
+        $user = is_string($pr['author'] ?? null) ? $pr['author'] : 'mara-feldwerk';
+        unset($pr['author']);
+
+        return [
+            'action' => $action,
+            'number' => $number,
+            'pull_request' => [
+                'url' => self::API."/repos/{$fullName}/pulls/{$number}", 'id' => 1_500_000_000 + $number, 'node_id' => 'PR_fake'.$number,
+                'html_url' => "https://github.com/{$fullName}/pull/{$number}", 'number' => $number, 'state' => 'open', 'locked' => false,
+                'title' => 'Change things', 'body' => null, 'draft' => false, 'merged' => false, 'merged_at' => null, 'closed_at' => null,
+                'user' => ['login' => $user, 'id' => 77_001, 'type' => str_ends_with($user, '[bot]') ? 'Bot' : 'User'],
+                'head' => ['label' => "feldwerk:feature-{$number}", 'ref' => "feature-{$number}", 'sha' => str_repeat('b', 40)],
+                'base' => ['label' => 'feldwerk:main', 'ref' => 'main', 'sha' => str_repeat('c', 40)],
+                'created_at' => '2026-11-24T09:00:00Z', 'updated_at' => '2026-11-24T09:00:00Z',
+                ...$pr,
+            ],
+            'repository' => self::repositoryJson($repositoryId, $fullName),
+            'sender' => ['login' => $user, 'id' => 77_001, 'type' => 'User'],
+            'installation' => ['id' => 55_000_001],
+        ];
+    }
+
+    /**
+     * A `check_run` payload as GitHub sends it.
+     *
+     * @return array<string, mixed>
+     */
+    public static function checkRun(string $sha, string $status, ?string $conclusion = null, int $id = 3_000_001, string $name = 'tests', int $repositoryId = 700_000_001): array
+    {
+        return [
+            'action' => $status === 'completed' ? 'completed' : 'created',
+            'check_run' => [
+                'id' => $id, 'name' => $name, 'head_sha' => $sha, 'status' => $status, 'conclusion' => $conclusion,
+                'html_url' => "https://github.com/feldwerk/website/runs/{$id}", 'details_url' => "https://github.com/feldwerk/website/actions/runs/{$id}",
+                'started_at' => '2026-11-24T09:01:00Z', 'completed_at' => $status === 'completed' ? '2026-11-24T09:05:00Z' : null,
+                'app' => ['id' => 15_368, 'slug' => 'github-actions', 'name' => 'GitHub Actions'],
+                'check_suite' => ['id' => 4_000_001, 'head_branch' => 'feature', 'head_sha' => $sha],
+                'pull_requests' => [],
+            ],
+            'repository' => self::repositoryJson($repositoryId, 'feldwerk/website'),
+            'sender' => ['login' => 'github-actions[bot]', 'id' => 41_898_282, 'type' => 'Bot'],
+            'installation' => ['id' => 55_000_001],
         ];
     }
 

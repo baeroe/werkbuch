@@ -369,7 +369,38 @@ final class WorkItemSchemas
             'workflow' => ['$ref' => '#/components/schemas/WorkflowResource', 'description' => 'With `include=workflow`: the workflow of the project.'],
             'relations' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/RelationEntryResource'], 'description' => 'With `include=relations`, as the reader sees them.'],
             'attachments' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/AttachmentResource'], 'description' => 'With `include=attachments`: the file list (not the pictures and files of the texts).'],
+            'links' => ['type' => 'array', 'items' => self::link(), 'description' => 'With `include=links`: the linked pull requests, oldest link first.'],
         ];
+    }
+
+    /**
+     * A PR linked to an item (`WorkItemLinkResource`, spec 12).
+     *
+     * @return array<string, mixed>
+     */
+    public static function link(): array
+    {
+        $text = ['type' => 'string'];
+        $nullable = ['type' => ['string', 'null']];
+
+        return self::object('A pull request linked to the item, as GitHub told it last.', [
+            'id' => $text, 'work_item_id' => $text, 'kind' => ['type' => 'string', 'enum' => ['pull_request']],
+            'repository' => ['type' => 'string', 'description' => '`owner/name`.'], 'number' => ['type' => 'integer'], 'title' => $text,
+            'url' => ['type' => 'string', 'format' => 'uri'],
+            'state' => ['type' => 'string', 'enum' => ['open', 'merged', 'closed']], 'draft' => ['type' => 'boolean'],
+            'head_branch' => $text, 'base_branch' => $text, 'head_sha' => $text,
+            'closes' => ['type' => 'boolean', 'description' => 'A closing word (`Fixes KEY-n`) names the item: it is merged with the PR.'],
+            'author' => ['type' => 'string', 'description' => 'The GitHub login that opened it.'],
+            'thread_id' => ['type' => ['string', 'null'], 'description' => 'The strand of an agent that opened it.'],
+            'review' => ['type' => ['string', 'null'], 'enum' => ['approve', 'changes', null], 'description' => 'The verdict of the review of the head commit.'],
+            'ci' => ['type' => 'string', 'enum' => ['none', 'pending', 'success', 'failure'], 'description' => 'The checks of the head commit: `failure` as soon as one fails.'],
+            'checks' => ['type' => 'array', 'items' => self::object('A check run on the head commit.', [
+                'name' => $text, 'app' => $nullable, 'status' => $text, 'conclusion' => $nullable, 'url' => $nullable,
+            ], ['name', 'app', 'status', 'conclusion', 'url'], false)],
+            'merged_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+            'created_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+            'updated_at' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+        ], ['id', 'work_item_id', 'kind', 'repository', 'number', 'title', 'url', 'state', 'draft', 'head_branch', 'base_branch', 'head_sha', 'closes', 'author', 'thread_id', 'review', 'ci', 'checks', 'merged_at', 'created_at', 'updated_at'], false);
     }
 
     /**

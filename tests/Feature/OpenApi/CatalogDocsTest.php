@@ -306,6 +306,7 @@ it('lets a client send every key the document names', function () use ($bodies, 
     $workflow = $this->postJson('/api/v1/workflows', [
         'name' => 'Short', 'description' => 'Three states.', 'is_default' => false, 'is_free' => false, 'initial_state_id' => 'st_todo',
         'states' => $states, 'transitions' => [['st_todo', 'st_doing'], ['st_doing', 'st_done']], 'state_mapping' => new stdClass,
+        'agent_states' => ['working' => 'st_doing', 'review' => null, 'correction' => 'st_todo', 'merged' => 'st_done'],
     ])->assertCreated()->json('data');
     $this->putJson("/api/v1/workflows/{$workflow['id']}", $workflow)->assertOk();
     $this->putJson("/api/v1/workflows/{$workflow['id']}", [

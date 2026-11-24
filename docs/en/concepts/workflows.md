@@ -59,6 +59,25 @@ Project admins switch the workflow of their project under **Project settings →
 
 Without items it is a plain confirmation. Otherwise the dialog lists every state that holds items, with their number and a proposal (the state of the same name, else the first one of the same category), and says what the switch does to them: closed items that land in an open state lose their resolution, open ones that land in a closed state get its default. You confirm once every state has its target. The same question comes when you save a workflow without a state that still holds items (**Replace statuses**): the states that stay and the new ones are the targets. werkbuch moves the items at once, deliberately without the transition rules, and their history names the person who did it. Nobody is notified about these moves. When [auto-close](/en/concepts/automations#when-the-workflow-changes) is on, the dialog also says which Canceled state it takes from then on, or that it is switched off.
 
+## Steps of the agents
+
+A workflow names the state each step of the agents sets, and every project of the workflow uses them, for pull requests of people as well:
+
+| Step | Category | Example |
+|---|---|---|
+| `working` (In progress) | Started | In Progress |
+| `review` (In review) | Started | a state "In Review" of its own (in the standard workflow: Pending) |
+| `correction` (Correction) | Backlog or Unstarted | Todo |
+| `merged` (Merged) | Completed | Done |
+
+Org admins set them over REST and MCP (`agent_states` of the workflow, step → id of a state; the editor shows them later). Left out of a save, the steps stay. A step on a state of another category is a `422` at the step, and In progress and In review need two different states; a state that a step names keeps its category (`422` at the state). When a state goes, its step follows the state that takes over its items (`state_mapping`) if that state fits, else the step is empty. Only a workflow that names all four steps lets pull requests move items.
+
+### Pull requests
+
+A pull request in the repo of a project links to the items it names: in its title or description (not in code) after `fix`, `fixes`, `fixed`, `fixing`, `close`, `closes`, `closed`, `closing`, `resolve`, `resolves`, `resolved` or `resolving` it closes them on merge; after `ref`, `refs`, `references`, `part of`, `relates to` or `related to`, and as a bare key in the text or in the branch name, it only links them; `skip` or `ignore` before a key takes a link back. A word may take a colon, several keys go by comma or `and`: `Fixes: WEB-12, WEB-13 and WEB-14`. Only keys of the project count, former identifiers too.
+
+What a pull request of a person sets off: a draft nothing. Opened or ready for review, it moves each of its items in a Backlog or Unstarted state to the step `review`; items that already started or are closed stay. Merged into the base branch of the project, it moves the items it closes to the step `merged`, unless another pull request (a draft too) is still open at the item; when that one closes without a merge, the item follows then. Deliveries that GitHub sends late or again never undo a newer state. A move the workflow does not allow leaves the state, and a comment at the item says so. The app writes one comment at the pull request naming its items and keeps it up to date. `GET /work-items/{item}?include=links` reads the pull requests of an item with their checks; whoever reads the item reads them, so readers of a public project see title, branches and author of a pull request even of a private repo.
+
 ## Delete
 
 A workflow can only be deleted while no project uses it; archived projects count too, and so does a project being deleted until it is gone for good. The default workflow can never be deleted. The interface says which projects still use a workflow, and the API answers `409` with `reason: in_use` and their identifiers in `projects`; its `detail` marks a project that is being deleted.

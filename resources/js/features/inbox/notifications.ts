@@ -113,6 +113,7 @@ const FIELD_NAMES: Record<string, TranslationKey> = {
   resolution_id: 'inbox.field.resolution_id',
   relation: 'inbox.field.relation',
   attachment: 'inbox.field.attachment',
+  pull_request: 'inbox.field.pull_request',
 };
 
 /**

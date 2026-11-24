@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\Attachment;
 use App\Models\WorkItem;
+use App\Models\WorkItemLink;
 use App\RichText\Document;
 use App\Support\ItemValues;
 use Illuminate\Http\Request;
@@ -78,6 +79,8 @@ final class WorkItemResource extends JsonResource
             )),
             'attachments' => $this->when(in_array('attachments', $item->includes, true), fn () => $item->attachments
                 ->map(fn (Attachment $attachment) => (new AttachmentResource($attachment))->resolve($request))->values()->all()),
+            'links' => $this->when(in_array('links', $item->includes, true), fn () => $item->links
+                ->map(fn (WorkItemLink $link) => (new WorkItemLinkResource($link))->resolve($request))->values()->all()),
         ];
     }
 }

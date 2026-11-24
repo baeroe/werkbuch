@@ -32,7 +32,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * `state_mapping` (removed state → key of a state of the input, a new one with its local id too), else 409
  * `state_in_use` naming the states and their items, and nothing is written; the items move before their states go
  * (RemapStates, `state_removed`); Auto-Close of a project whose state goes or stops being canceled follows (FollowWorkflow,
- * `state_removed`). Everything runs under the catalog lock, one change of the catalog at a time, each from
+ * `state_removed`). The steps of the agents (spec 7.4, `agent_states`: step → a state of the input) are checked by
+ * category; left out they stay, and a step on a state that goes follows the state mapping when the target fits, else it
+ * is empty (WorkflowInput::agentStates). Everything runs under the catalog lock, one change of the catalog at a time, each from
  * what the one before left, and every change of an item waits for it. Only what really changes is written and
  * recorded; the same input again writes nothing. The `workflow.updated` of the saved workflow says in
  * `meta.categories_changed` whether a staying state changed its category (only then does the search reindex; the
@@ -44,10 +46,10 @@ final class SaveWorkflow
     use AsAction;
 
     /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
-    public const FIELDS = ['name', 'description', 'is_default', 'is_free', 'initial_state_id', 'states', 'transitions', 'state_mapping'];
+    public const FIELDS = ['name', 'description', 'is_default', 'is_free', 'initial_state_id', 'states', 'transitions', 'state_mapping', 'agent_states'];
 
     /**
-     * @param  array<array-key, mixed>  $input  `name`, `description`, `is_default`, `is_free`, `initial_state_id`, `states`, `transitions`, `state_mapping`
+     * @param  array<array-key, mixed>  $input  `name`, `description`, `is_default`, `is_free`, `initial_state_id`, `states`, `transitions`, `state_mapping`, `agent_states`
      *
      * @throws ValidationException
      * @throws Problem 422 `invalid_workflow`, 409 `state_in_use`, 404 for a workflow deleted meanwhile
@@ -100,6 +102,9 @@ final class SaveWorkflow
                     throw Problem::conflict('state_in_use', ['states' => $unmapped]);
                 }
             }
+
+            // the steps of the agents (spec 7.4): sent, or kept and following the state mapping
+            $agentSteps = WorkflowInput::agentStates($valid, $current);
 
             $before = $current === null ? null : self::snapshot($current);
 
@@ -189,6 +194,7 @@ final class SaveWorkflow
             }
 
             $saved->initial_state_id = $ids[$valid['initial_state_id']];
+            $saved->agent_states = array_map(fn (?string $key) => $key === null ? null : $ids[$key], $agentSteps);
             $saved->save();
 
             // the relations as they are now, not as they were read before the writes
@@ -230,7 +236,7 @@ final class SaveWorkflow
     /**
      * What an event compares: the fields, the states in order and the transitions as sorted pairs.
      *
-     * @return array{name: string, description: string, is_default: bool, is_free: bool, initial_state_id: ?string, states: list<array{id: string, name: string, icon: string, category: string}>, transitions: list<array{0: string, 1: string}>}
+     * @return array{name: string, description: string, is_default: bool, is_free: bool, initial_state_id: ?string, states: list<array{id: string, name: string, icon: string, category: string}>, transitions: list<array{0: string, 1: string}>, agent_states: array{working: ?string, review: ?string, correction: ?string, merged: ?string}}
      */
     private static function snapshot(Workflow $workflow): array
     {
@@ -250,6 +256,7 @@ final class SaveWorkflow
             'initial_state_id' => $workflow->initial_state_id,
             'states' => $states,
             'transitions' => $transitions,
+            'agent_states' => $workflow->agentStates(),
         ];
     }
 }

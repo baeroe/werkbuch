@@ -20,6 +20,7 @@ use Illuminate\Support\Str;
  * @property string $project_id
  * @property string|null $work_item_id
  * @property string|null $runner_id
+ * @property int|null $repository_github_id
  * @property string|null $branch
  * @property string|null $base_branch
  * @property string|null $worktree
@@ -33,7 +34,7 @@ use Illuminate\Support\Str;
  * @property Carbon|null $updated_at
  * @property-read Runner|null $runner
  */
-#[Fillable(['bot_id', 'project_id', 'work_item_id', 'runner_id', 'branch', 'base_branch', 'worktree', 'session_id', 'pr_number', 'status', 'pause_reason', 'corrections', 'conflicts'])]
+#[Fillable(['bot_id', 'project_id', 'work_item_id', 'runner_id', 'repository_github_id', 'branch', 'base_branch', 'worktree', 'session_id', 'pr_number', 'status', 'pause_reason', 'corrections', 'conflicts'])]
 final class AgentThread extends Model
 {
     /** @use HasFactory<AgentThreadFactory> */
@@ -51,7 +52,7 @@ final class AgentThread extends Model
 
     protected function casts(): array
     {
-        return ['pr_number' => 'integer', 'corrections' => 'integer', 'conflicts' => 'integer'];
+        return ['repository_github_id' => 'integer', 'pr_number' => 'integer', 'corrections' => 'integer', 'conflicts' => 'integer'];
     }
 
     /** The branch of a strand of an item: `agent/<KEY>-<slug of the title>` (spec 7.6). */

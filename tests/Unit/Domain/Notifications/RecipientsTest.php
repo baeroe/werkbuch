@@ -143,6 +143,14 @@ it('tells watchers about relations and attachments', function () use ($facts, $t
         ->and($table(Recipients::of($facts('work_item.relation_added', ['changedFields' => $relation]))))->toBe($everyone)
         ->and($table(Recipients::of($facts('work_item.relation_removed', ['changedFields' => $removed]))))->toBe($everyone)
         ->and($table(Recipients::of($facts('work_item.updated', ['changedFields' => $attachment]))))->toBe($everyone);
+
+    // a PR linked or merged (WEBU-25) is a change of the item too; a link taken back by `skip` tells nobody
+    $link = EventFacts::fieldsOf('work_item.link_added', ['pull_request' => ['old' => null, 'new' => ['number' => 12]]]);
+    expect($link)->toBe(['pull_request'])
+        ->and(EventFacts::fieldsOf('work_item.link_merged', null))->toBe(['pull_request'])
+        ->and($table(Recipients::of($facts('work_item.link_added', ['changedFields' => $link]))))->toBe($everyone)
+        ->and($table(Recipients::of($facts('work_item.link_merged', ['changedFields' => $link]))))->toBe($everyone)
+        ->and(Recipients::of($facts('work_item.link_removed')))->toBe([]);
 });
 
 it('keeps an opt-out away except for a mention and an assignment', function () use ($facts, $table, $lene, $mara, $noah) {

@@ -41,7 +41,8 @@ final readonly class EventFacts
 
     /**
      * The fields an event changed, in the order of its `changes`: without `rank` (the manual order is no change anyone
-     * hears of, A270), `attachment` for `changes.attachments`, `relation` for a relation added or removed.
+     * hears of, A270), `attachment` for `changes.attachments`, `relation` for a relation added or removed, `pull_request`
+     * for a PR linked or merged (WEBU-25).
      *
      * @param  ?array<string, mixed>  $changes
      * @return list<string>
@@ -50,6 +51,10 @@ final readonly class EventFacts
     {
         if (in_array($type, ['work_item.relation_added', 'work_item.relation_removed'], true)) {
             return ['relation'];
+        }
+
+        if (in_array($type, ['work_item.link_added', 'work_item.link_merged'], true)) {
+            return ['pull_request'];
         }
 
         $fields = [];

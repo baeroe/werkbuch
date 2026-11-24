@@ -333,10 +333,28 @@ final class CatalogSchemas
                     'items' => ['type' => 'array', 'minItems' => 2, 'maxItems' => 2, 'items' => ['type' => 'string']],
                 ],
                 'state_mapping' => self::map('Removed state (ULID) to the state (an id of `states`) that takes over its items; only for a `PUT`.'),
+                'agent_states' => self::agentStates(),
             ],
             ['name', 'is_default', 'is_free', 'initial_state_id', 'states', 'transitions'],
             true,
         );
+    }
+
+    /**
+     * The steps of the agents of a workflow (spec 7.4), in a body and in `WorkflowResource`.
+     *
+     * @return array<string, mixed>
+     */
+    public static function agentStates(): array
+    {
+        $state = ['type' => ['string', 'null']];
+
+        return [
+            'type' => ['object', 'null'],
+            'description' => 'The state each agent step sets (`working`, `review`: started; `correction`: backlog/unstarted; `merged`: completed): an id of `states` or `null`. Left out, they stay; a removed state passes its step on along `state_mapping` when it fits.',
+            'properties' => ['working' => $state, 'review' => $state, 'correction' => $state, 'merged' => $state],
+            'additionalProperties' => false,
+        ];
     }
 
     /**

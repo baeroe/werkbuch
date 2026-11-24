@@ -8,7 +8,7 @@ namespace App\Domain\Notifications;
  * - `assigned`: only the new assignee of `work_item.assigned` and `work_item.created` (A268).
  * - `comment`, `state_changed`, `item_changed`: the watchers of `comment.created`, `work_item.state_changed`,
  *   `work_item.updated` (with a field other than the rank), `work_item.assigned` (all but the new assignee) and
- *   `work_item.relation_added|removed`.
+ *   `work_item.relation_added|removed`, `work_item.link_added|merged` (a PR linked or merged, WEBU-25).
  * - `item_created`: only the lead, for `work_item.created`.
  * - `template_run_failed`: only the lead and the author of the template, for `template.run_failed` (phase 10).
  * The lead watches every item of the project unless they unsubscribed from it (A269); whoever unsubscribed only hears
@@ -68,6 +68,8 @@ final class Recipients
                 break;
             case 'work_item.relation_added':
             case 'work_item.relation_removed':
+            case 'work_item.link_added':
+            case 'work_item.link_merged':
                 $add(NotificationKind::ItemChanged, $watchers);
                 break;
             case 'template.run_failed':
