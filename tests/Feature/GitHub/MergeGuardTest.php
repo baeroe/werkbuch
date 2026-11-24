@@ -297,6 +297,26 @@ it('keeps the guard when the comment cannot be written', function () {
         ->and($reported)->toBe(1);
 });
 
+it('passes over a run whose project the guard holds by the time the claim locks it, and takes the next', function () {
+    // the candidates come without a lock: the guard is set between reading them and locking the project of the first
+    $guarded = AgentWorld::run($this->agent, $this->project);
+    $other = Project::factory()->create();
+    $next = AgentWorld::run(AgentWorld::agent([$other], [], 'Otto'), $other);
+    [$runner, $token] = AgentWorld::runner();
+    $set = false;
+    DB::connection()->beforeExecuting(function (string $sql) use (&$set) {
+        if (! $set && str_starts_with($sql, 'select * from `projects`') && str_contains($sql, 'lock in share mode')) {
+            $set = true;
+            DB::table('project_repositories')->update(['guard_detected_at' => now(), 'guard_sha' => str_repeat('a', 40), 'guard_branch' => 'main']);
+        }
+    });
+
+    $this->postJson('/api/runner/claim', [], AgentWorld::headers($token))->assertOk()->assertJsonPath('run.id', $next->id);
+    expect($set)->toBeTrue()
+        ->and([$guarded->fresh()->status, $guarded->fresh()->runner_id])->toBe([RunStatus::Queued, null])
+        ->and($next->fresh()->runner_id)->toBe($runner->id);
+});
+
 it('lets an admin of the project confirm, opens the paused strands and frees the waiting runs', function () {
     $thread = AgentThread::factory()->create(['bot_id' => $this->agent->id, 'project_id' => $this->project->id, 'status' => AgentThread::PAUSED, 'pause_reason' => 'guard']);
     $braked = AgentThread::factory()->create(['bot_id' => $this->agent->id, 'project_id' => $this->project->id, 'status' => AgentThread::PAUSED, 'pause_reason' => 'brake']);

@@ -60,6 +60,18 @@ it('reads installations and repos from GitHub, removes what is gone and keeps th
     expect($other->fresh()->removed_at)->toBeNull();
 });
 
+it('passes over an installation without a numeric id and a repo without a name', function () {
+    $this->github->installations[] = [...FakeGitHub::installationJson(55_000_003, 'broken'), 'id' => '55000003'];
+    $this->github->repositories[55_000_001][] = array_diff_key(FakeGitHub::repositoryJson(700_000_004, 'feldwerk/nameless'), ['full_name' => true]);
+    $this->github->repositories[55_000_001][] = [...FakeGitHub::repositoryJson(700_000_005, 'feldwerk/textid'), 'id' => '700000005'];
+
+    $status = SyncGitHub::run(Actor::system($this->admin, 'test'));
+
+    expect($status['installations']->pluck('installation_id')->all())->toBe([55_000_001])
+        ->and($status['repositories']->pluck('full_name')->all())->toBe(['feldwerk/website'])
+        ->and(GitHubRepository::query()->whereIn('github_id', [700_000_004, 700_000_005])->exists())->toBeFalse();
+});
+
 it('never takes a list of repos as complete that GitHub answered only in part', function () {
     $link = FakeGitHub::link($this->project);
     // GitHub says there are 1 200 repos, but its pages end after one
