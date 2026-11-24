@@ -67,8 +67,10 @@ func TestTokenFile(t *testing.T) {
 			}
 		}
 	}
-	if f.Write("ghs_x\nline") == nil {
-		t.Fatal("a token with a line break")
+	for _, bad := range []string{"ghs_x\nline", "ghs_x y", "ghs_x'", "ghs_x:", ""} {
+		if f.Write(bad) == nil {
+			t.Fatalf("took %q", bad)
+		}
 	}
 }
 
@@ -208,5 +210,32 @@ func TestTheRealGhReadsTheTokenOfTheRun(t *testing.T) {
 	hosts, _ := os.ReadFile(filepath.Join(file.GhConfigDir(), "hosts.yml"))
 	if strings.Contains(string(hosts), "machine") {
 		t.Fatal("gh wrote the machine's login into the config of the run")
+	}
+}
+
+func TestClosedEnv(t *testing.T) {
+	env := strings.Join(ClosedEnv("/private/empty"), "\n") + "\n"
+	for _, want := range []string{"GIT_CONFIG_COUNT=1\n", "GIT_CONFIG_KEY_0=credential.helper\nGIT_CONFIG_VALUE_0=\n", "GH_CONFIG_DIR=/private/empty\n", "GH_TOKEN=\n", "GITHUB_TOKEN=\n", "GH_ENTERPRISE_TOKEN=\n", "GITHUB_ENTERPRISE_TOKEN=\n"} {
+		if !strings.Contains(env, want) {
+			t.Fatalf("no %q in\n%s", want, env)
+		}
+	}
+	if strings.Contains(env, TokenFileEnv) {
+		t.Fatal("the token file in a closed environment")
+	}
+	// git asks no helper of the machine: the remote sees no login
+	fg, url := remote(t)
+	global := filepath.Join(t.TempDir(), "gitconfig")
+	os.WriteFile(global, []byte("[credential]\n\thelper = \"!f() { echo username=x-access-token; echo password=stale-machine-token; }; f\"\n"), 0o600)
+	t.Setenv("GIT_CONFIG_GLOBAL", global)
+	probe := exec.Command("git", "ls-remote", "--", url)
+	probe.Env = append(os.Environ(), ClosedEnv(t.TempDir())...)
+	if out, err := probe.CombinedOutput(); err == nil {
+		t.Fatalf("answered without a token: %s", out)
+	}
+	for _, r := range fg.Requests() {
+		if r.Token != "" {
+			t.Fatalf("a login reached the remote")
+		}
 	}
 }

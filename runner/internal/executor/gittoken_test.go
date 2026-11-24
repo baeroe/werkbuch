@@ -274,8 +274,12 @@ func TestGhCalledByItsPathGetsTheTokenOfTheRun(t *testing.T) {
 
 func TestALightRunGetsNeitherTheGitTokenNorGh(t *testing.T) {
 	w := newGitWorld(t)
-	listing := filepath.Join(t.TempDir(), "ls")
+	listing, ghDir := filepath.Join(t.TempDir(), "ls"), filepath.Join(t.TempDir(), "ghdir")
 	t.Setenv("FAKE_LS", listing)
+	t.Setenv("FAKE_GHDIR", ghDir)
+	// gh of the machine is logged in as someone else
+	t.Setenv("GH_TOKEN", "gho_machinetokenmachinetoken0001")
+	t.Setenv("GITHUB_TOKEN", "gho_machinetokenmachinetoken0002")
 	expires := time.Now().Add(time.Hour)
 	w.remote.Accept(firstToken, expires)
 	run := w.run("01look", protocol.Review, "review", func(r *protocol.Run) {
@@ -291,8 +295,17 @@ func TestALightRunGetsNeitherTheGitTokenNorGh(t *testing.T) {
 	}
 	env, _ := os.ReadFile(w.env)
 	files, _ := os.ReadFile(listing)
-	if !fetched || strings.Contains(string(env), "WERKBUCH_GIT_TOKEN_FILE") || strings.Contains(string(env), "GH_CONFIG_DIR") {
+	if !fetched || strings.Contains(string(env), "WERKBUCH_GIT_TOKEN_FILE") || strings.Contains(string(env), "credential.http") {
 		t.Fatalf("fetched %v, env of the light run:\n%s", fetched, env)
+	}
+	// closed: no helper, an empty gh, no token variable of the machine
+	for _, want := range []string{"\nGIT_CONFIG_COUNT=1\n", "\nGIT_CONFIG_KEY_0=credential.helper\n", "\nGIT_CONFIG_VALUE_0=\n", "\nGH_TOKEN=\n", "\nGITHUB_TOKEN=\n", "\nGH_ENTERPRISE_TOKEN=\n", "\nGITHUB_ENTERPRISE_TOKEN=\n", "\nGH_CONFIG_DIR="} {
+		if !strings.Contains("\n"+string(env), want) {
+			t.Fatalf("no %q in the env of the light run", strings.TrimSpace(want))
+		}
+	}
+	if ghFiles, err := os.ReadFile(ghDir); err != nil || len(ghFiles) != 0 {
+		t.Fatalf("gh config of the light run: %q %v", ghFiles, err)
 	}
 	if len(files) == 0 || strings.Contains(string(files), "git-token") || strings.Contains(string(files), "gh") {
 		t.Fatalf("the light run may read %q", files)

@@ -13,7 +13,7 @@
 #   awaitrenew  waits until the runner renewed the git token (its file changes), then FAKE_PUSH_DELAY seconds
 #   usegh     runs the gh at $FAKE_GH by its path (gh reads the token of the run from GH_CONFIG_DIR)
 # FAKE_ARGS (a file) gets the arguments of a run, FAKE_ENV its environment, FAKE_LS the files of --add-dir,
-# FAKE_LINES the number of text lines (default 3).
+# FAKE_GHDIR the files of GH_CONFIG_DIR, FAKE_LINES the number of text lines (default 3).
 case "$1" in
 --version) echo "2.1.330 (Claude Code)"; exit 0 ;;
 auth) echo '{"loggedIn": true, "authMethod": "claude.ai"}'; exit 0 ;;
@@ -33,6 +33,7 @@ done
 [ -n "$FAKE_ENV" ] && env > "$FAKE_ENV"
 # what a light run could read besides the worktree
 [ -n "$FAKE_LS" ] && [ -n "$adddir" ] && ls -A "$adddir" > "$FAKE_LS"
+[ -n "$FAKE_GHDIR" ] && ls -A "$GH_CONFIG_DIR" > "$FAKE_GHDIR"
 # the prepared context of a light run, kept for the test (the private folder goes with the run)
 [ -n "$FAKE_CONTEXT" ] && [ -n "$adddir" ] && cp "$adddir"/*.txt "$adddir"/*.diff "$FAKE_CONTEXT"/ 2>/dev/null
 prompt=$(cat | tr "[:upper:]" "[:lower:]")

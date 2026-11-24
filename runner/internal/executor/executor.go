@@ -400,10 +400,16 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 		}
 	}
 	cmd := adapter.Command(job)
-	// a light run pushes nothing: the token is the runner's for clone and fetch, its CLI gets neither file nor gh (A531)
-	cmd.Env = os.Environ()
-	if !protocol.Light(run.Type) {
-		cmd.Env = append(cmd.Env, ws.Env...)
+	// a light run pushes nothing: the token is the runner's for clone and fetch; its CLI gets neither file nor gh of the
+	// run, and git and gh fail closed instead of using the logins of the machine (A531)
+	cmd.Env = append(os.Environ(), ws.Env...)
+	if protocol.Light(run.Type) {
+		empty, err := mcpconfig.Folder()
+		if err != nil {
+			return failed("gh: " + err.Error()), ""
+		}
+		defer empty.Remove()
+		cmd.Env = append(os.Environ(), git.ClosedEnv(empty.Dir)...)
 	}
 	cmd.Env = append(cmd.Env,
 		"WERKBUCH_RUN_ID="+run.ID,

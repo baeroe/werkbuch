@@ -47,8 +47,8 @@ git (the helpers of the machine, such as osxkeychain, are switched off for the r
 keychain), and `gh` reads the same token from its own config folder (`GH_CONFIG_DIR`), also when an agent calls it by
 its full path; the token variables of the machine (`GH_TOKEN`, `GITHUB_TOKEN`) are empty in a run. Ten minutes before
 the token runs out the runner asks werkbuch for a new one and replaces the files at once: a `git push` or `gh` call the
-agent starts later uses the new token, also when the agent started before. A review or a comment never sees the token;
-the runner uses it for the clone only. Without a repository in werkbuch a run works in a folder of its strand, or in a
+agent starts later uses the new token, also when the agent started before. A review or a comment never sees the token
+(the runner uses it for the clone only), and git and `gh` in it reach for no login of the machine either. Without a repository in werkbuch a run works in a folder of its strand, or in a
 worktree of the local repository `repos` of `config.yaml` names for the project (for development).
 
 ## TUI

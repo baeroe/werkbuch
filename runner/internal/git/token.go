@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -67,12 +68,28 @@ func (f *TokenFile) Env() []string {
 	)
 }
 
-// Write replaces the token at once: new files 0600 next to the old ones, renamed over them. A reader sees the old or
-// the new token, never half of one.
+// tokenRe is what a token of GitHub is made of; anything else never reaches a file (it goes into YAML and a helper).
+var tokenRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// ClosedEnv is the environment of the CLI of a light run (A531): it pushes nothing and needs no token, so git and gh
+// fail closed instead of reaching for the logins of the machine: every credential helper off, gh with an empty config
+// folder (emptyDir, made by the caller) and the token variables empty.
+func ClosedEnv(emptyDir string) []string {
+	return []string{
+		"GIT_TERMINAL_PROMPT=0", "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=",
+		"GH_CONFIG_DIR=" + emptyDir,
+		"GH_TOKEN=", "GITHUB_TOKEN=", "GH_ENTERPRISE_TOKEN=", "GITHUB_ENTERPRISE_TOKEN=",
+	}
+}
+
+// Write replaces the token: new files 0600 next to the old ones, renamed over them. A reader of one file sees the old or
+// the new token, never half of one. The three files (git-token, gh/config.yml, gh/hosts.yml) are renamed one after the
+// other, so for a moment git may read the new token while gh still reads the old one (or the other way round after a
+// failed write): both are valid then, the old one runs out only RenewBefore later.
 func (f *TokenFile) Write(token string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if strings.ContainsAny(token, "\r\n\"'\\ ") {
+	if !tokenRe.MatchString(token) {
 		return errors.New("a git token with a character no token has")
 	}
 	if err := replace(f.dir, f.Path, token); err != nil {
