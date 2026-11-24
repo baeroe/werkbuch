@@ -6,7 +6,8 @@ import { useApiMutation } from './mutation';
 
 /**
  * Online is a question of time (a contact within the last minute), not an event (A580): while a screen shows the
- * runners it asks again this often, also in the background tab it came from.
+ * runners it asks again this often. Not in a background tab (TanStack pauses `refetchInterval` there, and the app
+ * does not reload on focus): back in the tab, the next ask comes within 15 s. Nothing asks once the screen is gone.
  */
 export const RUNNERS_REFRESH_MS = 15_000;
 

@@ -17,7 +17,6 @@ import { toast } from '@/components/ui/toast';
 import { useSettle } from '@/hooks/mutation';
 import { useActiveRuns, useCancelRun, useRevokeRunner, useRunners } from '@/hooks/runners';
 import { notifyError } from '@/lib/errors';
-import { focusWhenLost } from '@/lib/focusOrigin';
 import { t, tn } from '@/lib/i18n';
 import type { AgentRun, Runner } from '@/types';
 import { Loaded, RowsSkeleton, SectionHeader } from '../../frame/parts';
@@ -26,7 +25,7 @@ import type { SectionProps } from '../sections';
 import { PairingDialog } from './PairingDialog';
 import { cardId, RunnerCard } from './RunnerCard';
 import { PlacesDialog, RenameDialog } from './RunnerDialogs';
-import { runName } from './runnerParts';
+import { holdFocus, runName } from './runnerParts';
 
 type Canceling = { runner: Runner; run: AgentRun; key: string | null };
 
@@ -82,11 +81,19 @@ export default function Runners(_props: SectionProps) {
         setCanceling(null);
         toast({
           title: key ? t('settings.runners.cancel.done', { key }) : t('settings.runners.cancel.done_plain'),
-          description: t('settings.runners.cancel.done_description', { name: runner.name }),
+          description: run.status === 'running' ? t('settings.runners.cancel.done_description', { name: runner.name }) : t('settings.runners.cancel.done_queued'),
           tone: 'success',
         });
-        // the row goes once the run ended: the focus goes to the runner's card
-        focusWhenLost(() => document.getElementById(cardId(runner)), 10_000);
+        // the question closes and its trigger may go with the run: the focus goes to the runner's card (not when the
+        // person is elsewhere by now, e.g. "Erneut versuchen" of a toast after the question closed)
+        const card = document.getElementById(cardId(runner));
+        holdFocus(
+          () => card,
+          () => {
+            const active = document.activeElement;
+            return !active || active === document.body || !active.isConnected || active.closest('[role="alertdialog"]') !== null || (card?.contains(active) ?? false);
+          },
+        );
       },
       onError: (error) => notifyError(t('settings.runners.cancel.failed'), error, () => runCancel({ runner, run, key })),
     });

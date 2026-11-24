@@ -89,3 +89,20 @@ export const gigabytes = (value: number): string => numberFormat('gb').format(va
 
 /** "42 %" (German) or "42%" (English): a share given in percent. */
 export const percent = (value: number): string => numberFormat('percent').format(value / 100);
+
+/**
+ * Gives `target()` the focus for the next frames: a dialog that just closed (or a focus guard of an open one) moves a
+ * lost focus a moment later, so the focus is taken again until it stays. `onlyIf` says whether it may be taken (the
+ * person did not go elsewhere). Returns what stops it.
+ */
+export function holdFocus(target: () => HTMLElement | null | undefined, onlyIf: () => boolean = () => true, frames = 20): () => void {
+  let tries = 0;
+  let frame = 0;
+  const take = () => {
+    const element = target();
+    if (element?.isConnected && document.activeElement !== element && onlyIf()) element.focus();
+    if ((tries += 1) < frames) frame = requestAnimationFrame(take);
+  };
+  frame = requestAnimationFrame(take);
+  return () => cancelAnimationFrame(frame);
+}

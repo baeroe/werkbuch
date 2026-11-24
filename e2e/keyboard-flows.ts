@@ -291,6 +291,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'set the places of a runner', file: 'runners.spec.ts', test: 'sets the places, renames and revokes a runner with the keyboard' },
   { flow: 'rename a runner', file: 'runners.spec.ts', test: 'sets the places, renames and revokes a runner with the keyboard' },
   { flow: 'revoke a runner', file: 'runners.spec.ts', test: 'sets the places, renames and revokes a runner with the keyboard' },
+  { flow: 'cancel a run on a runner', file: 'runners.spec.ts', test: 'cancels a run on a runner with the keyboard; the focus goes to its card' },
   { flow: 'connect GitHub', file: 'github.spec.ts', test: 'posts the manifest to GitHub when connecting, with the keyboard' },
   { flow: 'choose the repo of a project', file: 'github.spec.ts', test: 'chooses the repo of a project with the keyboard' },
   { flow: 'confirm an unauthorized merge', file: 'github.spec.ts', test: 'confirms an unauthorized merge with the keyboard' },

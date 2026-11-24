@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { createE2eRunner, pressMod, redeemRunnerCode, removeE2eRunner, tabTo, tr } from '../helpers';
+import { createE2eProject, createE2eRunner, createE2eRunnerRow, createItem, pressMod, redeemRunnerCode, removeE2eProject, removeE2eRunner, runId, tabTo, tr, variant } from '../helpers';
 
 // Settings → Runners (WEBU-27, spec 6.2, 8.4, 10.1) as the e2e person (Erik Ende, org admin), in English. No machine
 // runs here: the spec redeems the code the dialog shows over the runner protocol, as `werkbuch-runner login` does.
@@ -77,5 +77,32 @@ test('sets the places, renames and revokes a runner with the keyboard', async ({
     await expect(card2).toHaveCount(0);
   } finally {
     await removeE2eRunner(page, runner.id);
+  }
+});
+
+test('cancels a run on a runner with the keyboard; the focus goes to its card', async ({ page }) => {
+  // a runner with a run of Kira on an item of a project of the spec, written before the first key
+  const project = await createE2eProject(page, `E2E ${variant()} ${runId()} runs`);
+  const item = await createItem(page, { project_id: project.id, title: 'E2E Kontaktformular prüfen' });
+  const runner = createE2eRunnerRow('runs', { runs: [{ itemId: item.id, status: 'running' }] });
+  const task = label('settings.runners.run.type.task');
+  try {
+    await page.goto('/settings/runners');
+    const card = page.getByRole('article', { name: runner.name, exact: true });
+    await expect(card.getByRole('link', { name: new RegExp(`^${item.key} `) })).toBeVisible();
+
+    await tabTo(page, card.getByRole('button', { name: label('settings.runners.runs.cancel_named', { run: task, subject: item.key }) }), { max: 80 });
+    await page.keyboard.press('Enter');
+    const question = page.getByRole('alertdialog', { name: label('settings.runners.cancel.title', { run: task, key: item.key }) });
+    await tabTo(page, question.getByRole('button', { name: label('settings.runners.cancel.confirm') }));
+    await page.keyboard.press('Enter');
+    await expect(page.getByText(label('settings.runners.cancel.done', { key: item.key }))).toBeVisible();
+    await expect(question).toHaveCount(0);
+    await expect(card).toBeFocused();
+    // the run on a runner is being canceled: the runner stops its CLI at its next contact
+    await expect(card.getByText(`${task}, ${label('settings.runners.run.status.canceling')}`, { exact: false })).toBeVisible();
+  } finally {
+    await removeE2eRunner(page, runner.id);
+    await removeE2eProject(page, project.identifier);
   }
 });

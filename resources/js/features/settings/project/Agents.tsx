@@ -9,7 +9,8 @@
 
 import { Link } from '@inertiajs/react';
 import { CircleAlert, GitBranch, ShieldAlert } from 'lucide-react';
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { Fragment, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
@@ -21,14 +22,14 @@ import { toast } from '@/components/ui/toast';
 import { AGENT_STEPS, missingSteps, STEP_CATEGORIES, stepsComplete } from '@/domain/agents';
 import { useConfirmMergeGuard, useGitHub, useProjectRepository, useSetProjectRepository } from '@/hooks/github';
 import { useSettle } from '@/hooks/mutation';
-import { useItemRef } from '@/hooks/richText';
+import { itemRefQuery } from '@/hooks/richText';
 import { useWorkflows } from '@/hooks/workflows';
 import { notifyError } from '@/lib/errors';
 import { focusWhenLost } from '@/lib/focusOrigin';
 import { intlLocale, t, tx, type TranslationKey } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { usePermissions } from '@/lib/permissions';
-import type { AgentStep, GitHubStatus, MergeGuard, Project, ProjectRepository, StateCategory, Workflow } from '@/types';
+import type { AgentStep, GitHubStatus, ListedItem, MergeGuard, Project, ProjectRepository, StateCategory, Workflow } from '@/types';
 import { fieldErrors, noticeOf, useDraft, useFieldErrors, useSaveShortcut } from '../frame/form';
 import { formatDateTime, useOrgZone } from '../frame/format';
 import { LeaveGuard } from '../frame/LeaveGuard';
@@ -69,26 +70,39 @@ const fieldsOf = (link: ProjectRepository | null): Fields => ({
 
 /* ------------------------------------------------------------------- unauthorized merge */
 
-/** An item of the runs that pushed, as a link with its key; nothing while it loads or when the reader does not see it. */
-function RunItem({ id }: { id: string }) {
-  const item = useItemRef(id);
-  if (!item.data) return null;
+/** The items of the runs that pushed, as links with their key, in a list of the language ("WEB-47 und WEB-48"). */
+function RunItems({ items }: { items: ListedItem[] }) {
+  const parts = new Intl.ListFormat(intlLocale(), { type: 'conjunction' }).formatToParts(items.map((item) => item.key));
+  let at = 0;
   return (
-    <Link href={paths.item(item.data.key)} className={linkClass}>
-      {item.data.key}
-    </Link>
+    <>
+      {parts.map((part, index) => {
+        if (part.type === 'literal') return <Fragment key={index}>{part.value}</Fragment>;
+        const item = items[at++]!;
+        return (
+          <Link key={item.id} href={paths.item(item.key)} className={linkClass}>
+            {item.key}
+          </Link>
+        );
+      })}
+    </>
   );
 }
 
 /**
  * werkbuch detected a push of the app to the base branch that no merge of werkbuch explains (spec 11.3): every strand
- * of the project pauses until a project admin confirms; the strands then go on with a correction.
+ * of the project pauses until a project admin confirms; the strands then go on with a correction. The items of the
+ * runs that pushed are named once the reader sees them (an item the reader does not see stays out).
  */
 function MergeGuardBanner({ project, guard, canManage, unprotected, pending, onConfirm }: { project: Project; guard: MergeGuard; canManage: boolean; unprotected: boolean; pending: boolean; onConfirm: () => void }) {
   const zone = useOrgZone();
-  const items = [...new Set(guard.runs.flatMap((run) => (run.item_id ? [run.item_id] : [])))];
+  const ids = [...new Set(guard.runs.flatMap((run) => (run.item_id ? [run.item_id] : [])))];
+  const refs = useQueries({ queries: ids.map((id) => itemRefQuery(id)) });
+  const items = refs.flatMap((ref) => (ref.data ? [ref.data] : []));
   const branch = guard.branch ?? '';
   const sha = (guard.sha ?? '').slice(0, 7);
+  const parts = { time: guard.detected_at ? formatDateTime(guard.detected_at, zone) : '', branch, sha, items: <RunItems items={items} /> };
+  const what = guard.detected_at ? (items.length > 0 ? 'pushed_at_runs' : 'pushed_at') : items.length > 0 ? 'pushed_runs' : 'pushed';
 
   return (
     <Banner
@@ -106,24 +120,9 @@ function MergeGuardBanner({ project, guard, canManage, unprotected, pending, onC
       }
     >
       <Measure>
-        {guard.detected_at
-          ? t('settings.project.agents.guard.pushed_at', { time: formatDateTime(guard.detected_at, zone), branch, sha })
-          : t('settings.project.agents.guard.pushed', { branch, sha })}
-        {items.length > 0 && (
-          <>
-            {t('settings.project.agents.guard.from_runs')}
-            {items.map((id, index) => (
-              <span key={id}>
-                {index > 0 && ', '}
-                <RunItem id={id} />
-              </span>
-            ))}
-          </>
-        )}
-        {`${t('settings.project.agents.guard.paused')} `}
-        {canManage
-          ? `${t('settings.project.agents.guard.admin')}${unprotected ? ` ${t('settings.project.agents.guard.unprotected', { branch })}` : ''}`
-          : t('settings.project.agents.guard.reader')}
+        {tx(`settings.project.agents.guard.${what}`, parts)}{' '}
+        {canManage ? t('settings.project.agents.guard.admin') : t('settings.project.agents.guard.reader')}
+        {canManage && unprotected && ` ${t('settings.project.agents.guard.unprotected', { branch })}`}
       </Measure>
     </Banner>
   );

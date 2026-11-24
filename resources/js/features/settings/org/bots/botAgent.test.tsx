@@ -16,7 +16,7 @@ import { list, mara, organization, person } from '@/test/fixtures';
 import type { AgentConfig, Runner, User } from '@/types';
 import { OrgSettings } from '../OrgSettings';
 import { agentSummary } from '../Bots';
-import { cliState } from './BotAgent';
+import { cliState, shortId } from './BotAgent';
 
 const inertia = vi.hoisted(() => ({ url: '/settings/bots?agent=u_kira' }));
 
@@ -139,6 +139,13 @@ describe('cliState', () => {
     expect(cliState(studio, 'codex')).toBe('not_logged_in');
     expect(cliState(box, 'claude')).toBe('not_installed');
     expect(cliState({ clis: [{ cli: 'codex', installed: false, version: null, logged_in: false, path: null }] }, 'codex')).toBe('not_installed');
+  });
+});
+
+describe('shortId', () => {
+  it('shortens an id to its start and end, and leaves a short one', () => {
+    expect(shortId('01m8a0b1c2d3e4f5g6h7jkabcd')).toBe('01m8…abcd');
+    expect(shortId('r_gone')).toBe('r_gone');
   });
 });
 
@@ -328,13 +335,17 @@ describe('BotAgent', () => {
     await waitFor(() => expect(puts()[0]?.body).toMatchObject({ model: 'opus' }));
   });
 
-  it('shows a revoked runner of the pool, to take it out', async () => {
+  it('shows the revoked runners of the pool apart, to take them out', async () => {
     const user = userEvent.setup();
-    renderAgent({ runners: [], configs: { u_kira: config('u_kira', { runner_ids: ['r_gone'] }) } });
+    renderAgent({ runners: [], configs: { u_kira: config('u_kira', { runner_ids: ['01m8a0b1c2d3e4f5g6h7jkabcd', '01m8z9y8x7w6v5t4s3r2qpwxyz'] }) } });
 
-    const gone = await screen.findByRole('checkbox', { name: 'Ein widerrufener Runner' });
-    expect(gone.getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByText('Er arbeitet nicht mehr. Nimm ihn aus dem Pool, sonst lehnt das Speichern ab.')).toBeTruthy();
+    const first = await screen.findByRole('checkbox', { name: 'Ein widerrufener Runner (01m8…abcd)' });
+    expect(first.getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('checkbox', { name: 'Ein widerrufener Runner (01m8…wxyz)' })).toBeTruthy();
+    expect(screen.getAllByText('Er arbeitet nicht mehr. Nimm ihn aus dem Pool, sonst lehnt das Speichern ab.')).toHaveLength(2);
+    await user.click(first);
+    expect(screen.queryByRole('checkbox', { name: 'Ein widerrufener Runner (01m8…abcd)' })).toBeNull();
+    const gone = screen.getByRole('checkbox', { name: 'Ein widerrufener Runner (01m8…wxyz)' });
     await user.click(gone);
     // out of the pool: no runner is left, and the pool says to connect one
     expect(await screen.findByText('Noch kein Runner')).toBeTruthy();

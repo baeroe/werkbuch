@@ -158,16 +158,20 @@ describe('Runners', () => {
   });
 
   it('shows an offline runner with its waiting runs, and one that has not reported yet', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T10:00:00Z'));
     renderRunners({
       runners: [
         makeRunner('r1', { online: false, last_seen_at: '2026-10-28T07:12:00Z', clis: [{ cli: 'codex', installed: false, version: null, logged_in: false, path: null }], load: { cpu: 3, gpu: null, ram_used: 2, ram_total: 0, disk_free: 10, disk_total: 100, measured_at: '2026-10-28T07:12:00Z' } }),
         makeRunner('r2', { online: false, os: 'linux', arch: 'amd64', last_seen_at: null, load: null, clis: [], equipment: null }),
         makeRunner('r3', { equipment: { mcp_servers: [], skills: [], plugins: [], werkbuch_access: [] } }),
+        makeRunner('r4', { online: false, last_seen_at: '2026-10-26T16:30:00Z' }),
       ],
       runs: [makeRun('run1', { work_item_id: 'wi_gone', status: 'waiting', started_at: null })],
     });
 
     const offline = await cardOf('mac-r1');
+    // today: the time alone, in the zone of the organisation
     expect(within(offline).getByText('Offline seit 08:12')).toBeTruthy();
     expect(within(offline).getByText('Letzter Kontakt am 28.10.2026, 08:12')).toBeTruthy();
     expect(fact(offline, 'CLIs').textContent).toBe('Codexnicht installiert');
@@ -186,6 +190,9 @@ describe('Runners', () => {
     expect(fact(silent, 'CLIs').textContent).toBe('Noch keine gemeldet');
     expect(fact(silent, 'Ausstattung').textContent).toBe('Noch kein Bericht');
     expect(fact(silent, 'Aufträge').textContent).toBe('Keine');
+
+    // before today: with the day
+    expect(within(await cardOf('mac-r4')).getByText('Offline seit 26.10.2026, 17:30')).toBeTruthy();
 
     const bare = await cardOf('mac-r3');
     expect(fact(bare, 'Ausstattung').textContent).toContain('Nichts eingerichtet: nur werkbuch');
@@ -275,6 +282,20 @@ describe('Runner verbinden', () => {
     expect(window.getSelection()?.toString()).toBe(pairingOf().command);
   });
 
+  it('stops asking for the code once the dialog is closed (A580)', async () => {
+    const user = userEvent.setup();
+    renderRunners({ runners: [makeRunner('r1')], runs: [], routes: { 'POST /api/v1/runner-pairings': () => ({ status: 201, body: { data: pairingOf() } }), 'GET /api/v1/runner-pairings/pc1': () => ({ body: { data: pairingOf() } }) } });
+    await cardOf('mac-r1');
+    await user.click(screen.getAllByRole('button', { name: 'Runner verbinden' })[0]);
+    const dialog = await screen.findByRole('dialog', { name: 'Runner verbinden' });
+    await waitFor(() => expect(calls('GET', '/api/v1/runner-pairings/pc1')).toHaveLength(1));
+    await user.click(within(dialog).getAllByRole('button', { name: 'Schließen' })[0]);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // longer than the 2 s between two asks
+    await new Promise((resolve) => setTimeout(resolve, 2300));
+    expect(calls('GET', '/api/v1/runner-pairings/pc1')).toHaveLength(1);
+  });
+
   it('counts the code down and offers a new one once it expired', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-28T08:00:00Z'));
@@ -302,8 +323,11 @@ describe('Runner verbinden', () => {
     vi.setSystemTime(new Date('2026-10-28T08:00:30Z'));
     expect(await within(dialog).findByText('(noch 0:35 Min.)', {}, { timeout: 2500 })).toBeTruthy();
 
+    // the focus is on "Neuer Code", which goes with the expired code: "Neuen Code erzeugen" takes it
+    within(dialog).getByRole('button', { name: 'Neuer Code' }).focus();
     vi.setSystemTime(new Date('2026-10-28T08:02:00Z'));
     const expired = await within(dialog).findByRole('alert', {}, { timeout: 2500 });
+    await waitFor(() => expect(document.activeElement).toBe(within(expired).getByRole('button', { name: 'Neuen Code erzeugen' })));
     expect(within(expired).getByText('Der Code ist abgelaufen')).toBeTruthy();
     expect(within(dialog).queryByText('Wartet auf den Runner …')).toBeNull();
     await user.click(within(expired).getByRole('button', { name: 'Neuen Code erzeugen' }));
@@ -394,7 +418,13 @@ describe('Places, name and revoking', () => {
     expect(calls('PATCH', '/api/v1/runners/r1')[0].body).toEqual({ slots: { total: 2, per_repo: 3, light: null } });
     expect(await within(dialog).findByText('Je Repo höchstens so viele wie gesamt.')).toBeTruthy();
     expect(perRepo.getAttribute('aria-invalid')).toBe('true');
+    // the field the server refused takes the focus
+    await waitFor(() => expect(document.activeElement).toBe(perRepo));
     expect(within(dialog).getByText('Die Plätze sind ganze Zahlen.')).toBeTruthy();
+    // typing there again takes its refusal away
+    await user.type(perRepo, '{Backspace}');
+    expect(within(dialog).queryByText('Je Repo höchstens so viele wie gesamt.')).toBeNull();
+    expect(perRepo.getAttribute('aria-invalid')).toBeNull();
 
     answer = 'fail';
     await user.clear(perRepo);
@@ -439,14 +469,17 @@ describe('Places, name and revoking', () => {
     expect(within(dialog).queryByText('Gib dem Runner einen Namen.')).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'Umbenennen' }));
     expect(await within(dialog).findByText('Ein anderer Runner heißt schon so.')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(name));
+    await user.type(name, '-2');
+    expect(within(dialog).queryByText('Ein anderer Runner heißt schon so.')).toBeNull();
 
     answer = 'fail';
     await user.click(within(dialog).getByRole('button', { name: 'Umbenennen' }));
     await waitFor(() => expect(toastNamed('„mac-r1“ nicht umbenannt')).toBeTruthy());
     answer = 'ok';
     act(() => runToastAction(toastNamed('„mac-r1“ nicht umbenannt')!.id));
-    await waitFor(() => expect(toastNamed('Runner heißt jetzt „studio“')).toBeTruthy());
-    expect(calls('PATCH', '/api/v1/runners/r1').at(-1)!.body).toEqual({ name: 'studio' });
+    await waitFor(() => expect(toastNamed('Runner heißt jetzt „studio-2“')).toBeTruthy());
+    expect(calls('PATCH', '/api/v1/runners/r1').at(-1)!.body).toEqual({ name: 'studio-2' });
   });
 
   it('revokes a runner after asking, says how many runs it ended, and moves the focus on', async () => {
@@ -530,6 +563,8 @@ describe('Places, name and revoking', () => {
     act(() => runToastAction(toastNamed('Auftrag nicht abgebrochen')!.id));
     await waitFor(() => expect(toastNamed('WEB-47: Auftrag wird abgebrochen')).toBeTruthy());
     expect(toastNamed('WEB-47: Auftrag wird abgebrochen')!.description).toBe('„mac-r1“ beendet das CLI beim nächsten Kontakt. Was nicht gepusht ist, bleibt im Worktree.');
+    // the question closes: the focus goes to the runner's card
+    await waitFor(() => expect(document.activeElement).toBe(document.getElementById('runner-card-r1')));
 
     // a run without an item, from the queue
     await user.click(within(card).getByRole('button', { name: 'Abbrechen: Umsetzen an Ohne Item' }));
@@ -537,6 +572,7 @@ describe('Places, name and revoking', () => {
     expect(within(plain).getByText('Der Auftrag kommt aus der Warteschlange. Am Item lässt er sich erneut starten.')).toBeTruthy();
     await user.click(within(plain).getByRole('button', { name: 'Auftrag abbrechen' }));
     await waitFor(() => expect(toastNamed('Auftrag wird abgebrochen')).toBeTruthy());
+    expect(toastNamed('Auftrag wird abgebrochen')!.description).toBe('Der Auftrag ist aus der Warteschlange. Am Item lässt er sich erneut starten.');
     // the row is gone: the card takes the focus
     await waitFor(() => expect(document.activeElement).toBe(document.getElementById('runner-card-r1')));
   });

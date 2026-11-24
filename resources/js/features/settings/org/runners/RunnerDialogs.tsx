@@ -42,9 +42,12 @@ export function PlacesDialog({ runner, open, onOpenChange, finalFocus }: DialogP
     per_repo: String(runner?.slots.per_repo ?? ''),
     light: String(runner?.slots.light ?? ''),
   });
+  // a refusal at a field goes as soon as the person types there again; the next send shows them all anew
+  const [typed, setTyped] = useState<ReadonlySet<keyof RunnerSlots>>(new Set());
 
   function send() {
     if (!runner) return;
+    setTyped(new Set());
     // as typed: what is no whole number goes as null, and the server's sentence stands at the field
     const slots = { total: whole(values.total), per_repo: whole(values.per_repo), light: whole(values.light) } as unknown as RunnerSlots;
     settle(save.mutateAsync({ id: runner.id, slots }), {
@@ -80,8 +83,11 @@ export function PlacesDialog({ runner, open, onOpenChange, finalFocus }: DialogP
           autoComplete="off"
           value={values[pot.key]}
           hint={pot.hint()}
-          error={fieldMessage(save.error, `slots.${pot.key}`)}
-          onChange={(event) => setValues((current) => ({ ...current, [pot.key]: event.target.value }))}
+          error={typed.has(pot.key) ? undefined : fieldMessage(save.error, `slots.${pot.key}`)}
+          onChange={(event) => {
+            setValues((current) => ({ ...current, [pot.key]: event.target.value }));
+            setTyped((current) => new Set(current).add(pot.key));
+          }}
         />
       ))}
     </FormDialog>
@@ -132,6 +138,8 @@ export function RenameDialog({ runner, open, onOpenChange, finalFocus }: DialogP
         onChange={(event) => {
           setName(event.target.value);
           setAttempted(false);
+          // the refusal of the last name goes with typing a new one
+          rename.reset();
         }}
       />
     </FormDialog>

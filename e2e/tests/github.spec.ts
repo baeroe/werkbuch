@@ -7,6 +7,8 @@ import { api, artisanEval, createE2eProject, pressMod, PEOPLE, removeE2eProject,
 // instance has its own), and remove it again (the seeder removes what an aborted run left). Its installation is
 // suspended on purpose: then werkbuch never asks GitHub (whether a ruleset protects a branch, a token), and the specs
 // send nothing to github.com. Connecting itself posts the manifest to github.com: the spec catches that post.
+// "Neu einlesen" has no test here: it asks GitHub for installations and repos with a token of the app, and only an app
+// registered at github.com gets one (Vitest and Pest prove the button and the sync; the note stands in FLOWS too).
 
 const label = (key: string, params: Record<string, string | number> = {}) => tr('en', key, params);
 // the ddev calls (tinker) take their time

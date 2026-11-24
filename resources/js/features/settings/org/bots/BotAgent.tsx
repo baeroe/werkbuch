@@ -78,6 +78,9 @@ export function cliState(runner: Pick<Runner, 'clis'>, cli: AgentCli): CliState 
   return entry.logged_in ? 'ready' : 'not_logged_in';
 }
 
+/** "01m8…abcd": enough of an id to tell two revoked runners apart. */
+export const shortId = (id: string) => (id.length > 9 ? `${id.slice(0, 4)}…${id.slice(-4)}` : id);
+
 const quotedList = (texts: string[]) => new Intl.ListFormat(intlLocale(), { type: 'conjunction' }).format(texts.map((text) => t('settings.agents.quoted', { text })));
 
 function BackLink({ variant = 'ghost' }: { variant?: 'ghost' | 'secondary' }) {
@@ -263,13 +266,15 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
                     <li key={id}>
                       <Checkbox
                         className="items-start py-1"
-                        aria-label={t('settings.bot_agent.pool.gone')}
+                        aria-label={t('settings.bot_agent.pool.gone', { id: shortId(id) })}
                         aria-describedby={`runner-hint-${id}`}
                         checked
                         onCheckedChange={(on) => toggleRunner(id, on)}
                         label={
                           <span className="min-w-0">
-                            <span className="block font-medium">{t('settings.bot_agent.pool.gone')}</span>
+                            <span className="block font-medium">
+                              {t('settings.bot_agent.pool.gone', { id: shortId(id) })}
+                            </span>
                             <span id={`runner-hint-${id}`} className="block text-sm text-muted">
                               {t('settings.bot_agent.pool.gone_hint')}
                             </span>

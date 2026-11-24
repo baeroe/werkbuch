@@ -24,7 +24,7 @@ import { errorText } from '../../frame/form';
 import { useOrgZone } from '../../frame/format';
 import { CommandBlock } from './CommandBlock';
 import { placesSummary } from './RunnerDialogs';
-import { clockTime, remaining, systemOf, useNow } from './runnerParts';
+import { clockTime, holdFocus, remaining, systemOf, useNow } from './runnerParts';
 
 type PairingProps = {
   open: boolean;
@@ -46,6 +46,7 @@ export function PairingDialog({ open, onOpenChange, finalFocus }: PairingProps) 
   const runnerId = pairing.data?.runner_id ?? null;
   const connected = runnerId ? (runners.data?.items.find((runner) => runner.id === runnerId) ?? null) : null;
   const done = useRef<HTMLButtonElement>(null);
+  const again = useRef<HTMLButtonElement>(null);
 
   function newCode() {
     settle(create.mutateAsync(undefined), {
@@ -70,20 +71,21 @@ export function PairingDialog({ open, onOpenChange, finalFocus }: PairingProps) 
     if (runnerId) void queryClient.invalidateQueries({ queryKey: qk.runners.all });
   }, [runnerId, queryClient]);
 
-  // the button that had the focus („Neuer Code“) is gone: „Fertig“ takes it once it is drawn; the dialog's focus guard
-  // moves a lost focus to the dialog a moment later, so it holds on for a few frames
+  // the button that had the focus („Neuer Code“) is gone: „Fertig“ takes it once it is drawn
   const connectedId = connected?.id;
+  useEffect(() => (connectedId ? holdFocus(() => done.current) : undefined), [connectedId]);
+
+  // the code ran out while the focus was in the dialog („Neuer Code“ went with it): „Neuen Code erzeugen“ takes it
   useEffect(() => {
-    if (!connectedId) return;
-    let tries = 0;
-    let frame = 0;
-    const take = () => {
-      if (done.current && document.activeElement !== done.current) done.current.focus();
-      if ((tries += 1) < 20) frame = requestAnimationFrame(take);
+    if (!expired) return;
+    const dialog = again.current?.closest('[role="dialog"]');
+    const inDialog = () => {
+      const active = document.activeElement;
+      return !active || active === document.body || !active.isConnected || (dialog?.contains(active) ?? false);
     };
-    frame = requestAnimationFrame(take);
-    return () => cancelAnimationFrame(frame);
-  }, [connectedId]);
+    if (!inDialog()) return;
+    return holdFocus(() => again.current, inDialog);
+  }, [expired]);
 
   return (
     <Dialog
@@ -136,7 +138,7 @@ export function PairingDialog({ open, onOpenChange, finalFocus }: PairingProps) 
                   role="alert"
                   title={t('settings.runners.pairing.expired_title')}
                   action={
-                    <Button variant="secondary" size="sm" icon={RefreshCw} pending={create.isPending} onClick={newCode}>
+                    <Button ref={again} variant="secondary" size="sm" icon={RefreshCw} pending={create.isPending} onClick={newCode}>
                       {t('settings.runners.pairing.new_code_again')}
                     </Button>
                   }

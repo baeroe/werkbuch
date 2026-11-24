@@ -122,7 +122,7 @@ function renderAgents({
       current = current ? { ...current, guard: null } : null;
       return { body: { data: current } };
     },
-    'GET /api/v1/references': () => ({ body: { data: { items: [makeWorkItem({ id: 'i_web47', key: 'WEB-47' })], pages: [] } } }),
+    'GET /api/v1/references': () => ({ body: { data: { items: [makeWorkItem({ id: 'i_web47', key: 'WEB-47' }), makeWorkItem({ id: 'i_web48', key: 'WEB-48' })], pages: [] } } }),
     ...overrides,
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -329,11 +329,13 @@ describe('Agents: unauthorized merge', () => {
     renderAgents({ link: linkOf(github.repositories[0], { guard, protected: false }) });
 
     const banner = await screen.findByRole('alert', { name: 'Eigenmächtiger Merge erkannt: WEB pausiert' });
-    expect(banner.textContent).toContain('Am 20.11.2026, 09:15 kam auf main ein Push der App (a41c9e7), den kein Merge von werkbuch erklärt, aus dem Auftrag von ');
-    expect(await within(banner).findByRole('link', { name: 'WEB-47' })).toBeTruthy();
+    // until the items are known the sentence names none, then it names them as links in one sentence
+    expect(await within(banner).findByRole('link', { name: 'WEB-48' })).toBeTruthy();
     expect(within(banner).getByRole('link', { name: 'WEB-47' }).getAttribute('href')).toBe('/items/WEB-47');
     expect(calls('GET', '/api/v1/references?items=i_web47%2Ci_web48')).toHaveLength(1);
-    expect(banner.textContent).toContain('. Alle Stränge des Projekts pausieren. Prüfe den Commit bei GitHub');
+    expect(banner.textContent).toContain(
+      'Am 20.11.2026, 09:15 kam auf main ein Push der App (a41c9e7), den kein Merge von werkbuch erklärt, aus dem Auftrag von WEB-47 und WEB-48. Alle Stränge des Projekts pausieren. Prüfe den Commit bei GitHub',
+    );
     expect(banner.textContent).toContain('Ein Ruleset auf main (Pull Request nötig, ohne Bypass) hält solche Pushes fern.');
 
     await user.click(within(banner).getByRole('button', { name: 'Bestätigen und fortsetzen' }));
@@ -355,6 +357,7 @@ describe('Agents: unauthorized merge', () => {
 
     const banner = await screen.findByRole('alert', { name: 'Eigenmächtiger Merge erkannt: WEB pausiert' });
     expect(banner.textContent).toContain('Auf  kam ein Push der App (), den kein Merge von werkbuch erklärt. Alle Stränge');
+    expect(within(banner).queryByRole('link')).toBeNull();
     expect(banner.textContent).not.toContain('Ruleset');
     await user.click(within(banner).getByRole('button', { name: 'Bestätigen und fortsetzen' }));
     await waitFor(() => expect(toastNamed('Nicht bestätigt')).toBeTruthy());
@@ -366,9 +369,11 @@ describe('Agents: unauthorized merge', () => {
 
   it('tells a reader that an admin confirms', async () => {
     signedIn = lene;
-    renderAgents({ role: 'viewer', link: linkOf(github.repositories[0], { guard }) });
+    renderAgents({ role: 'viewer', link: linkOf(github.repositories[0], { guard: { ...guard, detected_at: null } }) });
 
     const banner = await screen.findByRole('alert', { name: 'Eigenmächtiger Merge erkannt: WEB pausiert' });
+    expect(await within(banner).findByRole('link', { name: 'WEB-48' })).toBeTruthy();
+    expect(banner.textContent).toContain('Auf main kam ein Push der App (a41c9e7), den kein Merge von werkbuch erklärt, aus dem Auftrag von WEB-47 und WEB-48. Alle Stränge');
     expect(banner.textContent).toContain('Ein Admin des Projekts prüft den Commit und bestätigt; danach machen die Stränge weiter.');
     expect(within(banner).queryByRole('button')).toBeNull();
   });

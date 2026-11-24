@@ -9,7 +9,7 @@
  */
 
 import { Building2, Check, ExternalLink, GitBranch, Lock, RefreshCw, Shield, ShieldAlert, ShieldCheck, Unplug, User as UserIcon } from 'lucide-react';
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { AlertDialog } from '@/components/ui/AlertDialog';
 import { Banner } from '@/components/ui/Banner';
 import { Button, buttonClass } from '@/components/ui/Button';
@@ -32,7 +32,10 @@ import { MANIFEST_PERMISSIONS, permissionTexts } from './permissions';
 /** The page title takes the focus when the view under it changes (disconnected). */
 export const GITHUB_TITLE = 'github-title';
 
-/** Where the person goes to choose the repos of the installation: werkbuch gives a state there that GitHub sends back. */
+/**
+ * Where the person goes to choose the repos of the installation: werkbuch gives a state there that GitHub sends back,
+ * and GitHub returns to the settings afterwards. In the same tab: a second tab would keep this page with the old repos.
+ */
 const INSTALL_PATH = '/github/install';
 
 /** GitHub allows 34 characters for the name of an app; the manifest shortens the organization before " werkbuch". */
@@ -69,6 +72,14 @@ function Connect() {
   const [error, setError] = useState<string | undefined>(undefined);
   // the page is on its way to GitHub: the button stays busy until it is gone
   const [leaving, setLeaving] = useState(false);
+  // back from GitHub through the back/forward cache: the page is the one that left, busy button and all
+  useEffect(() => {
+    const back = (event: PageTransitionEvent) => {
+      if (event.persisted) setLeaving(false);
+    };
+    window.addEventListener('pageshow', back);
+    return () => window.removeEventListener('pageshow', back);
+  }, []);
 
   function connect(event?: FormEvent) {
     event?.preventDefault();
@@ -280,10 +291,10 @@ function Connected({ github, onDisconnect }: { github: GitHubStatus; onDisconnec
             <Button variant="secondary" icon={RefreshCw} pending={sync.isPending} onClick={readAgain}>
               {t('settings.github.sync.button')}
             </Button>
-            <a href={INSTALL_PATH} target="_blank" rel="noreferrer" className={buttonClass({ variant: 'secondary' }, 'gap-1.5')}>
+            <a href={INSTALL_PATH} className={buttonClass({ variant: 'secondary' }, 'gap-1.5')}>
               {t('settings.github.repos.change')}
               <ExternalLink className="size-3.5 text-muted" aria-hidden="true" />{' '}
-              <span className="sr-only">{t('settings.github.opens')}</span>
+              <span className="sr-only">{t('settings.github.leaves')}</span>
             </a>
           </div>
         }

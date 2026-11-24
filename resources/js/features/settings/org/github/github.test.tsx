@@ -5,7 +5,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode, Ref } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -178,6 +178,18 @@ describe('GitHub, not connected', () => {
     expect(button.getAttribute('aria-busy') ?? button.getAttribute('aria-disabled')).toBeTruthy();
     await user.click(button);
     expect(calls('POST', '/api/v1/github/manifest')).toHaveLength(1);
+
+    // a page shown again from memory only (another page's pageshow) keeps it busy
+    window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: false }));
+    await user.click(button);
+    expect(calls('POST', '/api/v1/github/manifest')).toHaveLength(1);
+    // back from GitHub through the back/forward cache: the button works again
+    act(() => {
+      window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
+    });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Mit GitHub verbinden' }).getAttribute('aria-busy')).not.toBe('true'));
+    await user.click(screen.getByRole('button', { name: 'Mit GitHub verbinden' }));
+    await waitFor(() => expect(calls('POST', '/api/v1/github/manifest')).toHaveLength(2));
   });
 
   it('posts it for a GitHub organization with Enter in the field', async () => {
@@ -257,9 +269,10 @@ describe('GitHub, connected', () => {
     expect(row('feldwerk/design-tokens').textContent).toBe('feldwerk/design-tokensKein Projekt');
     expect(row('feldwerk/alt').textContent).toBe('feldwerk/altprivatbei GitHub entferntKein Projekt');
 
-    const change = screen.getByRole('link', { name: 'Repos bei GitHub ändern (öffnet GitHub)' });
+    // in the same tab: GitHub comes back to the settings, a second tab would keep this page with the old repos
+    const change = screen.getByRole('link', { name: 'Repos bei GitHub ändern (wechselt zu GitHub)' });
     expect(change.getAttribute('href')).toBe('/github/install');
-    expect(change.getAttribute('target')).toBe('_blank');
+    expect(change.hasAttribute('target')).toBe(false);
     expect(screen.getByText('Ruleset empfohlen')).toBeTruthy();
   });
 

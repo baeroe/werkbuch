@@ -11,7 +11,7 @@
  */
 
 import { expect, type Locator, type Page } from '@playwright/test';
-import { api, artisanEval, createE2eProject, createE2eRunner, createItem, login, PEOPLE, pngBytes, pressMod, removeE2eProject, removeE2eRunner, removeE2eWebhook, runId, tr, uploadViaApi, variant } from './helpers';
+import { api, artisanEval, createE2eProject, createE2eRunnerRow, createItem, login, PEOPLE, pngBytes, pressMod, redeemRunnerCode, removeE2eProject, removeE2eRunner, removeE2eWebhook, runId, tr, uploadViaApi, variant } from './helpers';
 
 /** What a path needs from the data of the run (A11Y ids, resolved over the API by the spec). */
 export type A11yIds = {
@@ -82,6 +82,32 @@ async function press(page: Page, target: Locator, key = 'Enter'): Promise<void> 
 async function onList(page: Page, ...keys: string[]): Promise<void> {
   await expect(page.locator('[data-nav-target]').first()).toBeVisible();
   for (const key of keys) await page.keyboard.press(key);
+}
+
+/** A runner of a state (`E2E <variant> <run> a11y <what>`), written into the database; the list is read anew. */
+async function a11yRunner(page: Page, what: string): Promise<{ id: string; name: string }> {
+  const runner = createE2eRunnerRow(`a11y ${what}`);
+  await page.reload();
+  return runner;
+}
+
+/** Two runners with runs on items of a project of the state: one online that runs one, one offline that one waits for. */
+async function a11yRunners(page: Page) {
+  const project = await createE2eProject(page, e2eName());
+  const item = await createItem(page, { project_id: project.id, title: 'E2E a11y run' });
+  const waiting = await createItem(page, { project_id: project.id, title: 'E2E a11y waiting run' });
+  const online = createE2eRunnerRow('a11y online', { runs: [{ itemId: item.id, status: 'running' }] });
+  const offline = createE2eRunnerRow('a11y offline', { online: false, runs: [{ itemId: waiting.id, status: 'waiting' }] });
+  await page.reload();
+  return { online, offline, item };
+}
+
+/** Revokes the runners of the states and takes their project away (its runs go with it). */
+async function removeA11yRunners(page: Page): Promise<void> {
+  const runners = (await (await api(page, 'GET', '/api/v1/runners?per_page=100')).json()) as { data: { id: string; name: string }[] };
+  for (const runner of runners.data.filter((entry) => entry.name.startsWith(e2eName()))) await removeE2eRunner(page, runner.id);
+  const projects = (await (await api(page, 'GET', '/api/v1/projects?per_page=100&include_archived=1')).json()) as { data: { identifier: string; name: string }[] };
+  for (const project of projects.data.filter((entry) => entry.name === e2eName())) await removeE2eProject(page, project.identifier);
 }
 
 export const A11Y_PAGES: readonly A11yEntry[] = [
@@ -334,6 +360,19 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
     },
   }),
   state({
+    name: 'runners with a runner',
+    page: 'Settings/Organization',
+    path: () => '/settings/runners',
+    // the screen itself, no dialog: a runner with a report (pots, meters, CLIs, equipment with its warning) and a run,
+    // one offline with a waiting run (its banner)
+    state: async (page) => {
+      const { online, offline, item } = await a11yRunners(page);
+      await expect(page.getByRole('article', { name: online.name, exact: true }).getByRole('link', { name: new RegExp(`^${item.key} `) })).toBeVisible();
+      await expect(page.getByText(en('settings.runners.waiting.one', { count: 1, name: offline.name }))).toBeVisible();
+    },
+    cleanup: (page) => removeA11yRunners(page),
+  }),
+  state({
     name: 'pairing dialog',
     page: 'Settings/Organization',
     path: () => '/settings/runners',
@@ -344,21 +383,63 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
     },
   }),
   state({
+    name: 'pairing dialog connected',
+    page: 'Settings/Organization',
+    path: () => '/settings/runners',
+    // the machine redeems the code the dialog shows, as `werkbuch-runner login` does
+    state: async (page) => {
+      await press(page, page.getByRole('button', { name: en('settings.runners.connect') }).first());
+      const command = page.getByRole('dialog', { name: en('settings.runners.connect') }).getByRole('group', { name: en('settings.runners.pairing.command') }).locator('code');
+      await expect(command).toHaveText(/--code \S+$/);
+      const runner = await redeemRunnerCode(page, (await command.textContent())!.split('--code ')[1]!.trim(), 'a11y paired');
+      await expect(page.getByRole('dialog', { name: en('settings.runners.pairing.connected_title', { name: runner.name }) })).toBeVisible({ timeout: 15_000 });
+    },
+    cleanup: (page) => removeA11yRunners(page),
+  }),
+  state({
     name: 'runner places dialog',
     page: 'Settings/Organization',
     path: () => '/settings/runners',
-    // a runner of its own (the e2e data have none): connected over the protocol, then the list read anew
     state: async (page) => {
-      const runner = await createE2eRunner(page, 'a11y');
-      await page.reload();
+      const runner = await a11yRunner(page, 'places');
       await press(page, page.getByRole('button', { name: en('settings.runners.action.places_named', { name: runner.name }) }));
       await expect(page.getByRole('dialog', { name: en('settings.runners.slots.title', { name: runner.name }) }).getByRole('textbox', { name: en('settings.runners.pot.total') })).toBeVisible();
     },
-    cleanup: async (page) => {
-      const response = await api(page, 'GET', '/api/v1/runners?per_page=100');
-      const { data } = (await response.json()) as { data: { id: string; name: string }[] };
-      for (const runner of data.filter((entry) => entry.name.startsWith(e2eName()))) await removeE2eRunner(page, runner.id);
+    cleanup: (page) => removeA11yRunners(page),
+  }),
+  state({
+    name: 'runner rename dialog',
+    page: 'Settings/Organization',
+    path: () => '/settings/runners',
+    state: async (page) => {
+      const runner = await a11yRunner(page, 'rename');
+      await press(page, page.getByRole('button', { name: en('settings.runners.action.rename_named', { name: runner.name }) }));
+      await expect(page.getByRole('dialog', { name: en('settings.runners.rename.title', { name: runner.name }) }).getByRole('textbox', { name: en('settings.runners.rename.name') })).toBeVisible();
     },
+    cleanup: (page) => removeA11yRunners(page),
+  }),
+  state({
+    name: 'runner revoke dialog',
+    page: 'Settings/Organization',
+    path: () => '/settings/runners',
+    state: async (page) => {
+      const runner = await a11yRunner(page, 'revoke');
+      await press(page, page.getByRole('button', { name: en('settings.runners.action.revoke_named', { name: runner.name }) }));
+      await expect(page.getByRole('alertdialog', { name: en('settings.runners.revoke.title', { name: runner.name }) })).toBeVisible();
+    },
+    cleanup: (page) => removeA11yRunners(page),
+  }),
+  state({
+    name: 'run cancel dialog',
+    page: 'Settings/Organization',
+    path: () => '/settings/runners',
+    state: async (page) => {
+      const { online, item } = await a11yRunners(page);
+      const task = en('settings.runners.run.type.task');
+      await press(page, page.getByRole('article', { name: online.name, exact: true }).getByRole('button', { name: en('settings.runners.runs.cancel_named', { run: task, subject: item.key }) }));
+      await expect(page.getByRole('alertdialog', { name: en('settings.runners.cancel.title', { run: task, key: item.key }) })).toBeVisible();
+    },
+    cleanup: (page) => removeA11yRunners(page),
   }),
   state({
     name: 'inbox with cards',
@@ -392,30 +473,40 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
   settings('project', 'automations'),
   settings('project', 'agents'),
   state({
+    name: 'github connected',
+    page: 'Settings/Organization',
+    path: () => '/settings/github',
+    // the connected view: the app, an installation, a repo of a project with a guard and without a ruleset, a free repo
+    state: async (page) => {
+      await connectGitHub(page);
+      await page.reload();
+      await expect(page.getByRole('list', { name: en('settings.github.repos.label') }).getByText(en('settings.github.repo.guarded'))).toBeVisible();
+    },
+    cleanup: disconnectGitHub,
+  }),
+  state({
     name: 'disconnect GitHub dialog',
     page: 'Settings/Organization',
     path: () => '/settings/github',
-    // the connected view needs an app: one named e2e-werkbuch when the instance has none (without an installation, so
-    // werkbuch asks GitHub nothing), taken away in `cleanup` (else by the E2eSeeder); an app of the instance stays
     state: async (page) => {
-      a11yApp = JSON.parse(
-        artisanEval(
-          [
-            '$created = App\\Models\\GitHubApp::current() === null;',
-            "$erik = App\\Models\\User::query()->where('email', 'e2e@example.com')->firstOrFail();",
-            "if ($created) { App\\Models\\GitHubApp::factory()->create(['slug' => 'e2e-werkbuch', 'name' => 'E2E werkbuch', 'owner_login' => 'e2e', 'created_by' => $erik->id]); }",
-            "echo json_encode(['created' => $created]), PHP_EOL;",
-          ].join('\n'),
-        ),
-      ) as { created: boolean };
+      await connectGitHub(page);
       await page.reload();
       await press(page, page.getByRole('button', { name: en('settings.github.disconnect.button') }));
       await expect(page.getByRole('alertdialog', { name: en('settings.github.disconnect.question') })).toBeVisible();
     },
-    cleanup: async () => {
-      if (a11yApp?.created) artisanEval("App\\Models\\GitHubApp::query()->where('slug', 'e2e-werkbuch')->delete(); echo 'ok', PHP_EOL;");
-      a11yApp = null;
+    cleanup: disconnectGitHub,
+  }),
+  state({
+    name: 'project agents with guard',
+    page: 'Projects/Settings',
+    path: () => '/projects/WEB/settings/agents',
+    // the agents of the E2E project whose repo the guard holds: the banner "Unauthorized merge detected"
+    state: async (page) => {
+      const identifier = await connectGitHub(page);
+      await page.goto(`/projects/${identifier}/settings/agents`);
+      await expect(page.getByRole('alert', { name: en('settings.project.agents.guard.title', { identifier }) })).toBeVisible();
     },
+    cleanup: disconnectGitHub,
   }),
   state({
     name: 'workflow editor with agent steps',
@@ -437,7 +528,61 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
       await expect(page.getByRole('switch', { name: en('settings.bot_agent.enabled') })).toBeVisible();
     },
   }),
+  state({
+    name: 'bot agent of a bot that cannot be an agent',
+    page: 'Settings/Organization',
+    path: () => '/settings/bots',
+    // the default bot ("Automation") cannot be an agent: the view says why instead of the form (WEBU-27)
+    state: async (page) => {
+      await press(page, page.getByRole('link', { name: new RegExp(`${en('settings.bots.agent.for', { name: DEFAULT_BOT })}$`) }));
+      await expect(page.getByText(en('settings.bot_agent.cannot.title', { name: DEFAULT_BOT }))).toBeVisible();
+    },
+  }),
 ];
 
-/** The app the state "disconnect GitHub dialog" made, for its cleanup. */
-let a11yApp: { created: boolean } | null = null;
+/** The name of the default bot of the demo (the state "bot agent of a bot that cannot be an agent"). */
+const DEFAULT_BOT = 'Automation';
+
+/** What `connectGitHub` made, for `disconnectGitHub`. */
+let a11yGitHub: { created: boolean; installation: string; identifier: string } | null = null;
+
+/**
+ * GitHub for the states of Settings → GitHub and Project → Agenten: an app named e2e-werkbuch when the instance has none
+ * (an app of the instance's own stays untouched), a suspended installation (so werkbuch asks GitHub nothing) with two
+ * repos, the first the repo of an E2E project with the guard on and no ruleset. Answers the identifier of the project.
+ * `disconnectGitHub` takes it all away again (else the E2eSeeder before the next run).
+ */
+async function connectGitHub(page: Page): Promise<string> {
+  const project = await createE2eProject(page, e2eName());
+  const repo = `e2e/${variant()}-${runId()}-a11y`;
+  const answer = JSON.parse(
+    artisanEval(
+      [
+        "$erik = App\\Models\\User::query()->where('email', 'e2e@example.com')->firstOrFail();",
+        '$created = App\\Models\\GitHubApp::current() === null;',
+        "if ($created) { App\\Models\\GitHubApp::factory()->create(['slug' => 'e2e-werkbuch', 'name' => 'E2E werkbuch', 'owner_login' => 'e2e', 'created_by' => $erik->id]); }",
+        `$installation = App\\Models\\GitHubInstallation::factory()->create(['account_login' => 'e2e-${variant()}', 'suspended_at' => now()]);`,
+        `$site = App\\Models\\GitHubRepository::factory()->create(['installation_id' => $installation->id, 'full_name' => '${repo}-site']);`,
+        `App\\Models\\GitHubRepository::factory()->create(['installation_id' => $installation->id, 'full_name' => '${repo}-docs', 'private' => false]);`,
+        `App\\Models\\ProjectRepository::query()->create(['project_id' => '${project.id}', 'repository_id' => $site->id, 'base_branch' => 'main', 'protected' => false, 'guard_detected_at' => now(), 'guard_sha' => 'a41c9e7d00ff11', 'guard_branch' => 'main']);`,
+        "echo json_encode(['created' => $created, 'installation' => $installation->id]), PHP_EOL;",
+      ].join('\n'),
+    ),
+  ) as { created: boolean; installation: string };
+  a11yGitHub = { ...answer, identifier: project.identifier };
+  return project.identifier;
+}
+
+async function disconnectGitHub(page: Page): Promise<void> {
+  const made = a11yGitHub;
+  a11yGitHub = null;
+  if (!made) return;
+  await removeE2eProject(page, made.identifier);
+  artisanEval(
+    [
+      `App\\Models\\GitHubInstallation::query()->whereKey('${made.installation}')->delete();`,
+      made.created ? "App\\Models\\GitHubApp::query()->where('slug', 'e2e-werkbuch')->delete();" : '',
+      "echo 'ok', PHP_EOL;",
+    ].join('\n'),
+  );
+}

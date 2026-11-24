@@ -1,32 +1,49 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, arrowTo, createE2eRunner, pressMod, removeE2eRunner, runId, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, arrowTo, createE2eRunner, pressMod, removeE2eRunner, runId, tabTo, tr, variant } from '../helpers';
 
 // Bot → Agent and the steps of the agents in a workflow (WEBU-27, spec 7.4, 10.4) as the e2e person (Erik Ende, org
-// admin), in English, keyboard only. Each test makes what it changes over the API: a bot `E2E …` with Erik as its
-// responsible person and a runner `E2E …` (the bot is deactivated in `finally`, accounts are never deleted; the runner
-// is revoked), or a workflow `E2E …` (removed in `finally`, the e2e seeder removes what an aborted run left).
+// admin), in English, keyboard only. What a test changes it brings itself over the API: one bot per Playwright project
+// (`e2e-agent-<variant>`, Erik responsible), found again by its handle in every run, reactivated if needed and with its
+// agent set back to off (accounts are never deleted, so runs do not pile up bots), a runner `E2E …` (revoked in
+// `finally`), or a workflow `E2E …` (removed in `finally`, the e2e seeder removes what an aborted run left).
 
 const label = (key: string, params: Record<string, string | number> = {}) => tr('en', key, params);
 const prefix = () => `E2E ${variant()} ${runId()}`;
 
-/** A bot of this run that can be an agent: Erik is responsible for it. */
-async function createAgentBot(page: Page): Promise<{ id: string; name: string }> {
+/** The agent of a bot as it starts: off, every runner, Claude Code with its default model. */
+async function resetAgent(page: Page, id: string): Promise<void> {
+  const reset = await api(page, 'PUT', `/api/v1/bots/${id}/agent`, { enabled: false, runner_ids: [], cli: 'claude', model: 'sonnet', models: {} });
+  expect(reset.status(), await reset.text()).toBe(200);
+}
+
+/**
+ * The bot of this Playwright project that can be an agent: Erik is responsible for it. Made once, then found by its
+ * handle; a run that broke off may have left it deactivated or as an agent.
+ */
+async function agentBot(page: Page): Promise<{ id: string; name: string }> {
   await page.goto('/my-items');
   const me = (await (await api(page, 'GET', '/api/v1/me')).json()) as { data: { id: string } };
-  const name = `${prefix()} Agent`;
-  const created = await api(page, 'POST', '/api/v1/bots', {
-    name,
-    handle: `e2e-agent-${runId().toLowerCase()}-${variant()}`,
-    description: '',
-    owner_id: me.data.id,
-  });
-  expect(created.status(), await created.text()).toBe(201);
-  return { id: ((await created.json()) as { data: { id: string } }).data.id, name };
+  const handle = `e2e-agent-${variant()}`;
+  const name = `E2E ${variant()} Agent`;
+  let bot = (await allEntries(page, 'bots')).find((entry) => entry.handle === handle) as { id: string; disabled_at: string | null; owner_id: string | null } | undefined;
+  if (!bot) {
+    const created = await api(page, 'POST', '/api/v1/bots', { name, handle, description: '', owner_id: me.data.id });
+    expect(created.status(), await created.text()).toBe(201);
+    bot = ((await created.json()) as { data: { id: string; disabled_at: null; owner_id: string } }).data;
+  }
+  if (bot.disabled_at !== null) {
+    const reactivated = await api(page, 'POST', `/api/v1/users/${bot.id}/reactivate`);
+    expect(reactivated.status(), await reactivated.text()).toBeLessThan(300);
+  }
+  const named = await api(page, 'PATCH', `/api/v1/users/${bot.id}`, { name, owner_id: me.data.id });
+  expect(named.status(), await named.text()).toBe(200);
+  await resetAgent(page, bot.id);
+  return { id: bot.id, name };
 }
 
 test('sets up a bot as an agent with the keyboard: on, one runner as its pool, Codex, saved with mod+enter', async ({ page }) => {
-  const bot = await createAgentBot(page);
+  const bot = await agentBot(page);
   const runner = await createE2eRunner(page, 'agent pool');
   try {
     await page.goto('/settings/bots');
@@ -72,8 +89,7 @@ test('sets up a bot as an agent with the keyboard: on, one runner as its pool, C
     await expect(page.getByRole('article', { name: bot.name, exact: true })).toContainText(label('settings.bots.agent.on', { cli: 'Codex', model: 'gpt-5-codex', runners: runner.name }));
   } finally {
     await removeE2eRunner(page, runner.id);
-    const deactivated = await api(page, 'POST', `/api/v1/users/${bot.id}/deactivate`);
-    expect(deactivated.status(), await deactivated.text()).toBeLessThan(300);
+    await resetAgent(page, bot.id);
   }
 });
 

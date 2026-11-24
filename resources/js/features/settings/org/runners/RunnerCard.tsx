@@ -13,12 +13,17 @@ import { useItemRef } from '@/hooks/richText';
 import { t, tx } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import type { AgentCli, AgentRun, Runner } from '@/types';
-import { formatDateTime, relativeTime, useOrgZone } from '../../frame/format';
+import { formatDate, formatDateTime, relativeTime, useOrgZone } from '../../frame/format';
 import { Badge } from '../../frame/parts';
 import { clockTime, gigabytes, percent, runName, statusLabel, systemOf } from './runnerParts';
 
 /** The id of a runner's card: the focus goes there after a run of it was canceled, and to the next one after a revoke. */
 export const cardId = (runner: Pick<Runner, 'id'>) => `runner-card-${runner.id}`;
+
+/** "09:41" today, "27.10.2026, 09:41" before: since when a runner is offline, in the zone of the organisation. */
+function sinceText(iso: string, zone: string): string {
+  return formatDate(iso, zone) === formatDate(new Date().toISOString(), zone) ? clockTime(iso, zone) : formatDateTime(iso, zone);
+}
 
 function OnlineBadge({ runner }: { runner: Runner }) {
   const zone = useOrgZone();
@@ -33,7 +38,7 @@ function OnlineBadge({ runner }: { runner: Runner }) {
   return (
     <Badge tone="quiet" className="gap-1.5">
       <span className="size-2 rounded-full border border-current" aria-hidden="true" />
-      {runner.last_seen_at ? t('settings.runners.offline_since', { time: clockTime(runner.last_seen_at, zone) }) : t('settings.runners.offline')}
+      {runner.last_seen_at ? t('settings.runners.offline_since', { time: sinceText(runner.last_seen_at, zone) }) : t('settings.runners.offline')}
     </Badge>
   );
 }
