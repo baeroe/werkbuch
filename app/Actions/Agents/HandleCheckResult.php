@@ -19,8 +19,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * - of an agent (a strand at that head commit): red makes a correction with the failed checks (once per commit, the
  *   agent reads their logs, A511), green starts the review (not for a draft) and may merge (ApproveAndMerge);
  * - of a person: green and ready starts the review of the review agent, when the project reviews PRs of persons.
- * Results of older commits count nothing. Nothing at a strand while a run of it that changes code waits or runs (A593:
- * its end looks again) or while an epic still works through its children (A594).
+ * Results of older commits count nothing. While a run of a strand that changes code waits or runs, red CI only leaves
+ * its findings at the strand (A593, A607: its end looks again), and nothing at all while an epic still works through
+ * its children (A594).
  */
 final class HandleCheckResult
 {
@@ -67,7 +68,12 @@ final class HandleCheckResult
     {
         // a run that changes code is at work (a push of it in between is no state to judge, A593), an epic is not
         // through its children (A594): its end looks again
-        if ($thread->head_sha !== $pr['head_sha'] || $thread->status !== AgentThread::OPEN || AgentFlow::coding($thread) || AgentFlow::epicPending($thread)) {
+        if ($thread->head_sha !== $pr['head_sha'] || $thread->status !== AgentThread::OPEN || AgentFlow::epicPending($thread)) {
+            return null;
+        }
+
+        // while a run changes code only red CI counts, as findings that wait at the strand (A607)
+        if (AgentFlow::coding($thread) && $ci !== 'failure') {
             return null;
         }
 

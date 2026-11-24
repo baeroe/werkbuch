@@ -24,8 +24,10 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * A correction at a strand (spec 7.1, 7.2): CI red or a review with findings at the PR of the agent, a person setting
  * the item back, a person assigning the bot again (the brakes start again, `$resetBrakes`), or the guard lifted. The
  * item goes to „Korrektur“; the correction continues the session of the strand. Once per head commit of the PR (CI and
- * review of one commit make one correction: findings of a correction that waits still join it). At the brake
- * (spec 7.2: at most so many corrections per strand) the strand pauses instead. Nothing at a strand that ended.
+ * review of one commit make one correction: findings of a correction that waits still join it; findings of CI and
+ * review while a run of the strand changes code wait at the strand, A607). A correction ends the verdict of the review
+ * before it (A606). At the brake (spec 7.2: at most so many corrections per strand) the strand pauses instead. Nothing
+ * at a strand that ended.
  */
 final class StartCorrection
 {
@@ -69,8 +71,15 @@ final class StartCorrection
                 return $waiting;
             }
 
-            // CI and review of a strand whose run is at work judge a push in between (A593): its end looks again
+            // CI and review of a strand whose run is at work judge a push in between (A593): the findings wait at the
+            // strand, the end of the run takes them when it pushed nothing and drops them when it pushed (A607)
             if (in_array($source, ['ci', 'review'], true) && $runs->contains(fn (AgentRun $run) => in_array($run->type, AgentFlow::CODE, true))) {
+                $pending = $locked->pending_findings;
+                $pending = $pending !== null && $pending['head'] === $headSha ? $pending : null;
+                if ($headSha !== null && ($pending === null || ! str_contains($pending['text'], $findings))) {
+                    $locked->forceFill(['pending_findings' => ['source' => $pending['source'] ?? $source, 'head' => $headSha, 'text' => $pending === null ? $findings : $pending['text']."\n\n".$findings]])->save();
+                }
+
                 return null;
             }
 
@@ -93,7 +102,8 @@ final class StartCorrection
                 return null;
             }
 
-            $locked->forceFill(['corrections' => $locked->corrections + 1, 'merge_sha' => null])->save();
+            // every correction ends what a review decided before it (A606): an approve of the commit it starts on merges nothing
+            $locked->forceFill(['corrections' => $locked->corrections + 1, 'merge_sha' => null, 'review_sha' => null, 'review_verdict' => null])->save();
             AgentFlow::move($bot, $item, AgentStep::Correction);
 
             return $run;

@@ -12,7 +12,7 @@ namespace App\GitHub;
 final class Manifest
 {
     /** @var array<string, string> */
-    public const PERMISSIONS = ['contents' => 'write', 'pull_requests' => 'write', 'checks' => 'read', 'actions' => 'read', 'metadata' => 'read'];
+    public const PERMISSIONS = ['contents' => 'write', 'pull_requests' => 'write', 'checks' => 'read', 'actions' => 'read', 'statuses' => 'read', 'metadata' => 'read'];
 
     /** @var list<string> */
     public const EVENTS = ['pull_request', 'push', 'check_suite', 'check_run'];

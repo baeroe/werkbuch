@@ -23,6 +23,15 @@ final class OwnMerges
 
     public static function expect(string $repositoryId, int $prNumber): GitHubMerge
     {
+        // a merge of the PR whose answer got lost is the same merge asked again: one row, its window starts again
+        $open = GitHubMerge::query()->where('repository_id', $repositoryId)->where('pr_number', $prNumber)->whereNull('merge_sha')
+            ->orderByDesc('started_at')->orderByDesc('id')->lockForUpdate()->first();
+        if ($open !== null) {
+            $open->forceFill(['started_at' => now()])->save();
+
+            return $open;
+        }
+
         return GitHubMerge::query()->create(['repository_id' => $repositoryId, 'pr_number' => $prNumber, 'started_at' => now()]);
     }
 

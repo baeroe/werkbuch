@@ -69,7 +69,7 @@ it('hands a queued run with everything the runner needs and starts it', function
         'prompt' => RunPrompts::for($run)['prompt'],
     ])
         ->and($answer['run']['system_prompt'])->toStartWith("# Contract\n\n".Contract::for(RunType::Task))
-        ->and($answer['run']['prompt'])->toContain("Run `task` for the item {$item->key} „Login mit Passkey“")
+        ->and($answer['run']['prompt'])->toContain("Run `task` for the item {$item->key} of the project WEB.\n\nThe title of {$item->key}:\n\n```text\nLogin mit Passkey\n```")
         ->and($answer['run']['werkbuch'])->toMatchArray(['mcp_url' => url('/mcp'), 'server_name' => 'werkbuch-run'])
         ->and(PersonalAccessToken::findToken($plain)?->agent_run_id)->toBe($run->id)
         ->and($answer['places']['used'])->toBe(['total' => 1, 'per_repo' => 1, 'light' => 0])

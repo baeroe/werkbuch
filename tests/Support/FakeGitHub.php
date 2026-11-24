@@ -94,6 +94,12 @@ final class FakeGitHub
     /** @var list<string> the commits whose check runs werkbuch asked for */
     public array $checkRunCalls = [];
 
+    /** @var array<string, list<array<string, mixed>>> the workflow runs of a commit as GET /actions/runs?head_sha= lists them */
+    public array $workflowRuns = [];
+
+    /** @var array<string, list<array<string, mixed>>> the commit statuses of a commit as GET /commits/{sha}/status lists them */
+    public array $statuses = [];
+
     /**
      * The app, an installation of `feldwerk` and one repo `feldwerk/website` (default branch `main`), and the fake.
      */
@@ -154,6 +160,10 @@ final class FakeGitHub
             Str::is('/repos/*/*/pulls/*/reviews', $path) && $request->method() === 'GET' => Http::response($page === 1 ? array_values(array_map(fn (array $review) => ['body' => $review['body']], $this->reviews)) : [], 200),
             Str::is('/repos/*/*/issues/*/comments', $path) && $request->method() === 'GET' => Http::response($page === 1 ? array_values(array_map(fn (array $comment) => ['body' => $comment['body']], $this->comments)) : [], 200),
             Str::is('/repos/*/*/commits/*/check-runs', $path) => $this->checkRunsOf(explode('/', $path)[5], $page),
+            Str::is('/repos/*/*/actions/runs', $path) => Http::response(['total_count' => count($this->workflowRuns[(string) ($request->data()['head_sha'] ?? '')] ?? []),
+                'workflow_runs' => $page === 1 ? ($this->workflowRuns[(string) ($request->data()['head_sha'] ?? '')] ?? []) : []], 200),
+            Str::is('/repos/*/*/commits/*/status', $path) => Http::response(['state' => 'pending', 'total_count' => count($this->statuses[explode('/', $path)[5]] ?? []),
+                'statuses' => $page === 1 ? ($this->statuses[explode('/', $path)[5]] ?? []) : []], 200),
             Str::is('/repos/*/*/pulls/*', $path) && $request->method() === 'GET' => $this->pull((int) last(explode('/', $path))),
             $path === '/graphql' => $this->graphql($request),
             Str::is('/repos/*/*/git/refs/heads/*', $path) && $request->method() === 'DELETE' => $this->deleteBranch($path),
@@ -171,7 +181,7 @@ final class FakeGitHub
             'owner' => ['login' => 'feldwerk', 'id' => 9_001, 'type' => 'Organization'],
             'description' => 'werkbuch', 'external_url' => 'https://werkbuch.example.com', 'html_url' => 'https://github.com/apps/feldwerk-werkbuch',
             'created_at' => '2026-11-23T10:00:00Z', 'updated_at' => '2026-11-23T10:00:00Z',
-            'permissions' => ['contents' => 'write', 'pull_requests' => 'write', 'checks' => 'read', 'actions' => 'read', 'metadata' => 'read'],
+            'permissions' => ['contents' => 'write', 'pull_requests' => 'write', 'checks' => 'read', 'actions' => 'read', 'statuses' => 'read', 'metadata' => 'read'],
             'events' => ['check_run', 'check_suite', 'pull_request', 'push'],
             'client_id' => 'Iv23liFake', 'client_secret' => 'client-secret-'.Str::random(20),
             'webhook_secret' => 'whsec-fake-'.Str::random(24), 'pem' => $this->conversionPem,

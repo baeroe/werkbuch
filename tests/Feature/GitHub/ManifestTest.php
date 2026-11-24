@@ -37,7 +37,7 @@ it('starts the manifest flow with the permissions and events of spec 11.3', func
             'setup_url' => config('app.url').'/github/setup',
             'setup_on_update' => true,
             'public' => false,
-            'default_permissions' => ['contents' => 'write', 'pull_requests' => 'write', 'checks' => 'read', 'actions' => 'read', 'metadata' => 'read'],
+            'default_permissions' => ['contents' => 'write', 'pull_requests' => 'write', 'checks' => 'read', 'actions' => 'read', 'statuses' => 'read', 'metadata' => 'read'],
             'default_events' => ['pull_request', 'push', 'check_suite', 'check_run'],
         ]);
 });

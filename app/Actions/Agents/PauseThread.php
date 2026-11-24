@@ -16,14 +16,15 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Pauses a strand (spec 7.2): its PR, branch, worktree and session stay, what of it waits or runs is canceled. At the
  * brake (`brake`) the item goes to „Korrektur“ and to the responsible person of the bot, with the last finding in a
- * comment of the agent (that assignment ends nothing: its actor is the agent). A person who gives the item to someone
+ * comment of the agent (that assignment ends nothing: its actor is the agent); so too when a run that should change
+ * code pushed nothing (`no_change`, A606). A person who gives the item to someone
  * else pauses it too (`reassigned`), and one who cancels the item (`canceled`, A595).
  */
 final class PauseThread
 {
     use AsAction;
 
-    public const REASONS = ['brake', 'reassigned', 'canceled'];
+    public const REASONS = ['brake', 'no_change', 'reassigned', 'canceled'];
 
     public function handle(Actor $actor, AgentThread $thread, string $reason, ?string $finding = null): AgentThread
     {
@@ -42,14 +43,15 @@ final class PauseThread
 
             $locked->forceFill(['status' => AgentThread::PAUSED, 'pause_reason' => $reason])->save();
 
-            if ($reason === 'brake') {
+            if ($reason === 'brake' || $reason === 'no_change') {
                 $bot = User::query()->findOrFail($locked->bot_id);
                 $item = WorkItem::query()->findOrFail($locked->work_item_id);
                 AgentFlow::move($bot, $item, AgentStep::Correction);
                 if ($bot->owner_id !== null) {
                     AgentFlow::assign($bot, $item, $bot->owner_id);
                 }
-                AgentFlow::comment($bot, $item, __('agents.comment.brake', [], AgentFlow::locale())."\n\n".($finding ?? ''));
+                $said = $reason === 'brake' ? __('agents.comment.brake', [], AgentFlow::locale()) : __('agents.comment.no_change', [], AgentFlow::locale());
+                AgentFlow::comment($bot, $item, rtrim($said."\n\n".($finding ?? '')));
             }
 
             return $locked;

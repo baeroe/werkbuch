@@ -157,6 +157,29 @@ final class GitHubApi
     }
 
     /**
+     * The workflow runs of GitHub Actions at a commit (A608): a run that waits (concurrency, an environment to approve)
+     * has no check run yet.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function workflowRuns(string $token, string $fullName, string $sha): array
+    {
+        return self::pages(fn (int $page) => self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->get('/repos/'.self::repoPath($fullName).'/actions/runs', ['head_sha' => $sha, 'per_page' => 100, 'page' => $page]), 'actions/runs'), 'workflow_runs');
+    }
+
+    /**
+     * The commit statuses of a commit, the latest per context (A608: CI that reports through the status API).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function statuses(string $token, string $fullName, string $sha): array
+    {
+        return self::pages(fn (int $page) => self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->get('/repos/'.self::repoPath($fullName).'/commits/'.rawurlencode($sha).'/status', ['per_page' => 100, 'page' => $page]), 'commits/status'), 'statuses');
+    }
+
+    /**
      * The bodies of the reviews of a pull request, or of the comments at it (`issues/{n}/comments`): to find what
      * werkbuch posted already.
      *

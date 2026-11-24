@@ -48,7 +48,7 @@ final class SyncChecks
                 ->orderBy('id')->lockForUpdate()->get();
 
             foreach ($links as $link) {
-                $check = WorkItemLinkCheck::query()->where('work_item_link_id', $link->id)->where('check_run_id', $fields['check_run_id'])->first()
+                $check = WorkItemLinkCheck::query()->where('work_item_link_id', $link->id)->where('kind', 'check')->where('check_run_id', $fields['check_run_id'])->first()
                     ?? new WorkItemLinkCheck(['work_item_link_id' => $link->id]);
 
                 if ($check->status !== 'completed' || $fields['status'] === 'completed') {

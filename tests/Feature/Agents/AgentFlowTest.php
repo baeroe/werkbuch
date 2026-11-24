@@ -187,7 +187,7 @@ it('pauses the strand at the brake without ending it and the owner gets the item
     foreach (['1', '2', '3'] as $round) {
         $sha = str_repeat($round, 40);
         $ci($this, $sha === str_repeat('1', 40) ? str_repeat('0', 40) : str_repeat((string) ($round - 1), 40), 'failure', (int) "300000{$round}");
-        $finish($this, $claim($this), []);
+        $finish($this, $claim($this), ['commit' => $sha]);
         $pr($this, 'synchronize', $sha);
     }
 

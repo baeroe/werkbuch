@@ -84,6 +84,7 @@ $listed = fn (string $sha, string $status, ?string $conclusion = null, int $id =
 $heads = fn (string $type) => AgentRun::query()->where('type', $type)->orderBy('id')->pluck('head_sha')->all();
 
 it('decides nothing on the CI of a strand while its run that changes code is at work and looks at the head when it ends', function () use ($claim, $finish, $assign, $pr, $ci, $heads) {
+    $this->kira->forceFill(['owner_id' => $this->mara->id])->save();
     $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
     [$a, $b] = [str_repeat('a', 40), str_repeat('b', 40)];
     $assign($this, $item, $this->kira);
@@ -106,7 +107,19 @@ it('decides nothing on the CI of a strand while its run that changes code is at 
     $finish($this, $review, ['verdict' => 'approve', 'text' => 'Verdict: approve']);
     expect($this->github->merges)->toBe([])->and($heads('correction'))->toHaveCount(1)
         ->and(ApproveAndMerge::run($this->system, AgentThread::query()->sole()))->toBeFalse()
-        ->and(StartCorrection::run($this->system, AgentThread::query()->sole(), 'ci', 'red', str_repeat('c', 40)))->not->toBeNull();
+        ->and(StartCorrection::run($this->system, AgentThread::query()->sole(), 'ci', 'red', str_repeat('c', 40)))->not->toBeNull()
+        ->and(AgentThread::query()->sole()->only(['review_sha', 'review_verdict']))->toBe(['review_sha' => null, 'review_verdict' => null]);
+
+    // the correction ends without a commit (A606): the approve of before merges nothing, the owner gets the item
+    $correction = $claim($this);
+    expect($correction['type'])->toBe('correction')->and(AgentRun::query()->findOrFail($correction['id'])->context['start_head'])->toBe($b);
+    $finish($this, $correction, ['summary' => 'Nothing to change here.']);
+    $thread = AgentThread::query()->sole();
+    expect($this->github->merges)->toBe([])->and($thread->merge_sha)->toBeNull()
+        ->and($thread->only(['status', 'pause_reason']))->toBe(['status' => 'paused', 'pause_reason' => 'no_change'])
+        ->and($item->fresh()->only(['state_id', 'assignee_id']))->toBe(['state_id' => $this->states['Todo'], 'assignee_id' => $this->mara->id])
+        ->and(Comment::query()->where('work_item_id', $item->id)->latest('id')->first()->body_text)->toContain('No change')->toContain('Nothing to change here.')
+        ->and($heads('review'))->toBe([$b])->and($claim($this))->toBeNull();
 });
 
 it('takes no findings of CI or review while a run of the strand that changes code runs, and starts nothing for a run stopped by hand', function () use ($claim, $assign) {
@@ -438,5 +451,146 @@ it('consumes an event that comes twice once', function () {
     // the claim of the consumer: the second delivery of the event (a redispatch, a retry) does nothing
     expect(app(Outbox::class)->consume($event->id, AgentConsumer::class))->toBeTrue()
         ->and(app(Outbox::class)->consume($event->id, AgentConsumer::class))->toBeFalse()
+        ->and(AgentRun::query()->count())->toBe(1);
+});
+
+it('keeps the findings of CI and a review that come while a correction runs and makes them a correction when it pushes nothing', function () use ($claim, $finish, $assign, $pr, $ci, $heads) {
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
+    [$a, $b] = [str_repeat('a', 40), str_repeat('b', 40)];
+    $assign($this, $item, $this->kira);
+    $task = $claim($this);
+    $pr($this, 'opened', $a);
+    $finish($this, $task, ['commit' => $a]);
+    $ci($this, $a, 'failure');
+    $correction = $claim($this);
+    $thread = AgentThread::query()->sole();
+    expect($correction['type'])->toBe('correction')->and($thread->corrections)->toBe(1);
+
+    // the review of the commit asks for changes and another check fails while the correction runs: kept, not dropped
+    $review = AgentRun::factory()->type(RunType::Review)->create(['bot_id' => $this->kira->id, 'project_id' => $this->project->id, 'work_item_id' => $item->id,
+        'thread_id' => $thread->id, 'head_sha' => $a, 'repository_github_id' => 700_000_001, 'pr_number' => 12,
+        'status' => RunStatus::Succeeded, 'finished_at' => now(), 'result' => ['verdict' => 'changes', 'text' => 'Important: the form has no label.']]);
+    expect(HandleRunResult::run($this->system, $review))->toBe('changes');
+    $ci($this, $a, 'failure', 3_000_002, 'lint');
+    $ci($this, $a, 'failure', 3_000_002, 'lint');
+    expect($thread->fresh()->pending_findings)->toMatchArray(['source' => 'review', 'head' => $a])
+        ->and(substr_count($thread->fresh()->pending_findings['text'], 'lint: failure'))->toBe(1)
+        ->and($heads('correction'))->toBe([$a]);
+
+    // the correction pushes nothing: the kept findings make the next correction, the brake counts it
+    $finish($this, $correction, []);
+    $next = AgentRun::query()->where('type', 'correction')->latest('id')->firstOrFail();
+    expect(AgentRun::query()->where('type', 'correction')->count())->toBe(2)
+        ->and($next->context['findings'])->toContain('Important: the form has no label.')->toContain('lint: failure')
+        ->and($thread->fresh()->only(['corrections', 'pending_findings', 'status']))->toBe(['corrections' => 2, 'pending_findings' => null, 'status' => 'open'])
+        ->and($item->fresh()->state_id)->toBe($this->states['Todo']);
+
+    // findings while the next correction runs, which pushes: dropped, the new commit is judged anew
+    $run = $claim($this);
+    $ci($this, $a, 'failure', 3_000_003, 'types');
+    expect($thread->fresh()->pending_findings)->not->toBeNull();
+    $finish($this, $run, ['commit' => $b]);
+    expect($thread->fresh()->pending_findings)->toBeNull()->and(AgentRun::query()->where('type', 'correction')->count())->toBe(2);
+    $pr($this, 'synchronize', $b);
+    $ci($this, $b, 'success', 3_000_004);
+    expect($heads('review'))->toBe([$a, $b]);
+});
+
+it('drops findings a failed run of the strand leaves behind, and findings of another head', function () use ($claim, $assign, $pr, $ci) {
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
+    $a = str_repeat('a', 40);
+    $assign($this, $item, $this->kira);
+    $task = $claim($this);
+    $pr($this, 'opened', $a);
+    $ci($this, $a, 'failure');
+    $thread = AgentThread::query()->sole();
+    expect($thread->fresh()->pending_findings['head'])->toBe($a)
+        ->and(StartCorrection::run($this->system, $thread, 'ci', 'red at c', str_repeat('c', 40)))->toBeNull()
+        ->and($thread->fresh()->pending_findings)->toMatchArray(['head' => str_repeat('c', 40), 'text' => 'red at c'])
+        ->and(StartCorrection::run($this->system, $thread, 'comments', 'by hand', null))->not->toBeNull();
+
+    $this->postJson("/api/runner/runs/{$task['id']}/result", ['attempt' => 1, 'status' => 'failed', 'error' => 'crashed'], AgentWorld::headers($this->token))->assertOk();
+    expect($thread->fresh()->pending_findings)->toBeNull();
+});
+
+it('reads workflow runs and commit statuses as CI: a waiting run is no green, a failed status is red', function () use ($claim, $finish, $assign, $pr, $heads) {
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
+    $a = str_repeat('a', 40);
+    $assign($this, $item, $this->kira);
+    $task = $claim($this);
+    $pr($this, 'opened', $a);
+    $finish($this, $task, ['commit' => $a]);
+
+    // a workflow waits for its concurrency group, without any check run: pending, no review
+    $this->travel(3)->minutes();
+    $this->github->workflowRuns[$a] = [['id' => 91, 'name' => 'CI', 'status' => 'waiting', 'conclusion' => null, 'html_url' => 'https://github.com/feldwerk/website/actions/runs/91'], ['id' => 'x', 'name' => 'Malformed']];
+    expect(SweepAgentThreads::run($this->system))->toBe(1)->and($heads('review'))->toBe([])
+        ->and(WorkItemLink::query()->sole()->ci())->toBe('pending')
+        ->and(WorkItemLink::query()->sole()->checks->pluck('kind')->all())->toBe(['workflow']);
+
+    // no delivery tells when it ends: the sweep asks again; it passed, a commit status fails
+    $this->github->workflowRuns[$a] = [['id' => 91, 'name' => 'CI', 'status' => 'completed', 'conclusion' => 'success', 'html_url' => null]];
+    $this->github->statuses[$a] = [['id' => 501, 'context' => 'ci/jenkins', 'state' => 'error', 'target_url' => 'https://ci.example.com/501']];
+    expect(SweepAgentThreads::run($this->system))->toBe(0);
+    $this->travel(3)->minutes();
+    expect(SweepAgentThreads::run($this->system))->toBe(1)
+        ->and(AgentRun::query()->where('type', 'correction')->sole()->context['findings'])->toContain('ci/jenkins: failure (https://ci.example.com/501)')
+        ->and(WorkItemLink::query()->sole()->checks->sortBy('kind')->pluck('kind')->values()->all())->toBe(['status', 'workflow']);
+});
+
+it('merges nothing while a workflow run waits or a commit status is pending, though the check runs are green', function () use ($claim, $finish, $assign, $pr, $ci) {
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
+    $a = str_repeat('a', 40);
+    $assign($this, $item, $this->kira);
+    $task = $claim($this);
+    $pr($this, 'opened', $a);
+    $finish($this, $task, ['commit' => $a]);
+    $ci($this, $a, 'success');
+    $this->github->statuses[$a] = [['id' => 502, 'context' => 'deploy/preview', 'state' => 'pending', 'target_url' => null]];
+
+    $finish($this, $claim($this), ['verdict' => 'approve', 'text' => 'Verdict: approve']);
+    expect($this->github->merges)->toBe([])->and(AgentThread::query()->sole()->merge_sha)->toBeNull()
+        ->and(WorkItemLink::query()->sole()->ci())->toBe('pending')
+        ->and(AgentRun::query()->where('type', 'correction')->count())->toBe(0);
+
+    // the status passes: the approve of the commit merges
+    $this->github->statuses[$a] = [['id' => 502, 'context' => 'deploy/preview', 'state' => 'success', 'target_url' => null]];
+    expect(ApproveAndMerge::run($this->system, AgentThread::query()->sole()))->toBeFalse();
+    $this->travel(3)->minutes();
+    SweepAgentThreads::run($this->system);
+    expect($this->github->merges)->toBe([['number' => 12, 'sha' => $a, 'method' => 'squash']]);
+});
+
+it('sets no older head back from a delivery that comes late, and asks GitHub to merge a PR once', function () use ($claim, $finish, $assign, $pr) {
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
+    [$a, $b] = [str_repeat('a', 40), str_repeat('b', 40)];
+    $assign($this, $item, $this->kira);
+    $task = $claim($this);
+    $pr($this, 'opened', $a);
+    $pr($this, 'synchronize', $b, ['updated_at' => '2026-11-24T09:10:00Z']);
+    $pr($this, 'synchronize', $a, ['updated_at' => '2026-11-24T09:05:00Z']);
+    expect(AgentThread::query()->sole()->head_sha)->toBe($b);
+    $finish($this, $task, ['commit' => $b]);
+
+    $repository = ProjectRepository::query()->sole()->repository_id;
+    $first = OwnMerges::expect($repository, 12);
+    $this->travel(1)->minutes();
+    $again = OwnMerges::expect($repository, 12);
+    expect($again->id)->toBe($first->id)->and($again->started_at->gt($first->started_at))->toBeTrue();
+    OwnMerges::merged($again, str_repeat('f', 40));
+    expect(OwnMerges::expect($repository, 12)->id)->not->toBe($first->id);
+});
+
+it('leaves a strand that a person paused meanwhile to her when a run of it ends without a commit', function () {
+    $sha = str_repeat('a', 40);
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['In Progress'], 'assignee_id' => $this->kira->id]);
+    $thread = AgentThread::factory()->create(['bot_id' => $this->kira->id, 'project_id' => $this->project->id, 'work_item_id' => $item->id, 'status' => AgentThread::PAUSED,
+        'pause_reason' => 'reassigned', 'repository_github_id' => 700_000_001, 'pr_number' => 12, 'head_sha' => $sha, 'branch' => 'agent/x',
+        'pending_findings' => ['source' => 'ci', 'head' => $sha, 'text' => 'red']]);
+    $run = AgentRun::factory()->type(RunType::Correction)->create(['bot_id' => $this->kira->id, 'project_id' => $this->project->id, 'work_item_id' => $item->id,
+        'thread_id' => $thread->id, 'status' => RunStatus::Succeeded, 'finished_at' => now(), 'context' => ['start_head' => $sha], 'result' => []]);
+
+    expect(HandleRunResult::run($this->system, $run))->toBe('nothing')
+        ->and($thread->fresh()->only(['status', 'pause_reason', 'pending_findings']))->toBe(['status' => 'paused', 'pause_reason' => 'reassigned', 'pending_findings' => null])
         ->and(AgentRun::query()->count())->toBe(1);
 });

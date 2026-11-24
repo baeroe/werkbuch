@@ -17,8 +17,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Every minute (spec 7.2): a strand whose task ended two minutes ago without a PR never got one (a comment and
  * „Korrektur“); for a PR whose head commit came two minutes ago without any check GitHub is asked for its check runs
- * (LoadPullRequestChecks, A591: only a commit GitHub has none for counts green). Looks back a day at most, the oldest
- * first. Answers how many it handled.
+ * (LoadPullRequestChecks, A591: only a commit GitHub has none for counts green), and again for one whose workflow runs or
+ * commit statuses still waited when GitHub was last asked (A608). Looks back a day at most, the oldest first. Answers how
+ * many it handled.
  */
 final class SweepAgentThreads
 {
@@ -43,6 +44,17 @@ final class SweepAgentThreads
                 ->whereColumn('work_item_link_checks.head_sha', 'work_item_links.head_sha'))
             ->groupBy('repository_github_id', 'head_sha')->orderBy('seen')->limit(200)->get();
         foreach ($quiet as $link) {
+            LoadPullRequestChecks::dispatch((int) $link->repository_github_id, (string) $link->head_sha);
+            $count++;
+        }
+
+        // a workflow run or a commit status that waited when GitHub was asked: no delivery says when it ends (A608)
+        $waiting = WorkItemLink::query()->selectRaw('repository_github_id, head_sha, min(checks_loaded_at) as loaded')->where('state', WorkItemLink::OPEN)->where('draft', false)
+            ->whereColumn('checks_loaded_sha', 'head_sha')->whereBetween('checks_loaded_at', [now()->subDay(), $settled])
+            ->whereExists(fn ($checks) => $checks->selectRaw('1')->from('work_item_link_checks')->whereColumn('work_item_link_checks.work_item_link_id', 'work_item_links.id')
+                ->whereColumn('work_item_link_checks.head_sha', 'work_item_links.head_sha')->whereIn('kind', ['workflow', 'status'])->where('work_item_link_checks.status', '!=', 'completed'))
+            ->groupBy('repository_github_id', 'head_sha')->orderBy('loaded')->limit(200)->get();
+        foreach ($waiting as $link) {
             LoadPullRequestChecks::dispatch((int) $link->repository_github_id, (string) $link->head_sha);
             $count++;
         }

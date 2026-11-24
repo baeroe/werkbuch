@@ -59,7 +59,7 @@ final class StartConflict
                 return null;
             }
 
-            $locked->forceFill(['conflicts' => $locked->conflicts + 1, 'merge_sha' => null])->save();
+            $locked->forceFill(['conflicts' => $locked->conflicts + 1, 'merge_sha' => null, 'review_sha' => null, 'review_verdict' => null])->save();
 
             return $run;
         }, 3);

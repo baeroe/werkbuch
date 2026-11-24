@@ -7,6 +7,7 @@
     "agents.comment.gave_up.ready": "werkbuch konnte den Pull Request :pr nicht als bereit markieren: GitHub hat nicht rechtzeitig geantwortet. Markier ihn auf GitHub als bereit oder setz das Item zurück, dann versucht es werkbuch erneut.",
     "agents.comment.merge_refused": "GitHub hat den Merge abgelehnt (:status). Vielleicht verlangt ein Ruleset eine Freigabe; merge selbst oder passe das Ruleset an.",
     "agents.comment.no_answer": "Darauf habe ich keine Antwort.",
+    "agents.comment.no_change": "Keine Änderung: der Auftrag endete ohne neuen Commit am Pull Request, darum merged nichts auf Grund der Reviews von vorher. Schau es dir an und weise mich wieder zu, dann geht es weiter. Was der Agent gesagt hat:",
     "agents.comment.no_pr": "Der Agent ist fertig geworden, ohne einen Pull Request zu öffnen.",
     "agents.comment.not_moved": "Der Workflow erlaubt den Wechsel von „:from“ nach „:to“ nicht; das Item bleibt, wo es ist.",
     "agents.comment.review.approve": "Review von :pr bei :sha: freigegeben.",

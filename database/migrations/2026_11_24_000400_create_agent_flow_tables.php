@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\Schema;
 // the texts nobody changed). The agent settings of a project (spec 10.3) are a row per project, the defaults without
 // one. A type of item tells agents how to work on it, a label may name the model of a run (`cli:model`). A strand
 // keeps what the flow decides on: the head commit of its PR, the verdict of the review of a commit, the commit it
-// decided to merge, since when it waits for a PR, when it asked GitHub to mark a draft ready. A review of a PR names
+// decided to merge, since when it waits for a PR, when it asked GitHub to mark a draft ready, findings that came while a
+// run of it changed code. A review of a PR names
 // the PR. A link knows since when its head commit stands (a PR without checks is green two minutes after the push).
 return new class extends Migration
 {
@@ -55,6 +56,8 @@ return new class extends Migration
             $table->string('merge_sha', 64)->nullable()->after('review_verdict');
             $table->timestamp('awaiting_pr_since')->nullable()->after('merge_sha');
             $table->timestamp('ready_requested_at')->nullable()->after('awaiting_pr_since');
+            // findings of CI or a review that came while a run of the strand changed code (A607)
+            $table->json('pending_findings')->nullable()->after('ready_requested_at');
         });
 
         Schema::table('agent_runs', function (Blueprint $table) {
@@ -70,10 +73,28 @@ return new class extends Migration
             $table->string('checks_loaded_sha', 40)->nullable()->after('head_seen_at');
             $table->timestamp('checks_loaded_at')->nullable()->after('checks_loaded_sha');
         });
+
+        // besides check runs a link keeps the workflow runs and commit statuses of its head commit (A608); the new unique
+        // index comes first, so that the foreign key of the link always has an index to stand on
+        Schema::table('work_item_link_checks', function (Blueprint $table) {
+            $table->string('kind', 8)->default('check')->after('work_item_link_id');
+            $table->unique(['work_item_link_id', 'kind', 'check_run_id']);
+        });
+        Schema::table('work_item_link_checks', function (Blueprint $table) {
+            $table->dropUnique(['work_item_link_id', 'check_run_id']);
+        });
     }
 
     public function down(): void
     {
+        Schema::table('work_item_link_checks', function (Blueprint $table) {
+            $table->unique(['work_item_link_id', 'check_run_id']);
+        });
+        Schema::table('work_item_link_checks', function (Blueprint $table) {
+            $table->dropUnique(['work_item_link_id', 'kind', 'check_run_id']);
+            $table->dropColumn('kind');
+        });
+
         Schema::table('work_item_links', function (Blueprint $table) {
             $table->dropColumn(['head_seen_at', 'checks_loaded_sha', 'checks_loaded_at']);
         });
@@ -84,7 +105,7 @@ return new class extends Migration
         });
 
         Schema::table('agent_threads', function (Blueprint $table) {
-            $table->dropColumn(['head_sha', 'pr_draft', 'review_sha', 'review_verdict', 'merge_sha', 'awaiting_pr_since', 'ready_requested_at']);
+            $table->dropColumn(['head_sha', 'pr_draft', 'review_sha', 'review_verdict', 'merge_sha', 'awaiting_pr_since', 'ready_requested_at', 'pending_findings']);
         });
 
         Schema::table('labels', function (Blueprint $table) {

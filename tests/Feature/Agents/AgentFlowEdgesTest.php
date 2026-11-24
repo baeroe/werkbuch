@@ -562,7 +562,7 @@ it('builds the job of every kind with the layers of the organization, the type a
 
     $correction = $make(RunType::Correction, ['source' => 'review', 'findings' => 'Important: no test']);
     expect($correction['system_prompt'])->toContain('# How to work on items of this type')->toContain('Start with a failing test.')->toContain('# The project')->toContain('Run pest in DDEV.')
-        ->and($correction['prompt'])->toContain('„Footer phone“')->toContain('The pull request is #3.')->toContain('from review')->toContain('Important: no test')
+        ->and($correction['prompt'])->toContain("```text\nFooter phone\n```")->toContain('The pull request is #3.')->toContain('from review')->toContain('Important: no test')
         ->and($make(RunType::Conflict, [])['prompt'])->toContain('base branch `main`')
         ->and($make(RunType::Comment, ['author' => 'Mara', 'question' => 'Why?'])['prompt'])->toContain('Mara asked you')
         ->and($make(RunType::Review, ['repository' => 'feldwerk/website', 'base_branch' => 'main'], ['pr_number' => 3, 'head_sha' => 'abc', 'work_item_id' => null])['prompt'])->toContain('It names no item of the project.')
@@ -571,7 +571,7 @@ it('builds the job of every kind with the layers of the organization, the type a
         ->and($correction['prompt'])->toEndWith(RunPrompts::DATA);
 });
 
-it('makes a correction of the findings of a review at the head of the strand', function () use ($strand, $ended) {
+it('makes a correction of the findings of a review at the head of the strand and forgets its verdict', function () use ($strand, $ended) {
     $sha = str_repeat('a', 40);
     $thread = $strand(['repository_github_id' => 700_000_001, 'pr_number' => 12, 'head_sha' => $sha]);
     Queue::fake([PostReviewVerdictJob::class]);
@@ -581,7 +581,7 @@ it('makes a correction of the findings of a review at the head of the strand', f
 
     expect(HandleRunResult::run($this->system, $review))->toBe('changes')
         ->and(AgentRun::query()->where('type', 'correction')->sole()->context)->toMatchArray(['source' => 'review', 'findings' => 'Important: no test.'])
-        ->and($thread->fresh()->only(['review_sha', 'review_verdict']))->toBe(['review_sha' => $sha, 'review_verdict' => 'changes']);
+        ->and($thread->fresh()->only(['review_sha', 'review_verdict']))->toBe(['review_sha' => null, 'review_verdict' => null]);
     Queue::assertPushed(PostReviewVerdictJob::class);
 });
 

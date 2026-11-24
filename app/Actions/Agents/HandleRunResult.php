@@ -25,7 +25,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  *   correction. A review of a commit the PR has left behind changes nothing.
  * - `task`, `correction`, `conflict`: with a repo the item goes to „In Review“ once the strand has its PR (a task waits
  *   for it, SweepAgentThreads); a child of an epic hands over to the next child, the last makes the PR ready. Without a
- *   repo the summary becomes a comment and the item „Gemergt“ (spec 7.1).
+ *   repo the summary becomes a comment and the item „Gemergt“ (spec 7.1). A run at a PR that pushed nothing merges
+ *   nothing: findings that waited meanwhile make a correction, else the strand pauses for a person (A606, A607).
  * - `failed`, `timed_out`, `lost`: a comment with the reason, the item to „Korrektur“, no new attempt (spec 7.2).
  * - `canceled`: nothing.
  */
@@ -52,6 +53,11 @@ final class HandleRunResult
         $item = $run->workItem;
         if ($item === null) {
             return 'nothing';
+        }
+
+        // findings that waited for a run that changes code die with it: the next run starts from the item (A607)
+        if ($run->thread !== null && in_array($run->type, AgentFlow::CODE, true)) {
+            AgentThread::query()->whereKey($run->thread->id)->update(['pending_findings' => null]);
         }
 
         $reason = $run->error ?? $run->status->value;
@@ -123,7 +129,7 @@ final class HandleRunResult
             }
 
             // the items, the runs of the strand, then the strand (A592)
-            $thread = $run->thread === null ? null : AgentFlow::lockStrand($run->thread)[1];
+            [$runs, $thread] = $run->thread === null ? [collect(), null] : AgentFlow::lockStrand($run->thread);
             if ($thread !== null && ($thread->status !== AgentThread::OPEN || $thread->head_sha !== $run->head_sha)) {
                 return 'stale';
             }
@@ -146,7 +152,15 @@ final class HandleRunResult
                 return 'reviewed';
             }
 
-            $thread->forceFill(['review_sha' => $run->head_sha, 'review_verdict' => $verdict])->save();
+            // a run that changes code is at work (a correction a person asked for, A606): an approve of the commit it
+            // starts on is no verdict the strand keeps; findings wait for its end (A607)
+            if ($runs->contains(fn (AgentRun $open) => in_array($open->type, AgentFlow::CODE, true))) {
+                if ($verdict === 'approve') {
+                    return 'held';
+                }
+            } else {
+                $thread->forceFill(['review_sha' => $run->head_sha, 'review_verdict' => $verdict])->save();
+            }
 
             if ($verdict === 'approve') {
                 ApproveAndMerge::run($actor, $thread);
@@ -168,15 +182,57 @@ final class HandleRunResult
             return 'nothing';
         }
 
+        // the run of the strand's own item at a PR: did it push (A606)? The head the strand knows, or the commit the runner
+        // reports (the webhook of the push may come after the result)
+        $start = $run->context['start_head'] ?? null;
+        $own = $thread->repository_github_id !== null && $thread->work_item_id === $item->id && is_string($start);
+        $commit = $run->result['commit'] ?? null;
+        if ($own && (! is_string($commit) || $commit === '') && $thread->fresh()?->head_sha === $start) {
+            return self::unchanged($actor, $run, $thread, $item);
+        }
+        if ($own) {
+            $thread->forceFill(['pending_findings' => null])->save();
+        }
+
         $outcome = self::coded($actor, $run, $thread, $item);
 
-        // CI and review of the head waited for the run (A593): now they count
+        // CI and review of the head waited for the run (A593): now they count; a head the strand does not know yet
+        // (the push is on its way) waits for its webhook
         $fresh = $thread->fresh();
-        if ($fresh !== null && $fresh->status === AgentThread::OPEN && $fresh->repository_github_id !== null && $fresh->head_sha !== null) {
+        if ($fresh !== null && $fresh->status === AgentThread::OPEN && $fresh->repository_github_id !== null && $fresh->head_sha !== null
+            && (! $own || $fresh->head_sha !== $start)) {
             HandleCheckResult::run($actor, $fresh->repository_github_id, $fresh->head_sha);
         }
 
         return $outcome;
+    }
+
+    /**
+     * A run that should change the code of a PR pushed nothing (A606, A607): no merge on the verdicts of before. Findings
+     * of CI or a review that came meanwhile become a correction (the brake counts); without any the strand pauses, the
+     * item goes to „Korrektur“ and to the responsible person with a comment that nothing changed.
+     */
+    private static function unchanged(Actor $actor, AgentRun $run, AgentThread $thread, WorkItem $item): string
+    {
+        return DB::transaction(function () use ($actor, $run, $thread, $item): string {
+            ItemLock::take($item);
+            [, $locked] = AgentFlow::lockStrand($thread);
+            // findings of the head the run started on and left as it was; of another head they judged something else
+            $pending = $locked->pending_findings;
+            $pending = $pending !== null && $pending['head'] === $locked->head_sha ? $pending : null;
+            $locked->forceFill(['pending_findings' => null])->save();
+            if ($locked->status !== AgentThread::OPEN) {
+                return 'nothing';
+            }
+
+            if ($pending !== null) {
+                return StartCorrection::run($actor, $locked, $pending['source'], $pending['text']) === null ? 'nothing' : 'correction';
+            }
+
+            PauseThread::run($actor, $locked, 'no_change', isset($run->result['summary']) ? (string) $run->result['summary'] : null);
+
+            return 'no_change';
+        }, 3);
     }
 
     private static function coded(Actor $actor, AgentRun $run, AgentThread $thread, WorkItem $item): string

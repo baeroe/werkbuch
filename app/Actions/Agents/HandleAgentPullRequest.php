@@ -11,11 +11,13 @@ use App\Models\AgentThread;
 use App\Models\ProjectRepository;
 use App\Models\User;
 use App\Models\WorkItem;
+use App\Models\WorkItemLink;
 use App\Support\Actor;
 use App\Support\AgentFlow;
 use App\Support\AgentPullRequests;
 use App\Support\ItemLock;
 use App\Support\OwnMerges;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -26,7 +28,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * is no draft puts the item to „In Review“ (an epic only once werkbuch made its PR ready). Merged (by werkbuch or a
  * person) the strand is merged (a merge werkbuch asked for is settled as its own, A600); a draft that became ready has
  * the CI of its head looked at (GitHub runs none for that); closed without a merge it ends and the item goes to „Korrektur“. Deliveries out of order
- * change nothing a later one decided: a strand that ended stays.
+ * change nothing a later one decided: a strand that ended stays, and a delivery older than the newest the links know
+ * (`pr_updated_at`) sets neither head nor draft back.
  */
 final class HandleAgentPullRequest
 {
@@ -53,6 +56,12 @@ final class HandleAgentPullRequest
         }
 
         $merged = ($pr['merged'] ?? false) === true || is_string($pr['merged_at'] ?? null);
+
+        // a delivery older than what the links of the PR know (A550) sets no older head or draft back; a merge stays one
+        $newest = WorkItemLink::query()->where('repository_github_id', $repositoryId)->where('number', $number)->max('pr_updated_at');
+        if (! $merged && is_string($pr['updated_at'] ?? null) && is_string($newest) && CarbonImmutable::parse($pr['updated_at'])->lt(CarbonImmutable::parse($newest))) {
+            return 'stale';
+        }
         if (($pr['state'] ?? null) === 'closed') {
             // GitHub tells of a merge werkbuch asked for before its answer came, or instead of it (A600): the push of the
             // merge is werkbuch's own

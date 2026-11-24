@@ -7,6 +7,7 @@
     "agents.comment.gave_up.ready": "werkbuch could not mark the pull request :pr ready for review: GitHub did not answer in time. Mark it ready on GitHub, or set the item back to try again.",
     "agents.comment.merge_refused": "GitHub refused the merge (:status). A ruleset may ask for an approval; merge it yourself or adjust the ruleset.",
     "agents.comment.no_answer": "I have no answer to that.",
+    "agents.comment.no_change": "No change: the run ended without a new commit on the pull request, so nothing merges on the reviews of before. Look at it and assign me again to go on. What the agent said:",
     "agents.comment.no_pr": "The agent finished without opening a pull request.",
     "agents.comment.not_moved": "The workflow does not allow moving from „:from“ to „:to“; the item stays where it is.",
     "agents.comment.review.approve": "Review of :pr at :sha: approved.",

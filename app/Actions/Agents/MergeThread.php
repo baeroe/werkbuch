@@ -34,7 +34,7 @@ final class MergeThread
 {
     use AsAction;
 
-    public const PERMISSIONS = ['contents' => 'write', 'pull_requests' => 'write', 'checks' => 'read'];
+    public const PERMISSIONS = ['contents' => 'write', 'pull_requests' => 'write', 'checks' => 'read', 'actions' => 'read', 'statuses' => 'read'];
 
     /**
      * @throws GitHubUnavailable when GitHub does not answer (the job tries again)
