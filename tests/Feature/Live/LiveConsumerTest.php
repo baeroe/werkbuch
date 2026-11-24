@@ -1,6 +1,5 @@
 <?php
 
-use App\Agents\AgentConsumer;
 use App\Access\ProjectRole;
 use App\Actions\Comments\AddComment;
 use App\Actions\Comments\AddReaction;
@@ -21,6 +20,7 @@ use App\Actions\Views\DeleteView;
 use App\Actions\WorkItems\RedistributeRanks;
 use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\UpdateWorkItem;
+use App\Agents\AgentConsumer;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Events\Outbox;

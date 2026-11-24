@@ -46,4 +46,3 @@ it('fits code runs in all and per repo, and light runs only in their own pot', f
         ->and(Places::used([$task('a'), $task('a'), $task('b'), $review('b')]))->toBe(['total' => 3, 'per_repo' => 2, 'light' => 1])
         ->and(Places::used([]))->toBe(['total' => 0, 'per_repo' => 0, 'light' => 0]);
 });
-

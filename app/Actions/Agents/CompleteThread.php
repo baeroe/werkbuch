@@ -30,10 +30,7 @@ final class CompleteThread
     {
         return DB::transaction(function () use ($actor, $thread, $outcome): AgentThread {
             // the item before the runs and the strand, as every action of the flow locks them
-            $at = WorkItem::query()->find($thread->work_item_id);
-            if ($at !== null) {
-                ItemLock::take($at);
-            }
+            ItemLock::take(WorkItem::query()->findOrFail($thread->work_item_id));
 
             foreach (AgentFlow::openRuns($thread) as $run) {
                 CancelRun::stop($actor, $run);
@@ -46,11 +43,7 @@ final class CompleteThread
 
             $locked->forceFill(['status' => $outcome === 'merged' ? AgentThread::MERGED : AgentThread::CLOSED, 'awaiting_pr_since' => null])->save();
             $bot = User::query()->findOrFail($locked->bot_id);
-            $item = WorkItem::query()->find($locked->work_item_id);
-
-            if ($item === null) {
-                return $locked;
-            }
+            $item = WorkItem::query()->findOrFail($locked->work_item_id);
 
             if ($outcome !== 'merged') {
                 AgentFlow::move($bot, $item, AgentStep::Correction);

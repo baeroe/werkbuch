@@ -1,5 +1,7 @@
 <?php
 
+use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
 use App\Actions\AgentRuns\EnqueueRun;
 use App\Actions\Agents\CheckThreadMergeability;
 use App\Actions\Agents\CompleteThread;
@@ -25,6 +27,7 @@ use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
 use App\Domain\Workflow\AgentStep;
 use App\Events\EventType;
+use App\GitHub\GitHubApi;
 use App\GitHub\GitHubUnavailable;
 use App\Jobs\CheckPullRequestMergeability;
 use App\Jobs\MarkPullRequestReady;
@@ -41,7 +44,6 @@ use App\Models\Label;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workflow;
-use App\Models\WorkflowState;
 use App\Models\WorkItem;
 use App\Models\WorkItemLink;
 use App\Models\WorkItemLinkCheck;
@@ -52,7 +54,6 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Queue;
 use Tests\Support\AgentWorld;
 use Tests\Support\FakeGitHub;
 
@@ -106,7 +107,7 @@ it('works an item of a project without a repo to „Gemergt“ with its summary 
         ->and(Comment::query()->where('work_item_id', $other->work_item_id)->sole()->body_text)->toBe(__('agents.comment.done'));
 });
 
-it('works the children of an epic without a repo one by one and then the epic', function () use ($ended) {
+it('works the children of an epic without a repo one by one and then the epic', function () {
     $epic = WorkItem::factory()->for($this->project)->epic()->create(['state_id' => $this->states['Todo'], 'assignee_id' => $this->kira->id]);
     $child = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo']]);
     $first = StartTask::run($this->system, $epic, $this->kira);
@@ -277,12 +278,12 @@ it('knows why a bot cannot be an agent in a project', function () {
 
 it('moves only where the workflow lets it and says so otherwise', function () {
     $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
-    $matrix = Workflow::factory()->matrix([['Backlog', 'Doing']])->create();
+    $matrix = Workflow::factory()->matrix([[0, 1]])->create();
     $states = $matrix->states->pluck('id', 'name');
     $matrix->forceFill(['agent_states' => ['working' => $states['Doing'], 'review' => $states['Doing'], 'correction' => $states['Backlog'], 'merged' => $states['Done']]])->save();
     $strict = Project::factory()->create(['workflow_id' => $matrix->id]);
     $stuck = WorkItem::factory()->for($strict)->create(['state_id' => $states['Doing']]);
-    app(App\Access\RoleAssignments::class)->setProjectRole($this->kira, $strict, App\Access\ProjectRole::Member);
+    app(RoleAssignments::class)->setProjectRole($this->kira, $strict, ProjectRole::Member);
 
     DB::transaction(function () use ($stuck, $item) {
         AgentFlow::move($this->kira, $stuck, AgentStep::Merged);
@@ -335,9 +336,6 @@ it('pauses a strand only once and leaves one that ended', function () use ($stra
     expect(PauseThread::run($this->system, $thread, 'reassigned')->status)->toBe(AgentThread::CLOSED)
         ->and(CompleteThread::run($this->system, $thread, 'merged')->status)->toBe(AgentThread::CLOSED);
 
-    $gone = AgentThread::factory()->create(['bot_id' => $this->kira->id, 'project_id' => $this->project->id]);
-    WorkItem::query()->whereKey($gone->work_item_id)->delete();
-    expect(CompleteThread::run($this->system, $gone->fresh(), 'merged')->status)->toBe(AgentThread::MERGED);
 });
 
 it('ends the strand of a PR closed without a merge with „Korrektur“', function () use ($strand) {
@@ -475,9 +473,12 @@ it('posts nothing and marks nothing ready for what is gone, and only a draft', f
         'status' => RunStatus::Succeeded, 'result' => ['verdict' => 'changes', 'text' => 'Important: x'], 'context' => ['person' => false]]);
     (new PostReviewVerdictJob($run->id))->handle();
     expect($github->comments[0]['body'])->toContain('Important: x');
+});
 
+it('refuses a ready mark GitHub answers with errors', function () {
     Http::fake(['*/graphql' => Http::response(['errors' => [['message' => 'no']]])]);
-    expect(fn () => App\GitHub\GitHubApi::markReady('t', 'PR_x'))->toThrow(GitHubUnavailable::class);
+
+    expect(fn () => GitHubApi::markReady('t', 'PR_x'))->toThrow(GitHubUnavailable::class);
 });
 
 it('makes an epic ready only when no child is open and says when there is no PR', function () use ($strand) {

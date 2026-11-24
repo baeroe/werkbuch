@@ -1,6 +1,5 @@
 <?php
 
-use App\Agents\AgentConsumer;
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
 use App\Actions\Comments\AddComment;
@@ -11,6 +10,7 @@ use App\Actions\Pages\MovePage;
 use App\Actions\Pages\UpdatePage;
 use App\Actions\Projects\DeleteProject;
 use App\Actions\WorkItems\DeleteWorkItem;
+use App\Agents\AgentConsumer;
 use App\Events\EventType;
 use App\Events\Outbox;
 use App\Jobs\ConsumeEvent;

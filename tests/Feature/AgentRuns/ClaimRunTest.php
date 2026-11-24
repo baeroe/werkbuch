@@ -16,8 +16,8 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Support\Actor;
-use Illuminate\Support\Facades\DB;
 use App\Support\RunPrompts;
+use Illuminate\Support\Facades\DB;
 use Tests\Support\AgentWorld;
 
 /*

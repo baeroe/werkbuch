@@ -29,10 +29,7 @@ final class PauseThread
     {
         return DB::transaction(function () use ($actor, $thread, $reason, $finding): AgentThread {
             // the item before the runs and the strand, as every action of the flow locks them
-            $at = WorkItem::query()->find($thread->work_item_id);
-            if ($at !== null) {
-                ItemLock::take($at);
-            }
+            ItemLock::take(WorkItem::query()->findOrFail($thread->work_item_id));
 
             foreach (AgentFlow::openRuns($thread) as $run) {
                 CancelRun::stop($actor, $run);
