@@ -52,6 +52,14 @@ final class OrganizationPolicy
             : Response::deny(__('problem.detail.agents_admins_only'));
     }
 
+    /** The one GitHub app of the instance (spec 10.2): connect, sync, disconnect, accounts with `org.manage`. */
+    public function manageGitHub(User $user): Response
+    {
+        return Visibility::can($user, Permission::OrgManage)
+            ? Response::allow()
+            : Response::deny(__('problem.detail.github_admins_only'));
+    }
+
     public function viewSystem(User $user): Response
     {
         return $user->isPerson() && Visibility::can($user, Permission::OrgManage)

@@ -14,7 +14,8 @@ namespace App\Domain\Notifications;
  * The lead watches every item of the project unless they unsubscribed from it (A269); whoever unsubscribed only hears
  * of mentions and assignments (A113). The actor never hears of their own event, nor does the person an automation or a
  * template run acted for (`causedBy`, A342, K12).
- * `webhook_disabled`: every org admin, for `webhook.disabled` (the system switched a webhook off, phase 11). Every other event tells nobody (A270),
+ * `webhook_disabled`: every org admin, for `webhook.disabled` (the system switched a webhook off, phase 11).
+ * `merge_guard_detected`: every org admin, for `project.merge_guard_detected` (WEBU-24, A515). Every other event tells nobody (A270),
  * `comment.updated` only the people mentioned anew.
  */
 final class Recipients
@@ -74,6 +75,9 @@ final class Recipients
                 break;
             case 'webhook.disabled':
                 $add(NotificationKind::WebhookDisabled, $facts->orgAdmins);
+                break;
+            case 'project.merge_guard_detected':
+                $add(NotificationKind::MergeGuardDetected, $facts->orgAdmins);
                 break;
         }
 

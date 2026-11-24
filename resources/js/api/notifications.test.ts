@@ -94,6 +94,7 @@ describe('the notification settings', () => {
       'item_created',
       'template_run_failed',
       'webhook_disabled',
+      'merge_guard_detected',
     ]);
   });
 

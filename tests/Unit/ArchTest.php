@@ -31,6 +31,9 @@ arch('search turns models into documents and writes nothing')
 arch('webhooks build payloads and targets, record nothing and leave the database to actions')
     ->expect('App\Webhooks')->classes()->toBeFinal()
     ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema']);
+arch('the GitHub client asks GitHub, records nothing and leaves the database to actions')
+    ->expect('App\GitHub')->classes()->toBeFinal()
+    ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema']);
 arch('the PDF of wiki pages renders and records nothing')
     ->expect('App\Pdf')->classes()->toBeFinal()
     ->not->toUse([EventRecorder::class, 'Illuminate\Support\Facades\DB', 'Illuminate\Support\Facades\Schema']);
@@ -173,6 +176,16 @@ it('keeps App\Webhooks free of writes', function () {
         ->all();
 
     expect(appFiles('app/Webhooks'))->not->toBe([])
+        ->and($hits)->toBe([]);
+});
+
+// App\GitHub asks GitHub and reads the database; every write is an action's (WEBU-24)
+it('keeps App\GitHub free of writes', function () {
+    $hits = collect(appFiles('app/GitHub'))
+        ->flatMap(fn (string $f) => [...modelWrites((string) file_get_contents(repo_path($f)), $f), ...inserts((string) file_get_contents(repo_path($f)), $f)])
+        ->all();
+
+    expect(appFiles('app/GitHub'))->not->toBe([])
         ->and($hits)->toBe([]);
 });
 

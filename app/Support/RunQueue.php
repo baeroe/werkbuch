@@ -2,10 +2,13 @@
 
 namespace App\Support;
 
+use App\Actions\AgentRuns\ClaimRun;
+use App\Actions\GitHub\DetectUnauthorizedPush;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
 use App\Models\AgentConfig;
 use App\Models\AgentRun;
+use App\Models\ProjectRepository;
 use App\Models\Runner;
 use Illuminate\Support\Collection;
 
@@ -41,15 +44,24 @@ final class RunQueue
     }
 
     /**
-     * Why a run cannot start now: its agent is off (`agent_off`), no runner of the pool has its CLI (`no_cli`), or the
+     * Why a run cannot start now: its agent is off (`agent_off`), the guard holds its project (`merge_guard`), GitHub gave no token a moment ago (`github_unavailable`), no runner of the pool has its CLI (`no_cli`), or the
      * runner of its strand is offline (`runner_offline`); null when a runner could take it.
      *
      * @param  Collection<int, Runner>  $runners  every runner that is not revoked
+     * @param  list<string>  $guarded  the projects the guard against an unauthorized merge holds (`merge_guard`, spec 11.3)
      */
-    public static function waitingReason(AgentRun $run, ?AgentConfig $config, Collection $runners): ?string
+    public static function waitingReason(AgentRun $run, ?AgentConfig $config, Collection $runners, array $guarded = []): ?string
     {
         if ($config === null || ! $config->enabled) {
             return 'agent_off';
+        }
+
+        if (in_array($run->project_id, $guarded, true)) {
+            return DetectUnauthorizedPush::WAITING;
+        }
+
+        if ($run->retry_at !== null && $run->retry_at->isFuture()) {
+            return ClaimRun::GITHUB_UNAVAILABLE;
         }
 
         $pool = $runners->filter(fn (Runner $runner) => $config->pools($runner));
@@ -74,10 +86,11 @@ final class RunQueue
             ->with('thread.runner')->get();
         $runners = Runner::query()->whereNull('revoked_at')->get();
         $configs = AgentConfig::query()->whereIn('bot_id', $pending->pluck('bot_id')->unique()->values())->get()->keyBy('bot_id');
+        $guarded = self::guarded();
         $waiting = 0;
 
         foreach ($pending as $run) {
-            $reason = self::waitingReason($run, $configs->get($run->bot_id), $runners);
+            $reason = self::waitingReason($run, $configs->get($run->bot_id), $runners, $guarded);
             $status = $reason === null ? RunStatus::Queued : RunStatus::Waiting;
             $waiting += $reason === null ? 0 : 1;
 
@@ -88,5 +101,15 @@ final class RunQueue
         }
 
         return $waiting;
+    }
+
+    /**
+     * The projects the guard against an unauthorized merge holds (spec 11.3).
+     *
+     * @return list<string>
+     */
+    public static function guarded(): array
+    {
+        return array_values(ProjectRepository::query()->whereNotNull('guard_detected_at')->pluck('project_id')->map(fn (mixed $id) => (string) $id)->all());
     }
 }

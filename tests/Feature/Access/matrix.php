@@ -18,6 +18,7 @@ use App\Actions\AgentRuns\PruneRunEvents;
 use App\Actions\AgentRuns\ReapLostRuns;
 use App\Actions\AgentRuns\RecordHeartbeat;
 use App\Actions\AgentRuns\RecordRunEvents;
+use App\Actions\AgentRuns\RenewGitToken;
 use App\Actions\AgentRuns\RetryRun;
 use App\Actions\Agents\GetAgentConfig;
 use App\Actions\Agents\SaveAgentConfig;
@@ -42,6 +43,19 @@ use App\Actions\Comments\ListComments;
 use App\Actions\Comments\RemoveReaction;
 use App\Actions\Favorites\ListFavorites;
 use App\Actions\Favorites\ToggleFavorite;
+use App\Actions\GitHub\CompleteManifest;
+use App\Actions\GitHub\ConfirmMergeGuard;
+use App\Actions\GitHub\DetectUnauthorizedPush;
+use App\Actions\GitHub\DisconnectGitHub;
+use App\Actions\GitHub\GetGitHub;
+use App\Actions\GitHub\GetProjectRepository;
+use App\Actions\GitHub\HandleGitHubDelivery;
+use App\Actions\GitHub\LinkRepository;
+use App\Actions\GitHub\PruneGitHubDeliveries;
+use App\Actions\GitHub\ReceiveGitHubDelivery;
+use App\Actions\GitHub\ReturnFromInstallation;
+use App\Actions\GitHub\StartManifest;
+use App\Actions\GitHub\SyncGitHub;
 use App\Actions\Invitations\InviteUser;
 use App\Actions\Invitations\ListInvitations;
 use App\Actions\Labels\DeleteLabel;
@@ -191,6 +205,7 @@ use App\Models\Automation;
 use App\Models\Comment;
 use App\Models\CommentReaction;
 use App\Models\Event;
+use App\Models\GitHubDelivery;
 use App\Models\Label;
 use App\Models\Notification;
 use App\Models\NotificationMail;
@@ -209,6 +224,7 @@ use App\Models\WorkItemType;
 use App\Pdf\Gotenberg;
 use App\Support\Actor;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -216,6 +232,7 @@ use Illuminate\Support\Str;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use PragmaRX\Google2FA\Google2FA;
 use Tests\Feature\Access\MatrixWorld;
+use Tests\Support\FakeGitHub;
 use Tests\Support\WorkflowFixtures;
 
 /*
@@ -1556,6 +1573,129 @@ return [
     'PruneRunEvents' => [
         'action' => PruneRunEvents::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => PruneRunEvents::run($a),
+        'system' => true,
+    ],
+    // the one GitHub app (WEBU-24): every account reads it, org admins connect, sync and disconnect it; the repo of a
+    // project and the confirmation of an unauthorized merge are its admins'
+    'GetGitHub' => [
+        'action' => GetGitHub::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetGitHub::run($a),
+        'allowed' => $everyone,
+    ],
+    'StartManifest' => [
+        'action' => StartManifest::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => StartManifest::run($a, []),
+        'allowed' => $catalogAdmins,
+    ],
+    'CompleteManifest' => [
+        'action' => CompleteManifest::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            Cache::put(StartManifest::stateKey('matrix'), $a->user->id, 60);
+            (new FakeGitHub)->fake();
+
+            return CompleteManifest::run($a, ['code' => 'matrix', 'state' => 'matrix']);
+        },
+        'allowed' => $catalogAdmins,
+        'event' => EventType::GitHubConnected,
+    ],
+    'SyncGitHub' => [
+        'action' => SyncGitHub::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->github();
+
+            return SyncGitHub::run($a);
+        },
+        'allowed' => $catalogAdmins,
+    ],
+    // the way back from installing: with the state of the person it reads GitHub for those who manage it, does nothing for
+    // anybody else (no refusal: a link must not tell)
+    'ReturnFromInstallation' => [
+        'action' => ReturnFromInstallation::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->github();
+
+            return ReturnFromInstallation::run($a, ['state' => StartManifest::issueState($a->user->id, 'setup')]);
+        },
+        'allowed' => $everyone,
+    ],
+    'DisconnectGitHub' => [
+        'action' => DisconnectGitHub::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->github();
+
+            return DisconnectGitHub::run($a);
+        },
+        'allowed' => $catalogAdmins,
+        'event' => EventType::GitHubDisconnected,
+    ],
+    'GetProjectRepository' => [
+        'action' => GetProjectRepository::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetProjectRepository::run($a, $w->github($column)?->project ?? $w->project($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'LinkRepository' => [
+        'action' => LinkRepository::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->github();
+
+            return LinkRepository::run($a, $w->project($column), ['repository_id' => 'feldwerk/website']);
+        },
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectRepositoryChanged,
+    ],
+    'ConfirmMergeGuard' => [
+        'action' => ConfirmMergeGuard::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $link = $w->github($column);
+            $link?->forceFill(['guard_detected_at' => now(), 'guard_sha' => str_repeat('a', 40), 'guard_branch' => 'main'])->save();
+
+            return ConfirmMergeGuard::run($a, $w->project($column));
+        },
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectMergeGuardConfirmed,
+    ],
+    // the webhook of GitHub and the token of a run (WEBU-24): no account, the actor is the system
+    'ReceiveGitHubDelivery' => [
+        'action' => ReceiveGitHubDelivery::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ReceiveGitHubDelivery::run($a, ['delivery' => 'matrix', 'event' => 'ping', 'body' => '{"zen":"Matrix"}']),
+        'system' => true,
+    ],
+    'HandleGitHubDelivery' => [
+        'action' => HandleGitHubDelivery::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->github();
+            $id = (string) Str::ulid();
+            GitHubDelivery::query()->insert(['id' => $id, 'delivery_id' => 'matrix', 'event' => 'ping', 'payload' => '{}', 'received_at' => now()]);
+
+            return HandleGitHubDelivery::run($a, $id);
+        },
+        'system' => true,
+    ],
+    'DetectUnauthorizedPush' => [
+        'action' => DetectUnauthorizedPush::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->github('project_admin');
+
+            return DetectUnauthorizedPush::run($a, FakeGitHub::push(str_repeat('a', 40)));
+        },
+        'system' => true,
+        'event' => EventType::ProjectMergeGuardDetected,
+    ],
+    'PruneGitHubDeliveries' => [
+        'action' => PruneGitHubDeliveries::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PruneGitHubDeliveries::run($a),
+        'system' => true,
+    ],
+    'RenewGitToken' => [
+        'action' => RenewGitToken::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $w->github('project_admin');
+
+            return RenewGitToken::run($a, $runner = $w->runner(), $w->run('project_admin', ['status' => RunStatus::Running, 'runner_id' => $runner->id])->id, ['attempt' => 1]);
+        },
         'system' => true,
     ],
 ];

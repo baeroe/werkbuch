@@ -20,6 +20,8 @@ Route::prefix('api/runner')->middleware(SetLocale::class.':'.SetLocale::API)->gr
         Route::post('runs/{runId}/heartbeat', [RunnerProtocolController::class, 'heartbeat'])->name('runner.heartbeat');
         Route::post('runs/{runId}/events', [RunnerProtocolController::class, 'events'])->name('runner.events');
         Route::post('runs/{runId}/result', [RunnerProtocolController::class, 'result'])->name('runner.result');
+        // a new installation token before the one of the claim runs out (spec 6.4, WEBU-24)
+        Route::post('runs/{runId}/git-token', [RunnerProtocolController::class, 'gitToken'])->name('runner.git-token');
     });
 });
 

@@ -422,7 +422,7 @@ Writes webhooks; org admins only. `create` and `rotate-secret` answer the secret
 
 ### `agents`
 
-Reads runners and the agent configuration of bots (org admins) and the runs of agents with their logs (who sees the project). (Needs `read`.)
+Reads runners and the agent configuration of bots (org admins), the runs of agents with their logs (who sees the project), the GitHub app and the repo of a project. (Needs `read`.)
 
 | Action | Purpose | Required | REST twin |
 |---|---|---|---|
@@ -432,10 +432,12 @@ Reads runners and the agent configuration of bots (org admins) and the runs of a
 | `get-run` | One run. | `run` | `GET /runs/{run}` |
 | `run-events` | The log of a run in the order it came. | `run` | `GET /runs/{run}/events` |
 | `get-config` | The agent configuration of a bot. | `bot` | `GET /bots/{user}/agent` |
+| `get-github` | The GitHub app of the instance, its installations and repos with their project; never a key. | – | `GET /github` |
+| `get-repository` | The repo of a project with its base branch, the ruleset hint and the guard against an unauthorized merge; `data` null without one. | `project` | `GET /projects/{project}/repository` |
 
 ### `manage-agents`
 
-Changes runners and the agent configuration of bots (org admins) and steers runs (who may change the item). Pairing a runner works only in the web app. An agent never steers runs with the token of its own run (403 `agent_forbidden`). (Needs `write`.)
+Changes runners and the agent configuration of bots (org admins), steers runs (who may change the item), syncs the GitHub app and sets the repo of a project. Pairing a runner and connecting or disconnecting GitHub work only in the web app. An agent never steers runs with the token of its own run (403 `agent_forbidden`). (Needs `write`.)
 
 | Action | Purpose | Required | REST twin |
 |---|---|---|---|
@@ -444,6 +446,9 @@ Changes runners and the agent configuration of bots (org admins) and steers runs
 | `cancel-run` | Cancels a run; one on a runner ends once the runner stopped it. | `run` | `POST /runs/{run}/cancel` |
 | `retry-run` | Starts a run that ended without success again; answers the new run. | `run` | `POST /runs/{run}/retry` |
 | `save-config` | Sets the agent configuration of a bot as a whole. | `bot`, `input` | `PUT /bots/{user}/agent` |
+| `sync-github` | Reads the installations of the GitHub app and their repos from GitHub again (org admins). | – | `POST /github/sync` |
+| `set-repository` | Gives a project its repo (one the app reaches, at most one project per repo) and base branch, or none; admins of the project. | `project`, `input` | `PUT /projects/{project}/repository` |
+| `confirm-merge-guard` | Confirms an unauthorized merge: the guard goes and the paused strands of the project are open again; admins of the project. | `project` | `POST /projects/{project}/repository/confirm-guard` |
 
 <!-- tools:end -->
 

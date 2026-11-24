@@ -23,6 +23,8 @@ final class Problem extends RuntimeException implements HttpExceptionInterface
         'attachment_inline', 'mail_not_configured', 'mail_failed', 'template_changed',
         'webhook_not_logged', 'token_required', 'unsupported_media_type',
         'agent_forbidden', 'agent_off', 'run_finished', 'run_not_retryable', 'run_replaced',
+        'github_connected', 'github_not_connected', 'github_unavailable', 'repository_unavailable', 'merge_guard_open',
+        'nothing_to_confirm', 'no_repository', 'run_canceling',
     ];
 
     /**

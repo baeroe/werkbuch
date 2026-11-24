@@ -19,7 +19,7 @@
  * renamed or removed status still reads.
  */
 
-import { CalendarClock, CalendarSync, Check, CircleDot, Ellipsis, Trash2, Webhook, type LucideIcon } from 'lucide-react';
+import { CalendarClock, CalendarSync, Check, CircleDot, Ellipsis, ShieldAlert, Trash2, Webhook, type LucideIcon } from 'lucide-react';
 import { useId, type MouseEvent, type ReactNode } from 'react';
 import { botWord, formatDay } from '@/components/fields/format';
 import { linkFocusRing } from '@/components/items/ItemLink';
@@ -74,13 +74,15 @@ const SYSTEM_ICONS: Partial<Record<Notification['event'], LucideIcon>> = {
   due: CalendarClock,
   template_run_failed: CalendarSync,
   webhook_disabled: Webhook,
+  merge_guard_detected: ShieldAlert,
 };
 
 /**
  * Where a notification leads: its item; a failed template to its page (one deleted since says there that it does not
  * exist, without asking for it, T9-M5), without the template behind it (the demo rows) to the templates of its
  * project; for a switched-off webhook the log of its deliveries (one deleted since says so there, with the way back), without
- * the webhook behind it (the demo rows) the webhooks of the settings; any other kind without an item to the settings.
+ * the webhook behind it (the demo rows) the webhooks of the settings; an unauthorized merge to the settings of its project,
+ * where an admin of the project confirms it (WEBU-24); any other kind without an item to the settings.
  */
 export function hrefOf(notification: Notification, project: Project | undefined): string {
   if (notification.work_item_id) return paths.item(notification.item?.key ?? notification.work_item_id);
@@ -88,6 +90,7 @@ export function hrefOf(notification: Notification, project: Project | undefined)
   if (notification.event === 'webhook_disabled') {
     return notification.data.webhook_id ? paths.webhookDeliveries(notification.data.webhook_id) : paths.settings('webhooks');
   }
+  if (notification.event === 'merge_guard_detected') return project ? paths.projectSettings(project.identifier) : paths.projects();
   // a kind without an item that comes later leads to the settings, never to the webhooks (T14-M7)
   return paths.settings();
 }
@@ -152,6 +155,11 @@ function sentenceOf(notification: Notification, ctx: RowContext): { sentence: Re
       return { sentence: t('inbox.kind.template_run_failed'), excerpt: data.error ?? null };
     case 'webhook_disabled':
       return { sentence: data.name ? t('inbox.kind.webhook_disabled_named', { name: data.name }) : t('inbox.kind.webhook_disabled'), excerpt: t('inbox.webhook_reason') };
+    case 'merge_guard_detected':
+      return {
+        sentence: t(data.deleted ? 'inbox.kind.merge_guard_deleted' : 'inbox.kind.merge_guard_detected', { branch: data.branch ?? '', sha: (data.sha ?? '').slice(0, 7) }),
+        excerpt: t('inbox.merge_guard_reason'),
+      };
     default:
       // a kind of a later version (a tab older than the server): a neutral sentence, never a broken inbox (T16-M5)
       return { sentence: tx('inbox.kind.unknown', { actor }), excerpt: null };

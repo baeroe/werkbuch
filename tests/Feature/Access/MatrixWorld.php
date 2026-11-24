@@ -6,10 +6,12 @@ use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
 use App\Models\AgentConfig;
 use App\Models\AgentRun;
+use App\Models\GitHubApp;
 use App\Models\Organization;
 use App\Models\Page;
 use App\Models\PersonalAccessToken;
 use App\Models\Project;
+use App\Models\ProjectRepository;
 use App\Models\Runner;
 use App\Models\Template;
 use App\Models\User;
@@ -22,6 +24,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
+use Tests\Support\FakeGitHub;
 
 /**
  * The world every row of the rights matrix runs in: the organization with a logo, the public project WEB and the private
@@ -30,6 +33,9 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
  */
 final class MatrixWorld
 {
+    /** The false GitHub of `github()`. */
+    public ?FakeGitHub $fakeGitHub = null;
+
     /** The columns of the matrix, one kind of account each. */
     public const COLUMNS = [
         'org_admin', 'project_admin', 'project_member', 'project_viewer', 'outsider_public', 'outsider_private', 'default_bot',
@@ -201,5 +207,22 @@ final class MatrixWorld
         Http::fake(['*' => Http::response('ok')]);
 
         return Webhook::factory()->create(['created_by' => $this->account('org_admin')->id, 'url' => 'https://receiver.example.com/hook']);
+    }
+
+    /**
+     * The GitHub app with an installation and the repo `feldwerk/website` behind a false GitHub (once per world), and,
+     * with a column, that repo as the repo of the project of the column (WEBU-24). Through the factories: no events.
+     */
+    public function github(?string $column = null): ?ProjectRepository
+    {
+        if (GitHubApp::query()->doesntExist()) {
+            $this->fakeGitHub = FakeGitHub::connected();
+        }
+
+        if ($column === null) {
+            return null;
+        }
+
+        return ProjectRepository::query()->where('project_id', $this->project($column)->id)->first() ?? FakeGitHub::link($this->project($column));
     }
 }

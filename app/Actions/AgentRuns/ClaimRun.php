@@ -9,10 +9,13 @@ use App\Domain\Agents\RunType;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
+use App\GitHub\GitHubUnavailable;
+use App\GitHub\InstallationTokens;
 use App\Models\AgentConfig;
 use App\Models\AgentRun;
 use App\Models\AgentThread;
 use App\Models\Project;
+use App\Models\ProjectRepository;
 use App\Models\Runner;
 use App\Support\Actor;
 use App\Support\RunnerProtocol;
@@ -22,6 +25,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
+use Throwable;
 
 /**
  * A runner asks for work (spec 6.3, 9): its report becomes its last state, then werkbuch hands it the next run it may
@@ -39,6 +43,14 @@ final class ClaimRun
     /** How many waiting runs one claim looks at. */
     public const CANDIDATES = 200;
 
+    /** The error of a run GitHub gave no installation token for. */
+    public const GIT_TOKEN = 'git_token';
+
+    /** The reason a run waits while GitHub does not answer, and how long it waits (A511). */
+    public const GITHUB_UNAVAILABLE = 'github_unavailable';
+
+    public const RETRY_SECONDS = 120;
+
     /**
      * @param  array<array-key, mixed>  $input  the report (`load`, `clis`, `equipment`), `version` and `protocol` of the headers
      * @return array<string, mixed>
@@ -50,13 +62,58 @@ final class ClaimRun
         $report = RunnerProtocol::report($input);
         $protocol = RunnerProtocol::protocol($input['protocol'] ?? null);
 
-        return DB::transaction(function () use ($runner, $input, $report, $protocol): array {
+        [$run, $token, $answer] = DB::transaction(function () use ($runner, $input, $report, $protocol): array {
             $locked = Runner::query()->lockForUpdate()->whereNull('revoked_at')->find($runner->id) ?? throw Problem::notFound();
             RunnerProtocol::keep($locked, $report, RunnerProtocol::version($input['version'] ?? null), $protocol);
 
             $run = $protocol >= Protocol::VERSION ? $this->take($locked) : null;
 
-            return ['run' => $run === null ? null : self::payload($run, RunTokens::issue($run)), ...RunnerProtocol::answer($locked)];
+            return [$run, $run === null ? null : RunTokens::issue($run), RunnerProtocol::answer($locked)];
+        }, 3);
+
+        if ($run === null || $token === null) {
+            return ['run' => null, ...$answer];
+        }
+
+        // the installation token after the commit: never HTTP under the locks of the claim (A511)
+        try {
+            $git = InstallationTokens::forRun($run);
+        } catch (Throwable $e) {
+            report($e);
+            self::giveBack($run, $e);
+
+            return ['run' => null, ...$answer];
+        }
+
+        // the run may have been canceled while GitHub answered (the guard, a person): then it is not handed out
+        if ($git !== null && AgentRun::query()->whereKey($run->id)->value('status') !== RunStatus::Running) {
+            return ['run' => null, ...$answer];
+        }
+
+        return ['run' => self::payload($run, $token, $git), ...$answer];
+    }
+
+    /**
+     * A run GitHub gave no token for goes back (A511), only if it is still this attempt. GitHub without an answer or
+     * with a 5xx counts no attempt: the run waits (`github_unavailable`) until `RETRY_SECONDS` have passed. A refusal
+     * (a repo the app no longer reaches) or anything else is an attempt: the first time a new one into the queue, the
+     * second time it fails with `git_token`.
+     */
+    private static function giveBack(AgentRun $run, Throwable $cause): void
+    {
+        DB::transaction(function () use ($run, $cause): void {
+            $locked = AgentRun::query()->lockForUpdate()->find($run->id);
+            if ($locked === null || $locked->status !== RunStatus::Running || $locked->attempt !== $run->attempt) {
+                return;
+            }
+
+            if ($cause instanceof GitHubUnavailable && $cause->transient()) {
+                ReapLostRuns::requeue($locked, self::GITHUB_UNAVAILABLE, false, now()->addSeconds(self::RETRY_SECONDS));
+            } elseif ($locked->attempt >= Protocol::MAX_ATTEMPTS) {
+                FinishRun::end($locked, RunStatus::Failed, ['error' => self::GIT_TOKEN]);
+            } else {
+                ReapLostRuns::requeue($locked, self::GIT_TOKEN);
+            }
         }, 3);
     }
 
@@ -87,6 +144,12 @@ final class ClaimRun
             // it and then finds the project being deleted, never a lock the other way round
             $project = Project::query()->sharedLock()->find($candidate->project_id);
             if ($project === null || $project->deleting_at !== null) {
+                continue;
+            }
+
+            // the guard against an unauthorized merge holds every run of the project (spec 11.3): the repo row shared,
+            // after the project and before the run, as DetectUnauthorizedPush takes them
+            if (ProjectRepository::query()->sharedLock()->where('project_id', $project->id)->whereNotNull('guard_detected_at')->exists()) {
                 continue;
             }
 
@@ -124,7 +187,10 @@ final class ClaimRun
         return AgentRun::query()->select('agent_runs.*')
             ->whereIn('agent_runs.status', [RunStatus::Queued->value, RunStatus::Waiting->value])
             ->whereIn('agent_runs.cli', $clis)
+            ->where(fn (Builder $due) => $due->whereNull('agent_runs.retry_at')->orWhere('agent_runs.retry_at', '<=', now()))
             ->join('projects', 'projects.id', '=', 'agent_runs.project_id')->whereNull('projects.deleting_at')
+            ->whereNotExists(fn ($guard) => $guard->selectRaw('1')->from('project_repositories')
+                ->whereColumn('project_repositories.project_id', 'agent_runs.project_id')->whereNotNull('project_repositories.guard_detected_at'))
             ->join('agent_configs', 'agent_configs.bot_id', '=', 'agent_runs.bot_id')->where('agent_configs.enabled', true)
             ->where(fn (Builder $pool) => $pool->whereJsonLength('agent_configs.runner_ids', 0)->orWhereJsonContains('agent_configs.runner_ids', $runner->id))
             ->leftJoin('agent_threads', 'agent_threads.id', '=', 'agent_runs.thread_id')
@@ -200,12 +266,14 @@ final class ClaimRun
     }
 
     /**
-     * What the runner needs to run it (spec 6.3). Setup and teardown of the project, the token for git and the prompt
-     * built from its layers come with the tickets of the projects, GitHub and the flow (WEBU-24 to 26).
+     * What the runner needs to run it (spec 6.3): `git` is the repo of the project and an installation token for it
+     * with the permissions of the kind (spec 11.3, null for a project without a repo). Setup and teardown of the
+     * project and the prompt built from its layers come with the tickets of the projects and the flow (WEBU-26).
      *
+     * @param  array{repo_url: string, token: string, expires_at: string}|null  $git
      * @return array<string, mixed>
      */
-    private static function payload(AgentRun $run, string $token): array
+    private static function payload(AgentRun $run, string $token, ?array $git): array
     {
         $item = $run->workItem;
         $thread = $run->type === RunType::Review ? null : $run->thread;
@@ -235,7 +303,7 @@ final class ClaimRun
             'system_prompt' => Contract::for($run->type),
             'prompt' => Contract::placeholder($run->type, $item?->key, $item?->title),
             'werkbuch' => ['mcp_url' => url('/mcp'), 'server_name' => 'werkbuch-run', 'token' => $token],
-            'git' => null,
+            'git' => $git,
         ];
     }
 }

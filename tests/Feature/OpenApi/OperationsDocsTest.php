@@ -185,7 +185,7 @@ it('describes a notification with its data, its times and its excerpt', function
     $notification = $schema('NotificationResource')['properties'];
     $data = $notification['data'];
 
-    expect(array_keys($data['properties']))->toBe(['source', 'comment_id', 'from', 'to', 'fields', 'due_date', 'overdue', 'template_id', 'error', 'webhook_id', 'name'])
+    expect(array_keys($data['properties']))->toBe(['source', 'comment_id', 'from', 'to', 'fields', 'due_date', 'overdue', 'template_id', 'error', 'webhook_id', 'name', 'sha', 'branch', 'deleted', 'item_ids'])
         ->and($data['x-werkbuch-open'])->toBeTrue()
         ->and($data['properties']['source']['enum'])->toBe(['comment', 'description', 'values'])
         ->and($notification['read_at']['format'])->toBe('date-time')

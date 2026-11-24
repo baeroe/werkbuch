@@ -4,11 +4,11 @@ use App\Domain\Notifications\Channel;
 use App\Domain\Notifications\NotificationKind as Kind;
 use App\Domain\Notifications\Preferences;
 
-it('has the inbox on and mail on for assigned, mentioned, comment and due by default', function () {
+it('has the inbox on and mail on for assigned, mentioned, comment, due and an unauthorized merge by default', function () {
     $mail = array_values(array_filter(Kind::ORDER, fn (Kind $kind) => Preferences::enabled($kind, Channel::Mail, [])));
     $inbox = array_values(array_filter(Kind::ORDER, fn (Kind $kind) => Preferences::enabled($kind, Channel::Inbox, [])));
 
-    expect($mail)->toBe([Kind::Assigned, Kind::Mentioned, Kind::Comment, Kind::Due])
+    expect($mail)->toBe([Kind::Assigned, Kind::Mentioned, Kind::Comment, Kind::Due, Kind::MergeGuardDetected])
         ->and($inbox)->toBe(Kind::ORDER);
 });
 
@@ -23,15 +23,15 @@ it('takes a stored choice over the default', function () {
         ->and(Preferences::enabled(Kind::Mentioned, Channel::Inbox, $stored))->toBeTrue();
 });
 
-it('names the nine kinds in the order of the clickdummy and ranks them for one entry per person', function () {
+it('names the ten kinds in the order of the clickdummy and ranks them for one entry per person', function () {
     $byRank = Kind::ORDER;
     usort($byRank, fn (Kind $a, Kind $b) => $a->rank() <=> $b->rank());
 
     expect(array_map(fn (Kind $kind) => $kind->value, Kind::ORDER))->toBe([
-        'assigned', 'mentioned', 'comment', 'state_changed', 'item_changed', 'due', 'item_created', 'template_run_failed', 'webhook_disabled',
+        'assigned', 'mentioned', 'comment', 'state_changed', 'item_changed', 'due', 'item_created', 'template_run_failed', 'webhook_disabled', 'merge_guard_detected',
     ])->and(Kind::ORDER)->toHaveCount(count(Kind::cases()))
         ->and(array_map(fn (Kind $kind) => $kind->value, $byRank))->toBe([
-            'mentioned', 'assigned', 'comment', 'state_changed', 'item_changed', 'due', 'item_created', 'template_run_failed', 'webhook_disabled',
-        ])->and(array_map(fn (Kind $kind) => $kind->rank(), $byRank))->toBe(range(1, 9))
+            'mentioned', 'assigned', 'comment', 'state_changed', 'item_changed', 'due', 'item_created', 'template_run_failed', 'webhook_disabled', 'merge_guard_detected',
+        ])->and(array_map(fn (Kind $kind) => $kind->rank(), $byRank))->toBe(range(1, 10))
         ->and(array_map(fn (Channel $channel) => $channel->value, Channel::cases()))->toBe(['inbox', 'mail']);
 });

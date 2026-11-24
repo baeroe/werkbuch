@@ -5,7 +5,8 @@ namespace App\Domain\Notifications;
 /**
  * What a notification tells (spec 4.14): the kinds of the table "Benachrichtigungsarten" of the phase plan 8, named
  * like `NOTIFICATION_EVENTS` of the clickdummy. `template_run_failed` and `webhook_disabled` come with phases 10 and 11
- * (A290); until then they only have their preferences.
+ * (A290); until then they only have their preferences. `merge_guard_detected` (WEBU-24, A515) tells the org admins of a push
+ * no merge of werkbuch explains, with a mail by default.
  */
 enum NotificationKind: string
 {
@@ -18,11 +19,12 @@ enum NotificationKind: string
     case ItemCreated = 'item_created';
     case TemplateRunFailed = 'template_run_failed';
     case WebhookDisabled = 'webhook_disabled';
+    case MergeGuardDetected = 'merge_guard_detected';
 
     /** The order of the clickdummy: how the preferences list the kinds. */
     public const ORDER = [
         self::Assigned, self::Mentioned, self::Comment, self::StateChanged, self::ItemChanged, self::Due,
-        self::ItemCreated, self::TemplateRunFailed, self::WebhookDisabled,
+        self::ItemCreated, self::TemplateRunFailed, self::WebhookDisabled, self::MergeGuardDetected,
     ];
 
     /** How strong the kind is when several meet one person (A267): the smaller, the stronger. */
@@ -38,12 +40,13 @@ enum NotificationKind: string
             self::ItemCreated => 7,
             self::TemplateRunFailed => 8,
             self::WebhookDisabled => 9,
+            self::MergeGuardDetected => 10,
         };
     }
 
     /** Whether a person gets a mail of the kind before they chose (spec 4.14); the inbox is always on by default. */
     public function mailByDefault(): bool
     {
-        return in_array($this, [self::Mentioned, self::Assigned, self::Comment, self::Due], true);
+        return in_array($this, [self::Mentioned, self::Assigned, self::Comment, self::Due, self::MergeGuardDetected], true);
     }
 }

@@ -122,8 +122,9 @@ final class Notification extends Model
     /**
      * Only what the person may still see (K5, the one place of this rule): a notification of a project the person sees
      * (App\Access\Visibility: never a project being deleted, nothing for a deactivated account), or an organization
-     * notification without a project (`webhook_disabled`) while the person is an org admin. Whose row it is, the caller
-     * decides.
+     * notification without a project (`webhook_disabled`) while the person is an org admin. An unauthorized merge
+     * (`merge_guard_detected`, WEBU-24) names its project but goes to org admins only: it stays only while the person is
+     * one. Whose row it is, the caller decides.
      *
      * @param  Builder<self>  $query
      */
@@ -131,11 +132,15 @@ final class Notification extends Model
     {
         $orgAdmin = ! $user->isDisabled() && Visibility::orgRole($user) === OrgRole::Admin;
 
+        $kind = $query->qualifyColumn('kind');
         $query->where(fn (Builder $visible) => $visible
-            ->whereIn($query->qualifyColumn('project_id'), Visibility::projectIds($user))
+            ->where(fn (Builder $project) => $project
+                ->whereIn($query->qualifyColumn('project_id'), Visibility::projectIds($user))
+                // what only org admins hear of goes with the role, also when it names a project
+                ->when(! $orgAdmin, fn (Builder $not) => $not->where($kind, '!=', NotificationKind::MergeGuardDetected)))
             ->when($orgAdmin, fn (Builder $or) => $or->orWhere(fn (Builder $org) => $org
                 ->whereNull($query->qualifyColumn('project_id'))
-                ->where($query->qualifyColumn('kind'), NotificationKind::WebhookDisabled))));
+                ->where($kind, NotificationKind::WebhookDisabled))));
     }
 
     /**

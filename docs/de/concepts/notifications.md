@@ -15,6 +15,7 @@ werkbuch sagt Personen Bescheid, wenn sich etwas an ihrer Arbeit tut: in der **I
 | Neues Item im Projekt | Nur der Lead des Projekts | aus |
 | Vorlage fehlgeschlagen | Der Lead des Projekts und wer die Vorlage angelegt hat, wenn ein Lauf nach Zeitplan oder mit **Jetzt ausführen** scheitert (siehe [Vorlagen](/de/concepts/templates#fehler-und-protokoll)) | aus |
 | Webhook abgeschaltet | Jede aktive Person mit Org-Rolle Admin, wenn das System einen [Webhook](/de/webhooks#abgeschaltet-und-wieder-an) abschaltet, der 24 Stunden lang gescheitert ist | aus |
+| Eigenmächtiger Merge | Jede aktive Person mit Org-Rolle Admin, wenn die GitHub-App den Basis-Branch eines Projekts außerhalb eines Merges von werkbuch ändert (alle Stränge des Projekts pausieren, bis ein Admin des Projekts bestätigt) | an |
 
 Wer ein Item beobachtet, steht unter [Work Items](/de/concepts/work-items#beobachten). Dazu gilt:
 
@@ -48,7 +49,7 @@ Ein Auszug kommt immer aus dem aktuellen Text: ein bearbeiteter Kommentar zeigt 
 
 ## Mail
 
-- **Gesammelt.** Benachrichtigungen zu einem Item werden `NOTIFICATION_MAIL_DELAY` Minuten gesammelt (standardmäßig 5) und gehen dann als eine Mail je Person und Item raus, die älteste zuerst. Der Betreff ist `[WEB-47] Titel des Items`, der Fuß verlinkt die Einstellungen der Benachrichtigungen. Gescheiterte Läufe einer Vorlage werden stattdessen je Vorlage gesammelt: Der Betreff nennt Projekt und Vorlage, der Knopf führt zur Vorlage. Ein abgeschalteter Webhook hat eine eigene Mail (Betreff `Webhook „…“ abgeschaltet`), deren Knopf zu seinen Zustellungen führt; in der Inbox führt die Zeile ebenfalls dorthin.
+- **Gesammelt.** Benachrichtigungen zu einem Item werden `NOTIFICATION_MAIL_DELAY` Minuten gesammelt (standardmäßig 5) und gehen dann als eine Mail je Person und Item raus, die älteste zuerst. Der Betreff ist `[WEB-47] Titel des Items`, der Fuß verlinkt die Einstellungen der Benachrichtigungen. Gescheiterte Läufe einer Vorlage werden stattdessen je Vorlage gesammelt: Der Betreff nennt Projekt und Vorlage, der Knopf führt zur Vorlage. Ein abgeschalteter Webhook hat eine eigene Mail (Betreff `Webhook „…“ abgeschaltet`), deren Knopf zu seinen Zustellungen führt; in der Inbox führt die Zeile ebenfalls dorthin. Ein eigenmächtiger Merge hat eine Mail je Projekt (Betreff `[WEB] Eigenmächtiger Merge: die Stränge pausieren`), deren Knopf und Zeile der Inbox zu den Einstellungen des Projekts führen.
 - **In deiner Sprache,** der Sprache deines Profils, sonst der der Organisation; Zeiten in deiner Zeitzone.
 - **Kommentare und Erwähnungen** kommen mit ihrem aktuellen Text. Links bleiben Links, Bilder und Dateien erscheinen als Links zu werkbuch; eine Mail hat nie Anhänge oder eingebettete Bilder. Ein langer Text wird mit **Weiterlesen** gekürzt.
 - **Beim Senden geprüft.** Kurz bevor die Mail rausgeht, prüft werkbuch jede Zeile noch einmal: das Konto ist aktiv, es sieht das Projekt noch, das Item gibt es, die Benachrichtigung ist noch ungelesen und Mail ist für das Ereignis noch an. Was du inzwischen in der Inbox gelesen hast, wird nicht gemailt. Bleibt nichts übrig, geht keine Mail raus.
@@ -119,7 +120,7 @@ curl -H "Authorization: Bearer <token>" \
 }
 ```
 
-`event` ist eins von `assigned`, `mentioned`, `comment`, `state_changed`, `item_changed`, `due`, `item_created`, `template_run_failed`, `webhook_disabled`. `data` enthält nur IDs und Namen von Feldern: `{source, comment_id}` bei einer Erwähnung, `{comment_id}` bei einem Kommentar, `{from, to}` (die Status, wie sie damals hießen) bei einem Statuswechsel, `{fields}` bei sonstigen Änderungen, `{due_date, overdue}` bei einer Erinnerung, `{template_id, error}` bei einer fehlgeschlagenen Vorlage (ihr `item` ist `null`), `{webhook_id, name}` bei einem abgeschalteten Webhook (ohne Projekt und Item). `mailed_at` ist der Zeitpunkt, zu dem die Mail mit dieser Benachrichtigung rausging, `item` das Item in der kurzen Form der Listen.
+`event` ist eins von `assigned`, `mentioned`, `comment`, `state_changed`, `item_changed`, `due`, `item_created`, `template_run_failed`, `webhook_disabled`, `merge_guard_detected`. `data` enthält nur IDs und Namen von Feldern: `{source, comment_id}` bei einer Erwähnung, `{comment_id}` bei einem Kommentar, `{from, to}` (die Status, wie sie damals hießen) bei einem Statuswechsel, `{fields}` bei sonstigen Änderungen, `{due_date, overdue}` bei einer Erinnerung, `{template_id, error}` bei einer fehlgeschlagenen Vorlage (ihr `item` ist `null`), `{webhook_id, name}` bei einem abgeschalteten Webhook (ohne Projekt und Item), `{sha, branch, deleted, item_ids}` bei einem eigenmächtigen Merge (ohne Item). `mailed_at` ist der Zeitpunkt, zu dem die Mail mit dieser Benachrichtigung rausging, `item` das Item in der kurzen Form der Listen.
 
 Eine Benachrichtigung als gelesen markieren, oder alle Erwähnungen auf einmal:
 

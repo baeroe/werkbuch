@@ -625,7 +625,8 @@ export type NotificationEvent =
   | 'due'
   | 'item_created'
   | 'template_run_failed'
-  | 'webhook_disabled';
+  | 'webhook_disabled'
+  | 'merge_guard_detected';
 
 export type NotificationChannel = 'inbox' | 'mail';
 
@@ -653,6 +654,11 @@ export interface NotificationData {
   /** `webhook_disabled` (phase 11): the webhook and its name when it was switched off. */
   webhook_id?: string;
   name?: string | null;
+  /** `merge_guard_detected` (WEBU-24): the push of the app that no merge of werkbuch explains, and the items of its runs. */
+  sha?: string | null;
+  branch?: string | null;
+  deleted?: boolean;
+  item_ids?: string[];
 }
 
 /** A notification of the own inbox, as `GET /api/v1/notifications` answers it (`NotificationResource`). */

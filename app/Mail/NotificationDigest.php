@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Domain\Notifications\NotificationKind;
 use App\Models\Notification;
+use App\Models\ProjectRepository;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\Webhook;
@@ -33,6 +34,9 @@ use Illuminate\Support\Carbon;
  *
  * A collection of switch-offs of a webhook (`webhook:<id>`, phase 11) is about the webhook: its mail names it in the
  * subject, says when the system switched it off and links to its deliveries.
+ *
+ * A collection of unauthorized merges of a project (`guard:<project>`, WEBU-24) names the project in the subject, each push
+ * with its branch, commit and time, and links to the settings of the project, where an admin confirms.
  */
 final class NotificationDigest extends Mailable
 {
@@ -50,6 +54,7 @@ final class NotificationDigest extends Mailable
         private readonly bool $reminders = false,
         private readonly ?Template $template = null,
         private readonly ?Webhook $webhook = null,
+        private readonly ?ProjectRepository $guard = null,
     ) {}
 
     public function envelope(): Envelope
@@ -57,6 +62,7 @@ final class NotificationDigest extends Mailable
         return new Envelope(subject: match (true) {
             $this->template !== null => $this->templateSubject(),
             $this->webhook !== null => $this->webhookSubject($this->webhook),
+            $this->guard !== null => $this->guardSubject($this->guard),
             $this->reminders => __('mail.notifications.reminders.subject'),
             default => __('mail.notifications.subject', ['key' => $this->item()->key, 'title' => $this->item()->title]),
         });
@@ -70,6 +76,9 @@ final class NotificationDigest extends Mailable
         }
         if ($this->webhook !== null) {
             return $this->webhookContent($this->webhook, $base);
+        }
+        if ($this->guard !== null) {
+            return $this->guardContent($this->guard, $base);
         }
         if ($this->reminders) {
             return $this->reminderContent($base);
@@ -117,6 +126,28 @@ final class NotificationDigest extends Mailable
             'deliveriesUrl' => "{$base}/settings/webhooks?deliveries=".rawurlencode($webhook->id),
             'settingsUrl' => "{$base}/me/notifications",
             'entries' => array_map(fn (array $line) => ['at' => $this->at($line['notification'])], $this->lines),
+        ]);
+    }
+
+    private function guardSubject(ProjectRepository $guard): string
+    {
+        return __('mail.notifications.guard.subject', ['identifier' => $guard->project->identifier]);
+    }
+
+    /** An unauthorized merge: one entry per push (branch, commit, time), the link to the settings of the project. */
+    private function guardContent(ProjectRepository $guard, string $base): Content
+    {
+        return new Content(view: 'mail.notifications.guard', text: 'mail.notifications.guard-text', with: [
+            'subject' => $this->guardSubject($guard),
+            'projectUrl' => "{$base}/projects/".rawurlencode($guard->project->identifier).'/settings',
+            'settingsUrl' => "{$base}/me/notifications",
+            'entries' => array_map(fn (array $line) => [
+                'at' => $this->at($line['notification']),
+                'sentence' => __(($line['notification']->data['deleted'] ?? false) === true ? 'mail.notifications.guard.deleted' : 'mail.notifications.guard.sentence', [
+                    'branch' => (string) ($line['notification']->data['branch'] ?? ''),
+                    'sha' => substr((string) ($line['notification']->data['sha'] ?? ''), 0, 7),
+                ]),
+            ], $this->lines),
         ]);
     }
 

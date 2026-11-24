@@ -41,6 +41,7 @@ use Illuminate\Support\Carbon;
  * @property array<string, mixed> $context
  * @property int $attempt
  * @property CarbonImmutable|null $lease_expires_at
+ * @property CarbonImmutable|null $retry_at
  * @property CarbonImmutable|null $started_at
  * @property CarbonImmutable|null $finished_at
  * @property array<string, mixed>|null $result
@@ -59,7 +60,7 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable([
     'type', 'status', 'waiting_reason', 'bot_id', 'cli', 'model', 'model_source', 'model_label_id', 'runner_id', 'project_id',
-    'work_item_id', 'thread_id', 'head_sha', 'trigger_event_id', 'context', 'attempt', 'lease_expires_at', 'started_at',
+    'work_item_id', 'thread_id', 'head_sha', 'trigger_event_id', 'context', 'attempt', 'lease_expires_at', 'retry_at', 'started_at',
     'finished_at', 'result', 'session_id', 'usage', 'error', 'canceled_by', 'events_dropped',
 ])]
 final class AgentRun extends Model
@@ -89,6 +90,7 @@ final class AgentRun extends Model
             'context' => 'array',
             'attempt' => 'integer',
             'lease_expires_at' => 'immutable_datetime',
+            'retry_at' => 'immutable_datetime',
             'started_at' => 'immutable_datetime',
             'finished_at' => 'immutable_datetime',
             'result' => 'array',

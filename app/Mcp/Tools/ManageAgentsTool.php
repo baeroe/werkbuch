@@ -5,10 +5,14 @@ namespace App\Mcp\Tools;
 use App\Actions\AgentRuns\CancelRun;
 use App\Actions\AgentRuns\RetryRun;
 use App\Actions\Agents\SaveAgentConfig;
+use App\Actions\GitHub\ConfirmMergeGuard;
+use App\Actions\GitHub\LinkRepository;
+use App\Actions\GitHub\SyncGitHub;
 use App\Actions\Runners\RevokeRunner;
 use App\Actions\Runners\UpdateRunner;
 use App\Http\Resources\AgentConfigResource;
 use App\Http\Resources\AgentRunResource;
+use App\Http\Resources\GitHubResource;
 use App\Http\Resources\RunnerResource;
 use App\Mcp\Support\McpAction;
 use App\Mcp\Support\McpArguments;
@@ -16,15 +20,18 @@ use App\Mcp\Support\McpResult;
 use App\Mcp\Support\ToolSchema;
 use App\Mcp\Support\WriteTool;
 use App\OpenApi\AgentSchemas;
+use App\OpenApi\GitHubSchemas;
 use App\Support\Actor;
+use App\Support\References;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 /**
  * `manage-agents` (WEBU-20, A482), the pair of `agents`: renames a runner or sets its places, revokes it, cancels a run
- * or starts it again, sets the agent configuration of a bot. Pairing a runner is not here: a one-time code comes only
- * from the session (A397). An agent never steers runs through the token of its own run (403 `agent_forbidden`).
+ * or starts it again, sets the agent configuration of a bot, syncs the GitHub app, gives a project its repo and confirms
+ * an unauthorized merge (WEBU-24). Pairing a runner and connecting or disconnecting GitHub are not here: only from the
+ * session (A397). An agent never steers runs through the token of its own run (403 `agent_forbidden`).
  */
 #[IsDestructive]
 #[IsReadOnly(false)]
@@ -35,7 +42,7 @@ final class ManageAgentsTool extends WriteTool
 
     protected string $title = 'Manage agents';
 
-    protected string $description = 'Changes runners (name, places, revoke; org admins), the agent configuration of a bot (org admins) and runs (cancel, start again; who may change the item).';
+    protected string $description = 'Changes runners (name, places, revoke; org admins), the agent configuration of a bot (org admins), runs (cancel, start again; who may change the item), the GitHub app (sync) and the repo of a project.';
 
     protected function actions(): array
     {
@@ -85,6 +92,29 @@ final class ManageAgentsTool extends WriteTool
                 required: ['bot', 'input'],
                 twin: 'PUT bots/{user}/agent',
                 path: ['user' => 'bot'],
+            ),
+            new McpAction(
+                name: 'sync-github',
+                summary: 'Reads the installations of the GitHub app and their repos from GitHub again (org admins).',
+                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::body(['data' => (new GitHubResource(SyncGitHub::run($actor)))->resolve(request())]),
+                twin: 'POST github/sync',
+            ),
+            new McpAction(
+                name: 'set-repository',
+                summary: 'Gives a project its repo (one the app reaches, at most one project per repo) and base branch, or none; admins of the project.',
+                run: fn (Actor $actor, McpArguments $args): McpResult => AgentsTool::repository(LinkRepository::run($actor, References::project($args->reference('project')), $args->input())),
+                parameters: ['project' => ToolSchema::reference('project')],
+                input: GitHubSchemas::repositoryBody(),
+                required: ['project', 'input'],
+                twin: 'PUT projects/{project}/repository',
+            ),
+            new McpAction(
+                name: 'confirm-merge-guard',
+                summary: 'Confirms an unauthorized merge: the guard goes and the paused strands of the project are open again; admins of the project.',
+                run: fn (Actor $actor, McpArguments $args): McpResult => AgentsTool::repository(ConfirmMergeGuard::run($actor, References::project($args->reference('project')))),
+                parameters: ['project' => ToolSchema::reference('project')],
+                required: ['project'],
+                twin: 'POST projects/{project}/repository/confirm-guard',
             ),
         ];
     }

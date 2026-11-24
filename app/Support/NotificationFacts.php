@@ -31,7 +31,7 @@ final class NotificationFacts
     public const TELLING = [
         EventType::WorkItemCreated, EventType::WorkItemUpdated, EventType::WorkItemStateChanged, EventType::WorkItemAssigned,
         EventType::WorkItemRelationAdded, EventType::WorkItemRelationRemoved, EventType::CommentCreated, EventType::CommentUpdated,
-        EventType::TemplateRunFailed, EventType::WebhookDisabled,
+        EventType::TemplateRunFailed, EventType::WebhookDisabled, EventType::ProjectMergeGuardDetected,
     ];
 
     /**
@@ -62,6 +62,9 @@ final class NotificationFacts
         }
         if ($event->type === EventType::WebhookDisabled) {
             return self::ofWebhook($event);
+        }
+        if ($event->type === EventType::ProjectMergeGuardDetected) {
+            return self::ofMergeGuard($event);
         }
 
         // the events of a comment hang on its item (A227): the subject is always the item
@@ -100,10 +103,6 @@ final class NotificationFacts
      */
     private static function ofWebhook(Event $event): EventFacts
     {
-        Visibility::forget();
-        $admins = array_keys(array_filter(app(RoleIndex::class)->orgRoles(), fn (OrgRole $role) => $role === OrgRole::Admin));
-        $people = $admins === [] ? [] : User::query()->whereKey($admins)->where('type', AccountType::Person)->whereNull('disabled_at')->pluck('id')->all();
-
         return new EventFacts(
             type: $event->type->value,
             actorId: $event->actor_id,
@@ -116,8 +115,50 @@ final class NotificationFacts
             optedOut: [],
             leadId: null,
             stateSnapshot: null,
-            orgAdmins: array_values($people),
+            orgAdmins: self::orgAdmins(),
         );
+    }
+
+    /**
+     * The facts of an unauthorized merge (WEBU-24, A515): the project (one being deleted tells nobody), no item; every
+     * active org admin hears of it (they see every project), whoever else watches the items of the runs reads the comment
+     * at the item.
+     */
+    private static function ofMergeGuard(Event $event): ?EventFacts
+    {
+        $project = Project::query()->find($event->project_id);
+        if ($project === null || $project->deleting_at !== null) {
+            return null;
+        }
+
+        return new EventFacts(
+            type: $event->type->value,
+            actorId: $event->actor_id,
+            projectId: $project->id,
+            itemId: null,
+            changedFields: [],
+            mentioned: [],
+            assignee: null,
+            watchers: [],
+            optedOut: [],
+            leadId: null,
+            stateSnapshot: null,
+            orgAdmins: self::orgAdmins(),
+        );
+    }
+
+    /**
+     * The active people with the org role admin (the role index read afresh, one query for the people). The default
+     * bot is an admin, but no person.
+     *
+     * @return list<string>
+     */
+    private static function orgAdmins(): array
+    {
+        Visibility::forget();
+        $admins = array_keys(array_filter(app(RoleIndex::class)->orgRoles(), fn (OrgRole $role) => $role === OrgRole::Admin));
+
+        return $admins === [] ? [] : array_values(User::query()->whereKey($admins)->where('type', AccountType::Person)->whereNull('disabled_at')->pluck('id')->all());
     }
 
     /** The facts of a failed run of a template: its project, lead and author, no item. */
@@ -165,6 +206,10 @@ final class NotificationFacts
             NotificationKind::ItemChanged => ['fields' => EventFacts::fieldsOf($event->type->value, $event->changes)],
             NotificationKind::TemplateRunFailed => ['template_id' => $event->subject_id, 'error' => $event->meta['error'] ?? null],
             NotificationKind::WebhookDisabled => ['webhook_id' => $event->subject_id, 'name' => $event->meta['name'] ?? null],
+            NotificationKind::MergeGuardDetected => [
+                'sha' => $event->changes['guard']['new'] ?? null, 'branch' => $event->meta['branch'] ?? null,
+                'deleted' => ($event->meta['deleted'] ?? false) === true, 'item_ids' => $event->meta['item_ids'] ?? [],
+            ],
             default => [],
         };
     }

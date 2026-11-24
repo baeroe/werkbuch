@@ -41,6 +41,9 @@ it('knows the events of this phase that have no webhook', function () {
         // runners, agents and their runs (WEBU-20, A478)
         'runner.paired', 'runner.updated', 'runner.revoked', 'agent_config.updated',
         'agent_run.queued', 'agent_run.started', 'agent_run.canceled', 'agent_run.finished',
+        // the GitHub app, the repo of a project and the guard against an unauthorized merge (WEBU-24, A514)
+        'github.connected', 'github.disconnected', 'project.repository_changed', 'project.merge_guard_detected',
+        'project.merge_guard_confirmed',
     ])->sort()->values()->all());
 });
 

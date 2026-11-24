@@ -6,11 +6,15 @@ use App\Actions\AgentRuns\GetRun;
 use App\Actions\AgentRuns\ListRunEvents;
 use App\Actions\AgentRuns\ListRuns;
 use App\Actions\Agents\GetAgentConfig;
+use App\Actions\GitHub\GetGitHub;
+use App\Actions\GitHub\GetProjectRepository;
 use App\Actions\Runners\GetRunner;
 use App\Actions\Runners\ListRunners;
 use App\Http\Resources\AgentConfigResource;
 use App\Http\Resources\AgentRunEventResource;
 use App\Http\Resources\AgentRunResource;
+use App\Http\Resources\GitHubResource;
+use App\Http\Resources\ProjectRepositoryResource;
 use App\Http\Resources\RunnerResource;
 use App\Mcp\Support\McpAction;
 use App\Mcp\Support\McpArguments;
@@ -18,6 +22,7 @@ use App\Mcp\Support\McpResult;
 use App\Mcp\Support\ReadTool;
 use App\Mcp\Support\ToolSchema;
 use App\Models\AgentRun;
+use App\Models\ProjectRepository;
 use App\Models\Runner;
 use App\Models\User;
 use App\Support\Actor;
@@ -26,8 +31,8 @@ use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 /**
- * `agents` (WEBU-20, A482): one tool for runners, the agent configuration of bots and the runs of agents, as
- * `organization` is one for the catalogs. Runners and configurations are the org admins'; runs read who sees their
+ * `agents` (WEBU-20, A482): one tool for runners, the agent configuration of bots, the runs of agents and the GitHub app
+ * with the repos of projects (WEBU-24, A518), as `organization` is one for the catalogs. Runners and configurations are the org admins'; runs read who sees their
  * project. Never a token.
  */
 #[IsReadOnly]
@@ -38,7 +43,7 @@ final class AgentsTool extends ReadTool
 
     protected string $title = 'Agents';
 
-    protected string $description = 'Reads runners (org admins), the agent configuration of a bot (org admins) and the runs of agents with their logs (who sees the project).';
+    protected string $description = 'Reads runners (org admins), the agent configuration of a bot (org admins), the runs of agents with their logs (who sees the project), the GitHub app and the repo of a project.';
 
     protected function actions(): array
     {
@@ -96,7 +101,27 @@ final class AgentsTool extends ReadTool
                 twin: 'GET bots/{user}/agent',
                 path: ['user' => 'bot'],
             ),
+            new McpAction(
+                name: 'get-github',
+                summary: 'The GitHub app of the instance, its installations and repos with their project; never a key.',
+                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::body(['data' => (new GitHubResource(GetGitHub::run($actor)))->resolve(request())]),
+                twin: 'GET github',
+            ),
+            new McpAction(
+                name: 'get-repository',
+                summary: 'The repo of a project with its base branch, the ruleset hint and the guard against an unauthorized merge; `data` null without one.',
+                run: fn (Actor $actor, McpArguments $args): McpResult => self::repository(GetProjectRepository::run($actor, References::project($args->reference('project')))),
+                parameters: ['project' => ToolSchema::reference('project')],
+                required: ['project'],
+                twin: 'GET projects/{project}/repository',
+            ),
         ];
+    }
+
+    /** The repo of a project as REST answers it: `{data}`, null without one. */
+    public static function repository(?ProjectRepository $link): McpResult
+    {
+        return McpResult::body(['data' => $link === null ? null : (new ProjectRepositoryResource($link))->resolve(request())]);
     }
 
     public static function runner(McpArguments $args): Runner

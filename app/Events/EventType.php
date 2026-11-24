@@ -124,6 +124,14 @@ enum EventType: string
     case AgentRunCanceled = 'agent_run.canceled';
     case AgentRunFinished = 'agent_run.finished';
 
+    // the one GitHub app (WEBU-24, spec 10.2, 11.3): connected and disconnected (subject the organization), the repo of a
+    // project and the guard against an unauthorized merge (subject the project); no webhook (A514), never a secret
+    case GitHubConnected = 'github.connected';
+    case GitHubDisconnected = 'github.disconnected';
+    case ProjectRepositoryChanged = 'project.repository_changed';
+    case ProjectMergeGuardDetected = 'project.merge_guard_detected';
+    case ProjectMergeGuardConfirmed = 'project.merge_guard_confirmed';
+
     /**
      * Whether webhooks can subscribe to this event.
      */

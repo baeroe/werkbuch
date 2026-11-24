@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AutomationsController;
 use App\Http\Controllers\Api\BotsController;
 use App\Http\Controllers\Api\CommentsController;
 use App\Http\Controllers\Api\FavoritesController;
+use App\Http\Controllers\Api\GitHubController;
 use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\InvitationsController;
 use App\Http\Controllers\Api\LabelsController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PagesController;
 use App\Http\Controllers\Api\PageVersionsController;
 use App\Http\Controllers\Api\PasswordController;
+use App\Http\Controllers\Api\ProjectRepositoriesController;
 use App\Http\Controllers\Api\ProjectsController;
 use App\Http\Controllers\Api\PropertiesController;
 use App\Http\Controllers\Api\RelationsController;
@@ -253,6 +255,15 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::post('runs/{run}/cancel', [RunsController::class, 'cancel']);
     Route::post('runs/{run}/retry', [RunsController::class, 'retry']);
 
+    // the one GitHub app (spec 10.2, WEBU-24): every account reads it, org admins sync it; the repo of a project (spec
+    // 10.3) and the confirmation of an unauthorized merge (spec 11.3) for its admins; connecting and disconnecting only
+    // from the session (below)
+    Route::get('github', [GitHubController::class, 'show']);
+    Route::post('github/sync', [GitHubController::class, 'sync']);
+    Route::get('projects/{project}/repository', [ProjectRepositoriesController::class, 'show']);
+    Route::put('projects/{project}/repository', [ProjectRepositoriesController::class, 'update']);
+    Route::post('projects/{project}/repository/confirm-guard', [ProjectRepositoriesController::class, 'confirmGuard']);
+
     // only from the session of the interface, never with a token (P6): no token mints tokens (no wider abilities, no
     // tokens of bots, no longer life), and the own password and second factor stay out of a stolen token's reach
     Route::middleware(EnsureSession::class)->group(function () {
@@ -260,6 +271,9 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
         // a one-time code for a runner is as good as a token of it (A473)
         Route::post('runner-pairings', [RunnerPairingsController::class, 'store']);
         Route::get('runner-pairings/{pairing}', [RunnerPairingsController::class, 'show']);
+        // the app holds the key to every repo it is installed on (A397)
+        Route::post('github/manifest', [GitHubController::class, 'manifest']);
+        Route::delete('github', [GitHubController::class, 'destroy']);
     });
     Route::middleware(EnsureSession::class)->prefix('me')->group(function () {
         Route::put('password', [PasswordController::class, 'update'])->middleware('throttle:password-change');

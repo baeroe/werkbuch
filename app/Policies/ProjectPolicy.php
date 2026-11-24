@@ -36,6 +36,15 @@ final class ProjectPolicy
         return self::inProject($user, $project, Permission::ProjectManage, __('problem.detail.project_settings_admins'));
     }
 
+    /**
+     * The repo of the project and the confirmation of an unauthorized merge (spec 10.3, 11.3): `project.manage`, the
+     * admins of the project.
+     */
+    public function manageRepository(User $user, Project $project): Response
+    {
+        return self::inProject($user, $project, Permission::ProjectManage, __('problem.detail.repository_admins_only'));
+    }
+
     /** Switching the workflow (with a mapping of the states): `project.manage`, the admins of the project. */
     public function changeWorkflow(User $user, Project $project): Response
     {

@@ -10,6 +10,7 @@ use App\Mail\NotificationDigest;
 use App\Models\Notification;
 use App\Models\NotificationMail;
 use App\Models\NotificationPreference;
+use App\Models\ProjectRepository;
 use App\Models\Template;
 use App\Models\User;
 use App\Models\Webhook;
@@ -83,8 +84,9 @@ final class SendNotificationMail
         $person = User::query()->findOrFail($mail->user_id);
         $template = self::templateOf($mail);
         $webhook = self::webhookOf($mail);
+        $guard = self::guardOf($mail);
         // a mail server that went away since the collection opened (`log`, `array`) sends nothing: skipped, never `sent`
-        $lines = MailSetup::configured() ? $this->lines($mail, $person, $template, $webhook) : new EloquentCollection;
+        $lines = MailSetup::configured() ? $this->lines($mail, $person, $template, $webhook, $guard) : new EloquentCollection;
         if ($lines->isNotEmpty()) {
             $texts = Notification::textsOf($lines);
             $digest = new NotificationDigest(
@@ -94,6 +96,7 @@ final class SendNotificationMail
                 reminders: str_starts_with($mail->scope, 'due:'),
                 template: $template,
                 webhook: $webhook,
+                guard: $guard,
             );
             Mail::to($person)->locale($person->preferredLocale())->send($digest);
         }
@@ -126,7 +129,7 @@ final class SendNotificationMail
      *
      * @return EloquentCollection<int, Notification>
      */
-    private function lines(NotificationMail $mail, User $person, ?Template $template, ?Webhook $webhook): EloquentCollection
+    private function lines(NotificationMail $mail, User $person, ?Template $template, ?Webhook $webhook, ?ProjectRepository $guard): EloquentCollection
     {
         if (! $person->isPerson() || $person->isDisabled()) {
             return new EloquentCollection;
@@ -143,6 +146,8 @@ final class SendNotificationMail
                 // a switched-off webhook has no item: it needs to be there and still off (phase 11, K12); that the person is
                 // still an org admin is Notification::visibleTo
                 $line->kind === NotificationKind::WebhookDisabled => $webhook !== null && ! $webhook->active && ($line->data['webhook_id'] ?? null) === $webhook->id,
+                // an unauthorized merge has no item: it needs its guard still to hold the project (WEBU-24)
+                $line->kind === NotificationKind::MergeGuardDetected => $guard !== null && $guard->guarded() && $line->project_id === $guard->project_id,
                 $line->workItem === null => false,
                 $line->kind === NotificationKind::Due => self::stillDue($line->workItem, $person),
                 default => true,
@@ -174,6 +179,19 @@ final class SendNotificationMail
         }
 
         return Webhook::query()->find(substr($mail->scope, strlen('webhook:')));
+    }
+
+    /**
+     * The repo of the project of a collection of unauthorized merges (`guard:<project>`, WEBU-24) with the project, if
+     * the project still has one; null for every other collection.
+     */
+    private static function guardOf(NotificationMail $mail): ?ProjectRepository
+    {
+        if (! str_starts_with($mail->scope, 'guard:')) {
+            return null;
+        }
+
+        return ProjectRepository::query()->with('project')->where('project_id', substr($mail->scope, strlen('guard:')))->first();
     }
 
     /**

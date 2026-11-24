@@ -43,6 +43,14 @@ return [
         'timeout' => (int) env('GOTENBERG_TIMEOUT', 30),
     ],
 
+    // the one GitHub app of the instance (WEBU-24, spec 11.3): GitHub itself, no enterprise server (spec 2); seconds for
+    // one call (a claim waits for the token of its run)
+    'github' => [
+        'api_url' => 'https://api.github.com',
+        'web_url' => 'https://github.com',
+        'timeout' => 10,
+    ],
+
     // classes implementing App\Events\EventConsumer: each receives every domain event once, after the commit, in its own
     // queue (App\Events\Outbox): the search index, the notifications, the live updates and the webhooks (rows only, the
     // HTTP in jobs of their own). Off in tests (Tests\TestCase), where consumers() switches them on.

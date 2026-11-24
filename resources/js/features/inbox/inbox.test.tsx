@@ -322,6 +322,19 @@ describe('the inbox', () => {
     expect(webhook.getAttribute('href')).toBe('/settings/webhooks?deliveries=wh_crm');
   });
 
+  it('says an unauthorized merge at its project and leads to the settings of the project', async () => {
+    notifications = [
+      makeNotification({ id: 'n_guard', event: 'merge_guard_detected', actor_id: null, work_item_id: null, item: null, project_id: 'p_web', excerpt: null, data: { sha: 'a41c9e7d00', branch: 'main', deleted: false, item_ids: [] }, created_at: '2026-10-28T07:00:00.000Z' }),
+      makeNotification({ id: 'n_gone', event: 'merge_guard_detected', actor_id: null, work_item_id: null, item: null, project_id: 'p_web', excerpt: null, data: { sha: 'b52d0f8e00', branch: 'main', deleted: true }, created_at: '2026-10-28T06:00:00.000Z' }),
+    ];
+    renderInbox();
+
+    const pushed = await screen.findByRole('link', { name: /Die GitHub-App hat außerhalb eines Merges von werkbuch auf main gepusht \(a41c9e7\)/ });
+    expect(pushed.textContent).toContain('Alle Stränge des Projekts pausieren');
+    expect(pushed.getAttribute('href')).toBe('/projects/WEB/settings');
+    expect(screen.getByRole('link', { name: /Die GitHub-App hat den Basis-Branch main gelöscht \(b52d0f8\)/ })).toBeTruthy();
+  });
+
   it('shows what belongs to no item without the template or the webhook behind it', async () => {
     renderInbox();
     await loaded();

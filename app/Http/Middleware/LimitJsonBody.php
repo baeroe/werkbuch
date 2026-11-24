@@ -27,7 +27,7 @@ final class LimitJsonBody
 
     public function handle(Request $request, Closure $next): Response
     {
-        if (! ApiPaths::problems($request) || $this->isForm($request)) {
+        if (! ApiPaths::problems($request) || $request->is(VerifyGitHubSignature::PATH) || $this->isForm($request)) {
             return $next($request);
         }
 

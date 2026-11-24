@@ -559,7 +559,7 @@ final class OperationsSchemas
             'NotificationResource' => [
                 'data' => self::object(
                     'What the kind needs, ids and names only: `mentioned` has `source` (`comment`, `description`, `values`) and for a comment `comment_id`; `comment` has `comment_id`; `state_changed` has `from` and `to` (the states as they were); '
-                        .'`item_changed` has `fields`; `due` has `due_date` and `overdue`; `template_run_failed` has `template_id` and `error`; `webhook_disabled` has `webhook_id` and `name`. Other kinds have none.',
+                        .'`item_changed` has `fields`; `due` has `due_date` and `overdue`; `template_run_failed` has `template_id` and `error`; `webhook_disabled` has `webhook_id` and `name`; `merge_guard_detected` has `sha`, `branch`, `deleted` and `item_ids`. Other kinds have none.',
                     [
                         'source' => ['type' => 'string', 'enum' => ['comment', 'description', 'values']],
                         'comment_id' => ['type' => ['string', 'null']],
@@ -572,6 +572,10 @@ final class OperationsSchemas
                         'error' => ['type' => ['string', 'null']],
                         'webhook_id' => ['type' => ['string', 'null']],
                         'name' => ['type' => ['string', 'null']],
+                        'sha' => ['type' => ['string', 'null']],
+                        'branch' => ['type' => ['string', 'null']],
+                        'deleted' => ['type' => 'boolean'],
+                        'item_ids' => ['type' => 'array', 'items' => ['type' => 'string']],
                     ],
                 ),
                 'excerpt' => ['type' => ['string', 'null'], 'description' => 'The start of the current text for the reader (a comment, or the description for a mention); `null` for the other kinds and for a comment that is gone.'],
