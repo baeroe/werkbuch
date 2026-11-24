@@ -153,7 +153,8 @@ test('sets the agents of a project: merge method, brakes, a model per kind of ru
     await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.type('5');
 
-    await choose(page, page.getByRole('combobox', { name: new RegExp(`^${label('settings.runners.run.type.review')} `) }), 'opus');
+    // "Review" of the models, not the review agent above them
+    await choose(page, page.getByRole('combobox', { name: new RegExp(`^${label('settings.runners.run.type.review')} (?!${label('settings.project.agents.review_bot.label').split(' ')[1]})`) }), 'opus');
     await expect(page.getByText(label('settings.agents.model_for_cli', { cli: 'Claude Code' }))).toBeVisible();
 
     await tabTo(page, page.getByRole('textbox', { name: label('settings.project.agents.instructions.label') }));
