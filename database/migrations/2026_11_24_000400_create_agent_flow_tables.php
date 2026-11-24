@@ -66,13 +66,16 @@ return new class extends Migration
 
         Schema::table('work_item_links', function (Blueprint $table) {
             $table->timestamp('head_seen_at')->nullable()->after('head_sha');
+            // the head commit whose check runs werkbuch last read from GitHub itself, and when (A591)
+            $table->string('checks_loaded_sha', 40)->nullable()->after('head_seen_at');
+            $table->timestamp('checks_loaded_at')->nullable()->after('checks_loaded_sha');
         });
     }
 
     public function down(): void
     {
         Schema::table('work_item_links', function (Blueprint $table) {
-            $table->dropColumn('head_seen_at');
+            $table->dropColumn(['head_seen_at', 'checks_loaded_sha', 'checks_loaded_at']);
         });
 
         Schema::table('agent_runs', function (Blueprint $table) {

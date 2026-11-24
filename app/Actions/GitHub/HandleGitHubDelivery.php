@@ -4,10 +4,13 @@ namespace App\Actions\GitHub;
 
 use App\Actions\Agents\HandleAgentPullRequest;
 use App\Actions\Agents\HandleCheckResult;
+use App\Actions\Agents\StartReview;
 use App\Actions\Links\SyncChecks;
 use App\Actions\Links\SyncPullRequest;
 use App\GitHub\GitHubUnavailable;
 use App\Jobs\CheckPullRequestMergeability;
+use App\Jobs\LoadPullRequestChecks;
+use App\Models\AgentProjectSettings;
 use App\Models\AgentThread;
 use App\Models\GitHubApp;
 use App\Models\GitHubDelivery;
@@ -29,6 +32,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
 final class HandleGitHubDelivery
 {
     use AsAction;
+
+    /** The actions of a `pull_request` after which its head may be a commit werkbuch has no check runs of yet. */
+    public const NEW_HEAD = ['opened', 'reopened', 'synchronize', 'ready_for_review'];
 
     /**
      * @throws GitHubUnavailable when GitHub does not answer the sync (the job tries again)
@@ -91,6 +97,25 @@ final class HandleGitHubDelivery
         $outcome = SyncPullRequest::run($actor, $payload);
         if ($outcome === 'agent') {
             HandleAgentPullRequest::run($actor, $payload);
+        }
+
+        $pr = is_array($payload['pull_request'] ?? null) ? $payload['pull_request'] : [];
+        $sha = is_array($pr['head'] ?? null) ? ($pr['head']['sha'] ?? null) : null;
+        $repositoryId = is_array($payload['repository'] ?? null) ? ($payload['repository']['id'] ?? null) : null;
+        $link = $outcome === 'ignored' || ! is_int($repositoryId) || ! is_string($sha) ? null
+            : ProjectRepository::query()->with('project')->whereHas('repository', fn ($query) => $query->where('github_id', $repositoryId))->first();
+
+        if ($link !== null && ($pr['state'] ?? null) === 'open') {
+            // a person's PR: a review by the agent of the project cancels when its PR moves on (A596)
+            if ($outcome === 'linked' && is_int($pr['number'] ?? null)) {
+                StartReview::cancelStale($actor, $repositoryId, $pr['number'], $sha);
+            }
+
+            // the check runs of a new head that came before the PR had it (A591), where the flow reads them
+            if (in_array($payload['action'] ?? null, self::NEW_HEAD, true)
+                && ($outcome === 'agent' || (AgentProjectSettings::of($link->project_id)->review_person_prs && StartReview::reviewer($link->project, null) !== null))) {
+                LoadPullRequestChecks::dispatch($repositoryId, $sha);
+            }
         }
 
         return $outcome;

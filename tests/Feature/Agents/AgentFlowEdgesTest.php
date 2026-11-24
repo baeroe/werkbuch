@@ -565,7 +565,10 @@ it('builds the job of every kind with the layers of the organization, the type a
         ->and($correction['prompt'])->toContain('„Footer phone“')->toContain('The pull request is #3.')->toContain('from review')->toContain('Important: no test')
         ->and($make(RunType::Conflict, [])['prompt'])->toContain('base branch `main`')
         ->and($make(RunType::Comment, ['author' => 'Mara', 'question' => 'Why?'])['prompt'])->toContain('Mara asked you')
-        ->and($make(RunType::Review, ['repository' => 'feldwerk/website', 'base_branch' => 'main'], ['pr_number' => 3, 'head_sha' => 'abc', 'work_item_id' => null])['prompt'])->toContain('It names no item of the project.');
+        ->and($make(RunType::Review, ['repository' => 'feldwerk/website', 'base_branch' => 'main'], ['pr_number' => 3, 'head_sha' => 'abc', 'work_item_id' => null])['prompt'])->toContain('It names no item of the project.')
+        // a review has no shell and no token: it reads the files the runner put down (A493), never `gh`
+        ->toContain('`pull-request.diff`')->toContain('`pull-request-log.txt`')->not->toContain('gh pr')
+        ->and($correction['prompt'])->toEndWith(RunPrompts::DATA);
 });
 
 it('makes a correction of the findings of a review at the head of the strand', function () use ($strand, $ended) {

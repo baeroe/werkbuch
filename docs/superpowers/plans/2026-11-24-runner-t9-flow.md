@@ -12,7 +12,7 @@
 
 - Alle Regeln aus `CLAUDE.md` (Actions/Domain, Events nur in Transaktionen, Sichtbarkeit, Rechte- und Routen-Matrix, OpenAPI-Vertrag, MCP-Parität und Budget, 100 % Zeilen, Doku beider Sprachen).
 - Kein HTTP unter einer Sperre und nie in der Claim-Transaktion eines Konsumenten; Jobs `afterCommit`, nur IDs.
-- Sperren: Organisation geteilt → Projekt geteilt → Item(s) nach ID → Strang (`agent_threads` `for update`) → Aufträge (wie `FinishRun`/`ClaimRun`: Auftrag vor Strang nur im Protokoll; der Ablauf sperrt den Strang erst nach den Items, nie einen Auftrag vor dem Strang).
+- Sperren: Organisation geteilt → Projekt geteilt → Item(s) nach ID → offene Aufträge des Strangs → Strang (`AgentFlow::lockStrand`, A592; wie `FinishRun`/`ClaimRun`, die Auftrag → Strang sperren: die Kreuzung wartet immer am Auftrag).
 - Keine Oberfläche (`resources/js` bleibt; WEBU-27/32). Daten, REST und MCP vollständig.
 
 ## Datenmodell (Migration `2026_11_24_000400_create_agent_flow_tables`)

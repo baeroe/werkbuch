@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Actions\Agents\GiveUpOnThread;
 use App\Actions\Agents\MarkThreadReady;
 use App\Models\User;
 use App\Support\Actor;
@@ -21,6 +22,12 @@ final class MarkPullRequestReady implements ShouldQueue
     public array $backoff = [30, 120, 300, 900];
 
     public function __construct(public readonly string $threadId) {}
+
+    /** Every attempt failed: the epic is ready again for a later try, the agent says so (A601). */
+    public function failed(): void
+    {
+        GiveUpOnThread::run(Actor::system(User::defaultBot(), 'agents'), $this->threadId, 'ready');
+    }
 
     public function handle(): void
     {

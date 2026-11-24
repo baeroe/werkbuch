@@ -3,6 +3,7 @@
 namespace App\Actions\Agents;
 
 use App\Actions\AgentRuns\EnqueueRun;
+use App\Actions\GitHub\DetectUnauthorizedPush;
 use App\Domain\Agents\Brakes;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
@@ -49,11 +50,15 @@ final class StartCorrection
                 return null;
             }
 
+            // a person assigns the bot again: the brakes start again; while the guard holds the project the strand stays
+            // paused for it, and the correction waits with the runs of the project (A597)
+            $guarded = $resetBrakes && AgentFlow::guarded($locked->project_id);
             if ($resetBrakes) {
-                $locked->forceFill(['corrections' => 0, 'conflicts' => 0, 'status' => AgentThread::OPEN, 'pause_reason' => null])->save();
+                $locked->forceFill(['corrections' => 0, 'conflicts' => 0, 'status' => $guarded ? AgentThread::PAUSED : AgentThread::OPEN,
+                    'pause_reason' => $guarded ? DetectUnauthorizedPush::REASON : null])->save();
             }
 
-            if ($locked->status === AgentThread::PAUSED) {
+            if ($locked->status === AgentThread::PAUSED && ! $guarded) {
                 return null;
             }
 
@@ -62,6 +67,11 @@ final class StartCorrection
                 $waiting->forceFill(['context' => [...$waiting->context, 'findings' => $waiting->context['findings']."\n\n".$findings]])->save();
 
                 return $waiting;
+            }
+
+            // CI and review of a strand whose run is at work judge a push in between (A593): its end looks again
+            if (in_array($source, ['ci', 'review'], true) && $runs->contains(fn (AgentRun $run) => in_array($run->type, AgentFlow::CODE, true))) {
+                return null;
             }
 
             if ($headSha !== null && AgentRun::query()->where('thread_id', $locked->id)->where('type', RunType::Correction->value)->where('head_sha', $headSha)

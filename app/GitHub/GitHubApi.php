@@ -145,6 +145,32 @@ final class GitHubApi
             ->post('/repos/'.self::repoPath($fullName).'/pulls/'.$number.'/reviews', ['commit_id' => $sha, 'event' => $event, 'body' => $body]), 'pulls/reviews');
     }
 
+    /**
+     * The check runs of a commit (A591: what came before werkbuch knew the commit as the head of a PR).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function checkRuns(string $token, string $fullName, string $sha): array
+    {
+        return self::pages(fn (int $page) => self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->get('/repos/'.self::repoPath($fullName).'/commits/'.rawurlencode($sha).'/check-runs', ['per_page' => 100, 'page' => $page]), 'check-runs'), 'check_runs');
+    }
+
+    /**
+     * The bodies of the reviews of a pull request, or of the comments at it (`issues/{n}/comments`): to find what
+     * werkbuch posted already.
+     *
+     * @return list<string>
+     */
+    public static function bodies(string $token, string $fullName, int $number, bool $reviews): array
+    {
+        $path = '/repos/'.self::repoPath($fullName).($reviews ? '/pulls/'.$number.'/reviews' : '/issues/'.$number.'/comments');
+        $rows = self::pages(fn (int $page) => self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->get($path, ['per_page' => 100, 'page' => $page]), $reviews ? 'pulls/reviews' : 'issues/comments'), null);
+
+        return array_map(fn (array $row) => is_string($row['body'] ?? null) ? $row['body'] : '', $rows);
+    }
+
     /** Marks a draft pull request ready for review (only GraphQL can). */
     public static function markReady(string $token, string $nodeId): void
     {

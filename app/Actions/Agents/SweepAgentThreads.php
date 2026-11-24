@@ -3,6 +3,7 @@
 namespace App\Actions\Agents;
 
 use App\Domain\Workflow\AgentStep;
+use App\Jobs\LoadPullRequestChecks;
 use App\Models\AgentThread;
 use App\Models\User;
 use App\Models\WorkItem;
@@ -15,8 +16,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * Every minute (spec 7.2): a strand whose task ended two minutes ago without a PR never got one (a comment and
- * „Korrektur“); a PR whose head commit came two minutes ago without any check counts as green (HandleCheckResult, its
- * review and merge are once per commit). Looks back a day at most. Answers how many it handled.
+ * „Korrektur“); for a PR whose head commit came two minutes ago without any check GitHub is asked for its check runs
+ * (LoadPullRequestChecks, A591: only a commit GitHub has none for counts green). Looks back a day at most, the oldest
+ * first. Answers how many it handled.
  */
 final class SweepAgentThreads
 {
@@ -27,17 +29,22 @@ final class SweepAgentThreads
         $settled = now()->subMinutes(AgentFlow::SETTLE_MINUTES);
         $count = 0;
 
-        foreach (AgentThread::query()->where('status', AgentThread::OPEN)->whereNull('pr_number')->where('awaiting_pr_since', '<=', $settled)->orderBy('id')->limit(200)->get() as $thread) {
+        foreach (AgentThread::query()->where('status', AgentThread::OPEN)->whereNull('pr_number')->where('awaiting_pr_since', '<=', $settled)
+            ->orderBy('awaiting_pr_since')->orderBy('id')->limit(200)->get() as $thread) {
             $count += self::noPr($thread);
         }
 
-        $quiet = WorkItemLink::query()->select('repository_github_id', 'head_sha')->distinct()->where('state', WorkItemLink::OPEN)->where('draft', false)
+        // a head without any check: GitHub is asked once more after it settled (A591), only that may count it green
+        $quiet = WorkItemLink::query()->selectRaw('repository_github_id, head_sha, min(head_seen_at) as seen')->where('state', WorkItemLink::OPEN)->where('draft', false)
             ->whereBetween('head_seen_at', [now()->subDay(), $settled])
+            ->where(fn ($unasked) => $unasked->whereNull('checks_loaded_at')->orWhereColumn('checks_loaded_sha', '!=', 'head_sha')
+                ->orWhereRaw('checks_loaded_at < head_seen_at + interval '.AgentFlow::SETTLE_MINUTES.' minute'))
             ->whereNotExists(fn ($checks) => $checks->selectRaw('1')->from('work_item_link_checks')->whereColumn('work_item_link_checks.work_item_link_id', 'work_item_links.id')
                 ->whereColumn('work_item_link_checks.head_sha', 'work_item_links.head_sha'))
-            ->limit(200)->get();
+            ->groupBy('repository_github_id', 'head_sha')->orderBy('seen')->limit(200)->get();
         foreach ($quiet as $link) {
-            $count += HandleCheckResult::run($actor, $link->repository_github_id, $link->head_sha) === 'nothing' ? 0 : 1;
+            LoadPullRequestChecks::dispatch((int) $link->repository_github_id, (string) $link->head_sha);
+            $count++;
         }
 
         return $count;

@@ -10,6 +10,7 @@ use App\Actions\WorkItems\UpdateWorkItem;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
 use App\Domain\Workflow\AgentStep;
+use App\Domain\Workflow\StateCategory;
 use App\Enums\Locale;
 use App\Exceptions\Problem;
 use App\Models\AgentConfig;
@@ -57,11 +58,53 @@ final class AgentFlow
         };
     }
 
-    /** The open or paused strand of an item (or epic), locked, when it has one. */
+    /** The open or paused strand of an item (or epic), when it has one: not locked, lock it with `lockStrand`. */
     public static function threadAt(string $itemId): ?AgentThread
     {
-        return AgentThread::query()->lockForUpdate()->where('work_item_id', $itemId)
+        return AgentThread::query()->where('work_item_id', $itemId)
             ->whereIn('status', [AgentThread::OPEN, AgentThread::PAUSED])->orderByDesc('id')->first();
+    }
+
+    /**
+     * Locks a strand as every action of the flow does, after its item: the runs of the strand that have not ended, then
+     * the strand row (A592: item → runs → strand, as FinishRun and the claim lock run → strand). Answers both.
+     *
+     * @return array{0: Collection<int, AgentRun>, 1: AgentThread}
+     */
+    public static function lockStrand(AgentThread $thread): array
+    {
+        $runs = self::openRuns($thread);
+
+        return [$runs, AgentThread::query()->lockForUpdate()->findOrFail($thread->id)];
+    }
+
+    /** The kinds of runs that change code: while one of them waits or runs, CI and review of the strand decide nothing. */
+    public const CODE = [RunType::Task, RunType::Correction, RunType::Conflict];
+
+    /**
+     * Whether a run of a strand that changes code has not ended (A593): a push of it in between is no state to judge,
+     * the end of the run looks at the head again (HandleRunResult).
+     */
+    public static function coding(AgentThread $thread): bool
+    {
+        return AgentRun::query()->where('thread_id', $thread->id)->whereIn('type', array_map(fn (RunType $type) => $type->value, self::CODE))
+            ->whereIn('status', [RunStatus::Queued->value, RunStatus::Waiting->value, RunStatus::Running->value, RunStatus::Canceling->value])->exists();
+    }
+
+    /**
+     * Whether the strand of an epic with children still works through them (spec 7.6, A594): its PR is reviewed and
+     * merged only once werkbuch made it ready (`ready_requested_at`, ReadyEpic), draft or not.
+     */
+    public static function epicPending(AgentThread $thread): bool
+    {
+        return $thread->ready_requested_at === null && WorkItem::query()->whereKey($thread->work_item_id)->whereHas('type', fn ($query) => $query->where('is_epic', true))->exists()
+            && WorkItem::query()->where('parent_id', $thread->work_item_id)->exists();
+    }
+
+    /** Whether the guard against an unauthorized merge holds the project (spec 11.3): nothing merges then. */
+    public static function guarded(string $projectId): bool
+    {
+        return ProjectRepository::query()->where('project_id', $projectId)->whereNotNull('guard_detected_at')->exists();
     }
 
     /** The repo of a project as a strand starts with it: its GitHub ID and base branch, nothing without one. */
@@ -80,7 +123,10 @@ final class AgentFlow
         $workflow = Workflow::query()->with('states')->find($locked->project->workflow_id);
         $state = $workflow?->agentState($step);
 
-        if ($state === null || $locked->archived_at !== null || $locked->state_id === $state || ($step !== AgentStep::Merged && $locked->state->category->isClosed())) {
+        // a canceled item stays canceled, also when its PR is merged after all (a person decided, A595)
+        $category = $locked->state->category;
+        if ($state === null || $locked->archived_at !== null || $locked->state_id === $state || $category === StateCategory::Canceled
+            || ($step !== AgentStep::Merged && $category->isClosed())) {
             return;
         }
 
@@ -161,13 +207,21 @@ final class AgentFlow
     }
 
     /**
-     * The state of the CI of a link at its head commit (spec 7.2): from its check runs; without any it is green two
-     * minutes after the head commit came.
+     * The state of the CI of a link at its head commit (spec 7.2): from its check runs. Without any it is green only
+     * when werkbuch asked GitHub for the check runs of that commit at least two minutes after it came and GitHub had none
+     * (A591: a repo without CI); else it stays `none` and the sweep asks GitHub (LoadChecks).
      */
     public static function ci(WorkItemLink $link): string
     {
         $state = $link->ci();
 
-        return $state === 'none' && $link->head_seen_at !== null && $link->head_seen_at->lte(now()->subMinutes(self::SETTLE_MINUTES)) ? 'success' : $state;
+        return $state === 'none' && self::askedLate($link) ? 'success' : $state;
+    }
+
+    /** Whether werkbuch asked GitHub for the check runs of the head commit of a link once the commit had settled. */
+    public static function askedLate(WorkItemLink $link): bool
+    {
+        return $link->head_seen_at !== null && $link->checks_loaded_sha === $link->head_sha && $link->checks_loaded_at !== null
+            && $link->checks_loaded_at->gte($link->head_seen_at->copy()->addMinutes(self::SETTLE_MINUTES));
     }
 }

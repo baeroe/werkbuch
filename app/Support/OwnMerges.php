@@ -31,6 +31,17 @@ final class OwnMerges
         $merge->forceFill(['merge_sha' => strtolower($sha), 'merged_at' => now()])->save();
     }
 
+    /**
+     * The merge of a PR werkbuch asked for is done: its commit, from GitHub's own word (the PR merged) when the answer
+     * to the merge got lost (A600). Only merges of that PR still without a commit; nothing for a PR werkbuch never
+     * merged.
+     */
+    public static function settle(string $repositoryId, int $prNumber, string $sha): void
+    {
+        GitHubMerge::query()->where('repository_id', $repositoryId)->where('pr_number', $prNumber)->whereNull('merge_sha')
+            ->update(['merge_sha' => strtolower($sha), 'merged_at' => now()]);
+    }
+
     /** Whether a commit on the base branch of the repo is werkbuch's own merge, may still be, or is not. */
     public static function explain(string $repositoryId, string $sha): string
     {

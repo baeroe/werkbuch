@@ -17,13 +17,13 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * Pauses a strand (spec 7.2): its PR, branch, worktree and session stay, what of it waits or runs is canceled. At the
  * brake (`brake`) the item goes to „Korrektur“ and to the responsible person of the bot, with the last finding in a
  * comment of the agent (that assignment ends nothing: its actor is the agent). A person who gives the item to someone
- * else pauses it too (`reassigned`).
+ * else pauses it too (`reassigned`), and one who cancels the item (`canceled`, A595).
  */
 final class PauseThread
 {
     use AsAction;
 
-    public const REASONS = ['brake', 'reassigned'];
+    public const REASONS = ['brake', 'reassigned', 'canceled'];
 
     public function handle(Actor $actor, AgentThread $thread, string $reason, ?string $finding = null): AgentThread
     {

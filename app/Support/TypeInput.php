@@ -99,7 +99,8 @@ final class TypeInput
             'icon' => $valid['icon'],
             'tone' => Tone::from($valid['tone']),
             'description' => $valid['description'] ?? '',
-            'agent_guidance' => self::guidance($valid['agent_guidance'] ?? null),
+            // a body without the key keeps the guidance (A590: the screens of the catalog do not send it yet), `null` clears it
+            'agent_guidance' => array_key_exists('agent_guidance', $input) ? self::guidance($valid['agent_guidance'] ?? null) : $existing?->agent_guidance,
             'is_epic' => (bool) $valid['is_epic'],
             'properties' => $properties,
             'archived' => ($valid['archived_at'] ?? null) !== null,

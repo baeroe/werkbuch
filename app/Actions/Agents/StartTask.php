@@ -3,6 +3,7 @@
 namespace App\Actions\Agents;
 
 use App\Actions\AgentRuns\EnqueueRun;
+use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
 use App\Domain\Workflow\StateCategory;
 use App\Exceptions\Problem;
@@ -27,7 +28,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * - an epic: a strand at the epic on the branch of the epic, a task for its first open child that nobody or the bot
  *   has (in order of rank); an epic without children is a task of its own.
  * Nothing when the bot is no agent in the project (the assignment stays a plain one) or the item went to someone else
- * meanwhile. Locks the item, then the strand (as every action of the flow).
+ * meanwhile. Locks the item, then the runs of the strand, then the strand (as every action of the flow, A592).
  */
 final class StartTask
 {
@@ -42,6 +43,11 @@ final class StartTask
             }
 
             $thread = AgentFlow::threadAt($locked->id);
+            if ($thread !== null) {
+                // the runs of the strand, then the strand (A592)
+                [, $thread] = AgentFlow::lockStrand($thread);
+            }
+
             if ($thread !== null && $thread->bot_id === $bot->id) {
                 return StartCorrection::run($actor, $thread, 'comments', AgentFlow::commentsSince($thread, $locked), null, true);
             }
@@ -51,8 +57,11 @@ final class StartTask
             }
 
             $epic = $locked->parent_id === null || $locked->type->is_epic ? null : AgentFlow::threadAt($locked->parent_id);
-            if ($epic !== null && $epic->bot_id === $bot->id && $epic->status === AgentThread::OPEN) {
-                return AgentFlow::openRuns($epic)->isEmpty() ? self::enqueue($actor, $bot, $epic, $locked, $triggerId) : null;
+            if ($epic !== null && $epic->bot_id === $bot->id) {
+                [$runs, $epic] = AgentFlow::lockStrand($epic);
+                if ($epic->status === AgentThread::OPEN) {
+                    return $runs->isEmpty() ? self::enqueue($actor, $bot, $epic, $locked, $triggerId) : null;
+                }
             }
 
             $repo = AgentFlow::repositoryOf($locked->project_id);
@@ -71,7 +80,8 @@ final class StartTask
 
     /**
      * The next child of an epic the agent works on (rule A): open (not Completed or Canceled), not archived, nobody's or
-     * the bot's, and not done in this strand yet; in order of rank.
+     * the bot's, neither done in this strand nor with a task of it that waits or runs (two who start the next child at
+     * once start it once); in order of rank.
      */
     public static function nextChild(AgentThread $thread, WorkItem $epic, User $bot): ?WorkItem
     {
@@ -79,7 +89,8 @@ final class StartTask
             ->where(fn ($query) => $query->whereNull('assignee_id')->orWhere('assignee_id', $bot->id))
             ->whereHas('state', fn ($query) => $query->whereNotIn('category', [StateCategory::Completed->value, StateCategory::Canceled->value]))
             ->whereNotExists(fn ($done) => $done->selectRaw('1')->from('agent_runs')->where('agent_runs.thread_id', $thread->id)
-                ->whereColumn('agent_runs.work_item_id', 'work_items.id')->where('agent_runs.type', RunType::Task->value)->where('agent_runs.status', 'succeeded'))
+                ->whereColumn('agent_runs.work_item_id', 'work_items.id')->where('agent_runs.type', RunType::Task->value)
+                ->whereIn('agent_runs.status', [RunStatus::Succeeded->value, RunStatus::Queued->value, RunStatus::Waiting->value, RunStatus::Running->value, RunStatus::Canceling->value]))
             ->orderBy('rank')->orderBy('id')->first();
     }
 

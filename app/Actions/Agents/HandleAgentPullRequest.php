@@ -15,6 +15,7 @@ use App\Support\Actor;
 use App\Support\AgentFlow;
 use App\Support\AgentPullRequests;
 use App\Support\ItemLock;
+use App\Support\OwnMerges;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -23,7 +24,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * learns its PR (number, head commit, draft). A new head commit voids the decision to merge and cancels reviews of the
  * commit before (an approve frees only its own commit) and has GitHub asked whether the PR still merges. An open PR that
  * is no draft puts the item to „In Review“ (an epic only once werkbuch made its PR ready). Merged (by werkbuch or a
- * person) the strand is merged; closed without a merge it ends and the item goes to „Korrektur“. Deliveries out of order
+ * person) the strand is merged (a merge werkbuch asked for is settled as its own, A600); a draft that became ready has
+ * the CI of its head looked at (GitHub runs none for that); closed without a merge it ends and the item goes to „Korrektur“. Deliveries out of order
  * change nothing a later one decided: a strand that ended stays.
  */
 final class HandleAgentPullRequest
@@ -52,6 +54,11 @@ final class HandleAgentPullRequest
 
         $merged = ($pr['merged'] ?? false) === true || is_string($pr['merged_at'] ?? null);
         if (($pr['state'] ?? null) === 'closed') {
+            // GitHub tells of a merge werkbuch asked for before its answer came, or instead of it (A600): the push of the
+            // merge is werkbuch's own
+            if ($merged && is_string($pr['merge_commit_sha'] ?? null)) {
+                OwnMerges::settle($link->repository_id, $number, $pr['merge_commit_sha']);
+            }
             CompleteThread::run($actor, $thread, $merged ? 'merged' : 'closed');
 
             return $merged ? 'merged' : 'closed';
@@ -68,6 +75,7 @@ final class HandleAgentPullRequest
             }
 
             $moved = $locked->head_sha !== $head['sha'];
+            $readied = $locked->pr_draft && ! $draft;
             $locked->forceFill([
                 'pr_number' => $number, 'repository_github_id' => $repositoryId, 'head_sha' => $head['sha'], 'pr_draft' => $draft,
                 'awaiting_pr_since' => null, 'merge_sha' => $moved ? null : $locked->merge_sha,
@@ -77,7 +85,8 @@ final class HandleAgentPullRequest
                 CancelRun::stop($actor, $stale);
             }
 
-            if (! $draft && $locked->status === AgentThread::OPEN && ! $item->type->is_epic) {
+            // the end of a run that changes code moves the item itself (A593): a push of it in between moves nothing
+            if (! $draft && $locked->status === AgentThread::OPEN && ! $item->type->is_epic && ! AgentFlow::coding($locked)) {
                 AgentFlow::move(User::query()->findOrFail($locked->bot_id), $item, AgentStep::Review);
             }
 
@@ -85,8 +94,13 @@ final class HandleAgentPullRequest
                 CheckPullRequestMergeability::dispatch($locked->id)->afterCommit();
             }
 
-            return $moved ? 'pushed' : 'updated';
+            return $moved ? 'pushed' : ($readied ? 'readied' : 'updated');
         }, 3);
+
+        // ready for review: GitHub runs no CI again for that, the CI of the head counts now (A594)
+        if ($outcome === 'readied') {
+            HandleCheckResult::run($actor, $repositoryId, $head['sha']);
+        }
 
         return $outcome;
     }

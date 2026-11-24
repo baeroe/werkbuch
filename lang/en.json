@@ -3,6 +3,8 @@
     "agents.comment.closed": "The pull request :pr was closed without a merge; the work of the agent on this item ended.",
     "agents.comment.done": "Done.",
     "agents.comment.failed": "The run `:type` did not succeed: :reason. Start it again from the activity, or assign me again.",
+    "agents.comment.gave_up.merge": "werkbuch could not merge the pull request :pr: GitHub did not answer in time. Look at it on GitHub, or set the item back to have the agent go on.",
+    "agents.comment.gave_up.ready": "werkbuch could not mark the pull request :pr ready for review: GitHub did not answer in time. Mark it ready on GitHub, or set the item back to try again.",
     "agents.comment.merge_refused": "GitHub refused the merge (:status). A ruleset may ask for an approval; merge it yourself or adjust the ruleset.",
     "agents.comment.no_answer": "I have no answer to that.",
     "agents.comment.no_pr": "The agent finished without opening a pull request.",

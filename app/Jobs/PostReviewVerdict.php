@@ -24,6 +24,7 @@ final class PostReviewVerdict implements ShouldQueue
 
     public function handle(): void
     {
-        PostVerdict::run(Actor::system(User::defaultBot(), 'agents'), $this->runId);
+        // a try after the first looks for what an attempt whose answer got lost posted (A602)
+        PostVerdict::run(Actor::system(User::defaultBot(), 'agents'), $this->runId, $this->attempts() > 1);
     }
 }

@@ -2,6 +2,8 @@
 
 namespace App\Actions\Agents;
 
+use App\Actions\Links\LoadChecks;
+use App\Domain\GitHub\CiState;
 use App\Domain\Workflow\AgentStep;
 use App\GitHub\GitHubApi;
 use App\GitHub\GitHubUnavailable;
@@ -21,16 +23,18 @@ use RuntimeException;
 /**
  * werkbuch merges the PR of a strand (spec 7.2), from the job of the decision (ApproveAndMerge), with a short token of
  * its own: GitHub is asked first whether the PR can be merged (`mergeable` is `null` while it computes: `pending`, the
- * job looks again), a conflict becomes a `conflict` run. The merge goes at the head commit decided on (GitHub refuses
+ * job looks again), a conflict becomes a `conflict` run, the guard of the project or a CI that GitHub does not have
+ * green (its check runs read again, A591) stops it. The merge goes at the head commit decided on (GitHub refuses
  * when the head moved); werkbuch notes it as its own before it asks (OwnMerges, so the push of the merge never wakes the
  * guard) and its commit after. Then the strand is merged (CompleteThread) and the branch goes. A merge GitHub refuses
- * otherwise (a ruleset that wants an approval) is a comment and „Korrektur“. No HTTP under a lock.
+ * otherwise (a ruleset that wants an approval) is a comment and „Korrektur“. When the answer to a merge got lost, the
+ * next attempt finds the PR merged at that head and finishes (A600). No HTTP under a lock.
  */
 final class MergeThread
 {
     use AsAction;
 
-    public const PERMISSIONS = ['contents' => 'write', 'pull_requests' => 'write'];
+    public const PERMISSIONS = ['contents' => 'write', 'pull_requests' => 'write', 'checks' => 'read'];
 
     /**
      * @throws GitHubUnavailable when GitHub does not answer (the job tries again)
@@ -40,8 +44,17 @@ final class MergeThread
         $thread = AgentThread::query()->find($threadId);
         $link = $thread === null ? null : ProjectRepository::query()->with('repository.installation')->where('project_id', $thread->project_id)->first();
 
-        if ($thread === null || $link === null || $thread->status !== AgentThread::OPEN || $thread->merge_sha !== $sha || $thread->pr_number === null) {
+        // a strand merged meanwhile at this head (GitHub told of the merge before its answer came) still settles it
+        $settles = $thread !== null && $thread->status === AgentThread::MERGED && $thread->merge_sha === $sha;
+        if ($thread === null || $link === null || ($thread->status !== AgentThread::OPEN && ! $settles) || $thread->merge_sha !== $sha || $thread->pr_number === null) {
             return 'stale';
+        }
+
+        // the guard against an unauthorized merge holds the project: nothing merges (spec 11.3)
+        if ($link->guarded() && ! $settles) {
+            self::forget($thread, $sha);
+
+            return 'guarded';
         }
 
         $token = InstallationTokens::forLink($link, self::PERMISSIONS)['token'];
@@ -49,7 +62,12 @@ final class MergeThread
         $pr = GitHubApi::pullRequest($token, $repository, $thread->pr_number);
         $head = is_array($pr['head'] ?? null) ? ($pr['head']['sha'] ?? null) : null;
 
-        if (($pr['state'] ?? null) !== 'open' || $head !== $sha) {
+        // the answer to a merge of this head got lost (A600): GitHub has it merged, werkbuch finishes what it began
+        if (($pr['merged'] ?? false) === true && $head === $sha) {
+            return self::finish($actor, $thread, $link, $token, is_string($pr['merge_commit_sha'] ?? null) ? $pr['merge_commit_sha'] : null);
+        }
+
+        if ($settles || ($pr['state'] ?? null) !== 'open' || $head !== $sha) {
             self::forget($thread, $sha);
 
             return 'moved';
@@ -66,7 +84,16 @@ final class MergeThread
             return 'conflict';
         }
 
-        $merge = DB::transaction(fn () => OwnMerges::expect($link->repository_id, (int) $thread->pr_number));
+        // the CI of the head as GitHub has it now, not only what reached werkbuch (A591): not green, no merge
+        $ci = LoadChecks::run($actor, (int) $thread->repository_github_id, $sha, $token);
+        if ($ci !== CiState::SUCCESS && $ci !== CiState::NONE) {
+            self::forget($thread, $sha);
+            HandleCheckResult::run($actor, (int) $thread->repository_github_id, $sha);
+
+            return 'ci';
+        }
+
+        $merge = DB::transaction(fn () => OwnMerges::expect($link->repository_id, (int) $thread->pr_number), 3);
         try {
             $merged = GitHubApi::mergePullRequest($token, $repository, (int) $thread->pr_number, $sha, AgentProjectSettings::of($thread->project_id)->merge_method);
         } catch (GitHubUnavailable $e) {
@@ -77,13 +104,23 @@ final class MergeThread
             return self::refused($actor, $thread, $sha, $e);
         }
 
-        DB::transaction(function () use ($actor, $merge, $merged, $thread): void {
-            OwnMerges::merged($merge, $merged);
+        DB::transaction(fn () => OwnMerges::merged($merge, $merged), 3);
+
+        return self::finish($actor, $thread, $link, $token, null);
+    }
+
+    /** The PR is merged: a merge without its commit is settled from GitHub's word, the strand merged, the branch gone. */
+    private static function finish(Actor $actor, AgentThread $thread, ProjectRepository $link, string $token, ?string $commit): string
+    {
+        DB::transaction(function () use ($actor, $thread, $link, $commit): void {
+            if ($commit !== null) {
+                OwnMerges::settle($link->repository_id, (int) $thread->pr_number, $commit);
+            }
             CompleteThread::run($actor, $thread, 'merged');
-        });
+        }, 3);
 
         try {
-            GitHubApi::deleteBranch($token, $repository, (string) $thread->branch);
+            GitHubApi::deleteBranch($token, $link->repository->full_name, (string) $thread->branch);
         } catch (GitHubUnavailable $e) {
             report(new RuntimeException("The branch of strand {$thread->id} could not be deleted after the merge.", 0, $e));
         }

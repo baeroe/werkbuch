@@ -11,7 +11,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * Decides the merge of the PR of a strand (spec 7.2): an approve of the review and a green CI on the same head commit,
- * a PR that is open and no draft. Under the lock of the strand, once per head commit (`merge_sha`): two who decide at
+ * a PR that is open and no draft; no run of the strand that changes code at work (a conflict included, A593), an epic
+ * through its children (A594), no guard against an unauthorized merge in the project (spec 11.3). Under the lock of the strand, once per head commit (`merge_sha`): two who decide at
  * once (the end of the review, the last check) merge once (MergeDecisionRaceTest). The merge itself asks GitHub, in a job
  * after the commit (MergeThread). Answers whether it decided now.
  */
@@ -27,7 +28,8 @@ final class ApproveAndMerge
 
             if ($locked->status !== AgentThread::OPEN || $link === null || $locked->pr_draft || $link->state !== 'open'
                 || $locked->head_sha === null || $locked->merge_sha === $locked->head_sha || $link->head_sha !== $locked->head_sha
-                || $locked->review_sha !== $locked->head_sha || $locked->review_verdict !== 'approve' || AgentFlow::ci($link) !== 'success') {
+                || $locked->review_sha !== $locked->head_sha || $locked->review_verdict !== 'approve' || AgentFlow::ci($link) !== 'success'
+                || AgentFlow::coding($locked) || AgentFlow::epicPending($locked) || AgentFlow::guarded($locked->project_id)) {
                 return false;
             }
 

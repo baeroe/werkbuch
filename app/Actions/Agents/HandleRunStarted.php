@@ -29,14 +29,15 @@ final class HandleRunStarted
             $item = $run->workItem;
             $thread = $run->thread;
 
+            // the child before its epic, as a move that closes a parent locks them (A592)
+            if ($item->assignee_id === null && $thread !== null && $thread->work_item_id !== $item->id) {
+                AgentFlow::assign($run->bot, $item, $run->bot_id);
+            }
+            AgentFlow::move($run->bot, $item, AgentStep::Working);
+
             if ($thread !== null && $thread->work_item_id !== null && $thread->work_item_id !== $item->id) {
                 AgentFlow::move($run->bot, WorkItem::query()->findOrFail($thread->work_item_id), AgentStep::Working);
-                if ($item->assignee_id === null) {
-                    AgentFlow::assign($run->bot, $item, $run->bot_id);
-                }
             }
-
-            AgentFlow::move($run->bot, $item, AgentStep::Working);
         }, 3);
     }
 }

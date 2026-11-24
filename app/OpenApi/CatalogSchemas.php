@@ -374,7 +374,7 @@ final class CatalogSchemas
                 'icon' => ['type' => 'string', 'enum' => TypeIcon::NAMES],
                 'tone' => self::tone('type'),
                 'description' => ['type' => ['string', 'null'], 'maxLength' => CatalogInput::DESCRIPTION_MAX],
-                'agent_guidance' => ['type' => ['string', 'null'], 'maxLength' => TypeInput::GUIDANCE_MAX, 'description' => 'How agents work on such items (Markdown).'],
+                'agent_guidance' => ['type' => ['string', 'null'], 'maxLength' => TypeInput::GUIDANCE_MAX, 'description' => 'How agents work on such items (Markdown); left out it stays, `null` clears it.'],
                 'is_epic' => ['type' => 'boolean', 'description' => 'An epic can have child items and no parent; it shows in the timeline. Switching it off needs an epic without children, on a type without parents.'],
                 'properties' => [
                     'type' => 'array',
@@ -473,7 +473,7 @@ final class CatalogSchemas
             'id' => self::echoed('string'),
             'name' => self::name(),
             'color' => self::tone('label'),
-            'agent_model' => ['type' => ['string', 'null'], 'enum' => [...AgentModel::values(), null], 'description' => 'The model of runs at its items, `cli:model`.'],
+            'agent_model' => ['type' => ['string', 'null'], 'enum' => [...AgentModel::values(), null], 'description' => 'The model of runs at its items, `cli:model`; left out it stays, `null` clears it.'],
         ], ['name', 'color'], true);
     }
 

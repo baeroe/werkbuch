@@ -26,6 +26,7 @@ use App\Actions\Agents\CompleteThread;
 use App\Actions\Agents\FollowEvent;
 use App\Actions\Agents\GetAgentConfig;
 use App\Actions\Agents\GetProjectAgents;
+use App\Actions\Agents\GiveUpOnThread;
 use App\Actions\Agents\HandleAgentPullRequest;
 use App\Actions\Agents\HandleCheckResult;
 use App\Actions\Agents\HandleRunResult;
@@ -86,6 +87,7 @@ use App\Actions\Labels\DeleteLabel;
 use App\Actions\Labels\GetLabel;
 use App\Actions\Labels\ListLabels;
 use App\Actions\Labels\SaveLabel;
+use App\Actions\Links\LoadChecks;
 use App\Actions\Links\PostLinkback;
 use App\Actions\Links\SyncChecks;
 use App\Actions\Links\SyncPullRequest;
@@ -1786,6 +1788,16 @@ return [
     'MergeThread' => [
         'action' => MergeThread::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => MergeThread::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::OPEN])->id, str_repeat('a', 40)),
+        'system' => true,
+    ],
+    'GiveUpOnThread' => [
+        'action' => GiveUpOnThread::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GiveUpOnThread::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::OPEN])->id, 'merge', str_repeat('a', 40)),
+        'system' => true,
+    ],
+    'LoadChecks' => [
+        'action' => LoadChecks::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => LoadChecks::run($a, 700_000_001, str_repeat('a', 40)),
         'system' => true,
     ],
     'HandleAgentPullRequest' => [

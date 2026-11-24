@@ -38,7 +38,8 @@ final class HandleRunResult
         $run = $run->fresh(['bot', 'workItem', 'thread', 'project']) ?? $run;
 
         return match (true) {
-            $run->status === RunStatus::Canceled || ! $run->status->finished() => 'nothing',
+            $run->status === RunStatus::Canceled => self::canceled($actor, $run),
+            ! $run->status->finished() => 'nothing',
             $run->status !== RunStatus::Succeeded => self::failed($run),
             $run->type === RunType::Comment => self::answer($run),
             $run->type === RunType::Review => self::review($actor, $run),
@@ -55,11 +56,43 @@ final class HandleRunResult
 
         $reason = $run->error ?? $run->status->value;
         AgentFlow::comment($run->bot, $item, __('agents.comment.failed', ['type' => $run->type->value, 'reason' => $reason], AgentFlow::locale()));
-        if (! $run->type->light()) {
+        // a review of the PR of an agent that failed holds the strand as a failed correction would (A598)
+        if (! $run->type->light() || ($run->type === RunType::Review && $run->thread !== null)) {
             AgentFlow::move($run->bot, $item, AgentStep::Correction);
         }
 
         return 'failed';
+    }
+
+    /**
+     * A task of a child of an epic was canceled because the child left the agent (a person took or closed it, A599): the
+     * strand goes on with the next child, or the epic is ready. Any other canceled run: nothing.
+     */
+    private static function canceled(Actor $actor, AgentRun $run): string
+    {
+        $thread = $run->thread;
+        if ($run->type !== RunType::Task || $thread === null || $run->work_item_id === null || $thread->work_item_id === $run->work_item_id || $thread->status !== AgentThread::OPEN) {
+            return 'nothing';
+        }
+
+        return self::continueEpic($actor, $thread) ?? 'nothing';
+    }
+
+    /**
+     * The next step of an epic the agent works through, once none of its runs is open any more: the task of the next
+     * child, else ReadyEpic. Null while a run of the strand is open.
+     */
+    public static function continueEpic(Actor $actor, AgentThread $thread): ?string
+    {
+        if ($thread->fresh()?->status !== AgentThread::OPEN || AgentFlow::openRuns($thread)->isNotEmpty()) {
+            return null;
+        }
+
+        $epic = WorkItem::query()->findOrFail($thread->work_item_id);
+        $bot = User::query()->findOrFail($thread->bot_id);
+        $next = StartTask::nextChild($thread, $epic, $bot);
+
+        return $next !== null && StartTask::enqueue($actor, $bot, $thread, $next, null) !== null ? 'next_child' : ReadyEpic::run($actor, $thread);
     }
 
     private static function answer(AgentRun $run): string
@@ -83,8 +116,15 @@ final class HandleRunResult
                 ItemLock::take($item);
             }
 
-            $thread = $run->thread === null ? null : AgentThread::query()->lockForUpdate()->find($run->thread_id);
+            // the items, the runs of the strand, then the strand (A592)
+            $thread = $run->thread === null ? null : AgentFlow::lockStrand($run->thread)[1];
             if ($thread !== null && ($thread->status !== AgentThread::OPEN || $thread->head_sha !== $run->head_sha)) {
+                return 'stale';
+            }
+
+            // the PR of a person moved on meanwhile: no approve of a commit it left, the links keep their review (A596)
+            if ($thread === null && WorkItemLink::query()->where('repository_github_id', $run->repository_github_id)->where('number', $run->pr_number)
+                ->where('head_sha', '!=', $run->head_sha)->exists()) {
                 return 'stale';
             }
 
@@ -122,6 +162,22 @@ final class HandleRunResult
             return 'nothing';
         }
 
+        $outcome = self::coded($actor, $run, $thread, $item);
+
+        // CI and review of the head waited for the run (A593): now they count
+        $fresh = $thread->fresh();
+        if ($fresh !== null && $fresh->status === AgentThread::OPEN && $fresh->repository_github_id !== null && $fresh->head_sha !== null) {
+            HandleCheckResult::run($actor, $fresh->repository_github_id, $fresh->head_sha);
+        }
+
+        return $outcome;
+    }
+
+    private static function coded(Actor $actor, AgentRun $run, AgentThread $thread, WorkItem $item): string
+    {
+        // the moves only while the item is still with the agent, or nobody's (a person may have taken it meanwhile, A599)
+        $mine = fn (WorkItem $of): bool => in_array($of->fresh()?->assignee_id, [$run->bot_id, null], true);
+
         if ($thread->repository_github_id === null) {
             AgentFlow::comment($run->bot, $item, (string) ($run->result['summary'] ?? __('agents.comment.done', [], AgentFlow::locale())));
             if ($thread->work_item_id === $item->id) {
@@ -129,22 +185,28 @@ final class HandleRunResult
 
                 return 'done';
             }
-            AgentFlow::move($run->bot, $item, AgentStep::Merged);
+            if ($mine($item)) {
+                AgentFlow::move($run->bot, $item, AgentStep::Merged);
+            }
 
-            return self::nextChild($actor, $run, $thread) ?? ReadyEpic::run($actor, $thread);
+            return self::continueEpic($actor, $thread) ?? 'waiting';
         }
 
         if ($thread->work_item_id !== $item->id) {
-            AgentFlow::move($run->bot, $item, AgentStep::Review);
+            if ($mine($item)) {
+                AgentFlow::move($run->bot, $item, AgentStep::Review);
+            }
 
-            return self::nextChild($actor, $run, $thread) ?? ReadyEpic::run($actor, $thread);
+            return self::continueEpic($actor, $thread) ?? 'waiting';
         }
 
-        return DB::transaction(function () use ($run, $thread, $item): string {
+        $outcome = DB::transaction(function () use ($run, $thread, $item, $mine): string {
             ItemLock::take($item);
-            $locked = AgentThread::query()->lockForUpdate()->findOrFail($thread->id);
+            [, $locked] = AgentFlow::lockStrand($thread);
             if ($locked->pr_number !== null) {
-                AgentFlow::move($run->bot, $item, AgentStep::Review);
+                if ($mine($item) && $locked->status === AgentThread::OPEN) {
+                    AgentFlow::move($run->bot, $item, AgentStep::Review);
+                }
 
                 return 'review';
             }
@@ -153,14 +215,8 @@ final class HandleRunResult
 
             return 'awaiting_pr';
         }, 3);
-    }
 
-    /** The task of the next child of an epic, or null when no child is left for the agent. */
-    private static function nextChild(Actor $actor, AgentRun $run, AgentThread $thread): ?string
-    {
-        $epic = WorkItem::query()->findOrFail($thread->work_item_id);
-        $next = $thread->status === AgentThread::OPEN ? StartTask::nextChild($thread, $epic, $run->bot) : null;
-
-        return $next !== null && StartTask::enqueue($actor, User::query()->findOrFail($run->bot_id), $thread, $next, null) !== null ? 'next_child' : null;
+        // a correction at an epic whose PR werkbuch could not make ready (A601) makes it ready again
+        return $outcome === 'review' && AgentFlow::epicPending($thread) ? ReadyEpic::run($actor, $thread) : $outcome;
     }
 }

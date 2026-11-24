@@ -57,6 +57,24 @@ final class StartReview
         }, 3);
     }
 
+    /**
+     * Cancels the reviews of a PR at other commits that wait or run (A596): a PR moved on, its review of the commit before
+     * would approve what is no longer the PR. Answers how many.
+     */
+    public static function cancelStale(Actor $actor, int $repositoryGithubId, int $number, string $sha): int
+    {
+        return DB::transaction(function () use ($actor, $repositoryGithubId, $number, $sha): int {
+            $stale = AgentRun::query()->lockForUpdate()->where('repository_github_id', $repositoryGithubId)->where('pr_number', $number)
+                ->where('type', RunType::Review->value)->where('head_sha', '!=', $sha)
+                ->whereIn('status', [RunStatus::Queued->value, RunStatus::Waiting->value, RunStatus::Running->value])->orderBy('id')->get();
+            foreach ($stale as $run) {
+                CancelRun::stop($actor, $run);
+            }
+
+            return $stale->count();
+        }, 3);
+    }
+
     /** Who reviews in the project: its review agent, else the bot of the strand (never for a PR of a person). */
     public static function reviewer(Project $project, ?AgentThread $thread): ?User
     {

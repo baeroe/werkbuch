@@ -63,7 +63,8 @@ final class SaveLabel
             $before = $current === null ? null : self::snapshot($current);
 
             $saved = $current ?? new Label;
-            $saved->fill(['name' => $valid['name'], 'color' => Tone::from($valid['color']), 'agent_model' => $valid['agent_model'] ?? null])->save();
+            $saved->fill(['name' => $valid['name'], 'color' => Tone::from($valid['color']), // a body without the key keeps the model (A590), `null` clears it
+                'agent_model' => array_key_exists('agent_model', $input) ? ($valid['agent_model'] ?? null) : $current?->agent_model])->save();
 
             if ($before === null) {
                 EventRecorder::record(EventType::LabelCreated, $actor, $saved, null, [

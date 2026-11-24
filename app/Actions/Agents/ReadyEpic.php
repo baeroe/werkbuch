@@ -18,8 +18,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * An epic the agent works through is ready (spec 7.6) when no child is open any more: the children the agent did stand
- * in „In Review“, every other child is Completed or Canceled. Then werkbuch marks the draft PR ready (CI and review run
- * from there; their results before do not count) and the epic goes to „In Review“. Without a repo the epic is done
+ * in „In Review“, every other child is Completed or Canceled. Then werkbuch notes it (`ready_requested_at`: CI and review
+ * count from there, A594), marks a draft PR ready and the epic goes to „In Review“; a PR the agent opened as no draft
+ * has its CI looked at at once. Without a repo the epic is done
  * („Gemergt“). Without a PR the agent never opened one: a comment and „Korrektur“. Answers what it did.
  */
 final class ReadyEpic
@@ -28,13 +29,14 @@ final class ReadyEpic
 
     public function handle(Actor $actor, AgentThread $thread): string
     {
-        return DB::transaction(function () use ($actor, $thread): string {
+        $outcome = DB::transaction(function () use ($actor, $thread): string {
             $epic = WorkItem::query()->findOrFail($thread->work_item_id);
             ItemLock::take($epic);
-            $locked = AgentThread::query()->lockForUpdate()->findOrFail($thread->id);
+            // the epic, the runs of the strand, then the strand (A592)
+            [$runs, $locked] = AgentFlow::lockStrand($thread);
             $bot = User::query()->findOrFail($locked->bot_id);
 
-            if ($locked->status !== AgentThread::OPEN || ! self::done($locked, $epic) || AgentRun::query()->where('thread_id', $locked->id)->whereIn('status', ['queued', 'waiting', 'running', 'canceling'])->exists()) {
+            if ($locked->status !== AgentThread::OPEN || ! self::done($locked, $epic) || $runs->isNotEmpty()) {
                 return 'waiting';
             }
 
@@ -51,14 +53,25 @@ final class ReadyEpic
                 return 'no_pr';
             }
 
-            if ($locked->pr_draft && $locked->ready_requested_at === null) {
+            // ready for CI and review from here on (A594), also when the agent opened its PR as no draft
+            if ($locked->ready_requested_at === null) {
                 $locked->forceFill(['ready_requested_at' => now()])->save();
-                MarkPullRequestReady::dispatch($locked->id)->afterCommit();
+                if ($locked->pr_draft) {
+                    MarkPullRequestReady::dispatch($locked->id)->afterCommit();
+                }
             }
             AgentFlow::move($bot, $epic, AgentStep::Review);
 
             return 'ready';
         }, 3);
+
+        // a PR that is no draft has its CI already: it counts now
+        $fresh = $thread->fresh();
+        if ($outcome === 'ready' && $fresh !== null && ! $fresh->pr_draft && $fresh->repository_github_id !== null && $fresh->head_sha !== null) {
+            HandleCheckResult::run($actor, $fresh->repository_github_id, $fresh->head_sha);
+        }
+
+        return $outcome;
     }
 
     /** Whether no child of the epic is open: the agent did its children in this strand, the others are closed. */

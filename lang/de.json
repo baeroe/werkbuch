@@ -3,6 +3,8 @@
     "agents.comment.closed": "Der Pull Request :pr wurde ohne Merge geschlossen; die Arbeit des Agenten an diesem Item ist beendet.",
     "agents.comment.done": "Erledigt.",
     "agents.comment.failed": "Der Auftrag `:type` ist nicht gelungen: :reason. Starte ihn in der Aktivität erneut oder weise mich wieder zu.",
+    "agents.comment.gave_up.merge": "werkbuch konnte den Pull Request :pr nicht mergen: GitHub hat nicht rechtzeitig geantwortet. Schau ihn auf GitHub an oder setz das Item zurück, dann macht der Agent weiter.",
+    "agents.comment.gave_up.ready": "werkbuch konnte den Pull Request :pr nicht als bereit markieren: GitHub hat nicht rechtzeitig geantwortet. Markier ihn auf GitHub als bereit oder setz das Item zurück, dann versucht es werkbuch erneut.",
     "agents.comment.merge_refused": "GitHub hat den Merge abgelehnt (:status). Vielleicht verlangt ein Ruleset eine Freigabe; merge selbst oder passe das Ruleset an.",
     "agents.comment.no_answer": "Darauf habe ich keine Antwort.",
     "agents.comment.no_pr": "Der Agent ist fertig geworden, ohne einen Pull Request zu öffnen.",

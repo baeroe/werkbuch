@@ -88,6 +88,12 @@ final class FakeGitHub
     /** Runs before every answer with the request (something that happens while GitHub answers). */
     public ?Closure $meanwhile = null;
 
+    /** @var array<string, list<array<string, mixed>>> the check runs of a commit as GET /commits/{sha}/check-runs lists them */
+    public array $checkRuns = [];
+
+    /** @var list<string> the commits whose check runs werkbuch asked for */
+    public array $checkRunCalls = [];
+
     /**
      * The app, an installation of `feldwerk` and one repo `feldwerk/website` (default branch `main`), and the fake.
      */
@@ -145,6 +151,9 @@ final class FakeGitHub
             Str::is('/repos/*/*/issues/comments/*', $path) && $request->method() === 'PATCH' => $this->editComment($path, $request),
             Str::is('/repos/*/*/pulls/*/merge', $path) && $request->method() === 'PUT' => $this->merge($path, $request),
             Str::is('/repos/*/*/pulls/*/reviews', $path) && $request->method() === 'POST' => $this->review($path, $request),
+            Str::is('/repos/*/*/pulls/*/reviews', $path) && $request->method() === 'GET' => Http::response($page === 1 ? array_values(array_map(fn (array $review) => ['body' => $review['body']], $this->reviews)) : [], 200),
+            Str::is('/repos/*/*/issues/*/comments', $path) && $request->method() === 'GET' => Http::response($page === 1 ? array_values(array_map(fn (array $comment) => ['body' => $comment['body']], $this->comments)) : [], 200),
+            Str::is('/repos/*/*/commits/*/check-runs', $path) => $this->checkRunsOf(explode('/', $path)[5], $page),
             Str::is('/repos/*/*/pulls/*', $path) && $request->method() === 'GET' => $this->pull((int) last(explode('/', $path))),
             $path === '/graphql' => $this->graphql($request),
             Str::is('/repos/*/*/git/refs/heads/*', $path) && $request->method() === 'DELETE' => $this->deleteBranch($path),
@@ -204,6 +213,15 @@ final class FakeGitHub
             'number' => $number, 'node_id' => 'PR_fake'.$number, 'state' => 'open', 'draft' => false, 'mergeable' => true, 'mergeable_state' => 'clean',
             ...$pr, 'head' => ['sha' => $pr['head']['sha'] ?? str_repeat('b', 40), 'ref' => $pr['head']['ref'] ?? "feature-{$number}"],
         ], 200);
+    }
+
+    /** The check runs of a commit as GitHub lists them (A591), from `checkRuns`; the test sees each call in `checkRunCalls`. */
+    private function checkRunsOf(string $sha, int $page): mixed
+    {
+        $this->checkRunCalls[] = $sha;
+        $runs = $page === 1 ? ($this->checkRuns[$sha] ?? []) : [];
+
+        return Http::response(['total_count' => count($this->checkRuns[$sha] ?? []), 'check_runs' => $runs], 200);
     }
 
     private function merge(string $path, Request $request): mixed

@@ -334,8 +334,9 @@ it('works an epic by rule A and leaves the child of a person to her', function (
     UpdateWorkItem::run(actor($this->mara), $copy, ['state_id' => $this->states['Done']]);
     expect($this->github->ready)->toBe(['PR_fake12'])->and($epic->fresh()->state_id)->toBe($this->states['Pending']);
 
+    // ready for review runs no CI again on GitHub: the green CI of the head counts now (A594)
     $pr($this, 'ready_for_review', str_repeat('a', 40), ['draft' => false]);
-    $ci($this, str_repeat('a', 40), 'success', 3_000_002);
+    $this->github->checkRuns[str_repeat('a', 40)] = [FakeGitHub::checkRun(str_repeat('a', 40), 'completed', 'success')['check_run']];
     $finish($this, $claim($this), ['verdict' => 'approve', 'text' => 'Verdict: approve']);
 
     expect($this->github->merges)->toHaveCount(1)

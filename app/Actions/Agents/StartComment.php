@@ -2,6 +2,8 @@
 
 namespace App\Actions\Agents;
 
+use App\Access\Permission;
+use App\Access\Visibility;
 use App\Actions\AgentRuns\EnqueueRun;
 use App\Domain\Agents\RunType;
 use App\Models\AgentRun;
@@ -16,7 +18,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * A person asked an agent in a comment (spec 7.1): a `comment` run that only reads and whose answer werkbuch posts as a
- * comment of the bot; never a change of code. At an open strand of the bot it continues its session (and its runner).
+ * comment of the bot; never a change of code. Only an author who may edit items of the project sets it off (A603). At an open strand of the bot it continues its session (and its runner).
  */
 final class StartComment
 {
@@ -25,7 +27,8 @@ final class StartComment
     public function handle(Actor $actor, WorkItem $item, User $bot, Comment $comment): ?AgentRun
     {
         return DB::transaction(function () use ($actor, $item, $bot, $comment): ?AgentRun {
-            if (AgentFlow::refusal($bot, $item->project) !== null) {
+            // only who may edit items of the project sets an agent to work (A603): a reader of a public project asks nobody
+            if (AgentFlow::refusal($bot, $item->project) !== null || ! Visibility::can($comment->author, Permission::ItemEdit, $item->project)) {
                 return null;
             }
 
