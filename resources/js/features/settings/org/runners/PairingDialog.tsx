@@ -24,7 +24,7 @@ import { errorText } from '../../frame/form';
 import { useOrgZone } from '../../frame/format';
 import { CommandBlock } from './CommandBlock';
 import { placesSummary } from './RunnerDialogs';
-import { clockTime, holdFocus, remaining, systemOf, useNow } from './runnerParts';
+import { clockTime, focusLost, holdFocus, remaining, systemOf, useNow } from './runnerParts';
 
 type PairingProps = {
   open: boolean;
@@ -71,21 +71,13 @@ export function PairingDialog({ open, onOpenChange, finalFocus }: PairingProps) 
     if (runnerId) void queryClient.invalidateQueries({ queryKey: qk.runners.all });
   }, [runnerId, queryClient]);
 
-  // the button that had the focus („Neuer Code“) is gone: „Fertig“ takes it once it is drawn
+  // the button that had the focus („Neuer Code“) is gone: „Fertig“ takes it once it is drawn, only while the focus is
+  // lost (on the page, gone with its element, or on the dialog itself, where its focus guard puts a lost one)
   const connectedId = connected?.id;
-  useEffect(() => (connectedId ? holdFocus(() => done.current) : undefined), [connectedId]);
+  useEffect(() => (connectedId ? holdFocus(() => done.current, () => focusLost(done.current)) : undefined), [connectedId]);
 
-  // the code ran out while the focus was in the dialog („Neuer Code“ went with it): „Neuen Code erzeugen“ takes it
-  useEffect(() => {
-    if (!expired) return;
-    const dialog = again.current?.closest('[role="dialog"]');
-    const inDialog = () => {
-      const active = document.activeElement;
-      return !active || active === document.body || !active.isConnected || (dialog?.contains(active) ?? false);
-    };
-    if (!inDialog()) return;
-    return holdFocus(() => again.current, inDialog);
-  }, [expired]);
+  // the code ran out and „Neuer Code“ went with the focus on it: „Neuen Code erzeugen“ takes it, only while it is lost
+  useEffect(() => (expired ? holdFocus(() => again.current, () => focusLost(again.current)) : undefined), [expired]);
 
   return (
     <Dialog

@@ -367,6 +367,47 @@ describe('Agents: unauthorized merge', () => {
     await waitFor(() => expect(toastNamed('Merge bestätigt')).toBeTruthy());
   });
 
+  it('waits for the items of its runs, then shows the whole sentence once', async () => {
+    renderAgents({ link: linkOf(github.repositories[0], { guard }) });
+    // the answer of the references waits until the test lets it go
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const fetching = globalThis.fetch;
+    globalThis.fetch = (input, init) => (String(input).includes('/api/v1/references') ? gate.then(() => fetching(input, init)) : fetching(input, init));
+
+    expect(await screen.findByRole('heading', { name: 'Repository' })).toBeTruthy();
+    await waitFor(() => expect(calls('GET', '/api/v1/references?items=i_web47%2Ci_web48')).toHaveLength(0));
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    // the alert region appears once, with the links in its first text
+    const seen: string[] = [];
+    const observer = new MutationObserver(() => {
+      const alert = document.querySelector('[role="alert"]');
+      if (alert && !seen.includes(alert.textContent!)) seen.push(alert.textContent!);
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    release();
+    const banner = await screen.findByRole('alert', { name: 'Eigenmächtiger Merge erkannt: WEB pausiert' });
+    observer.disconnect();
+    globalThis.fetch = fetching;
+    expect(within(banner).getByRole('link', { name: 'WEB-47' })).toBeTruthy();
+    expect(within(banner).getByRole('link', { name: 'WEB-48' })).toBeTruthy();
+    expect(seen.every((text) => text.includes('aus dem Auftrag von WEB-47 und WEB-48. Alle Stränge des Projekts pausieren.'))).toBe(true);
+  });
+
+  it('leaves out items the reader does not see and says the sentence without runs', async () => {
+    renderAgents({
+      link: linkOf(github.repositories[0], { guard }),
+      // WEB-47 is not in the answer (hidden or gone), WEB-48 neither: both settle as not found
+      overrides: { 'GET /api/v1/references': () => ({ body: { data: { items: [], pages: [] } } }) },
+    });
+
+    const banner = await screen.findByRole('alert', { name: 'Eigenmächtiger Merge erkannt: WEB pausiert' });
+    expect(banner.textContent).toContain('Am 20.11.2026, 09:15 kam auf main ein Push der App (a41c9e7), den kein Merge von werkbuch erklärt. Alle Stränge des Projekts pausieren.');
+    expect(banner.textContent).not.toContain('aus dem Auftrag');
+    expect(within(banner).queryByRole('link')).toBeNull();
+  });
+
   it('tells a reader that an admin confirms', async () => {
     signedIn = lene;
     renderAgents({ role: 'viewer', link: linkOf(github.repositories[0], { guard: { ...guard, detected_at: null } }) });

@@ -104,6 +104,10 @@ function MergeGuardBanner({ project, guard, canManage, unprotected, pending, onC
   const parts = { time: guard.detected_at ? formatDateTime(guard.detected_at, zone) : '', branch, sha, items: <RunItems items={items} /> };
   const what = guard.detected_at ? (items.length > 0 ? 'pushed_at_runs' : 'pushed_at') : items.length > 0 ? 'pushed_runs' : 'pushed';
 
+  // an alert is announced as it first shows: it waits for the items of its runs (a hidden one settles too), so it is
+  // announced once with its whole sentence, not again when the links come
+  if (refs.some((ref) => ref.isPending)) return null;
+
   return (
     <Banner
       tone="danger"

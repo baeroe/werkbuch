@@ -138,8 +138,8 @@ export function RenameDialog({ runner, open, onOpenChange, finalFocus }: DialogP
         onChange={(event) => {
           setName(event.target.value);
           setAttempted(false);
-          // the refusal of the last name goes with typing a new one
-          rename.reset();
+          // the refusal of the last name goes with typing a new one (not while it is being saved: the answer still counts)
+          if (!rename.isPending) rename.reset();
         }}
       />
     </FormDialog>

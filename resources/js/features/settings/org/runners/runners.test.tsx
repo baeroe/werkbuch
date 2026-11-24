@@ -270,6 +270,31 @@ describe('Runner verbinden', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('leaves the focus where the person put it in the dialog when the runner connects', async () => {
+    const user = userEvent.setup();
+    let redeemed = false;
+    const world: World = { runners: [makeRunner('r1')], runs: [] };
+    world.routes = {
+      'POST /api/v1/runner-pairings': () => ({ status: 201, body: { data: pairingOf() } }),
+      'GET /api/v1/runner-pairings/pc1': () => ({ body: { data: pairingOf({ runner_id: redeemed ? 'r_new' : null }) } }),
+    };
+    renderRunners(world);
+    await cardOf('mac-r1');
+    await user.click(screen.getAllByRole('button', { name: 'Runner verbinden' })[0]);
+    const dialog = await screen.findByRole('dialog', { name: 'Runner verbinden' });
+    await within(dialog).findByText('ABCD-1234');
+    // the close button in the corner stays in both states of the dialog
+    const corner = within(dialog).getAllByRole('button', { name: 'Schließen' }).at(-1)!;
+    corner.focus();
+
+    world.runners = [...world.runners, makeRunner('r_new', { name: 'studio' })];
+    redeemed = true;
+    const connected = await screen.findByRole('dialog', { name: '„studio“ ist verbunden' }, { timeout: 4000 });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(within(connected).getByRole('button', { name: 'Fertig' })).not.toBe(document.activeElement);
+    expect(document.activeElement).toBe(corner);
+  });
+
   it('says when copying failed and selects the command', async () => {
     const user = userEvent.setup();
     vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'));
@@ -333,6 +358,15 @@ describe('Runner verbinden', () => {
     await user.click(within(expired).getByRole('button', { name: 'Neuen Code erzeugen' }));
     expect(await within(dialog).findByText('CODE-2')).toBeTruthy();
     expect(within(dialog).queryByRole('alert')).toBeNull();
+
+    // the second code runs out while the person is on "Befehl kopieren", which stays: the focus is no lost one
+    const copy = within(dialog).getByRole('button', { name: 'Befehl kopieren' });
+    copy.focus();
+    vi.setSystemTime(new Date('2026-10-28T08:21:00Z'));
+    expect(await within(dialog).findByRole('alert', {}, { timeout: 2500 })).toBeTruthy();
+    // longer than the frames the dialog would take it for
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(document.activeElement).toBe(copy);
   });
 
   it('says when no code was made, tries again, and tells a failed new code in a toast', async () => {
@@ -480,6 +514,38 @@ describe('Places, name and revoking', () => {
     act(() => runToastAction(toastNamed('„mac-r1“ nicht umbenannt')!.id));
     await waitFor(() => expect(toastNamed('Runner heißt jetzt „studio-2“')).toBeTruthy());
     expect(calls('PATCH', '/api/v1/runners/r1').at(-1)!.body).toEqual({ name: 'studio-2' });
+  });
+
+  it('keeps a rename that is still running when the person types on: its refusal shows', async () => {
+    const user = userEvent.setup();
+    renderRunners({
+      runners: [makeRunner('r1')],
+      runs: [],
+      routes: { 'PATCH /api/v1/runners/r1': () => problem(422, 'validation_failed', 'Nicht gespeichert', { name: ['Ein anderer Runner heißt schon so.'] }) },
+    });
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const send = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (String(input).endsWith('/runners/r1') && init?.method === 'PATCH') await held;
+      return send(input, init);
+    };
+    try {
+      const card = await cardOf('mac-r1');
+      await user.click(within(card).getByRole('button', { name: 'Umbenennen: „mac-r1“' }));
+      const dialog = await screen.findByRole('dialog', { name: '„mac-r1“ umbenennen' });
+      const name = within(dialog).getByRole('textbox', { name: 'Name' });
+      await user.clear(name);
+      await user.type(name, 'studio');
+      await user.click(within(dialog).getByRole('button', { name: 'Umbenennen' }));
+      await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Umbenennen' }).getAttribute('aria-busy')).toBe('true'));
+      // typing while the call runs does not drop it
+      await user.type(name, 'x');
+      release!();
+      expect(await within(dialog).findByText('Ein anderer Runner heißt schon so.')).toBeTruthy();
+    } finally {
+      globalThis.fetch = send;
+    }
   });
 
   it('revokes a runner after asking, says how many runs it ended, and moves the focus on', async () => {

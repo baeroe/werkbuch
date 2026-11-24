@@ -91,11 +91,20 @@ export const gigabytes = (value: number): string => numberFormat('gb').format(va
 export const percent = (value: number): string => numberFormat('percent').format(value / 100);
 
 /**
+ * Whether the focus is lost for an element of a dialog: nowhere, on the page, gone with its element, or on the dialog
+ * of `inside` itself (where the focus guard of an open dialog puts a lost focus). A focus the person moved stays.
+ */
+export function focusLost(inside: Element | null | undefined): boolean {
+  const active = document.activeElement;
+  return !active || active === document.body || !active.isConnected || active === inside?.closest('[role="dialog"]');
+}
+
+/**
  * Gives `target()` the focus for the next frames: a dialog that just closed (or a focus guard of an open one) moves a
  * lost focus a moment later, so the focus is taken again until it stays. `onlyIf` says whether it may be taken (the
  * person did not go elsewhere). Returns what stops it.
  */
-export function holdFocus(target: () => HTMLElement | null | undefined, onlyIf: () => boolean = () => true, frames = 20): () => void {
+export function holdFocus(target: () => HTMLElement | null | undefined, onlyIf: () => boolean, frames = 20): () => void {
   let tries = 0;
   let frame = 0;
   const take = () => {
