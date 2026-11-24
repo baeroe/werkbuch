@@ -10,7 +10,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * A workflow as `Workflow` of resources/js/types.ts: the states in order, the transitions as pairs of state ids by the
- * position of the state they start from, then of the one they lead to.
+ * position of the state they start from, then of the one they lead to; `agent_states` the steps of the agents.
  *
  * @mixin Workflow
  */
@@ -46,6 +46,8 @@ final class WorkflowResource extends JsonResource
             ])->values()->all(),
             /** @var list<list<string>> */
             'transitions' => $transitions,
+            // the state each step of the agents sets (spec 7.4), null where the workflow names none
+            'agent_states' => $workflow->agentStates(),
         ];
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Workflow\AgentStep;
 use App\Domain\Workflow\State;
 use App\Domain\Workflow\TransitionGraph;
 use Database\Factories\WorkflowFactory;
@@ -23,12 +24,13 @@ use Illuminate\Support\Carbon;
  * @property bool $is_default
  * @property bool $is_free
  * @property string|null $initial_state_id
+ * @property array<string, mixed>|null $agent_states
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Collection<int, WorkflowState> $states
  * @property Collection<int, WorkflowTransition> $transitions
  */
-#[Fillable(['name', 'description', 'is_default', 'is_free', 'initial_state_id'])]
+#[Fillable(['name', 'description', 'is_default', 'is_free', 'initial_state_id', 'agent_states'])]
 final class Workflow extends Model
 {
     /** @use HasFactory<WorkflowFactory> */
@@ -58,6 +60,28 @@ final class Workflow extends Model
     }
 
     /**
+     * The state each step of the agents sets (spec 7.4): every step once, a state id or null.
+     *
+     * @return array{working: ?string, review: ?string, correction: ?string, merged: ?string}
+     */
+    public function agentStates(): array
+    {
+        return AgentStep::read($this->agent_states);
+    }
+
+    /** The state a step of the agents sets, null when the workflow names none. */
+    public function agentState(AgentStep $step): ?string
+    {
+        return $this->agentStates()[$step->value];
+    }
+
+    /** Whether the workflow names a state for every step: agents and PR links work only then (spec 7.4, 12). */
+    public function agentStepsComplete(): bool
+    {
+        return AgentStep::complete($this->agentStates());
+    }
+
+    /**
      * @return HasMany<WorkflowState, $this>
      */
     public function states(): HasMany
@@ -81,6 +105,7 @@ final class Workflow extends Model
         return [
             'is_default' => 'bool',
             'is_free' => 'bool',
+            'agent_states' => 'array',
         ];
     }
 }
