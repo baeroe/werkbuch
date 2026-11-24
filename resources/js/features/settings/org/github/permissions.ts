@@ -12,6 +12,7 @@ export const MANIFEST_PERMISSIONS: Readonly<Record<string, string>> = {
   pull_requests: 'write',
   checks: 'read',
   actions: 'read',
+  statuses: 'read',
   metadata: 'read',
 };
 
@@ -20,6 +21,7 @@ const NAMES: Record<string, TranslationKey> = {
   pull_requests: 'settings.github.permission.pull_requests',
   checks: 'settings.github.permission.checks',
   actions: 'settings.github.permission.actions',
+  statuses: 'settings.github.permission.statuses',
   metadata: 'settings.github.permission.metadata',
 };
 

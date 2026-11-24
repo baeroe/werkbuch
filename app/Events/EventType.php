@@ -136,6 +136,11 @@ enum EventType: string
     case ProjectMergeGuardDetected = 'project.merge_guard_detected';
     case ProjectMergeGuardConfirmed = 'project.merge_guard_confirmed';
 
+    // the flow of the agents (WEBU-26, spec 7.3, 10.3): the working rules of the organization (subject the organization,
+    // the old and the new text) and the agent settings of a project; no webhook
+    case AgentRulesUpdated = 'agent_rules.updated';
+    case ProjectAgentSettingsUpdated = 'project.agent_settings_updated';
+
     /**
      * Whether webhooks can subscribe to this event.
      */

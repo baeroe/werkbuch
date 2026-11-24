@@ -37,6 +37,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $work_item_id
  * @property string|null $thread_id
  * @property string|null $head_sha
+ * @property int|null $repository_github_id
+ * @property int|null $pr_number
  * @property string|null $trigger_event_id
  * @property array<string, mixed> $context
  * @property int $attempt
@@ -60,7 +62,7 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable([
     'type', 'status', 'waiting_reason', 'bot_id', 'cli', 'model', 'model_source', 'model_label_id', 'runner_id', 'project_id',
-    'work_item_id', 'thread_id', 'head_sha', 'trigger_event_id', 'context', 'attempt', 'lease_expires_at', 'retry_at', 'started_at',
+    'work_item_id', 'thread_id', 'head_sha', 'repository_github_id', 'pr_number', 'trigger_event_id', 'context', 'attempt', 'lease_expires_at', 'retry_at', 'started_at',
     'finished_at', 'result', 'session_id', 'usage', 'error', 'canceled_by', 'events_dropped',
 ])]
 final class AgentRun extends Model
@@ -88,6 +90,8 @@ final class AgentRun extends Model
             'status' => RunStatus::class,
             'cli' => AgentCli::class,
             'context' => 'array',
+            'repository_github_id' => 'integer',
+            'pr_number' => 'integer',
             'attempt' => 'integer',
             'lease_expires_at' => 'immutable_datetime',
             'retry_at' => 'immutable_datetime',

@@ -20,6 +20,7 @@ use App\Actions\Views\DeleteView;
 use App\Actions\WorkItems\RedistributeRanks;
 use App\Actions\WorkItems\SetSubscription;
 use App\Actions\WorkItems\UpdateWorkItem;
+use App\Agents\AgentConsumer;
 use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Events\Outbox;
@@ -73,7 +74,7 @@ $message = fn (string $eventId, string $type, ?string $project, ?string $item, ?
 it('is a consumer of every event, in the queue live, without retries', function () {
     $consumer = new LiveConsumer;
 
-    expect((require repo_path('config/werkbuch.php'))['event_consumers'])->toBe([SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class])
+    expect((require repo_path('config/werkbuch.php'))['event_consumers'])->toBe([SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class, AgentConsumer::class])
         ->and($consumer->key())->toBe('live')
         ->and($consumer->queue())->toBe('live')
         ->and($consumer->tries())->toBe(1)

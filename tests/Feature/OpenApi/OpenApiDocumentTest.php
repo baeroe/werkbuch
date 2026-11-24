@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Agents\RunType;
 use App\Domain\Automations\AutomationKey;
 use App\Exceptions\Problem;
 use App\Http\Controllers\Api\ProjectsController;
@@ -186,6 +187,7 @@ it('gives a pattern only to ULID parameters', function () {
             match ($parameter['name']) {
                 'item', 'project' => expect($parameter['schema'])->toBe(['type' => 'string'], $key),
                 'key' => expect($parameter['schema'])->toBe(['type' => 'string', 'enum' => array_column(AutomationKey::cases(), 'value')], $key),
+                'kind' => expect($parameter['schema'])->toBe(['type' => 'string', 'enum' => RunType::VALUES], $key),
                 default => expect($parameter['schema'])->toBe(['type' => 'string', 'pattern' => $ulid], "{$key} {$parameter['name']}")
                     ->and($parameter['description'])->toContain('ULID'),
             };

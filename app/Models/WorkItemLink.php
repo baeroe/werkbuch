@@ -31,6 +31,9 @@ use Illuminate\Support\Carbon;
  * @property string $head_branch
  * @property string $base_branch
  * @property string $head_sha
+ * @property Carbon|null $head_seen_at
+ * @property string|null $checks_loaded_sha
+ * @property Carbon|null $checks_loaded_at
  * @property bool $closes
  * @property string $author
  * @property string|null $thread_id
@@ -45,7 +48,7 @@ use Illuminate\Support\Carbon;
  * @property-read WorkItem $workItem
  * @property-read Collection<int, WorkItemLinkCheck> $checks
  */
-#[Fillable(['work_item_id', 'kind', 'repository_github_id', 'repository', 'number', 'title', 'url', 'state', 'draft', 'head_branch', 'base_branch', 'head_sha', 'closes', 'author', 'thread_id', 'review', 'review_sha', 'merged_at', 'closed_at', 'pr_updated_at', 'merged_seen_at'])]
+#[Fillable(['work_item_id', 'kind', 'repository_github_id', 'repository', 'number', 'title', 'url', 'state', 'draft', 'head_branch', 'base_branch', 'head_sha', 'head_seen_at', 'checks_loaded_sha', 'checks_loaded_at', 'closes', 'author', 'thread_id', 'review', 'review_sha', 'merged_at', 'closed_at', 'pr_updated_at', 'merged_seen_at'])]
 final class WorkItemLink extends Model
 {
     /** @use HasFactory<WorkItemLinkFactory> */
@@ -63,7 +66,7 @@ final class WorkItemLink extends Model
     {
         return [
             'repository_github_id' => 'integer', 'number' => 'integer', 'draft' => 'boolean', 'closes' => 'boolean',
-            'merged_at' => 'datetime', 'closed_at' => 'datetime', 'pr_updated_at' => 'datetime', 'merged_seen_at' => 'datetime',
+            'merged_at' => 'datetime', 'closed_at' => 'datetime', 'pr_updated_at' => 'datetime', 'merged_seen_at' => 'datetime', 'head_seen_at' => 'datetime', 'checks_loaded_at' => 'datetime',
         ];
     }
 

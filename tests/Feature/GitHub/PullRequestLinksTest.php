@@ -228,7 +228,8 @@ it('links a PR of an agent with its strand and leaves what it sets off to the fl
     expect($deliver($this, 'opened', 18, ['author' => 'feldwerk-werkbuch[bot]', 'body' => "Fixes WEBU-{$a->number}"]))->toBe('agent')
         ->and($deliver($this, 'opened', 19, ['body' => "Fixes WEBU-{$b->number}", 'head' => ['ref' => "agent/WEBU-{$b->number}-thing", 'sha' => str_repeat('d', 40)]]))->toBe('agent')
         ->and($deliver($this, 'opened', 20, ['body' => "Fixes WEBU-{$b->number}", 'head' => ['ref' => "agent/WEBU-{$b->number}-thing", 'sha' => str_repeat('d', 40)]]))->toBe('agent')
-        ->and([$stateOf($this, $a), $stateOf($this, $b)])->toBe(['Todo', 'Todo'])
+        // the link moves nothing; the flow puts the item of the strand to „In Review“ (HandleAgentPullRequest, WEBU-26)
+        ->and([$stateOf($this, $a), $stateOf($this, $b)])->toBe(['Todo', 'Pending'])
         ->and(WorkItemLink::query()->where('number', 19)->value('thread_id'))->toBe($numbered->id)
         ->and(WorkItemLink::query()->where('number', 20)->value('thread_id'))->toBe($thread->id)
         ->and($this->github->comments)->toBe([]);

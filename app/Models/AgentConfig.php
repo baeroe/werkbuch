@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Domain\Agents\AgentCli;
-use App\Domain\Agents\RunType;
 use Database\Factories\AgentConfigFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -56,12 +55,6 @@ final class AgentConfig extends Model
     public function bot(): BelongsTo
     {
         return $this->belongsTo(User::class, 'bot_id');
-    }
-
-    /** The bot's model for a kind of run: its own for the kind, else its default (spec 7.7, stages 3). */
-    public function modelFor(RunType $type): string
-    {
-        return $this->models[$type->value] ?? $this->model;
     }
 
     /** Whether a runner is in the pool; an empty pool is every runner (A485). */

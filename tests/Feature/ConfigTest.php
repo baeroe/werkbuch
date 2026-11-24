@@ -1,5 +1,6 @@
 <?php
 
+use App\Agents\AgentConsumer;
 use App\Domain\Webhooks\Backoff;
 use App\Jobs\DeliverWebhook;
 use App\Live\LiveConsumer;
@@ -53,7 +54,7 @@ it('has the documented defaults', function () {
         ->and(config('werkbuch.notification_mail_delay'))->toBe(5)
         ->and(config('werkbuch.webhooks_allow_private'))->toBeFalse()
         // the file's default: the tests switch the consumers off (Tests\TestCase)
-        ->and((require base_path('config/werkbuch.php'))['event_consumers'])->toBe([SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class])
+        ->and((require base_path('config/werkbuch.php'))['event_consumers'])->toBe([SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class, AgentConsumer::class])
         ->and(config('werkbuch.event_consumers'))->toBe([])
         ->and(config('werkbuch.rate_limits.api'))->toBe(600)
         ->and(config('werkbuch.rate_limits.api_session'))->toBe(3000)

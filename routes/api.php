@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AgentConfigsController;
+use App\Http\Controllers\Api\AgentRulesController;
 use App\Http\Controllers\Api\AttachmentsController;
 use App\Http\Controllers\Api\AutomationsController;
 use App\Http\Controllers\Api\BotsController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PagesController;
 use App\Http\Controllers\Api\PageVersionsController;
 use App\Http\Controllers\Api\PasswordController;
+use App\Http\Controllers\Api\ProjectAgentsController;
 use App\Http\Controllers\Api\ProjectRepositoriesController;
 use App\Http\Controllers\Api\ProjectsController;
 use App\Http\Controllers\Api\PropertiesController;
@@ -249,6 +251,12 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::delete('runners/{runner}', [RunnersController::class, 'destroy']);
     Route::get('bots/{user}/agent', [AgentConfigsController::class, 'show']);
     Route::put('bots/{user}/agent', [AgentConfigsController::class, 'update']);
+    // the flow of the agents (WEBU-26, spec 7.3, 10.3, 10.5): the working rules of the organization per kind of run and
+    // the agent settings of a project
+    Route::get('agent-rules', [AgentRulesController::class, 'index']);
+    Route::put('agent-rules/{kind}', [AgentRulesController::class, 'update']);
+    Route::get('projects/{project}/agents', [ProjectAgentsController::class, 'show']);
+    Route::put('projects/{project}/agents', [ProjectAgentsController::class, 'update']);
     Route::get('runs', [RunsController::class, 'index']);
     Route::get('runs/{run}', [RunsController::class, 'show']);
     Route::get('runs/{run}/events', [RunsController::class, 'events']);

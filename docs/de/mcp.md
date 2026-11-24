@@ -422,7 +422,7 @@ Schreibt Webhooks; nur Org-Admins. `create` und `rotate-secret` nennen das Gehei
 
 ### `agents`
 
-Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins), die Aufträge der Agenten mit ihrem Protokoll (wer das Projekt sieht), die GitHub-App und das Repo eines Projekts. (Braucht `read`.)
+Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins), die Aufträge der Agenten mit ihrem Protokoll (wer das Projekt sieht), die GitHub-App, das Repo und die Agenten-Einstellungen eines Projekts und die Arbeitsregeln der Agenten. (Braucht `read`.)
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
@@ -434,10 +434,12 @@ Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins), die Aufträge 
 | `get-config` | Die Agenten-Konfiguration eines Bots. | `bot` | `GET /bots/{user}/agent` |
 | `get-github` | Die GitHub-App der Instanz, ihre Installationen und Repos mit ihrem Projekt; nie ein Schlüssel. | – | `GET /github` |
 | `get-repository` | Das Repo eines Projekts mit Basis-Branch, Ruleset-Hinweis und dem Wächter gegen einen eigenmächtigen Merge; `data` null ohne Repo. | `project` | `GET /projects/{project}/repository` |
+| `list-rules` | Die Arbeitsregeln der Organisation je Auftragstyp, jeweils mit dem Vertrag des Typs. | – | `GET /agent-rules` |
+| `get-project-agents` | Die Agenten-Einstellungen eines Projekts: Review-Agent, Text für Agenten, Modelle, Bremsen, Schalter. | `project` | `GET /projects/{project}/agents` |
 
 ### `manage-agents`
 
-Ändert Runner und die Agenten-Konfiguration von Bots (Org-Admins), steuert Aufträge (wer das Item ändern darf), liest die GitHub-App neu und setzt das Repo eines Projekts. Einen Runner verbinden und GitHub verbinden oder trennen geht nur in der Oberfläche. Ein Agent steuert Aufträge nie mit dem Token seines eigenen Auftrags (403 `agent_forbidden`). (Braucht `write`.)
+Ändert Runner und die Agenten-Konfiguration von Bots (Org-Admins), steuert Aufträge (wer das Item ändern darf), liest die GitHub-App neu, setzt das Repo und die Agenten-Einstellungen eines Projekts und ändert die Arbeitsregeln der Agenten (Org-Admins). Einen Runner verbinden und GitHub verbinden oder trennen geht nur in der Oberfläche. Ein Agent steuert Aufträge nie mit dem Token seines eigenen Auftrags (403 `agent_forbidden`). (Braucht `write`.)
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
@@ -449,6 +451,8 @@ Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins), die Aufträge 
 | `sync-github` | Liest die Installationen der GitHub-App und ihre Repos neu von GitHub (Org-Admins). | – | `POST /github/sync` |
 | `set-repository` | Gibt einem Projekt sein Repo (eines, das die App erreicht, höchstens ein Projekt je Repo) und den Basis-Branch, oder keins; Admins des Projekts. | `project`, `input` | `PUT /projects/{project}/repository` |
 | `confirm-merge-guard` | Bestätigt einen eigenmächtigen Merge: der Wächter geht, die pausierten Stränge des Projekts sind wieder offen; Admins des Projekts. | `project` | `POST /projects/{project}/repository/confirm-guard` |
+| `save-rule` | Setzt die Arbeitsregeln eines Auftragstyps; `null` stellt den Standard wieder her (Org-Admins). | `kind`, `input` | `PUT /agent-rules/{kind}` |
+| `save-project-agents` | Setzt die Agenten-Einstellungen eines Projekts als Ganzes (Admins des Projekts). | `project`, `input` | `PUT /projects/{project}/agents` |
 
 <!-- tools:end -->
 

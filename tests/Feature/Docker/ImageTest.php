@@ -236,11 +236,12 @@ it('builds the four runners with the version of the app on the build platform', 
     $app = $instructions('app');
     expect($app)->toContain('COPY --from=runner /dist ./runner/dist')
         ->and($app)->toContain('COPY resources/runner ./resources/runner')
+        ->and($app)->toContain('COPY resources/agents ./resources/agents')
         ->and(config('werkbuch.runner_dist'))->toBe(base_path('runner/dist'));
     foreach (['runner/dist/werkbuch-runner-linux-amd64', 'runner/bin/werkbuch-runner'] as $path) {
         expect($ignored($path))->toBeTrue("{$path} reaches the build context");
     }
-    foreach (['runner/go.mod', 'runner/go.sum', 'runner/main.go', 'runner/internal/service/service.go', 'resources/runner/install.sh', 'config/werkbuch.php'] as $path) {
+    foreach (['runner/go.mod', 'runner/go.sum', 'runner/main.go', 'runner/internal/service/service.go', 'resources/runner/install.sh', 'resources/agents/rules/en/task.md', 'resources/agents/rules/de/review.md', 'config/werkbuch.php'] as $path) {
         expect($ignored($path))->toBeFalse("{$path} is missing in the build context");
     }
 });

@@ -65,7 +65,7 @@ final class EditComment
                 'comment_id' => $fresh->id,
                 'author_id' => $fresh->author_id,
             ] + Mentions::meta($mentioned));
-            UpdateWorkItem::announceBots($actor, $locked, $mentioned, $fresh->id);
+            UpdateWorkItem::announceBots($actor, $locked, $mentioned, $fresh->id, true);
             ItemReferences::queue($actor, $locked, ItemReferences::anew($locked, Document::fromJson($old)->itemRefs(), [$key => $body]));
 
             return $fresh;

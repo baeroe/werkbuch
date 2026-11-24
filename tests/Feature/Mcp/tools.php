@@ -303,6 +303,13 @@ return [
 
         return [];
     }],
+    'agents:list-rules' => ['arguments' => fn (MatrixWorld $w) => []],
+    'agents:get-project-agents' => ['arguments' => fn (MatrixWorld $w) => ['project' => 'WEB']],
+    'manage-agents:save-rule' => ['arguments' => fn (MatrixWorld $w) => ['kind' => 'comment', 'input' => ['body' => 'Answer in one sentence.']]],
+    'manage-agents:save-project-agents' => ['arguments' => fn (MatrixWorld $w) => ['project' => 'WEB', 'input' => [
+        'review_bot_id' => null, 'instructions' => 'Tests run with pest.', 'models' => ['comment' => 'claude:haiku'], 'max_corrections' => 3, 'max_conflicts' => 2,
+        'review_person_prs' => true, 'comment_on_pr' => false, 'merge_method' => 'squash', 'setup_command' => null, 'teardown_command' => null,
+    ]]],
     'manage-agents:set-repository' => ['arguments' => function (MatrixWorld $w) {
         $w->github();
 

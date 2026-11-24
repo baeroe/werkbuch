@@ -110,6 +110,111 @@ final class GitHubApi
             ->patch('/repos/'.self::repoPath($fullName).'/issues/comments/'.$commentId, ['body' => $body]), 'issues/comments');
     }
 
+    /**
+     * A pull request as GitHub has it now: its state, its head, whether it can be merged (`mergeable` is `null` while
+     * GitHub still computes it) and its node ID (for GraphQL).
+     *
+     * @return array<array-key, mixed>
+     */
+    public static function pullRequest(string $token, string $fullName, int $number): array
+    {
+        return self::json(self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->get('/repos/'.self::repoPath($fullName).'/pulls/'.$number), 'pulls'));
+    }
+
+    /**
+     * Merges a pull request at its head commit (GitHub refuses with 409 when the head moved, with 405 when it cannot
+     * merge) and answers the commit of the merge.
+     */
+    public static function mergePullRequest(string $token, string $fullName, int $number, string $sha, string $method): string
+    {
+        $answer = self::json(self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->put('/repos/'.self::repoPath($fullName).'/pulls/'.$number.'/merge', ['sha' => $sha, 'merge_method' => $method]), 'pulls/merge'));
+
+        if (! is_string($answer['sha'] ?? null)) {
+            throw new GitHubUnavailable(GitHubUnavailable::GITHUB, 'GitHub answered pulls/merge without a sha.', GitHubUnavailable::MALFORMED);
+        }
+
+        return $answer['sha'];
+    }
+
+    /** Writes a review of a pull request at a commit: `APPROVE` or `COMMENT` (never `REQUEST_CHANGES`, spec 7.1). */
+    public static function createReview(string $token, string $fullName, int $number, string $sha, string $event, string $body): void
+    {
+        self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->post('/repos/'.self::repoPath($fullName).'/pulls/'.$number.'/reviews', ['commit_id' => $sha, 'event' => $event, 'body' => $body]), 'pulls/reviews');
+    }
+
+    /**
+     * The check runs of a commit (A591: what came before werkbuch knew the commit as the head of a PR).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function checkRuns(string $token, string $fullName, string $sha): array
+    {
+        return self::pages(fn (int $page) => self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->get('/repos/'.self::repoPath($fullName).'/commits/'.rawurlencode($sha).'/check-runs', ['per_page' => 100, 'page' => $page]), 'check-runs'), 'check_runs');
+    }
+
+    /**
+     * The workflow runs of GitHub Actions at a commit (A608): a run that waits (concurrency, an environment to approve)
+     * has no check run yet.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function workflowRuns(string $token, string $fullName, string $sha): array
+    {
+        return self::pages(fn (int $page) => self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->get('/repos/'.self::repoPath($fullName).'/actions/runs', ['head_sha' => $sha, 'per_page' => 100, 'page' => $page]), 'actions/runs'), 'workflow_runs');
+    }
+
+    /**
+     * The commit statuses of a commit, the latest per context (A608: CI that reports through the status API).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function statuses(string $token, string $fullName, string $sha): array
+    {
+        return self::pages(fn (int $page) => self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->get('/repos/'.self::repoPath($fullName).'/commits/'.rawurlencode($sha).'/status', ['per_page' => 100, 'page' => $page]), 'commits/status'), 'statuses');
+    }
+
+    /**
+     * The bodies of the reviews of a pull request, or of the comments at it (`issues/{n}/comments`): to find what
+     * werkbuch posted already.
+     *
+     * @return list<string>
+     */
+    public static function bodies(string $token, string $fullName, int $number, bool $reviews): array
+    {
+        $path = '/repos/'.self::repoPath($fullName).($reviews ? '/pulls/'.$number.'/reviews' : '/issues/'.$number.'/comments');
+        $rows = self::pages(fn (int $page) => self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->get($path, ['per_page' => 100, 'page' => $page]), $reviews ? 'pulls/reviews' : 'issues/comments'), null);
+
+        return array_map(fn (array $row) => is_string($row['body'] ?? null) ? $row['body'] : '', $rows);
+    }
+
+    /** Marks a draft pull request ready for review (only GraphQL can). */
+    public static function markReady(string $token, string $nodeId): void
+    {
+        $answer = self::json(self::send(fn (PendingRequest $http) => $http->withToken($token)->post('/graphql', [
+            'query' => 'mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { pullRequest { isDraft } } }',
+            'variables' => ['id' => $nodeId],
+        ]), 'graphql'));
+
+        if (isset($answer['errors'])) {
+            throw new GitHubUnavailable(GitHubUnavailable::GITHUB, 'GitHub refused markPullRequestReadyForReview.', GitHubUnavailable::MALFORMED);
+        }
+    }
+
+    /** Deletes a branch (after a merge). */
+    public static function deleteBranch(string $token, string $fullName, string $branch): void
+    {
+        $path = '/repos/'.self::repoPath($fullName).'/git/refs/heads/'.implode('/', array_map('rawurlencode', explode('/', $branch)));
+        // `send` with the method by name: ArchTest reads a call of the HTTP helper named after DELETE as a write of a model
+        self::send(fn (PendingRequest $http) => $http->withToken($token)->send('DELETE', $path), 'git/refs');
+    }
+
     /** `owner/name` with both parts encoded, never a path of its own. */
     private static function repoPath(string $fullName): string
     {

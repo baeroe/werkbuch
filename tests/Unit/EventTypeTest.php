@@ -46,6 +46,8 @@ it('knows the events of this phase that have no webhook', function () {
         // the PRs linked to an item (WEBU-25, A541)
         'work_item.link_added', 'work_item.link_merged', 'work_item.link_removed',
         'project.merge_guard_confirmed',
+        // the working rules of the agents and the agent settings of a project (WEBU-26)
+        'agent_rules.updated', 'project.agent_settings_updated',
     ])->sort()->values()->all());
 });
 

@@ -2,6 +2,7 @@
 
 namespace App\OpenApi;
 
+use App\Domain\Agents\RunType;
 use App\Domain\Automations\AutomationKey;
 use Dedoc\Scramble\Extensions\OperationExtension;
 use Dedoc\Scramble\Support\Generator\Operation;
@@ -49,6 +50,7 @@ final class PathParameters extends OperationExtension
             'item' => ['type' => 'string', 'description' => self::ITEM.').'],
             'project' => ['type' => 'string', 'description' => 'The project: its ULID (any case), its identifier (`WEB`) or a former identifier.'],
             'key' => ['type' => 'string', 'description' => 'The automation.', 'enum' => array_column(AutomationKey::cases(), 'value')],
+            'kind' => ['type' => 'string', 'description' => 'The kind of run.', 'enum' => RunType::VALUES],
             default => ['type' => 'string', 'description' => 'The ULID of the '.Str::snake($name, ' ').' (any case).', 'pattern' => self::ULID],
         };
     }

@@ -13,6 +13,7 @@ use Illuminate\Support\Carbon;
  *
  * @property string $id
  * @property string $work_item_link_id
+ * @property string $kind
  * @property int $check_run_id
  * @property string $name
  * @property string|null $app
@@ -23,7 +24,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['work_item_link_id', 'check_run_id', 'name', 'app', 'status', 'conclusion', 'url', 'head_sha'])]
+#[Fillable(['work_item_link_id', 'kind', 'check_run_id', 'name', 'app', 'status', 'conclusion', 'url', 'head_sha'])]
 final class WorkItemLinkCheck extends Model
 {
     use HasUlids;

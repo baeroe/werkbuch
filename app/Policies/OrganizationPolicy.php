@@ -44,6 +44,14 @@ final class OrganizationPolicy
             : Response::deny(__('problem.detail.runners_admins_only'));
     }
 
+    /** The working rules of the agents per kind of run (spec 7.3, 10.5): accounts with `org.manage_catalog`. */
+    public function manageAgentRules(User $user): Response
+    {
+        return Visibility::can($user, Permission::OrgManageCatalog)
+            ? Response::allow()
+            : Response::deny(__('problem.detail.agent_rules_admins_only'));
+    }
+
     /** The agent configuration of bots (spec 10.4): accounts with `org.manage`. */
     public function manageAgents(User $user): Response
     {

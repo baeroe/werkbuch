@@ -14,7 +14,7 @@ use App\Domain\Agents\RunType;
 final class RepoPermissions
 {
     /** What werkbuch's own short-lived tokens may (merge, review, comment, read checks and logs). */
-    public const OWN = ['contents' => 'write', 'pull_requests' => 'write', 'checks' => 'read', 'actions' => 'read', 'metadata' => 'read'];
+    public const OWN = ['contents' => 'write', 'pull_requests' => 'write', 'checks' => 'read', 'actions' => 'read', 'statuses' => 'read', 'metadata' => 'read'];
 
     /**
      * @return array<string, string>

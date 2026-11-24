@@ -102,6 +102,8 @@ COPY public ./public
 COPY resources/views ./resources/views
 # the installer of the runner (/runner/install.sh) and its binaries with their sums (/runner/download/…, A520)
 COPY resources/runner ./resources/runner
+# the standard working rules of the agents (/api/v1/agent-rules, the prompts of the runs)
+COPY resources/agents ./resources/agents
 COPY --from=runner /dist ./runner/dist
 COPY routes ./routes
 # read at runtime by the MCP references (werkbuch.docs_path, A409)

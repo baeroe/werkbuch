@@ -101,7 +101,7 @@ func newWorld(t *testing.T) *world {
 func str(s string) *string { return &s }
 
 func (w *world) run(id, kind, prompt string, edit ...func(*protocol.Run)) protocol.Run {
-	r := protocol.Run{ID: id, Attempt: 1, Type: kind, CLI: "claude", Model: "sonnet", TimeoutMinutes: 60, Prompt: prompt, SystemPrompt: "contract"}
+	r := protocol.Run{ID: id, Attempt: 1, Type: kind, CLI: "claude", Model: "sonnet", TimeoutMinutes: 120, Prompt: prompt, SystemPrompt: "contract"}
 	r.Project = protocol.ProjectRef{ID: "01p", Identifier: "WEB"}
 	r.Item = &protocol.ItemRef{ID: "01i", Key: "WEB-1", Title: "A thing"}
 	r.Thread = &protocol.Thread{ID: "thread-" + id, Branch: str("agent/WEB-1-a-thing"), BaseBranch: str("main")}

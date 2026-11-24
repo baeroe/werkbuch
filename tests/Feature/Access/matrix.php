@@ -20,8 +20,33 @@ use App\Actions\AgentRuns\RecordHeartbeat;
 use App\Actions\AgentRuns\RecordRunEvents;
 use App\Actions\AgentRuns\RenewGitToken;
 use App\Actions\AgentRuns\RetryRun;
+use App\Actions\Agents\ApproveAndMerge;
+use App\Actions\Agents\CheckThreadMergeability;
+use App\Actions\Agents\CompleteThread;
+use App\Actions\Agents\FollowEvent;
 use App\Actions\Agents\GetAgentConfig;
+use App\Actions\Agents\GetProjectAgents;
+use App\Actions\Agents\GiveUpOnThread;
+use App\Actions\Agents\HandleAgentPullRequest;
+use App\Actions\Agents\HandleCheckResult;
+use App\Actions\Agents\HandleRunResult;
+use App\Actions\Agents\HandleRunStarted;
+use App\Actions\Agents\ListAgentRules;
+use App\Actions\Agents\MarkThreadReady;
+use App\Actions\Agents\MergeThread;
+use App\Actions\Agents\PauseThread;
+use App\Actions\Agents\PostReviewVerdict;
+use App\Actions\Agents\ReadyEpic;
+use App\Actions\Agents\ResumeAfterGuard;
 use App\Actions\Agents\SaveAgentConfig;
+use App\Actions\Agents\SaveAgentRule;
+use App\Actions\Agents\SaveProjectAgents;
+use App\Actions\Agents\StartComment;
+use App\Actions\Agents\StartConflict;
+use App\Actions\Agents\StartCorrection;
+use App\Actions\Agents\StartReview;
+use App\Actions\Agents\StartTask;
+use App\Actions\Agents\SweepAgentThreads;
 use App\Actions\Attachments\DeleteAttachment;
 use App\Actions\Attachments\GetAttachment;
 use App\Actions\Attachments\IssueUploadUrl;
@@ -62,6 +87,7 @@ use App\Actions\Labels\DeleteLabel;
 use App\Actions\Labels\GetLabel;
 use App\Actions\Labels\ListLabels;
 use App\Actions\Labels\SaveLabel;
+use App\Actions\Links\LoadChecks;
 use App\Actions\Links\PostLinkback;
 use App\Actions\Links\SyncChecks;
 use App\Actions\Links\SyncPullRequest;
@@ -200,9 +226,11 @@ use App\Actions\WorkItemTypes\GetWorkItemType;
 use App\Actions\WorkItemTypes\ListWorkItemTypes;
 use App\Actions\WorkItemTypes\SaveWorkItemType;
 use App\Domain\Agents\RunStatus;
+use App\Domain\Agents\RunType;
 use App\Domain\Automations\AutomationKey;
 use App\Domain\Workflow\StateCategory;
 use App\Events\EventType;
+use App\Models\AgentThread;
 use App\Models\Attachment;
 use App\Models\Automation;
 use App\Models\Comment;
@@ -1660,6 +1688,152 @@ return [
         'allowed' => $projectAdmins,
         'hidden' => ['outsider_private'],
         'event' => EventType::ProjectMergeGuardConfirmed,
+    ],
+    // the working rules of the agents and the agent settings of a project (WEBU-26, spec 7.3, 10.3, 10.5)
+    'ListAgentRules' => [
+        'action' => ListAgentRules::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListAgentRules::run($a),
+        'allowed' => $everyone,
+    ],
+    'SaveAgentRule' => [
+        'action' => SaveAgentRule::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveAgentRule::run($a, 'review', ['body' => "Matrix rules {$column}"]),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::AgentRulesUpdated,
+    ],
+    'GetProjectAgents' => [
+        'action' => GetProjectAgents::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetProjectAgents::run($a, $w->project($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'SaveProjectAgents' => [
+        'action' => SaveProjectAgents::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveProjectAgents::run($a, $w->project($column), [
+            'review_bot_id' => null, 'instructions' => "Matrix {$column}", 'models' => ['review' => 'claude:opus'], 'max_corrections' => 2, 'max_conflicts' => 1,
+            'review_person_prs' => false, 'comment_on_pr' => true, 'merge_method' => 'squash', 'setup_command' => null, 'teardown_command' => null,
+        ]),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectAgentSettingsUpdated,
+    ],
+    // the flow of the agents (WEBU-26, spec 7): the work of the consumer and of jobs, as the system; the feature tests
+    // of tests/Feature/Agents play the paths that move items and queue runs
+    'FollowEvent' => [
+        'action' => FollowEvent::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => FollowEvent::run($a, Event::query()->where('type', EventType::BotCreated)->firstOrFail()),
+        'system' => true,
+    ],
+    'StartTask' => [
+        'action' => StartTask::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => StartTask::run($a, $w->item('project_admin'), $w->account('run_token')),
+        'system' => true,
+    ],
+    'StartCorrection' => [
+        'action' => StartCorrection::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => StartCorrection::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::MERGED]), 'ci', 'red'),
+        'system' => true,
+    ],
+    'StartConflict' => [
+        'action' => StartConflict::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => StartConflict::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::PAUSED]), str_repeat('a', 40)),
+        'system' => true,
+    ],
+    'StartReview' => [
+        'action' => StartReview::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => StartReview::run($a, $w->project('project_admin'), [
+            'repository_github_id' => 700_000_001, 'repository' => 'feldwerk/website', 'number' => 1, 'head_sha' => str_repeat('a', 40), 'base_branch' => 'main',
+        ], null, null),
+        'system' => true,
+    ],
+    'StartComment' => [
+        'action' => StartComment::class,
+        'run' => function (Actor $a, MatrixWorld $w, string $column) {
+            $item = $w->item('project_admin');
+
+            return StartComment::run($a, $item, $w->account('run_token'), Comment::factory()->for($item, 'workItem')->create());
+        },
+        'system' => true,
+    ],
+    'PauseThread' => [
+        'action' => PauseThread::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PauseThread::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::PAUSED]), 'reassigned'),
+        'system' => true,
+    ],
+    'HandleRunStarted' => [
+        'action' => HandleRunStarted::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => HandleRunStarted::run($a, $w->run('project_admin', ['type' => RunType::Review])),
+        'system' => true,
+    ],
+    'HandleRunResult' => [
+        'action' => HandleRunResult::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => HandleRunResult::run($a, $w->run('project_admin', ['status' => RunStatus::Canceled])),
+        'system' => true,
+    ],
+    'CompleteThread' => [
+        'action' => CompleteThread::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CompleteThread::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::MERGED]), 'merged'),
+        'system' => true,
+    ],
+    'ReadyEpic' => [
+        'action' => ReadyEpic::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ReadyEpic::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::PAUSED])),
+        'system' => true,
+    ],
+    'ApproveAndMerge' => [
+        'action' => ApproveAndMerge::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ApproveAndMerge::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::OPEN])),
+        'system' => true,
+    ],
+    'MergeThread' => [
+        'action' => MergeThread::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => MergeThread::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::OPEN])->id, str_repeat('a', 40)),
+        'system' => true,
+    ],
+    'GiveUpOnThread' => [
+        'action' => GiveUpOnThread::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GiveUpOnThread::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::OPEN])->id, 'merge', str_repeat('a', 40)),
+        'system' => true,
+    ],
+    'LoadChecks' => [
+        'action' => LoadChecks::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => LoadChecks::run($a, 700_000_001, str_repeat('a', 40)),
+        'system' => true,
+    ],
+    'HandleAgentPullRequest' => [
+        'action' => HandleAgentPullRequest::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => HandleAgentPullRequest::run($a, FakeGitHub::pullRequest('opened', 1)),
+        'system' => true,
+    ],
+    'HandleCheckResult' => [
+        'action' => HandleCheckResult::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => HandleCheckResult::run($a, 700_000_001, str_repeat('a', 40)),
+        'system' => true,
+    ],
+    'CheckThreadMergeability' => [
+        'action' => CheckThreadMergeability::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => CheckThreadMergeability::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::OPEN])->id),
+        'system' => true,
+    ],
+    'PostReviewVerdict' => [
+        'action' => PostReviewVerdict::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => PostReviewVerdict::run($a, $w->run('project_admin')->id),
+        'system' => true,
+    ],
+    'MarkThreadReady' => [
+        'action' => MarkThreadReady::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => MarkThreadReady::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::OPEN])->id),
+        'system' => true,
+    ],
+    'SweepAgentThreads' => [
+        'action' => SweepAgentThreads::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SweepAgentThreads::run($a),
+        'system' => true,
+    ],
+    'ResumeAfterGuard' => [
+        'action' => ResumeAfterGuard::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ResumeAfterGuard::run($a, [AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::OPEN])->id]),
+        'system' => true,
     ],
     // the webhook of GitHub and the token of a run (WEBU-24): no account, the actor is the system
     'ReceiveGitHubDelivery' => [

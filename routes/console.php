@@ -8,6 +8,7 @@ use App\Jobs\PruneWebhookDeliveriesJob;
 use App\Jobs\ReapLostRunsJob;
 use App\Jobs\RunDailyAutomationsJob;
 use App\Jobs\SendDueRemindersJob;
+use App\Jobs\SweepAgentThreadsJob;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -47,6 +48,7 @@ Schedule::job(new PruneWebhookDeliveriesJob)->hourly()->withoutOverlapping(60);
 
 // the runs of agents (WEBU-20): leases, time limits and the reasons of waiting runs every minute; their logs after 30 days
 Schedule::job(new ReapLostRunsJob)->everyMinute()->withoutOverlapping(5);
+Schedule::job(new SweepAgentThreadsJob)->everyMinute()->withoutOverlapping(5);
 Schedule::job(new PruneRunEventsJob)->hourly()->withoutOverlapping(60);
 
 // forget old webhook deliveries of GitHub (WEBU-24)

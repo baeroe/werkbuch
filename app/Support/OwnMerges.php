@@ -23,12 +23,32 @@ final class OwnMerges
 
     public static function expect(string $repositoryId, int $prNumber): GitHubMerge
     {
+        // a merge of the PR whose answer got lost is the same merge asked again: one row, its window starts again
+        $open = GitHubMerge::query()->where('repository_id', $repositoryId)->where('pr_number', $prNumber)->whereNull('merge_sha')
+            ->orderByDesc('started_at')->orderByDesc('id')->lockForUpdate()->first();
+        if ($open !== null) {
+            $open->forceFill(['started_at' => now()])->save();
+
+            return $open;
+        }
+
         return GitHubMerge::query()->create(['repository_id' => $repositoryId, 'pr_number' => $prNumber, 'started_at' => now()]);
     }
 
     public static function merged(GitHubMerge $merge, string $sha): void
     {
         $merge->forceFill(['merge_sha' => strtolower($sha), 'merged_at' => now()])->save();
+    }
+
+    /**
+     * The merge of a PR werkbuch asked for is done: its commit, from GitHub's own word (the PR merged) when the answer
+     * to the merge got lost (A600). Only merges of that PR still without a commit; nothing for a PR werkbuch never
+     * merged.
+     */
+    public static function settle(string $repositoryId, int $prNumber, string $sha): void
+    {
+        GitHubMerge::query()->where('repository_id', $repositoryId)->where('pr_number', $prNumber)->whereNull('merge_sha')
+            ->update(['merge_sha' => strtolower($sha), 'merged_at' => now()]);
     }
 
     /** Whether a commit on the base branch of the repo is werkbuch's own merge, may still be, or is not. */

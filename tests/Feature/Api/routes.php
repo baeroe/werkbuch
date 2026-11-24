@@ -202,6 +202,13 @@ return [
     'show the repo of a project' => ['GET', '/api/v1/projects/{project}/repository', 'params' => fn (MatrixWorld $w) => ['project' => 'WEB']],
     'set the repo of a project' => ['PUT', '/api/v1/projects/{project}/repository', 'params' => fn (MatrixWorld $w) => ['project' => 'WEB']],
     'confirm an unauthorized merge' => ['POST', '/api/v1/projects/{project}/repository/confirm-guard', 'params' => fn (MatrixWorld $w) => ['project' => 'WEB']],
+    'list the working rules of the agents' => ['GET', '/api/v1/agent-rules'],
+    'set the working rules of a kind of run' => ['PUT', '/api/v1/agent-rules/{kind}', 'params' => fn (MatrixWorld $w) => ['kind' => 'review'], 'body' => ['body' => 'Route rules']],
+    'show the agent settings of a project' => ['GET', '/api/v1/projects/{project}/agents', 'params' => fn (MatrixWorld $w) => ['project' => 'WEB']],
+    'set the agent settings of a project' => ['PUT', '/api/v1/projects/{project}/agents', 'params' => fn (MatrixWorld $w) => ['project' => 'WEB'], 'body' => [
+        'review_bot_id' => null, 'instructions' => null, 'models' => [], 'max_corrections' => 3, 'max_conflicts' => 2,
+        'review_person_prs' => true, 'comment_on_pr' => true, 'merge_method' => 'squash', 'setup_command' => null, 'teardown_command' => null,
+    ]],
     'list runs' => ['GET', '/api/v1/runs'],
     'show a run' => ['GET', '/api/v1/runs/{run}', 'params' => fn (MatrixWorld $w) => ['run' => $w->run('org_admin')->id]],
     'show the log of a run' => ['GET', '/api/v1/runs/{run}/events', 'params' => fn (MatrixWorld $w) => ['run' => $w->run('org_admin')->id]],
