@@ -38,7 +38,7 @@ final class AgentFlow
     /** How long a PR without any check waits before it counts as green, and a strand for the PR of its task (spec 7.2). */
     public const SETTLE_MINUTES = 2;
 
-    /** The answers of `refusal`, in its order. */
+    /** The answers of `refusal`. */
     public const REFUSALS = ['agent_off', 'default_bot', 'disabled', 'no_owner', 'archived', 'no_steps', 'not_member'];
 
     /**
@@ -53,9 +53,11 @@ final class AgentFlow
         $workflow = Workflow::query()->find($project->workflow_id);
 
         return match (true) {
-            ! $bot->isBot() || $config === null || ! $config->enabled => 'agent_off',
+            // the default bot and a deactivated one say so before their agent: neither is set up as one
+            ! $bot->isBot() => 'agent_off',
             $bot->is_default_bot => 'default_bot',
             $bot->isDisabled() => 'disabled',
+            $config === null || ! $config->enabled => 'agent_off',
             $bot->owner_id === null => 'no_owner',
             $project->archived_at !== null || $project->deleting_at !== null => 'archived',
             $workflow === null || ! $workflow->agentStepsComplete() => 'no_steps',
