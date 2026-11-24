@@ -49,7 +49,7 @@ final class RunPrompts
                 ."Findings to work through (from {$say('source', 'werkbuch')}):\n\n".RunPrompt::quote($say('findings', 'Look at the item and the pull request again.')),
             RunType::Conflict => "Run `conflict` for {$subject} of the project {$project}.\n\n".self::where($thread)
                 ."The pull request has conflicts with its base branch `{$thread?->base_branch}`: merge it into your branch, resolve them and push.",
-            RunType::Review => "Run `review` of the pull request #{$run->pr_number} of `{$say('repository', 'the repository')}` at the commit `{$run->head_sha}` (base branch `{$say('base_branch', $thread?->base_branch ?? 'main')}`).\n\n"
+            RunType::Review => "Run `review` of the pull request #{$run->pr_number} of `{$say('repository', 'the repository')}` at the commit `{$run->head_sha}` (base branch `{$say('base_branch', $thread->base_branch ?? 'main')}`).\n\n"
                 .($item === null ? 'It names no item of the project.' : "Its item is {$item->key} ".self::title($item).'; read it with `werkbuch-run`.')
                 ."\n\nRead the pull request with `gh pr view {$run->pr_number}` and `gh pr diff {$run->pr_number}` in the worktree you are given (checked out at that commit).",
             RunType::Comment => "Run `comment` at {$subject} of the project {$project}.\n\n{$say('author', 'Someone')} asked you in a comment:\n\n"
