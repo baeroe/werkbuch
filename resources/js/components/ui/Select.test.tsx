@@ -137,6 +137,26 @@ describe('Select', () => {
     expect(onValueChange).not.toHaveBeenCalled();
   });
 
+  it('puts options of one group under its heading and the others on their own, in the order of the list', async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    const options: SelectOption[] = [
+      { value: 'none', label: 'Kein Modell' },
+      { value: 'claude:haiku', label: 'haiku', group: 'Claude Code' },
+      { value: 'claude:opus', label: 'opus', group: 'Claude Code' },
+      { value: 'codex:gpt-5-codex', label: 'gpt-5-codex', group: 'Codex' },
+    ];
+    render(<Harness options={options} start="none" onValueChange={onValueChange} />);
+
+    await user.click(screen.getByRole('combobox', { name: /Status/ }));
+    const groups = await screen.findAllByRole('group');
+    expect(groups.map((group) => group.getAttribute('aria-labelledby') && document.getElementById(group.getAttribute('aria-labelledby')!)?.textContent)).toEqual(['Claude Code', 'Codex']);
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Kein Modell', 'haiku', 'opus', 'gpt-5-codex']);
+
+    await user.click(screen.getByRole('option', { name: 'gpt-5-codex' }));
+    expect(onValueChange).toHaveBeenCalledWith('codex:gpt-5-codex');
+  });
+
   it('closes on Escape without a change', async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();

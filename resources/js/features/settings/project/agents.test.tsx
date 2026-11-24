@@ -11,8 +11,8 @@ import type { ReactNode, Ref } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { agency, ida, lene, list, makeWorkItem, mara, organization, project, standard } from '@/test/fixtures';
-import type { GitHubRepository, GitHubStatus, MergeGuard, ProjectRepository, User, Workflow } from '@/types';
+import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, standard } from '@/test/fixtures';
+import type { GitHubRepository, GitHubStatus, Label, MergeGuard, ProjectAgents, ProjectRepository, User, Workflow } from '@/types';
 import { ProjectSettings } from './ProjectSettings';
 
 let signedIn: User = ida;
@@ -91,6 +91,32 @@ const guard: MergeGuard = {
   ],
 };
 
+const kira = { ...lene, id: 'u_kira', name: 'Kira', handle: 'kira', type: 'bot' as const, owner_id: 'u_mara' };
+const rita = { ...lene, id: 'u_rita', name: 'Rita', handle: 'rita', type: 'bot' as const, owner_id: 'u_mara' };
+const vera = { ...lene, id: 'u_vera', name: 'Vera', handle: 'vera', type: 'bot' as const, owner_id: 'u_mara' };
+const gabi = { ...lene, id: 'u_gone', name: 'Gabi', handle: 'gabi', type: 'bot' as const, owner_id: 'u_mara', disabled_at: '2026-11-01T00:00:00.000Z' };
+
+const defaults: ProjectAgents = {
+  project_id: 'p_web',
+  review_bot_id: null,
+  instructions: null,
+  models: {},
+  max_corrections: 3,
+  max_conflicts: 2,
+  review_person_prs: true,
+  comment_on_pr: true,
+  merge_method: 'squash',
+  setup_command: null,
+  teardown_command: null,
+  bots: [
+    { bot_id: 'u_kira', enabled: true, member: true, reviews: true, cli: 'claude', model: 'sonnet', models: { review: 'opus' } },
+    { bot_id: 'u_rita', enabled: false, member: true, reviews: true, cli: 'claude', model: 'haiku', models: {} },
+    { bot_id: 'u_vera', enabled: true, member: true, reviews: false, cli: 'codex', model: 'gpt-5-codex', models: {} },
+  ],
+  steps_complete: true,
+  updated_at: null,
+};
+
 const problem = (status: number, reason: string, extra: Record<string, unknown> = {}) => ({ status, body: { type: 'about:blank', title: reason, status, reason, detail: reason, ...extra } });
 
 /* ------------------------------------------------------------------------ server */
@@ -103,9 +129,12 @@ function renderAgents({
   status = github,
   role = 'admin' as const,
   overrides = {},
-}: { workflow?: Workflow; link?: ProjectRepository | null; status?: GitHubStatus; role?: 'admin' | 'viewer'; overrides?: Record<string, MockRoute> } = {}) {
+  agents = defaults,
+  catalog = labels,
+}: { workflow?: Workflow; link?: ProjectRepository | null; status?: GitHubStatus; role?: 'admin' | 'viewer'; overrides?: Record<string, MockRoute>; agents?: ProjectAgents; catalog?: Label[] } = {}) {
   const web = project('WEB', role, { id: 'p_web', name: 'Website-Relaunch', workflow_id: workflow.id });
   let current = link;
+  let settings = agents;
   api = mockApi({
     'GET /api/v1/projects/WEB': () => ({ body: { data: web } }),
     'GET /api/v1/projects': () => ({ body: list([web]) }),
@@ -122,6 +151,13 @@ function renderAgents({
       current = current ? { ...current, guard: null } : null;
       return { body: { data: current } };
     },
+    'GET /api/v1/projects/p_web/agents': () => ({ body: { data: settings } }),
+    'PUT /api/v1/projects/p_web/agents': (body) => {
+      settings = { ...settings, ...(body as Partial<ProjectAgents>), updated_at: '2026-11-24T10:00:00.000Z' };
+      return { body: { data: settings } };
+    },
+    'GET /api/v1/labels': () => ({ body: list(catalog) }),
+    'GET /api/v1/users': () => ({ body: list([mara, ida, lene, kira, rita, vera, gabi]) }),
     'GET /api/v1/references': () => ({ body: { data: { items: [makeWorkItem({ id: 'i_web47', key: 'WEB-47' }), makeWorkItem({ id: 'i_web48', key: 'WEB-48' })], pages: [] } } }),
     ...overrides,
   });
@@ -436,5 +472,202 @@ describe('Agents: states', () => {
     renderAgents({ workflow: { ...agency, agent_states: { ...agency.agent_states, merged: null } } as Workflow });
 
     expect(await screen.findByText('Agenten aus: der Workflow „Agentur-Freigabe“ hat noch nicht alle Agenten-Schritte')).toBeTruthy();
+  });
+});
+
+describe('Agents: settings (WEBU-32)', () => {
+  const choose = async (user: ReturnType<typeof userEvent.setup>, field: RegExp, option: string | RegExp) => {
+    await user.click(screen.getByRole('combobox', { name: field }));
+    await user.click(await screen.findByRole('option', { name: option }));
+  };
+
+  it('saves merge method, review agent, switches, commands, brakes, models and the text without touching the repo', async () => {
+    const user = userEvent.setup();
+    signedIn = mara;
+    renderAgents();
+
+    expect(await screen.findByRole('heading', { name: 'Bremsen' })).toBeTruthy();
+    expect(screen.getByText(/Ein Commit je PR auf dem Basis-Branch/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Rebase' }));
+    expect(screen.getByText(/einzeln auf den Basis-Branch gesetzt/)).toBeTruthy();
+
+    // only a bot that works as an agent and may edit items here reviews
+    await user.click(screen.getByRole('combobox', { name: /Review-Agent/ }));
+    const options = await screen.findAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      'Der Bot des Strangs (PRs von Personen ohne Review)',
+      'Kira',
+      'Rita (arbeitet nicht als Agent)',
+      'Vera (darf hier keine Items bearbeiten)',
+    ]);
+    expect(options[2].getAttribute('aria-disabled')).toBe('true');
+    expect(options[3].getAttribute('aria-disabled')).toBe('true');
+    await user.click(options[1]);
+
+    await user.click(screen.getByRole('switch', { name: 'Kommentar am PR' }));
+    await user.click(screen.getByRole('switch', { name: 'PRs von Personen reviewen' }));
+    await user.click(screen.getByRole('switch', { name: 'PRs von Personen reviewen' }));
+    await user.type(screen.getByRole('textbox', { name: /Setup-Befehl/ }), 'ddev start');
+    const corrections = screen.getByRole<HTMLInputElement>('textbox', { name: /Korrekturen je Strang/ });
+    await user.clear(corrections);
+    await user.type(corrections, '5');
+
+    // without a model of the project each agent takes its own: one model, or each by name
+    expect(screen.getByRole('combobox', { name: /^Review(?!-)/ }).textContent).toContain('Wie beim Bot (Kira: opus, Vera: gpt-5-codex)');
+    await choose(user, /^Review(?!-)/, 'haiku');
+    expect(screen.getByText('Gilt nur für Agenten mit Claude Code.')).toBeTruthy();
+    await choose(user, /^Antwort/, 'gpt-5-codex-mini');
+    await choose(user, /^Antwort/, /Wie beim Bot/);
+    await user.type(screen.getByRole('textbox', { name: /Projektinformationen und Regeln$/ }), 'Pest in DDEV.');
+
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(toastNamed('Agenten gespeichert')).toBeTruthy());
+    expect(calls('PUT', '/api/v1/projects/p_web/repository')).toHaveLength(0);
+    expect(calls('PUT', '/api/v1/projects/p_web/agents')[0].body).toEqual({
+      review_bot_id: 'u_kira',
+      instructions: 'Pest in DDEV.',
+      models: { review: 'claude:haiku' },
+      max_corrections: 5,
+      max_conflicts: 2,
+      review_person_prs: true,
+      comment_on_pr: false,
+      merge_method: 'rebase',
+      setup_command: 'ddev start',
+      teardown_command: null,
+    });
+    await waitFor(() => expect(screen.queryByText('Nicht gespeicherte Änderungen')).toBeNull());
+  });
+
+  it('counts an org admin bot that is no member only for reviews in what the kinds inherit', async () => {
+    signedIn = mara;
+    renderAgents({ agents: { ...defaults, bots: [...defaults.bots, { bot_id: 'u_gone', enabled: true, member: false, reviews: true, cli: 'claude', model: 'haiku', models: {} }] } });
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /^Review(?!-)/ }).textContent).toContain('Wie beim Bot (Kira: opus, Vera: gpt-5-codex, Gabi: haiku)'));
+    expect(screen.getByRole('combobox', { name: /^Umsetzen/ }).textContent).toContain('Wie beim Bot (Kira: sonnet, Vera: gpt-5-codex)');
+  });
+
+  it('names a deactivated saved review agent as such, and locks the review of PRs of persons without a review agent', async () => {
+    const user = userEvent.setup();
+    signedIn = mara;
+    renderAgents({ agents: { ...defaults, review_bot_id: 'u_gone', bots: [...defaults.bots, { bot_id: 'u_gone', enabled: true, member: true, reviews: false, cli: 'claude', model: 'sonnet', models: {} }] } });
+
+    const reviewer = await screen.findByRole('combobox', { name: /Review-Agent/ });
+    await waitFor(() => expect(reviewer.textContent).toContain('Gabi (deaktiviert)'));
+    const persons = screen.getByRole('switch', { name: 'PRs von Personen reviewen' });
+    expect(persons.hasAttribute('data-disabled')).toBe(false);
+
+    await user.click(reviewer);
+    await user.click(await screen.findByRole('option', { name: /Der Bot des Strangs/ }));
+    expect(screen.getByText(/Nur mit einem Review-Agenten des Projekts/)).toBeTruthy();
+    expect(persons.hasAttribute('data-disabled')).toBe(true);
+    expect(persons.getAttribute('aria-describedby')).toBeTruthy();
+    expect(document.getElementById(persons.getAttribute('aria-describedby')!)!.textContent).toContain('Nur mit einem Review-Agenten des Projekts');
+  });
+
+  it('saves the repo and the settings in one press, each only once', async () => {
+    const user = userEvent.setup();
+    renderAgents();
+
+    await screen.findByRole('combobox', { name: /Repo/ });
+    await choose(user, /Repo/, 'feldwerk/kunden-app');
+    await user.click(screen.getByRole('button', { name: 'Merge-Commit' }));
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await waitFor(() => expect(toastNamed('Agenten gespeichert')).toBeTruthy());
+    expect(calls('PUT', '/api/v1/projects/p_web/repository')).toHaveLength(1);
+    expect(calls('PUT', '/api/v1/projects/p_web/agents')).toHaveLength(1);
+  });
+
+  it('refuses a brake out of range without a call, shows a refusal of the server at its field and tries again after no answer', async () => {
+    const user = userEvent.setup();
+    let answer: 'field' | 'notice' | 'down' = 'field';
+    renderAgents({
+      overrides: {
+        'PUT /api/v1/projects/p_web/agents': () => {
+          if (answer === 'field') return problem(422, 'validation_failed', { errors: { 'models.task': ['Kein Modell der Liste.'] } });
+          if (answer === 'notice') return problem(422, 'validation_failed', { errors: { comment_on_pr: ['Ja oder nein.'] } });
+          return problem(503, 'service_unavailable');
+        },
+      },
+    });
+
+    const conflicts = await screen.findByRole<HTMLInputElement>('textbox', { name: /Konflikte je Strang/ });
+    await user.clear(conflicts);
+    await user.type(conflicts, '11');
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+    expect(await screen.findByText('Eine ganze Zahl von 1 bis 10.')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(conflicts));
+    expect(calls('PUT', '/api/v1/projects/p_web/agents')).toHaveLength(0);
+
+    await user.clear(conflicts);
+    await user.type(conflicts, '4');
+    expect(screen.queryByText('Eine ganze Zahl von 1 bis 10.')).toBeNull();
+    await choose(user, /^Umsetzen/, 'opus');
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+    expect(await screen.findByText('Kein Modell der Liste.')).toBeTruthy();
+
+    answer = 'notice';
+    await choose(user, /^Umsetzen/, 'sonnet');
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByText('Ja oder nein.')).toBeTruthy();
+
+    answer = 'down';
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(toastNamed('Agenten nicht gespeichert')).toBeTruthy());
+    runToastAction(toastNamed('Agenten nicht gespeichert')!.id);
+    await waitFor(() => expect(calls('PUT', '/api/v1/projects/p_web/agents')).toHaveLength(4));
+  });
+
+  it('keeps the saved repo when the settings are refused after it', async () => {
+    const user = userEvent.setup();
+    renderAgents({ overrides: { 'PUT /api/v1/projects/p_web/agents': () => problem(422, 'validation_failed', { errors: { review_bot_id: ['Wähle einen anderen Bot.'] } }) } });
+
+    await screen.findByRole('combobox', { name: /Repo/ });
+    await choose(user, /Repo/, 'feldwerk/kunden-app');
+    await choose(user, /Review-Agent/, 'Kira');
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(await screen.findByText('Wähle einen anderen Bot.')).toBeTruthy();
+    expect(calls('PUT', '/api/v1/projects/p_web/repository')).toHaveLength(1);
+    // the next press sends only the settings again
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(calls('PUT', '/api/v1/projects/p_web/agents')).toHaveLength(2));
+    expect(calls('PUT', '/api/v1/projects/p_web/repository')).toHaveLength(1);
+  });
+
+  it('names the model labels of the organization before the models, with the way to them for org admins', async () => {
+    signedIn = { ...mara };
+    renderAgents({ catalog: [...labels, { id: 'lb_haiku', name: 'Haiku Agent', color: 'sky', agent_model: 'claude:haiku' }, { id: 'lb_x', name: 'Alt', color: 'moss', agent_model: 'claude:gone' }] });
+
+    const list = await screen.findByRole('list', { name: 'Modell-Labels' });
+    expect(within(list).getAllByRole('listitem').map((entry) => entry.textContent)).toEqual(['Haiku Agenthaiku', 'Altclaude:gone']);
+    expect(screen.getByText(/Trägt ein Item eins davon/)).toBeTruthy();
+  });
+
+  it('says when there is no model label and an agent nobody runs', async () => {
+    renderAgents({ agents: { ...defaults, bots: [] } });
+
+    expect(await screen.findByText(/Noch kein Label mit einem Modell für Agenten/)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Labels bearbeiten' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: /^Korrektur/ }).textContent).toContain('Wie beim Bot');
+    expect(screen.getByRole('link', { name: 'Arbeitsregeln ansehen' }).getAttribute('href')).toBe('/settings/agents');
+  });
+
+  it('reads every setting without a form, and the review agent of a bot that left', async () => {
+    renderAgents({
+      role: 'viewer',
+      agents: { ...defaults, review_bot_id: 'u_gone', models: { task: 'codex:gpt-5-codex', review: 'claude:opus' }, merge_method: 'merge', setup_command: 'ddev start', instructions: 'Markdown.' },
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Bremsen' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Speichern' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Merge-Methode: Merge-Commit' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Review-Agent: Jemand' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Umsetzen: gpt-5-codex (Codex)' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Korrektur: Wie beim Bot (Kira: sonnet, Vera: gpt-5-codex)' })).toBeTruthy();
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: /Setup-Befehl/ }).readOnly).toBe(true);
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: /Korrekturen je Strang/ }).readOnly).toBe(true);
+    expect(screen.getByRole('switch', { name: 'PRs von Personen reviewen' }).getAttribute('aria-disabled') ?? (screen.getByRole('switch', { name: 'PRs von Personen reviewen' }) as HTMLButtonElement).disabled).toBeTruthy();
   });
 });

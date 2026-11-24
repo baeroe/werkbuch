@@ -65,6 +65,70 @@ describe('Labels', () => {
     expect(within(screen.getByRole('list', { name: 'Labels' })).getAllByRole('listitem')).toHaveLength(4);
   });
 
+  it('names the model of a model label in its row, with the CLI when it is not Claude Code', async () => {
+    renderWith(
+      <Labels readOnlyReason={null} />,
+      routes([...labels, { id: 'lb_haiku', name: 'Haiku Agent', color: 'sky', agent_model: 'claude:haiku' }, { id: 'lb_codex', name: 'Codex Agent', color: 'moss', agent_model: 'codex:gpt-5-codex-mini' }, { id: 'lb_odd', name: 'Alt', color: 'plum', agent_model: 'claude:gone' }]),
+    );
+
+    expect(within(await screen.findByRole('heading', { name: 'Haiku Agent' }).then((heading) => heading.closest('li')!)).getByText(/Modell für Agenten:/).textContent).toBe('Modell für Agenten: haiku');
+    expect(within(rowOf('Codex Agent')).getByText(/Modell für Agenten:/).textContent).toBe('Modell für Agenten: gpt-5-codex-mini (Codex)');
+    expect(within(rowOf('Alt')).getByText(/Modell für Agenten:/).textContent).toBe('Modell für Agenten: claude:gone');
+    expect(within(rowOf('UX')).queryByText(/Modell für Agenten:/)).toBeNull();
+  });
+
+  it('gives a label a model for agents grouped by CLI, suggests the name while it follows, and takes the model away', async () => {
+    const user = userEvent.setup();
+    renderWith(<Labels readOnlyReason={null} />, routes(labels, {
+      'POST /api/v1/labels': (body) => ({ status: 201, body: { data: { id: 'lb_new', ...(body as Omit<Label, 'id'>) } } }),
+      'PUT /api/v1/labels/lb_haiku': (body) => ({ body: { data: { id: 'lb_haiku', ...(body as Omit<Label, 'id'>) } } }),
+    }));
+
+    await user.click(await screen.findByRole('button', { name: 'Label anlegen' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Label anlegen' });
+    const name = within(dialog).getByRole<HTMLInputElement>('textbox', { name: 'Name' });
+    const model = within(dialog).getByRole('combobox', { name: /Modell für Agenten/ });
+    expect(model.textContent).toContain('Kein Modell');
+
+    await user.click(model);
+    expect(within(await screen.findByRole('listbox')).getAllByRole('group').map((group) => group.textContent?.split(/(?=haiku|gpt)/)[0])).toEqual(['Claude Code', 'Codex']);
+    await user.click(screen.getByRole('option', { name: 'haiku' }));
+    expect(name.value).toBe('Haiku Agent');
+    expect(within(dialog).getByText('Gilt nur für Agenten mit Claude Code.')).toBeTruthy();
+    // the name follows while it is the suggestion
+    await user.click(model);
+    await user.click(await screen.findByRole('option', { name: 'gpt-5-codex' }));
+    expect(name.value).toBe('Gpt-5-codex Agent');
+    await user.clear(name);
+    await user.type(name, 'Schnell');
+    await user.click(model);
+    await user.click(await screen.findByRole('option', { name: 'opus' }));
+    expect(name.value).toBe('Schnell');
+    await user.click(within(dialog).getByRole('button', { name: 'Anlegen' }));
+    await waitFor(() => expect(callsTo('POST', '/api/v1/labels')).toHaveLength(1));
+    expect(callsTo('POST', '/api/v1/labels')[0]!.body).toEqual({ name: 'Schnell', color: 'sky', agent_model: 'claude:opus' });
+  });
+
+  it('shows a refused model at its field and makes a model label plain again', async () => {
+    const user = userEvent.setup();
+    let refuse = true;
+    renderWith(<Labels readOnlyReason={null} />, routes([...labels, { id: 'lb_haiku', name: 'Haiku Agent', color: 'sky', agent_model: 'claude:haiku' }], {
+      'PUT /api/v1/labels/lb_haiku': (body) => (refuse ? invalid({ agent_model: ['Kein Modell der Liste.'] }) : { body: { data: { id: 'lb_haiku', ...(body as Omit<Label, 'id'>) } } }),
+    }));
+
+    await user.click(await screen.findByRole('button', { name: 'Label „Haiku Agent“ bearbeiten' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('combobox', { name: /Modell für Agenten/ }));
+    await user.click(await screen.findByRole('option', { name: 'Kein Modell' }));
+    expect(within(dialog).getByRole<HTMLInputElement>('textbox', { name: 'Name' }).value).toBe('');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Haiku');
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    expect(await within(dialog).findByText('Kein Modell der Liste.')).toBeTruthy();
+    refuse = false;
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(callsTo('PUT', '/api/v1/labels/lb_haiku').at(-1)!.body).toEqual({ name: 'Haiku', color: 'sky', agent_model: null }));
+  });
+
   it('says when the labels could not be loaded, and loads them again', async () => {
     const user = userEvent.setup();
     let fail = true;
@@ -97,11 +161,12 @@ describe('Labels', () => {
     await user.click(empty!);
     const dialog = await screen.findByRole('dialog', { name: 'Label anlegen' });
     await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Barrierefreiheit');
-    await user.keyboard('{Enter}');
+    // jsdom submits on Enter only without a second field; the model of the label is one (a browser takes the button)
+    await user.click(screen.getByRole('button', { name: 'Anlegen' }));
 
     expect(await screen.findByRole('heading', { name: 'Barrierefreiheit' })).toBeTruthy();
     expect(toastNamed('Label „Barrierefreiheit“ ist angelegt')).toBeDefined();
-    expect(callsTo('POST', '/api/v1/labels')[0]!.body).toEqual({ name: 'Barrierefreiheit', color: 'sky' });
+    expect(callsTo('POST', '/api/v1/labels')[0]!.body).toEqual({ name: 'Barrierefreiheit', color: 'sky', agent_model: null });
     await waitFor(() => expect(document.activeElement).toBe(header));
   });
 
@@ -133,7 +198,7 @@ describe('Labels', () => {
 
     expect(await within(dialog).findByText('Diesen Namen gibt es schon.')).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(name));
-    expect(callsTo('POST', '/api/v1/labels')[0]!.body).toEqual({ name: 'ux', color: 'moss' });
+    expect(callsTo('POST', '/api/v1/labels')[0]!.body).toEqual({ name: 'ux', color: 'moss', agent_model: null });
 
     refuse = false;
     await user.clear(name);
@@ -165,7 +230,7 @@ describe('Labels', () => {
     refuse = false;
     await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
     await waitFor(() => expect(toastNamed('Label „UX-Design“ gespeichert')).toBeDefined());
-    expect(callsTo('PUT', '/api/v1/labels/lb_ux').at(-1)!.body).toEqual({ name: 'UX-Design', color: 'sky' });
+    expect(callsTo('PUT', '/api/v1/labels/lb_ux').at(-1)!.body).toEqual({ name: 'UX-Design', color: 'sky', agent_model: null });
     // the button that opened the dialog is still there: the focus goes back to it
     await waitFor(() => expect(document.activeElement).toBe(edit));
   });

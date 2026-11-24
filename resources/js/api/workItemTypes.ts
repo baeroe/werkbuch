@@ -7,8 +7,10 @@ import type { Page, PageArgs } from './client';
 import { del, getPage, saveOne } from './http';
 
 /** The properties go in their order; the server takes the position from it (an entry's `position` is not read). */
-export type WorkItemTypeInput = Omit<WorkItemType, 'id' | 'archived_at' | 'properties'> & {
+/** `agent_guidance` left out stays as it is (A590); `null` clears it. */
+export type WorkItemTypeInput = Omit<WorkItemType, 'id' | 'archived_at' | 'properties' | 'agent_guidance'> & {
   id?: string;
+  agent_guidance?: string | null;
   archived_at?: string | null;
   properties: Pick<WorkItemType['properties'][number], 'property_id' | 'required'>[];
 };

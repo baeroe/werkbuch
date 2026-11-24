@@ -86,6 +86,8 @@ export interface Project {
   my_role: ProjectRole;
   /** Whether the signed-in account is a member: the role alone does not say it (org admins, public projects). */
   is_member: boolean;
+  /** Only with `include=members`: the members of the project and their roles. */
+  members?: ProjectMember[];
 }
 
 export interface ProjectMember {
@@ -137,6 +139,8 @@ export interface WorkItemType {
   is_epic: boolean;
   properties: { property_id: string; required: boolean; position: number }[];
   archived_at: string | null;
+  /** How agents work on items of the type (spec 7.3, layer 3): Markdown in the prompt after the working rules, or none. */
+  agent_guidance: string | null;
 }
 
 export interface PropertyOption {
@@ -172,6 +176,8 @@ export interface Label {
   id: string;
   name: string;
   color: TypeTone;
+  /** A model for agents, `cli:model` (spec 7.7): an item with the label runs its agent on it. Null: a plain label. */
+  agent_model: string | null;
 }
 
 export interface RelationType {
@@ -968,6 +974,56 @@ export interface AgentConfig {
   model: string;
   /** A model per kind of run (WEBU-32 edits them; sent back as they are). */
   models: Partial<Record<RunType, string>>;
+  updated_at: string | null;
+}
+
+/** The working rules of the organization for a kind of run (spec 7.3, 10.5). */
+export interface AgentRule {
+  type: RunType;
+  /** Markdown: the own text, else the standard in the language of the organization. */
+  body: string;
+  /** Whether the text is the standard (a new standard of a release reaches it). */
+  standard: boolean;
+  /** The contract of the kind, fixed in code and first in every prompt (English); read only. */
+  contract: string;
+  /** The standard of werkbuch for the kind, what restoring it gives (A620). */
+  standard_body: string;
+}
+
+export type MergeMethod = 'squash' | 'merge' | 'rebase';
+
+/** A bot of a project as the agent settings show it (A621). */
+export interface ProjectAgentBot {
+  bot_id: string;
+  /** Whether it works as an agent. */
+  enabled: boolean;
+  /** Whether it is a member of the project: only a member takes items; an org admin bot may review without. */
+  member: boolean;
+  /** Whether it may be the review agent here: a responsible person, active, may edit items. */
+  reviews: boolean;
+  cli: AgentCli;
+  model: string;
+  models: Partial<Record<RunType, string>>;
+}
+
+/** How agents work in a project (spec 10.3); the defaults while none are saved (`updated_at` null). */
+export interface ProjectAgents {
+  project_id: string;
+  review_bot_id: string | null;
+  /** Markdown for every run of the project. */
+  instructions: string | null;
+  /** A model per kind of run, `cli:model`. */
+  models: Partial<Record<RunType, string>>;
+  max_corrections: number;
+  max_conflicts: number;
+  review_person_prs: boolean;
+  comment_on_pr: boolean;
+  merge_method: MergeMethod;
+  setup_command: string | null;
+  teardown_command: string | null;
+  bots: ProjectAgentBot[];
+  /** Whether the workflow of the project names every step of the agents. */
+  steps_complete: boolean;
   updated_at: string | null;
 }
 

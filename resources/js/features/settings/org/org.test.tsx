@@ -163,6 +163,7 @@ describe('OrgSettings', () => {
       ['Webhooks', '/settings/webhooks'],
       ['Runner', '/settings/runners'],
       ['GitHub', '/settings/github'],
+      ['Agenten', '/settings/agents'],
       ['System', '/settings/system'],
     ]);
     expect(screen.getByRole('heading', { level: 1, name: 'Einstellungen' })).toBeTruthy();

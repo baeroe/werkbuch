@@ -13,6 +13,8 @@ export const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}`
 
 export interface ListProjectsArgs extends PageArgs {
   include_archived?: boolean;
+  /** `members` embeds the members of each project and their roles (`Project.members`). */
+  include?: 'members';
 }
 
 /** The projects the signed-in account sees; archived ones only on request. */

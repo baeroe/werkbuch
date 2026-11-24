@@ -3,8 +3,6 @@
 namespace App\Actions\Agents;
 
 use App\Access\Authorize;
-use App\Access\Permission;
-use App\Access\Visibility;
 use App\Domain\Agents\AgentModel;
 use App\Domain\Agents\Brakes;
 use App\Domain\Agents\RunType;
@@ -18,6 +16,7 @@ use App\Support\Actor;
 use App\Support\CatalogInput;
 use App\Support\CatalogLock;
 use App\Support\Ids;
+use App\Support\ProjectAgentBots;
 use App\Support\ProjectLock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -103,8 +102,12 @@ final class SaveProjectAgents
             $locked = ProjectLock::lock($project);
             $settings = AgentProjectSettings::query()->lockForUpdate()->where('project_id', $locked->id)->first() ?? AgentProjectSettings::of($locked->id);
 
-            if ($next['review_bot_id'] !== null && $next['review_bot_id'] !== $settings->review_bot_id && ! self::reviews($next['review_bot_id'], $locked)) {
-                throw ValidationException::withMessages(['review_bot_id' => __('field.review_bot_id.invalid')]);
+            // a new review agent only: the saved one is read when it changes, never on every save
+            if ($next['review_bot_id'] !== null && $next['review_bot_id'] !== $settings->review_bot_id) {
+                $reviewer = User::query()->whereKey($next['review_bot_id'])->first();
+                if ($reviewer === null || ! ProjectAgentBots::reviews($reviewer, $locked)) {
+                    throw ValidationException::withMessages(['review_bot_id' => __('field.review_bot_id.invalid')]);
+                }
             }
 
             $changes = CatalogInput::changes($settings->only(self::FIELDS), $next);
@@ -115,14 +118,5 @@ final class SaveProjectAgents
 
             return $settings->setRelation('project', $locked);
         }, 3);
-    }
-
-    /** Whether a bot may review in the project: active, with a responsible person, not the default bot, editing items. */
-    private static function reviews(string $botId, Project $project): bool
-    {
-        $bot = User::query()->find($botId);
-
-        return $bot !== null && $bot->isBot() && ! $bot->is_default_bot && $bot->owner_id !== null && ! $bot->isDisabled()
-            && Visibility::can($bot, Permission::ItemEdit, $project);
     }
 }

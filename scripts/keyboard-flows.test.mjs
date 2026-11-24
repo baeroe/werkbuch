@@ -135,6 +135,11 @@ const FLOWS = [
   // other buttons of the page. Vitest proves it (org/github/github.test.tsx, "reads the repos again"), Pest the sync.
   'set up a bot as agent', // 10.4, WEBU-27
   'set the agent steps of a workflow', // 7.4, WEBU-27
+  'set the working rules of the agents', // 7.3, 10.5, WEBU-32
+  'give a type guidance for agents', // 7.3, 10.5, WEBU-32
+  'give a label a model for agents', // 7.7, 10.5, WEBU-32
+  'set the agents of a project', // 10.3, WEBU-32
+  'choose the models of an agent per kind of run', // 7.7, 10.4, WEBU-32
 ];
 /** A name of `GAPS` with a space is a flow, one without a key of the catalog or the widgets. */
 const isFlow = (name) => /\s/.test(name);

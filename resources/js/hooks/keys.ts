@@ -94,6 +94,9 @@ export const qk = {
   runs: resource('runs'),
   /** The agent configuration of a bot: `qk.agentConfigs.detail(botId)`. */
   agentConfigs: resource('agent-configs'),
+  /** The working rules of the organization (`qk.agentRules.list({})`) and the agent settings of a project (`qk.projectAgents.detail(projectId)`). */
+  agentRules: resource('agent-rules'),
+  projectAgents: resource('project-agents'),
   /** The GitHub connection (`qk.github.detail('status')`) and the repo of a project (`qk.repository.detail(projectId)`). */
   github: resource('github'),
   repository: resource('repository'),

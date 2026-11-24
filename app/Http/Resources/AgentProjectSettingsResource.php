@@ -5,12 +5,14 @@ namespace App\Http\Resources;
 use App\Models\AgentProjectSettings;
 use App\Models\Project;
 use App\Models\Workflow;
+use App\Support\ProjectAgentBots;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * The agent settings of a project (spec 10.3), with whether the workflow of the project names every step of the agents
- * (spec 7.4: without them no run starts in the project). The resource reads the workflow of its project.
+ * (spec 7.4: without them no run starts in the project) and the bots that could review there with their agent (A621).
+ * The resource reads the workflow of its project and those bots.
  */
 final class AgentProjectSettingsResource extends JsonResource
 {
@@ -36,6 +38,7 @@ final class AgentProjectSettingsResource extends JsonResource
             'merge_method' => $settings->merge_method,
             'setup_command' => $settings->setup_command,
             'teardown_command' => $settings->teardown_command,
+            'bots' => ProjectAgentBots::of($project, $settings->review_bot_id),
             'steps_complete' => Workflow::query()->find($project->workflow_id)?->agentStepsComplete() ?? false,
             'updated_at' => $settings->updated_at?->toJSON(),
         ];

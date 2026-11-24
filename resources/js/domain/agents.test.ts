@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { agency, standard } from '@/test/fixtures';
-import { boundStates, missingSteps, modelsFor, NO_STEPS, stepsComplete, suggestSteps, whyNotAgent } from './agents';
+import { agentProjectReason, botModels, boundStates, isModelLabel, missingSteps, modelLabelName, modelsFor, modelValue, NO_STEPS, parseModel, RUN_TYPES, stepsComplete, suggestSteps, whyNotAgent } from './agents';
 
 describe('suggestSteps', () => {
   it('proposes the first started status, a review by name, an unstarted correction and the first completed one', () => {
@@ -53,5 +53,47 @@ describe('whyNotAgent', () => {
     expect(whyNotAgent({ is_default_bot: true, owner_id: null, disabled_at: null })).toEqual(['default_bot']);
     expect(whyNotAgent({ is_default_bot: false, owner_id: null, disabled_at: '2026-11-01T00:00:00Z' })).toEqual(['no_owner', 'disabled']);
     expect(whyNotAgent({ is_default_bot: false, owner_id: 'u_mara', disabled_at: null })).toEqual([]);
+  });
+});
+
+describe('models of agents', () => {
+  it('reads cli:model only for a CLI and a model of its list', () => {
+    expect(parseModel('claude:haiku')).toEqual({ cli: 'claude', model: 'haiku' });
+    expect(parseModel('codex:gpt-5-codex')).toEqual({ cli: 'codex', model: 'gpt-5-codex' });
+    expect([parseModel('claude:gpt-5-codex'), parseModel('gemini:pro'), parseModel('haiku'), parseModel('claude:haiku:x'), parseModel(''), parseModel(null), parseModel(undefined)]).toEqual([null, null, null, null, null, null, null]);
+    expect(modelValue({ cli: 'claude', model: 'opus' })).toBe('claude:opus');
+    expect(RUN_TYPES).toEqual(['task', 'correction', 'conflict', 'review', 'comment']);
+  });
+
+  it('knows a model label and suggests its name', () => {
+    expect([isModelLabel({ agent_model: 'claude:haiku' }), isModelLabel({ agent_model: null }), isModelLabel({ agent_model: '' })]).toEqual([true, false, false]);
+    expect([modelLabelName('haiku'), modelLabelName(' gpt-5-codex '), modelLabelName('')]).toEqual(['Haiku Agent', 'Gpt-5-codex Agent', '']);
+  });
+
+  it('says what each agent of a project takes for a kind of run: its model for the kind, else its default', () => {
+    const bots = [
+      { bot_id: 'u_kira', enabled: true, member: true, reviews: true, cli: 'claude' as const, model: 'sonnet', models: { review: 'opus' } },
+      { bot_id: 'u_off', enabled: false, member: true, reviews: true, cli: 'claude' as const, model: 'haiku', models: {} },
+    ];
+    expect(botModels(bots, 'review')).toEqual([{ bot_id: 'u_kira', model: 'opus' }]);
+    expect(botModels(bots, 'task')).toEqual([{ bot_id: 'u_kira', model: 'sonnet' }]);
+  });
+
+  it('counts an org admin bot without a membership only for reviews: it takes no items there', () => {
+    const boss = { bot_id: 'u_boss', enabled: true, member: false, reviews: true, cli: 'claude' as const, model: 'haiku', models: {} };
+    expect(botModels([boss], 'review')).toEqual([{ bot_id: 'u_boss', model: 'haiku' }]);
+    expect([botModels([boss], 'task'), botModels([boss], 'correction'), botModels([boss], 'conflict'), botModels([boss], 'comment')]).toEqual([[], [], [], []]);
+  });
+});
+
+describe('agentProjectReason', () => {
+  it('says why an agent does not work in a project of its', () => {
+    const live = { archived_at: null };
+    const complete = { ...standard, agent_states: { working: 'std_progress', review: 'std_pending', correction: 'std_todo', merged: 'std_done' } };
+    expect(agentProjectReason('viewer', live, complete)).toBe('viewer');
+    expect(agentProjectReason('member', { archived_at: '2026-11-01T00:00:00Z' }, complete)).toBe('archived');
+    expect(agentProjectReason('member', live, { ...standard, agent_states: NO_STEPS })).toBe('steps');
+    expect(agentProjectReason('admin', live, undefined)).toBe('steps');
+    expect(agentProjectReason('member', live, complete)).toBeNull();
   });
 });

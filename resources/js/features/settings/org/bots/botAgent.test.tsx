@@ -12,7 +12,7 @@ import type { ReactNode, Ref } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { list, mara, organization, person } from '@/test/fixtures';
+import { agency, list, mara, organization, person, project, standard } from '@/test/fixtures';
 import type { AgentConfig, Runner, User } from '@/types';
 import { OrgSettings } from '../OrgSettings';
 import { agentSummary } from '../Bots';
@@ -383,7 +383,13 @@ describe('BotAgent', () => {
     await user.click(screen.getByRole('button', { name: 'Codex' }));
     expect(screen.queryByText('Diese CLI gibt es nicht.')).toBeNull();
 
+    // a model per kind stands at its field
     refusal = () => problem(422, 'validation_failed', { errors: { 'models.review': ['Unbekannt.'] } });
+    await user.click(save());
+    expect(await screen.findByText('Unbekannt.')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: /^Review/ }).getAttribute('aria-invalid')).toBe('true');
+
+    refusal = () => problem(422, 'validation_failed', { errors: { models: ['Nur Auftragstypen.'] } });
     await user.click(save());
     await waitFor(() => expect(toastNamed('Agent nicht gespeichert')).toBeTruthy());
 
@@ -394,6 +400,98 @@ describe('BotAgent', () => {
     refusal = () => ({ body: { data: config('u_kira', { enabled: true }) } });
     await act(async () => runToastAction(toastNamed('Agent nicht gespeichert')!.id));
     await waitFor(() => expect(toastNamed('Kira: Agent gespeichert')).toBeTruthy());
+  });
+
+  it('chooses a model per kind of run, "Wie Standard" leaving the kind out, and saves them', async () => {
+    const user = userEvent.setup();
+    renderAgent({ configs: { u_kira: config('u_kira', { models: { review: 'haiku' } }) } });
+
+    const review = await screen.findByRole('combobox', { name: /^Review/ });
+    expect(review.textContent).toContain('haiku');
+    expect(screen.getByRole('combobox', { name: /^Umsetzen/ }).textContent).toContain('Wie Standard (sonnet)');
+    expect(screen.getByText('„Wie Standard“ nimmt das Standard-Modell.')).toBeTruthy();
+
+    await user.click(screen.getByRole('combobox', { name: /^Umsetzen/ }));
+    await user.click(await screen.findByRole('option', { name: 'opus' }));
+    await user.click(review);
+    await user.click(await screen.findByRole('option', { name: 'Wie Standard (sonnet)' }));
+    await user.click(save());
+
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(puts()[0]!.body).toMatchObject({ models: { task: 'opus' } });
+  });
+
+  it('keeps the models per kind in their order, so a model chosen and chosen back is no change', async () => {
+    const user = userEvent.setup();
+    // the server answers them sorted by name
+    renderAgent({ configs: { u_kira: config('u_kira', { models: { review: 'haiku', task: 'opus' } }) } });
+
+    const task = await screen.findByRole('combobox', { name: /^Umsetzen/ });
+    await user.click(task);
+    await user.click(await screen.findByRole('option', { name: 'sonnet' }));
+    expect(screen.getByText('Nicht gespeicherte Änderungen')).toBeTruthy();
+    await user.click(task);
+    await user.click(await screen.findByRole('option', { name: 'opus' }));
+    expect(screen.queryByText('Nicht gespeicherte Änderungen')).toBeNull();
+
+    await user.click(screen.getByRole('combobox', { name: /^Antwort/ }));
+    await user.click(await screen.findByRole('option', { name: 'haiku' }));
+    await user.click(save());
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(Object.keys((puts()[0]!.body as AgentConfig).models)).toEqual(['task', 'review', 'comment']);
+  });
+
+  it('says that an org admin bot reviews in every project, and its role as a member does not hold it back', async () => {
+    const complete = { ...agency, agent_states: { working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: 'app_done' } };
+    const boss = bot('u_kira', 'Kira', { org_role: 'admin' });
+    renderAgent({
+      bots: [boss, otto, automation, orphan],
+      routes: {
+        'GET /api/v1/projects': (_body, requested) => ({ body: list(requested.searchParams.get('include') === 'members' ? [project('OPS', 'admin', { id: 'p_ops', name: 'Ops', workflow_id: complete.id, members: [{ project_id: 'p_ops', user_id: 'u_kira', role: 'viewer' }] })] : []) }),
+        'GET /api/v1/workflows': () => ({ body: list([complete]) }),
+      },
+    });
+
+    expect(await screen.findByText('Kira ist Org-Admin und darf die PRs in jedem Projekt reviewen; Items übernimmt Kira nur, wo Kira Mitglied ist.')).toBeTruthy();
+    expect(within(screen.getByRole('list', { name: 'Projekte von Kira' })).getByRole('listitem').textContent).toContain('Arbeitet hier');
+  });
+
+  it('says it for an org admin bot in no project too', async () => {
+    renderAgent({ bots: [bot('u_kira', 'Kira', { org_role: 'admin' }), otto, automation, orphan], routes: { 'GET /api/v1/workflows': () => ({ body: list([standard]) }) } });
+    expect(await screen.findByText(/Kira ist in keinem Projekt Mitglied/)).toBeTruthy();
+    expect(screen.getByText(/Kira ist Org-Admin/)).toBeTruthy();
+  });
+
+  it('lists the projects of the agent with whether it works there and why not', async () => {
+    const complete = { ...agency, agent_states: { working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: 'app_done' } };
+    const member = (role: 'member' | 'viewer') => [{ project_id: 'x', user_id: 'u_kira', role }];
+    const projects = [
+      project('WEB', 'admin', { id: 'p_web', name: 'Website', workflow_id: standard.id, members: member('member') }),
+      project('APP', 'admin', { id: 'p_app', name: 'App', workflow_id: complete.id, members: member('member') }),
+      project('OPS', 'admin', { id: 'p_ops', name: 'Ops', workflow_id: complete.id, members: member('viewer') }),
+      project('OLD', 'admin', { id: 'p_old', name: 'Alt', workflow_id: complete.id, archived_at: '2026-10-01T00:00:00.000Z', members: member('member') }),
+      project('ZZZ', 'admin', { id: 'p_zzz', name: 'Ohne', workflow_id: complete.id, members: [] }),
+    ];
+    renderAgent({
+      routes: {
+        'GET /api/v1/projects': (_body, requested) => ({ body: list(requested.searchParams.get('include') === 'members' ? projects : []) }),
+        'GET /api/v1/workflows': () => ({ body: list([standard, complete]) }),
+      },
+    });
+
+    const listed = await screen.findByRole('list', { name: 'Projekte von Kira' });
+    expect(within(listed).getAllByRole('listitem').map((entry) => entry.textContent)).toEqual([
+      'OLD Alt: arbeitet hier nichtDas Projekt ist archiviert.',
+      'APP App: arbeitet hierArbeitet hier: Zuweisen startet einen Auftrag.',
+      'OPS Ops: arbeitet hier nichtLiest hier nur: gib ihm im Projekt die Rolle Member oder Admin.',
+      'WEB Website: arbeitet hier nichtDer Workflow des Projekts hat noch nicht alle Agenten-Schritte.',
+    ]);
+    expect(within(listed).getByRole('link', { name: /APP App/ }).getAttribute('href')).toBe('/projects/APP/settings/agents');
+  });
+
+  it('says when the agent is in no project', async () => {
+    renderAgent({ routes: { 'GET /api/v1/workflows': () => ({ body: list([standard]) }) } });
+    expect(await screen.findByText('Kira ist in keinem Projekt Mitglied. Füge den Bot in den Projekteinstellungen unter „Mitglieder“ hinzu.')).toBeTruthy();
   });
 
   it('says why a bot cannot be an agent instead of the form', async () => {

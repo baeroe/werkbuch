@@ -18,6 +18,7 @@ import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import { NotForMembers, useOrgRight } from '../frame/access';
 import { FormSkeleton, SectionHeader } from '../frame/parts';
 import { SectionNav, SettingsFrame } from '../frame/SettingsFrame';
+import AgentRules from './agents/AgentRules';
 import Bots from './Bots';
 import Labels from './catalogs/Labels';
 import RelationTypes from './catalogs/RelationTypes';
@@ -46,6 +47,7 @@ const COMPONENTS: Record<SectionSlug, ComponentType<SectionProps>> = {
   webhooks: Webhooks,
   runners: Runners,
   github: GitHub,
+  agents: AgentRules,
   system: System,
 };
 

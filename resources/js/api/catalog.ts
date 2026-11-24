@@ -20,8 +20,12 @@ export function listLabels(args: PageArgs = {}): Promise<Page<Label>> {
   return getPage<Label>('/labels', { ...args });
 }
 
-export function saveLabel(input: SaveInput<Label>): Promise<Label> {
-  return save<Label>('/labels', input);
+export type LabelInput = Omit<SaveInput<Label>, 'agent_model'> & { agent_model?: string | null };
+
+/** `agent_model` left out stays as it is (A590); `null` makes a plain label. */
+export function saveLabel(input: LabelInput): Promise<Label> {
+  const { id, ...body } = input;
+  return saveOne<Label>('/labels', id, body);
 }
 
 /** The answer is `{ affected_items }` without `data`. */

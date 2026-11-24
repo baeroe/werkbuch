@@ -181,6 +181,7 @@ export const types: WorkItemType[] = [
       { property_id: 'pr_effort', required: false, position: 1 },
     ],
     archived_at: null,
+    agent_guidance: null,
   },
   {
     id: 't_bug',
@@ -195,6 +196,7 @@ export const types: WorkItemType[] = [
       { property_id: 'pr_environment', required: true, position: 2 },
     ],
     archived_at: null,
+    agent_guidance: null,
   },
   {
     id: 't_epic',
@@ -205,6 +207,7 @@ export const types: WorkItemType[] = [
     is_epic: true,
     properties: [{ property_id: 'pr_customer', required: false, position: 0 }],
     archived_at: null,
+    agent_guidance: null,
   },
   {
     id: 't_wish',
@@ -215,6 +218,7 @@ export const types: WorkItemType[] = [
     is_epic: false,
     properties: [{ property_id: 'pr_customer', required: true, position: 0 }],
     archived_at: null,
+    agent_guidance: null,
   },
 ];
 
@@ -263,10 +267,10 @@ export const properties: Property[] = [
 ];
 
 export const labels: Label[] = [
-  { id: 'lb_ux', name: 'UX', color: 'sky' },
-  { id: 'lb_forms', name: 'Formulare', color: 'ochre' },
-  { id: 'lb_production', name: 'Produktion', color: 'plum' },
-  { id: 'lb_performance', name: 'Performance', color: 'moss' },
+  { id: 'lb_ux', name: 'UX', color: 'sky', agent_model: null },
+  { id: 'lb_forms', name: 'Formulare', color: 'ochre', agent_model: null },
+  { id: 'lb_production', name: 'Produktion', color: 'plum', agent_model: null },
+  { id: 'lb_performance', name: 'Performance', color: 'moss', agent_model: null },
 ];
 
 export const relationTypes: RelationType[] = [

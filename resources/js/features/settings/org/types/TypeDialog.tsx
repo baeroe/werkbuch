@@ -1,5 +1,6 @@
 /*
- * Creating and changing a type (spec 4.6): name, icon, tone, description, the Epic mark and the properties it carries,
+ * Creating and changing a type (spec 4.6): name, icon, tone, description, how agents work on its items (spec 7.3), the
+ * Epic mark and the properties it carries,
  * each required or not, in the order the form shows them; a preview of the tab beside the name. The dialog sends the
  * whole type every time (P24), its archive stamp included: an archived type stays archived when it is changed here, and
  * only "Restore" in the list brings it back. The Epic mark follows the items of the type (spec 4.8): it cannot go while
@@ -54,6 +55,7 @@ export function TypeDialog({ open, onOpenChange, type, properties, finalFocus }:
   const [icon, setIcon] = useState(type?.icon ?? 'square-check');
   const [tone, setTone] = useState<TypeTone>(type?.tone ?? 'sky');
   const [description, setDescription] = useState(type?.description ?? '');
+  const [guidance, setGuidance] = useState(type?.agent_guidance ?? '');
   const [isEpic, setIsEpic] = useState(type?.is_epic ?? false);
   const [assigned, setAssigned] = useState<Assigned[]>(() =>
     [...(type?.properties ?? [])]
@@ -90,6 +92,8 @@ export function TypeDialog({ open, onOpenChange, type, properties, finalFocus }:
         icon,
         tone,
         description: description.trim(),
+        // how agents work on items of the type (spec 7.3, layer 3); empty clears it
+        agent_guidance: guidance.trim() === '' ? null : guidance.trim(),
         is_epic: isEpic,
         // the order of the list is the order of the form
         properties: assigned.map((entry) => ({ property_id: entry.id, required: entry.required })),
@@ -115,7 +119,7 @@ export function TypeDialog({ open, onOpenChange, type, properties, finalFocus }:
       submitLabel={type ? t('settings.frame.save') : t('settings.catalog.submit_create')}
       pending={save.isPending}
       // a refusal of the mark that the send did not change has no place at the switch: it goes on top
-      notice={noticeOf(save.error, ['name', 'icon', 'tone', 'properties', ...(sentEpic.current !== null ? ['is_epic'] : [])])}
+      notice={noticeOf(save.error, ['name', 'icon', 'tone', 'agent_guidance', 'properties', ...(sentEpic.current !== null ? ['is_epic'] : [])])}
       finalFocus={finalFocus}
       onSubmit={submit}
     >
@@ -141,15 +145,28 @@ export function TypeDialog({ open, onOpenChange, type, properties, finalFocus }:
           </span>
         </div>
       </FieldGroup>
-      <Textarea
-        label={t('settings.types.dialog.description_label')}
-        name="description"
-        autoComplete="off"
-        hint={t('settings.types.dialog.description_hint')}
-        rows={2}
-        value={description}
-        onChange={(event) => setDescription(event.target.value)}
-      />
+      <div className="grid items-start gap-4 md:grid-cols-2">
+        <Textarea
+          label={t('settings.types.dialog.description_label')}
+          name="description"
+          autoComplete="off"
+          hint={t('settings.types.dialog.description_hint')}
+          rows={3}
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+        />
+        <Textarea
+          label={t('settings.types.dialog.guidance_label')}
+          name="agent_guidance"
+          autoComplete="off"
+          hint={t('settings.types.dialog.guidance_hint')}
+          placeholder={t('settings.types.dialog.guidance_placeholder')}
+          rows={3}
+          value={guidance}
+          error={fieldMessage(save.error, 'agent_guidance')}
+          onChange={(event) => setGuidance(event.target.value)}
+        />
+      </div>
       <div className="flex flex-col gap-1">
         <Switch
           label={t('settings.types.dialog.epic')}
