@@ -58,6 +58,9 @@ class AppServiceProvider extends ServiceProvider
     /** The requests of one runner a minute (A487). */
     public const RUNNER_PER_MINUTE = 3000;
 
+    /** The downloads of the installer and the runner a minute and address (A520). */
+    public const RUNNER_DOWNLOADS_PER_MINUTE = 30;
+
     /**
      * Register any application services.
      */
@@ -155,6 +158,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('runner', fn (Request $request) => str_starts_with($key = RunnerKey::for($request), 'runner:')
             ? Limit::perMinute(self::RUNNER_PER_MINUTE)->by($key) : Limit::perMinute(60)->by($key));
         RateLimiter::for('runner-pair', fn (Request $request) => Limit::perMinute(10)->by(RateKey::IP.$request->ip()));
+        // the installer and the binaries (A520): an install takes three requests, an update two; a binary is ~10 MB
+        RateLimiter::for('runner-download', fn (Request $request) => Limit::perMinute(self::RUNNER_DOWNLOADS_PER_MINUTE)->by(RateKey::IP.$request->ip()));
 
         // the index is written by the search consumer only, never when a model is saved (P1)
         WorkItem::disableSearchSyncing();

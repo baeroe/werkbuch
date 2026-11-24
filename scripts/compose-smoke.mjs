@@ -1,7 +1,10 @@
 // Smoke test of a running compose stack (scripts/compose-smoke.sh starts it): sign-in, live updates over the one port,
 // search, the limits of nginx and what only the image changes (cached routes, no Reverb HTTP API, no HSTS).
 // Node 24, no dependencies. As a script it reads SMOKE_URL, SMOKE_EMAIL, SMOKE_PASSWORD, SMOKE_PROBE and SMOKE_MODE
-// (full | again), writes `smoke: <check> ok` per check and `smoke: ok` at the end, or the failure and exit code 1.
+// (full | again | pair | runner), writes `smoke: <check> ok` per check and `smoke: ok` at the end, or the failure and
+// exit code 1. `pair` writes `smoke: code <CODE>` (a one-time code for the runner), `runner` checks that the runner
+// `smoke-<probe>` is online and revokes it.
+import { createHash } from 'node:crypto';
 import http from 'node:http';
 import { pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
@@ -292,7 +295,7 @@ export async function run(env, log = (line) => console.log(line)) {
   const email = env.SMOKE_EMAIL ?? '';
   const password = env.SMOKE_PASSWORD ?? '';
   const probe = env.SMOKE_PROBE ?? '';
-  check(['full', 'again'].includes(mode), `SMOKE_MODE must be full or again, not ${mode}`);
+  check(['full', 'again', 'pair', 'runner'].includes(mode), `SMOKE_MODE must be full, again, pair or runner, not ${mode}`);
   check(email !== '' && password !== '', 'SMOKE_EMAIL and SMOKE_PASSWORD are required');
   check(/^[a-z]{8,16}$/.test(probe), 'SMOKE_PROBE must be 8 to 16 lowercase letters');
 
@@ -338,6 +341,31 @@ export async function run(env, log = (line) => console.log(line)) {
   expectStatus(bots, 200, 'GET /api/v1/bots');
   check((bots.data?.data ?? []).some((bot) => bot.handle === 'automation'), 'no bot automation');
   ok('bots');
+
+  if (mode === 'pair') {
+    // (r2) a one-time code for the runner the shell installs from this instance in a container of the image
+    const pairing = await session.json('POST', '/api/v1/runner-pairings');
+    expectStatus(pairing, 201, 'POST /api/v1/runner-pairings');
+    check(pairing.data?.data?.command === `curl -fsSL ${base.origin}/runner/install.sh | sh -s -- --code ${pairing.data.data.code}`, `command is ${pairing.data?.data?.command}`);
+    log(`smoke: code ${pairing.data.data.code}`);
+    return;
+  }
+
+  if (mode === 'runner') {
+    // (r3) the runner the installer paired polled the instance: online, then revoked again
+    const runners = await session.json('GET', '/api/v1/runners');
+    expectStatus(runners, 200, 'GET /api/v1/runners');
+    const runner = (runners.data?.data ?? []).find((one) => one.name === `smoke-${probe}`);
+    check(runner !== undefined, `no runner smoke-${probe}: ${runners.text.slice(0, 300)}`);
+    // the binary of the image names the version of the app (the stage `runner` builds it with it)
+    const system = await session.json('GET', '/api/v1/system');
+    expectStatus(system, 200, 'GET /api/v1/system');
+    check(runner.online === true && runner.os === 'linux' && runner.version === system.data?.data?.version, `runner is ${JSON.stringify(runner)}, the app ${system.data?.data?.version}`);
+    expectStatus(await session.request('DELETE', `/api/v1/runners/${runner.id}`), 200, 'DELETE /api/v1/runners/{runner}');
+    ok('runner online');
+    log('smoke: ok');
+    return;
+  }
 
   if (mode === 'again') {
     const people = await session.json('GET', '/api/v1/users?filter[type]=person');
@@ -473,6 +501,25 @@ export async function run(env, log = (line) => console.log(line)) {
     check(pdf.headers.get('content-type') === 'application/pdf', `the PDF comes as ${pdf.headers.get('content-type')}`);
     check(pdf.text.startsWith('%PDF-'), `the PDF starts with ${JSON.stringify(pdf.text.slice(0, 20))}`);
     ok('pdf');
+
+    // (r) the runner from the instance (A520): the installer through nginx (which denies other *.sh), the four binaries
+    //     with sums that match, an unknown system 404 as a problem
+    const script = await session.request('GET', '/runner/install.sh', { headers: { Accept: '*/*' } });
+    expectStatus(script, 200, 'GET /runner/install.sh');
+    check(script.text.startsWith('#!/bin/sh\n') && script.text.includes(`WERKBUCH_URL='${base.origin}'\n`), `the installer: ${script.text.slice(0, 200)}`);
+    for (const target of ['darwin/arm64', 'darwin/amd64', 'linux/arm64', 'linux/amd64']) {
+      const sum = await session.request('GET', `/runner/download/${target}.sha256`, { headers: { Accept: '*/*' } });
+      expectStatus(sum, 200, `GET /runner/download/${target}.sha256`);
+      const binary = await fetch(new URL(`/runner/download/${target}`, base));
+      check(binary.status === 200 && binary.headers.get('content-type') === 'application/octet-stream', `GET /runner/download/${target}: ${binary.status} ${binary.headers.get('content-type')}`);
+      const bytes = Buffer.from(await binary.arrayBuffer());
+      const actual = createHash('sha256').update(bytes).digest('hex');
+      check(sum.text === `${actual}  werkbuch-runner-${target.replace('/', '-')}\n`, `the sum of ${target} is ${JSON.stringify(sum.text)}, the binary ${actual} (${bytes.length} bytes)`);
+    }
+    const unknown = await session.json('GET', '/runner/download/windows/amd64');
+    expectStatus(unknown, 404, 'GET /runner/download/windows/amd64');
+    check(unknown.headers.get('content-type') === 'application/problem+json', `an unknown system answers ${unknown.headers.get('content-type')}`);
+    ok('runner downloads');
 
     // (n) delete the project again (PurgeProject in the queue)
     expectStatus(await session.request('DELETE', `/api/v1/projects/${projectId}`), 202, 'DELETE /api/v1/projects');

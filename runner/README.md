@@ -5,6 +5,20 @@ HTTPS (no open port), runs Claude Code or Codex headless in a git worktree per s
 and the result back. Name, places and the setup commands of projects are set in werkbuch; the runner keeps only the
 instance URL (`~/.config/werkbuch-runner/config.yaml`) and its token (in the keychain).
 
+## Install
+
+Settings → Runners → Connect runner in werkbuch shows the command with a one-time code:
+
+```sh
+curl -fsSL https://werkbuch.example.com/runner/install.sh | sh -s -- --code ABCD-EFGH
+```
+
+The script downloads the runner of that instance (`/runner/download/<os>/<arch>`), checks its SHA-256 sum, puts it into
+`~/.local/bin` (`--prefix <dir>` for another place), pairs it and makes it a service of this user: a launch agent
+`dev.werkbuch.runner` on macOS, a systemd user unit `werkbuch-runner.service` on Linux. `--no-service` writes the plist
+or unit without loading it; `--name <name>` names the runner. Never as root, never with sudo. Running it again with a
+new code pairs the runner again and replaces the service.
+
 ## Commands
 
 ```sh
@@ -14,6 +28,8 @@ werkbuch-runner daemon    # poll and run (launchd/systemd units come with the in
 werkbuch-runner status    # what the daemon does now
 werkbuch-runner doctor    # CLIs, keychain, instance, token, git, equipment
 werkbuch-runner update    # update to the version the instance expects
+werkbuch-runner service install [--no-start]   # the launch agent or systemd user unit (the installer calls it)
+werkbuch-runner service uninstall              # stop and remove it
 werkbuch-runner logout    # forget the instance and its token
 werkbuch-runner version
 ```
@@ -50,6 +66,7 @@ skills and plugins are set up on the machine for the user of the runner.
 ```sh
 make test                      # gofmt, go vet, go test -race
 make build VERSION=0.3.2       # bin/werkbuch-runner, static, without cgo
+ddev runner-build              # the four binaries for the instance in DDEV (runner/dist, like the image)
 ```
 
 Tests run against a fake werkbuch (`internal/fakewerkbuch`) and a fake Claude Code (`testdata/claude`, a shell script

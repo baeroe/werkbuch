@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+## Description: Build the four runners into runner/dist, where /runner/install.sh and /runner/download find them (A522)
+## Usage: runner-build
+## Example: "ddev runner-build"
+
+# Like the stage `runner` of the Dockerfile: the same Go image (read from the Dockerfile), static without cgo, the version
+# of config/werkbuch.php (the sed of scripts/release-version.sh), a .sha256 next to each binary. In a container of its
+# own, so neither the Mac nor the web container needs Go; the module and build caches stay in a Docker volume.
+set -euo pipefail
+
+ROOT=${DDEV_APPROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}
+# shellcheck disable=SC2016 # $BUILDPLATFORM is a word of the Dockerfile
+IMAGE=$(sed -n 's/^FROM --platform=\$BUILDPLATFORM \(golang:[^ ]*\) AS runner$/\1/p' "$ROOT/Dockerfile")
+VERSION=$(sed -n "s/^[[:space:]]*'version' => '\([^']*\)'.*/\1/p" "$ROOT/config/werkbuch.php" | head -n 1)
+if [ -z "$IMAGE" ] || [ -z "$VERSION" ]; then
+    echo "runner-build: no Go image in the Dockerfile or no version in config/werkbuch.php" >&2
+    exit 1
+fi
+
+mkdir -p "$ROOT/runner/dist"
+# shellcheck disable=SC2016 # evaluated by sh in the container
+docker run --rm -v "$ROOT/runner:/src" -v werkbuch-runner-go:/cache -w /src \
+    -e CGO_ENABLED=0 -e GOTOOLCHAIN=local -e GOFLAGS=-trimpath -e GOMODCACHE=/cache/mod -e GOCACHE=/cache/build \
+    -e VERSION="$VERSION" "$IMAGE" sh -c '
+        set -e
+        for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do
+            os=${target%/*} arch=${target#*/}
+            GOOS=$os GOARCH=$arch go build -ldflags "-s -w -X main.version=$VERSION" -o "dist/werkbuch-runner-$os-$arch" .
+            (cd dist && sha256sum "werkbuch-runner-$os-$arch" > "werkbuch-runner-$os-$arch.sha256")
+        done'
+# the web container sees runner/dist only after mutagen synced it
+if [ "${DDEV_PROJECT:-}" != "" ]; then
+    ddev mutagen sync >/dev/null 2>&1 || true
+fi
+ls -l "$ROOT/runner/dist"
+echo "runner-build: werkbuch-runner $VERSION in runner/dist"

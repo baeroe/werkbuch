@@ -27,6 +27,10 @@ scripts
 docker-compose*.yml
 CLAUDE.md
 
+# the runner: its source goes into the stage `runner`, what a local build left never
+runner/bin
+runner/dist
+
 # docs: the workspace manifest (frozen lockfile) and the pages the MCP references read at runtime (DocReference, A409);
 # a new reference page needs its line here and its COPY in the Dockerfile
 docs/*
