@@ -151,6 +151,18 @@ func (c *Client) Events(ctx context.Context, runID string, attempt int, events [
 	return c.do(ctx, http.MethodPost, "/api/runner/runs/"+runID+"/events", body, nil, true)
 }
 
+// GitToken asks for a new installation token of a running run (spec 6.4): 409 `run_replaced` or 404 when werkbuch gave
+// the attempt away, other 409 (`no_repository`, `repository_unavailable`, `run_canceling`, `merge_guard_open`) when there
+// is none to give, 503 `github_unavailable` when GitHub did not answer.
+func (c *Client) GitToken(ctx context.Context, runID string, attempt int) (protocol.GitTokenAnswer, error) {
+	var a protocol.GitTokenAnswer
+	body := struct {
+		Attempt int `json:"attempt"`
+	}{attempt}
+	err := c.do(ctx, http.MethodPost, "/api/runner/runs/"+runID+"/git-token", body, &a, true)
+	return a, err
+}
+
 // Result ends a run.
 func (c *Client) Result(ctx context.Context, runID string, result protocol.Result) error {
 	return c.do(ctx, http.MethodPost, "/api/runner/runs/"+runID+"/result", result, nil, true)

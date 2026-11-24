@@ -120,19 +120,6 @@ func TestReviewWorktreeAndSweep(t *testing.T) {
 	}
 }
 
-func TestEnv(t *testing.T) {
-	if Env("") != nil {
-		t.Fatal("no token, no env")
-	}
-	env := strings.Join(Env("ghs_x"), "\n")
-	if !strings.Contains(env, "GH_TOKEN=ghs_x") || !strings.Contains(env, "credential.helper") {
-		t.Fatal(env)
-	}
-	if strings.Count(env, "ghs_x") != 2 {
-		t.Fatal("the token only in the two variables")
-	}
-}
-
 func TestNamesAndRefs(t *testing.T) {
 	for in, want := range map[string]string{"01abc": "01abc", "run-01x": "run-01x", "a b/c": "a-b-c"} {
 		if got, err := Name(in); err != nil || got != want {

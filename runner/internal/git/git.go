@@ -3,8 +3,8 @@
 // session of the CLI hangs on it), per review without a strand one worktree at its commit (`worktrees/run-<id>`,
 // removed after the run), and per strand of a project without repository a plain folder (`work/<strand>`).
 //
-// A token for git (WEBU-24) is never written into a config: a credential helper reads it from the environment of the
-// run (Env), `gh` gets it as GH_TOKEN.
+// A token for git (WEBU-24) is never written into a config of git, into argv or into the environment: it lives in files
+// of a private folder of the run (TokenFile, token.go), which the runner replaces when it renews the token (WEBU-31).
 package git
 
 import (
@@ -22,9 +22,6 @@ import (
 	"sync"
 	"time"
 )
-
-// TokenEnv carries the git token to the credential helper.
-const TokenEnv = "WERKBUCH_GIT_TOKEN"
 
 // KeepFor is how long a worktree stays after its last run (A497).
 const KeepFor = 72 * time.Hour
@@ -64,12 +61,12 @@ type Meta struct {
 
 // Spec says what a run needs.
 type Spec struct {
-	Name     string // strand ID, or run-<id>
-	Repo     string // URL or local path, "" without a repository
-	Branch   string // the branch of the strand
-	Base     string // its base, "" for the default branch
-	Head     string // a commit to look at (review without strand)
-	Token    string // installation token, "" without one
+	Name     string     // strand ID, or run-<id>
+	Repo     string     // URL or local path, "" without a repository
+	Branch   string     // the branch of the strand
+	Base     string     // its base, "" for the default branch
+	Head     string     // a commit to look at (review without strand)
+	Auth     *TokenFile // the installation token, nil without one
 	Teardown string
 }
 
@@ -87,21 +84,6 @@ func Name(raw string) (string, error) {
 		return "", fmt.Errorf("unusable name %q for a working folder", raw)
 	}
 	return name, nil
-}
-
-// Env is the environment git and the CLI get for a token: a credential helper reading it, and GH_TOKEN.
-func Env(token string) []string {
-	if token == "" {
-		return nil
-	}
-	return []string{
-		TokenEnv + "=" + token,
-		"GH_TOKEN=" + token,
-		"GIT_TERMINAL_PROMPT=0",
-		"GIT_CONFIG_COUNT=1",
-		"GIT_CONFIG_KEY_0=credential.helper",
-		`GIT_CONFIG_VALUE_0=!f() { echo username=x-access-token; echo "password=$` + TokenEnv + `"; }; f`,
-	}
 }
 
 func (m *Manager) run(ctx context.Context, env []string, dir string, args ...string) (string, error) {
@@ -195,7 +177,7 @@ func (m *Manager) Prepare(ctx context.Context, s Spec) (*Workspace, error) {
 	if s.Head != "" && !shaRe.MatchString(s.Head) {
 		return nil, fmt.Errorf("invalid commit %q", s.Head)
 	}
-	env := Env(s.Token)
+	env := s.Auth.Env()
 	if s.Repo == "" {
 		dir := filepath.Join(m.Data, "work", name)
 		ws := &Workspace{Dir: dir, Env: env, meta: dir + ".json"}

@@ -30,6 +30,8 @@ type RunState struct {
 	Result   *protocol.Result
 	Beats    int
 	Lost     int
+	// Renewals counts the requests for a new git token.
+	Renewals int
 }
 
 // Server is the fake.
@@ -51,7 +53,10 @@ type Server struct {
 	Lease time.Duration
 	// FailResults answers this many results with 503 first.
 	FailResults int
-	seen        map[string]time.Time
+	// RenewGit answers `git-token` of a running run in its attempt (n counts from 1): a token, or a problem with status
+	// and reason. Without it the fake answers 409 no_repository.
+	RenewGit func(id string, n int) (git *protocol.Git, status int, reason string)
+	seen     map[string]time.Time
 }
 
 // New starts the fake.
@@ -252,6 +257,18 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		st.Events = append(st.Events, events...)
 		json.NewEncoder(w).Encode(map[string]int{"stored": len(events), "dropped": 0})
+	case "git-token":
+		st.Renewals++
+		if s.RenewGit == nil {
+			problem(w, 409, "no_repository", "")
+			return
+		}
+		git, status, reason := s.RenewGit(st.Run.ID, st.Renewals)
+		if git == nil {
+			problem(w, status, reason, "")
+			return
+		}
+		json.NewEncoder(w).Encode(merge(s.answer(), map[string]any{"git": git}))
 	case "result":
 		if s.FailResults > 0 {
 			s.FailResults--

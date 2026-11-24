@@ -222,6 +222,12 @@ type HeartbeatAnswer struct {
 	DeadlineAt     *time.Time `json:"deadline_at"`
 }
 
+// GitTokenAnswer is the answer of `POST runs/{id}/git-token`: a new installation token for the run (WEBU-31).
+type GitTokenAnswer struct {
+	Answer
+	Git Git `json:"git"`
+}
+
 // Event is a line of the log of a run.
 type Event struct {
 	Kind string    `json:"kind"`

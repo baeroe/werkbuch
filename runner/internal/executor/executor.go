@@ -63,6 +63,10 @@ type Executor struct {
 	Retry time.Duration
 	// LookPath finds the binary of a CLI (tests point it at a fake).
 	LookPath func(string) (string, error)
+	// RenewBefore is how long before its expiry the git token of a run is renewed (WEBU-31: 10 min).
+	RenewBefore time.Duration
+	// RenewRetry is the first pause after a failed renewal (5 s, doubling up to a minute).
+	RenewRetry time.Duration
 
 	once    sync.Once
 	pulse   atomic.Int64
@@ -100,6 +104,12 @@ func (x *Executor) setDefaults() {
 	if x.Retry == 0 {
 		x.Retry = 2 * time.Minute
 	}
+	if x.RenewBefore == 0 {
+		x.RenewBefore = 10 * time.Minute
+	}
+	if x.RenewRetry == 0 {
+		x.RenewRetry = 5 * time.Second
+	}
 	if x.LookPath == nil {
 		x.LookPath = exec.LookPath
 	}
@@ -129,9 +139,12 @@ func (x *Executor) Run(ctx context.Context, e *Execution) string {
 		defer redact.Release(run.Git.Token)
 	}
 
+	tok := &gitToken{}
+	defer tok.release()
+
 	l := newLease(ctx, x, e, log)
 	sender := newSender(x, e, l)
-	result, reason := x.execute(l, e, sender, log)
+	result, reason := x.execute(l, e, sender, tok, log)
 	sender.close(reason != replaced && reason != shutdown)
 
 	status := ""
@@ -174,22 +187,20 @@ func failed(msg string) protocol.Result {
 	return protocol.Result{Status: protocol.Failed, Error: &msg}
 }
 
-func (x *Executor) repo(run protocol.Run) (string, string) {
+// repo is the repository of a run: the one of werkbuch's `git`, else (only then, A491) a local one of `config.yaml`.
+func (x *Executor) repo(run protocol.Run) string {
 	if run.Git != nil && run.Git.RepoURL != "" {
-		return run.Git.RepoURL, run.Git.Token
+		return run.Git.RepoURL
 	}
 	if x.Repos != nil {
-		if r := x.Repos()[run.Project.Identifier]; r != "" {
-			return r, ""
-		}
+		return x.Repos()[run.Project.Identifier]
 	}
-	return "", ""
+	return ""
 }
 
 // spec says where a run works: the strand's worktree (its name or ID), else a folder of the run.
 func (x *Executor) spec(run protocol.Run) git.Spec {
-	repo, token := x.repo(run)
-	spec := git.Spec{Repo: repo, Token: token, Name: "run-" + run.ID}
+	spec := git.Spec{Repo: x.repo(run), Name: "run-" + run.ID}
 	if run.TeardownCommand != nil {
 		spec.Teardown = *run.TeardownCommand
 	}
@@ -284,7 +295,7 @@ func (x *Executor) Teardown(ctx context.Context, dir, command string) {
 
 // execute runs the CLI; the reason is why the run stopped before the CLI ended by itself ("" when it did: a decision
 // of the lease after that changes nothing).
-func (x *Executor) execute(l *lease, e *Execution, s *sender, log *slog.Logger) (protocol.Result, string) {
+func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log *slog.Logger) (protocol.Result, string) {
 	run := e.Run
 	ctx := l.ctx
 	adapter := adapters.For(run.CLI)
@@ -306,6 +317,35 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, log *slog.Logger) 
 		return protocol.Result{}, l.reason()
 	}
 	defer release()
+
+	// the token of git lives in a private folder of its own from the clone on (not in the one a light run may read, A531)
+	if run.Git != nil && run.Git.RepoURL != "" && run.Git.Token != "" {
+		secret, err := mcpconfig.Folder()
+		if err != nil {
+			return failed("git token: " + err.Error()), ""
+		}
+		defer secret.Remove()
+		tok.file = git.NewTokenFile(secret.Dir, run.Git.RepoURL)
+		if err := tok.file.Write(run.Git.Token); err != nil {
+			return failed("git token: " + err.Error()), ""
+		}
+		spec.Auth = tok.file
+		r := x.newRenewer(l, run, tok, s, log)
+		floor := time.Duration(0)
+		// a token that is (nearly) out already is renewed before the clone; a failure that may pass goes on in the background
+		if r.due() {
+			switch r.try(ctx) {
+			case giveUp:
+				if ctx.Err() != nil {
+					return protocol.Result{}, l.reason()
+				}
+				r.expires = nil
+			case tryAgain:
+				floor = x.RenewRetry
+			}
+		}
+		defer r.start(floor)()
+	}
 
 	ws, err := x.Git.Prepare(ctx, spec)
 	if ctx.Err() != nil {
@@ -360,7 +400,17 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, log *slog.Logger) 
 		}
 	}
 	cmd := adapter.Command(job)
+	// a light run pushes nothing: the token is the runner's for clone and fetch; its CLI gets neither file nor gh of the
+	// run, and git and gh fail closed instead of using the logins of the machine (A531)
 	cmd.Env = append(os.Environ(), ws.Env...)
+	if protocol.Light(run.Type) {
+		empty, err := mcpconfig.Folder()
+		if err != nil {
+			return failed("gh: " + err.Error()), ""
+		}
+		defer empty.Remove()
+		cmd.Env = append(os.Environ(), git.ClosedEnv(empty.Dir)...)
+	}
 	cmd.Env = append(cmd.Env,
 		"WERKBUCH_RUN_ID="+run.ID,
 		"GIT_AUTHOR_NAME="+run.CommitIdentity.Name, "GIT_AUTHOR_EMAIL="+run.CommitIdentity.Email,
