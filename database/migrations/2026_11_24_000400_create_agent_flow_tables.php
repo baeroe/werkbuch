@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 // The flow of the agents (WEBU-26, spec 7). The working rules of the organization per kind of run are rows only where
@@ -58,6 +59,9 @@ return new class extends Migration
             $table->timestamp('ready_requested_at')->nullable()->after('awaiting_pr_since');
             // findings of CI or a review that came while a run of the strand changed code (A607)
             $table->json('pending_findings')->nullable()->after('ready_requested_at');
+            // a commit a run reported that the PR does not have yet, and when (A610: the sweep looks after a while)
+            $table->string('pushed_sha', 64)->nullable()->after('pending_findings');
+            $table->timestamp('pushed_at')->nullable()->after('pushed_sha');
         });
 
         Schema::table('agent_runs', function (Blueprint $table) {
@@ -87,6 +91,8 @@ return new class extends Migration
 
     public function down(): void
     {
+        // the rows of workflow runs and statuses go first: their IDs may meet those of check runs under the old index
+        DB::table('work_item_link_checks')->whereIn('kind', ['workflow', 'status'])->delete();
         Schema::table('work_item_link_checks', function (Blueprint $table) {
             $table->unique(['work_item_link_id', 'check_run_id']);
         });
@@ -105,7 +111,7 @@ return new class extends Migration
         });
 
         Schema::table('agent_threads', function (Blueprint $table) {
-            $table->dropColumn(['head_sha', 'pr_draft', 'review_sha', 'review_verdict', 'merge_sha', 'awaiting_pr_since', 'ready_requested_at', 'pending_findings']);
+            $table->dropColumn(['head_sha', 'pr_draft', 'review_sha', 'review_verdict', 'merge_sha', 'awaiting_pr_since', 'ready_requested_at', 'pending_findings', 'pushed_sha', 'pushed_at']);
         });
 
         Schema::table('labels', function (Blueprint $table) {

@@ -105,6 +105,10 @@ it('decides nothing on the CI of a strand while its run that changes code is at 
     $review = $claim($this);
     UpdateWorkItem::run(actor($this->mara), $item->fresh(), ['state_id' => $this->states['Todo']]);
     $finish($this, $review, ['verdict' => 'approve', 'text' => 'Verdict: approve']);
+    // held: no approve at the PR, the links keep no verdict, the item says why (A610)
+    expect(collect($this->github->comments)->contains(fn (array $comment) => str_contains($comment['body'], "werkbuch-run:{$review['id']}")))->toBeFalse()
+        ->and(WorkItemLink::query()->sole()->review)->toBeNull()
+        ->and(Comment::query()->where('work_item_id', $item->id)->latest('id')->first()->body_text)->toContain('approved while a correction runs');
     expect($this->github->merges)->toBe([])->and($heads('correction'))->toHaveCount(1)
         ->and(ApproveAndMerge::run($this->system, AgentThread::query()->sole()))->toBeFalse()
         ->and(StartCorrection::run($this->system, AgentThread::query()->sole(), 'ci', 'red', str_repeat('c', 40)))->not->toBeNull()
@@ -593,4 +597,55 @@ it('leaves a strand that a person paused meanwhile to her when a run of it ends 
     expect(HandleRunResult::run($this->system, $run))->toBe('nothing')
         ->and($thread->fresh()->only(['status', 'pause_reason', 'pending_findings']))->toBe(['status' => 'paused', 'pause_reason' => 'reassigned', 'pending_findings' => null])
         ->and(AgentRun::query()->count())->toBe(1);
+});
+
+it('sets an item back when a commit a run reported never reaches the PR', function () use ($claim, $finish, $assign, $pr, $ci) {
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
+    [$a, $b, $c] = [str_repeat('a', 40), str_repeat('b', 40), str_repeat('c', 40)];
+    $assign($this, $item, $this->kira);
+    $task = $claim($this);
+    $pr($this, 'opened', $a);
+    $finish($this, $task, ['commit' => $a]);
+    $ci($this, $a, 'failure');
+
+    // the correction reports a commit the PR never gets: the head waits for its webhook, the sweep looks after five minutes
+    $finish($this, $claim($this), ['commit' => $b]);
+    $thread = AgentThread::query()->sole();
+    expect($thread->pushed_sha)->toBe($b)->and($item->fresh()->state_id)->toBe($this->states['Pending']);
+    $this->travel(4)->minutes();
+    expect(SweepAgentThreads::run($this->system))->toBe(0);
+    $this->travel(2)->minutes();
+    expect(SweepAgentThreads::run($this->system))->toBe(1)
+        ->and($thread->fresh()->only(['pushed_sha', 'pushed_at']))->toBe(['pushed_sha' => null, 'pushed_at' => null])
+        ->and($item->fresh()->state_id)->toBe($this->states['Todo'])
+        ->and(Comment::query()->where('work_item_id', $item->id)->latest('id')->first()->body_text)->toContain('bbbbbbb')->toContain('not pushed')
+        ->and(SweepAgentThreads::noPush($thread))->toBe(0);
+
+    // a push that comes clears the wait
+    $thread->forceFill(['pushed_sha' => $c, 'pushed_at' => now()])->save();
+    $pr($this, 'synchronize', $c);
+    expect($thread->fresh()->pushed_sha)->toBeNull();
+});
+
+it('asks GitHub again for the workflow runs of a head when a suite of GitHub Actions completes', function () use ($claim, $finish, $assign, $pr, $heads) {
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
+    $a = str_repeat('a', 40);
+    $assign($this, $item, $this->kira);
+    $task = $claim($this);
+    $pr($this, 'opened', $a);
+    $finish($this, $task, ['commit' => $a]);
+    $this->travel(3)->minutes();
+    $this->github->workflowRuns[$a] = [['id' => 91, 'name' => 'CI', 'status' => 'queued', 'conclusion' => null, 'html_url' => null]];
+    SweepAgentThreads::run($this->system);
+    expect(WorkItemLink::query()->sole()->ci())->toBe('pending');
+
+    $this->github->workflowRuns[$a] = [['id' => 91, 'name' => 'CI', 'status' => 'completed', 'conclusion' => 'success', 'html_url' => null]];
+    $calls = count($this->github->checkRunCalls);
+    FakeGitHub::deliver($this, 'check_suite', FakeGitHub::checkSuite($a))->assertStatus(202);
+    expect(count($this->github->checkRunCalls))->toBe($calls + 1)->and(WorkItemLink::query()->sole()->ci())->toBe('success')
+        ->and($heads('review'))->toBe([$a]);
+
+    // nothing waits any more: the next suite asks GitHub nothing
+    FakeGitHub::deliver($this, 'check_suite', FakeGitHub::checkSuite($a))->assertStatus(202);
+    expect(count($this->github->checkRunCalls))->toBe($calls + 1);
 });

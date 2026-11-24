@@ -363,5 +363,8 @@ it('picks up the work the guard held back once a project admin confirms', functi
     $first = $claim($this);
     $finish($this, $first, []);
     expect([$first['type'], $claim($this)['type']])->toBe(['correction', 'task'])
-        ->and($first['prompt'])->toContain('from guard');
+        ->and($first['prompt'])->toContain('from guard')
+        // nothing to change after the guard: the head no review judged is looked at, the strand does not pause (A610)
+        ->and(AgentThread::query()->where('work_item_id', $item->id)->sole()->only(['status', 'pause_reason']))->toBe(['status' => 'open', 'pause_reason' => null])
+        ->and($item->fresh()->state_id)->toBe($this->states['Pending']);
 });

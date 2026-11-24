@@ -88,6 +88,7 @@ final class HandleAgentPullRequest
             $locked->forceFill([
                 'pr_number' => $number, 'repository_github_id' => $repositoryId, 'head_sha' => $head['sha'], 'pr_draft' => $draft,
                 'awaiting_pr_since' => null, 'merge_sha' => $moved ? null : $locked->merge_sha,
+                'pushed_sha' => $moved ? null : $locked->pushed_sha, 'pushed_at' => $moved ? null : $locked->pushed_at,
             ])->save();
 
             foreach ($runs->filter(fn (AgentRun $run) => $run->head_sha !== $head['sha']) as $stale) {

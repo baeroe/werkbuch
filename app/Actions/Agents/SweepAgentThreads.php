@@ -16,7 +16,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * Every minute (spec 7.2): a strand whose task ended two minutes ago without a PR never got one (a comment and
- * „Korrektur“); for a PR whose head commit came two minutes ago without any check GitHub is asked for its check runs
+ * „Korrektur“), nor did a commit a run reported five minutes ago reach its PR (A610: committed, not pushed); for a PR whose head commit came two minutes ago without any check GitHub is asked for its check runs
  * (LoadPullRequestChecks, A591: only a commit GitHub has none for counts green), and again for one whose workflow runs or
  * commit statuses still waited when GitHub was last asked (A608). Looks back a day at most, the oldest first. Answers how
  * many it handled.
@@ -33,6 +33,12 @@ final class SweepAgentThreads
         foreach (AgentThread::query()->where('status', AgentThread::OPEN)->whereNull('pr_number')->where('awaiting_pr_since', '<=', $settled)
             ->orderBy('awaiting_pr_since')->orderBy('id')->limit(200)->get() as $thread) {
             $count += self::noPr($thread);
+        }
+
+        // a run reported a commit the PR never got (committed, not pushed, A610)
+        foreach (AgentThread::query()->where('status', AgentThread::OPEN)->whereNotNull('pushed_sha')->where('pushed_at', '<=', now()->subMinutes(self::PUSH_MINUTES))
+            ->orderBy('pushed_at')->orderBy('id')->limit(200)->get() as $thread) {
+            $count += self::noPush($thread);
         }
 
         // a head without any check: GitHub is asked once more after it settled (A591), only that may count it green
@@ -60,6 +66,30 @@ final class SweepAgentThreads
         }
 
         return $count;
+    }
+
+    /** How long a commit a run reported may take to reach the PR. */
+    public const PUSH_MINUTES = 5;
+
+    /** A commit a run reported that never reached the PR: a comment and „Korrektur“; read again under its lock. */
+    public static function noPush(AgentThread $thread): int
+    {
+        return DB::transaction(function () use ($thread): int {
+            $item = WorkItem::query()->findOrFail($thread->work_item_id);
+            ItemLock::take($item);
+            [, $locked] = AgentFlow::lockStrand($thread);
+            if ($locked->pushed_sha === null || $locked->pushed_at === null || $locked->pushed_at->gt(now()->subMinutes(self::PUSH_MINUTES))) {
+                return 0;
+            }
+
+            $sha = $locked->pushed_sha;
+            $locked->forceFill(['pushed_sha' => null, 'pushed_at' => null])->save();
+            $bot = User::query()->findOrFail($locked->bot_id);
+            AgentFlow::comment($bot, $item, __('agents.comment.no_push', ['sha' => substr($sha, 0, 7)], AgentFlow::locale()));
+            AgentFlow::move($bot, $item, AgentStep::Correction);
+
+            return 1;
+        }, 3);
     }
 
     /** A strand without a PR two minutes after its task: a comment and „Korrektur“; read again under its lock. */

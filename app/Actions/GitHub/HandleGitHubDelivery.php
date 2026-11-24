@@ -15,6 +15,7 @@ use App\Models\AgentThread;
 use App\Models\GitHubApp;
 use App\Models\GitHubDelivery;
 use App\Models\ProjectRepository;
+use App\Models\WorkItemLink;
 use App\Support\Actor;
 use App\Support\OwnMerges;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -138,6 +139,13 @@ final class HandleGitHubDelivery
         }
 
         HandleCheckResult::run($actor, $repositoryId, $sha);
+
+        // a suite of GitHub Actions completed: its workflow runs, which werkbuch saw waiting, may have ended (A608, A610)
+        $app = is_array($source['app'] ?? null) ? ($source['app']['slug'] ?? null) : null;
+        if ($event === 'check_suite' && $app === 'github-actions' && WorkItemLink::query()->where('repository_github_id', $repositoryId)->where('head_sha', $sha)
+            ->where('state', WorkItemLink::OPEN)->whereHas('checks', fn ($checks) => $checks->where('kind', 'workflow')->where('status', '!=', 'completed')->where('head_sha', $sha))->exists()) {
+            LoadPullRequestChecks::dispatch($repositoryId, $sha);
+        }
 
         return $outcome;
     }
