@@ -36,6 +36,8 @@ return new class extends Migration
             $table->timestamp('closed_at')->nullable();
             // `updated_at` of the PR in the delivery the link holds: an older delivery writes no field
             $table->timestamp('pr_updated_at')->nullable();
+            // when werkbuch learned that the PR was merged (its own clock, to compare with the events of the item)
+            $table->timestamp('merged_seen_at', 6)->nullable();
             $table->timestamps();
 
             $table->unique(['work_item_id', 'repository_github_id', 'number']);

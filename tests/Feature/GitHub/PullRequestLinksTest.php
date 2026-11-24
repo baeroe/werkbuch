@@ -4,6 +4,7 @@ use App\Access\ProjectRole;
 use App\Actions\Comments\AddComment;
 use App\Actions\Links\SyncPullRequest;
 use App\Actions\Workflows\SaveWorkflow;
+use App\Actions\WorkItems\TransitionWorkItem;
 use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Models\AgentThread;
@@ -359,4 +360,34 @@ it('merges an item when the PR that held it back closes without a merge', functi
     $deliver($this, 'opened', 36, ['body' => "Fixes WEBU-{$b->number}"]);
     $deliver($this, 'closed', 36, ['state' => 'closed', 'closed_at' => '2026-11-24T11:00:00Z', 'body' => "Fixes WEBU-{$b->number}"]);
     expect($stateOf($this, $b))->toBe('In Progress');
+});
+
+it('takes neither closes nor skip from an old delivery, but still links a key it names', function () use ($item, $deliver, $stateOf) {
+    $a = $item($this, 'In Progress');
+    $b = $item($this, 'In Progress');
+    $c = $item($this, 'In Progress');
+    $deliver($this, 'opened', 37, ['updated_at' => '2026-11-24T09:00:00Z', 'body' => "Fixes WEBU-{$a->number}, refs WEBU-{$b->number}"]);
+    $deliver($this, 'edited', 37, ['updated_at' => '2026-11-24T09:30:00Z', 'body' => "Refs WEBU-{$a->number}, WEBU-{$b->number}"]);
+
+    // the old delivery comes late: it does not make WEBU-a close again, not take WEBU-b back, and links WEBU-c without closing
+    $deliver($this, 'edited', 37, ['updated_at' => '2026-11-24T09:10:00Z', 'body' => "Fixes WEBU-{$a->number}, WEBU-{$c->number}. Skip WEBU-{$b->number}"]);
+    expect(WorkItemLink::query()->where('number', 37)->orderBy('work_item_id')->pluck('closes', 'work_item_id')->all())
+        ->toBe([$a->id => false, $b->id => false, $c->id => false]);
+
+    $deliver($this, 'closed', 37, ['state' => 'closed', 'merged' => true, 'merged_at' => '2026-11-24T10:00:00Z', 'updated_at' => '2026-11-24T10:00:00Z', 'body' => "Refs WEBU-{$a->number}, WEBU-{$b->number}"]);
+    expect([$stateOf($this, $a), $stateOf($this, $b), $stateOf($this, $c)])->toBe(['In Progress', 'In Progress', 'In Progress']);
+});
+
+it('leaves an item a person moved on after the merge when the PR that held it back closes', function () use ($item, $deliver, $stateOf) {
+    $a = $item($this, 'In Progress');
+    $deliver($this, 'opened', 38, ['draft' => true, 'body' => "Fixes WEBU-{$a->number}"]);
+    $deliver($this, 'opened', 39, ['body' => "Fixes WEBU-{$a->number}"]);
+    $deliver($this, 'closed', 39, ['state' => 'closed', 'merged' => true, 'merged_at' => '2026-11-24T10:00:00Z', 'body' => "Fixes WEBU-{$a->number}"]);
+
+    // a person takes the item back to Todo: the close of the other PR does not overrule her
+    $this->travel(1)->seconds();
+    TransitionWorkItem::run(actor(User::factory()->admin()->create()), $a->fresh(), ['to_state_id' => $this->states['Todo']]);
+    $deliver($this, 'closed', 38, ['state' => 'closed', 'draft' => true, 'closed_at' => '2026-11-24T11:00:00Z', 'body' => "Fixes WEBU-{$a->number}"]);
+
+    expect($stateOf($this, $a))->toBe('Todo');
 });

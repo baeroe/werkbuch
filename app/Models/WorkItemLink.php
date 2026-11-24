@@ -39,12 +39,13 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $merged_at
  * @property Carbon|null $closed_at
  * @property Carbon|null $pr_updated_at
+ * @property Carbon|null $merged_seen_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read WorkItem $workItem
  * @property-read Collection<int, WorkItemLinkCheck> $checks
  */
-#[Fillable(['work_item_id', 'kind', 'repository_github_id', 'repository', 'number', 'title', 'url', 'state', 'draft', 'head_branch', 'base_branch', 'head_sha', 'closes', 'author', 'thread_id', 'review', 'review_sha', 'merged_at', 'closed_at', 'pr_updated_at'])]
+#[Fillable(['work_item_id', 'kind', 'repository_github_id', 'repository', 'number', 'title', 'url', 'state', 'draft', 'head_branch', 'base_branch', 'head_sha', 'closes', 'author', 'thread_id', 'review', 'review_sha', 'merged_at', 'closed_at', 'pr_updated_at', 'merged_seen_at'])]
 final class WorkItemLink extends Model
 {
     /** @use HasFactory<WorkItemLinkFactory> */
@@ -62,7 +63,7 @@ final class WorkItemLink extends Model
     {
         return [
             'repository_github_id' => 'integer', 'number' => 'integer', 'draft' => 'boolean', 'closes' => 'boolean',
-            'merged_at' => 'datetime', 'closed_at' => 'datetime', 'pr_updated_at' => 'datetime',
+            'merged_at' => 'datetime', 'closed_at' => 'datetime', 'pr_updated_at' => 'datetime', 'merged_seen_at' => 'datetime',
         ];
     }
 

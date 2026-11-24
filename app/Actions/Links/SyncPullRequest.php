@@ -13,8 +13,10 @@ use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Jobs\PostPullRequestComment;
+use App\Models\Event;
 use App\Models\Project;
 use App\Models\ProjectRepository;
+use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkflowState;
 use App\Models\WorkItem;
@@ -44,11 +46,12 @@ use RuntimeException;
  * branch of the project moves the items it closes to „Gemergt“, unless another PR (a draft too) is still open at the
  * item; closed items stay. A move the workflow does not allow leaves the state and says so in a comment at the item. The
  * moves are the default bot's (`Actor::automation('pr_link')`, A543). An archived item or project moves nothing. A PR
- * closed without a merge lets an item it was holding back go to „Gemergt“ when another PR merged and closed it before.
+ * closed without a merge lets an item it was holding back go to „Gemergt“ when another PR merged and closed it before
+ * and no person changed its state since.
  *
  * Order (A550): GitHub sends out of order and again; a delivery whose `updated_at` is older than what the links of the
  * PR hold writes no field (it only names items, a new link takes the PR as the newest delivery told it), and a merged
- * PR stays merged. Only links to items of the project the repo belongs to now count: a former project keeps its links
+ * PR stays merged; it names items, but neither takes a link back (`skip`) nor makes one close. Only links to items of the project the repo belongs to now count: a former project keeps its links
  * untouched.
  *
  * PRs of agents (AgentPullRequests: the app opened them, or a strand has them) are linked as any other, with their
@@ -143,7 +146,8 @@ final class SyncPullRequest
         $changed = false;
 
         foreach ($items as $item) {
-            $kind = $kindOf[$item->id] ?? null;
+            // an old delivery still names items, but decides nothing: it neither takes a link back nor makes one close
+            $kind = $stale && isset($kindOf[$item->id]) ? KeywordHit::LINKS : $kindOf[$item->id] ?? null;
             $existing = $links->get($item->id);
 
             if ($kind === KeywordHit::SKIP) {
@@ -157,7 +161,8 @@ final class SyncPullRequest
             }
 
             if ($existing === null) {
-                $added = WorkItemLink::query()->create([...$fields, 'work_item_id' => $item->id, 'closes' => $kind === KeywordHit::CLOSES]);
+                $added = WorkItemLink::query()->create([...$fields, 'work_item_id' => $item->id, 'closes' => $kind === KeywordHit::CLOSES,
+                    'merged_seen_at' => $fields['merged_seen_at'] ?? (($fields['state'] ?? null) === WorkItemLink::MERGED ? now() : null)]);
                 EventRecorder::record(EventType::WorkItemLinkAdded, $events, $item, $project, ['pull_request' => ['old' => null, 'new' => self::snapshot($added)]]);
                 $changed = true;
                 $review[$item->id] = $added->active();
@@ -170,7 +175,7 @@ final class SyncPullRequest
             $wasActive = $existing->active();
             $wasOpen = $existing->open();
             $wasMerged = $existing->state === WorkItemLink::MERGED;
-            $closes = $kind === null ? $existing->closes : $kind === KeywordHit::CLOSES;
+            $closes = $kind === null || $stale ? $existing->closes : $kind === KeywordHit::CLOSES;
             $changed = $changed || $closes !== $existing->closes;
 
             if (! $stale && $existing->head_sha !== $pr['head_sha']) {
@@ -180,7 +185,10 @@ final class SyncPullRequest
 
             // a merged PR stays merged, whatever a later delivery says of its state
             $kept = $wasMerged ? $existing->only(['state', 'draft', 'merged_at', 'closed_at']) : [];
-            $existing->fill([...($stale ? [] : $fields), ...$kept, 'closes' => $closes])->save();
+            $existing->fill([...($stale ? [] : $fields), ...$kept, 'closes' => $closes]);
+            // when werkbuch learned of the merge: what a later move of a person at the item is compared with
+            $existing->merged_seen_at = ! $wasMerged && $existing->state === WorkItemLink::MERGED ? now() : $existing->merged_seen_at;
+            $existing->save();
             $review[$item->id] = ! $wasActive && $existing->active();
             $merged[$item->id] = ! $wasMerged && $existing->state === WorkItemLink::MERGED && $existing->closes && $existing->base_branch === $repo->base_branch;
             // closed without a merge: a PR merged before may now merge the item it closes (no other PR open any more)
@@ -201,8 +209,7 @@ final class SyncPullRequest
         }
 
         foreach ($items as $item) {
-            $merged[$item->id] = ($merged[$item->id] ?? false) || (($released[$item->id] ?? false) && WorkItemLink::query()
-                ->where('work_item_id', $item->id)->where('state', WorkItemLink::MERGED)->where('closes', true)->where('base_branch', $repo->base_branch)->exists());
+            $merged[$item->id] = ($merged[$item->id] ?? false) || (($released[$item->id] ?? false) && self::releases($item, $repo->base_branch));
         }
 
         $refused = [];
@@ -280,13 +287,28 @@ final class SyncPullRequest
     }
 
     /**
+     * Whether a PR that closed without a merge lets its item go to „Gemergt“: another PR merged into the base branch
+     * and closed it before, and no person changed the state of the item since werkbuch learned of that merge (a person
+     * who moved it on decided; A543).
+     */
+    private static function releases(WorkItem $item, string $baseBranch): bool
+    {
+        $since = WorkItemLink::query()->where('work_item_id', $item->id)->where('state', WorkItemLink::MERGED)->where('closes', true)
+            ->where('base_branch', $baseBranch)->max('merged_seen_at');
+
+        return $since !== null && ! Event::query()->where('subject_type', $item->getMorphClass())->where('subject_id', $item->id)
+            ->where('type', EventType::WorkItemStateChanged->value)->where('occurred_at', '>=', $since)
+            ->whereIn('actor_id', User::query()->select('id')->where('type', 'person'))->exists();
+    }
+
+    /**
      * The fields of the PR as a link holds them: what a new link of a delivery older than the links takes.
      *
      * @return array<string, mixed>
      */
     private static function fieldsOf(WorkItemLink $link): array
     {
-        return $link->only(['kind', 'repository_github_id', 'repository', 'number', 'title', 'url', 'state', 'draft', 'head_branch', 'base_branch', 'head_sha', 'author', 'thread_id', 'merged_at', 'closed_at', 'pr_updated_at']);
+        return $link->only(['kind', 'repository_github_id', 'repository', 'number', 'title', 'url', 'state', 'draft', 'head_branch', 'base_branch', 'head_sha', 'author', 'thread_id', 'merged_at', 'closed_at', 'pr_updated_at', 'merged_seen_at']);
     }
 
     /**
