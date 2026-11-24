@@ -114,7 +114,8 @@ final class AgentSchemas
             'body' => ['type' => 'string', 'description' => 'Markdown; the standard of werkbuch in the language of the organization while nobody changed it.'],
             'standard' => ['type' => 'boolean', 'description' => 'Whether the text is the standard (a new standard of a release reaches it).'],
             'contract' => ['type' => 'string', 'description' => 'The contract of the kind, fixed in code and first in every prompt; read only.'],
-        ], ['type', 'body', 'standard', 'contract'], false);
+            'standard_body' => ['type' => 'string', 'description' => 'The standard of werkbuch for the kind in the language of the organization; what `null` restores.'],
+        ], ['type', 'body', 'standard', 'contract', 'standard_body'], false);
     }
 
     /**
@@ -149,6 +150,7 @@ final class AgentSchemas
             'type' => ['type' => 'string', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
             'standard' => ['type' => 'boolean', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
             'contract' => ['type' => 'string', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
+            'standard_body' => ['type' => 'string', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
         ], SaveAgentRule::FIELDS);
     }
 
@@ -176,6 +178,7 @@ final class AgentSchemas
             'teardown_command' => $text(SaveProjectAgents::COMMAND_MAX, 'Run by the runner before it removes a worktree.'),
             'project_id' => ['type' => 'string', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
             'steps_complete' => ['type' => 'boolean', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
+            'bots' => ['type' => 'array', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
             'updated_at' => ['type' => ['string', 'null'], 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
         ], SaveProjectAgents::FIELDS);
     }
@@ -244,6 +247,14 @@ final class AgentSchemas
                 'models' => ['type' => 'object', 'additionalProperties' => ['type' => 'string', 'enum' => AgentModel::values()], 'description' => 'A model per kind of run, `cli:model`.'],
                 'merge_method' => ['type' => 'string', 'enum' => AgentProjectSettings::MERGE_METHODS],
                 'steps_complete' => ['type' => 'boolean', 'description' => 'Whether the workflow of the project names every step of the agents; without them no run starts.'],
+                'bots' => ['type' => 'array', 'description' => 'The active bots of the project (not the default bot) and the saved review agent, by name, with their agent (A621).', 'items' => self::object('A bot of the project.', [
+                    'bot_id' => ['type' => 'string'],
+                    'enabled' => ['type' => 'boolean', 'description' => 'Whether it works as an agent.'],
+                    'reviews' => ['type' => 'boolean', 'description' => 'Whether it may be the review agent here: a responsible person, active, may edit items.'],
+                    'cli' => ['type' => 'string', 'enum' => AgentCli::VALUES],
+                    'model' => ['type' => 'string', 'description' => 'Its default model.'],
+                    'models' => ['type' => 'object', 'additionalProperties' => ['type' => 'string'], 'description' => 'Its model per kind of run.'],
+                ], ['bot_id', 'enabled', 'reviews', 'cli', 'model', 'models'], false)],
                 'updated_at' => $nullTime,
             ],
             'AgentConfigResource' => [

@@ -1,6 +1,8 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
+use App\Access\Visibility;
 use App\Domain\Agents\AgentModel;
 use App\Events\EventType;
 use App\Models\AgentProjectSettings;
@@ -63,4 +65,35 @@ it('refuses a reviewer that cannot work in the project, a model of no list and e
 
     // only the admins of the project
     $this->actingAs(memberOf($project, ProjectRole::Member))->putJson('/api/v1/projects/WEB/agents', $body())->assertForbidden();
+});
+
+it('names the bots that could review in the project with their agent and models (A621)', function () use ($body) {
+    $project = Project::factory()->create(['identifier' => 'WEB']);
+    $rita = AgentWorld::agent([$project], ['enabled' => true, 'cli' => 'claude', 'model' => 'sonnet', 'models' => ['review' => 'opus']], 'Rita');
+    $off = AgentWorld::agent([$project], ['enabled' => false], 'Bert');
+    $viewer = AgentWorld::agent([], [], 'Vera');
+    app(RoleAssignments::class)->setProjectRole($viewer, $project, ProjectRole::Viewer);
+    $outside = AgentWorld::agent([], [], 'Otto');
+    $gone = AgentWorld::agent([$project], [], 'Gina');
+    $gone->forceFill(['disabled_at' => now()])->save();
+    $plain = User::factory()->bot(User::factory()->create())->create(['name' => 'Paul']);
+    app(RoleAssignments::class)->setProjectRole($plain, $project, ProjectRole::Member);
+    $person = User::factory()->create();
+    app(RoleAssignments::class)->setProjectRole($person, $project, ProjectRole::Member);
+
+    $bots = $this->actingAs(User::factory()->admin()->create())->getJson('/api/v1/projects/WEB/agents')->assertOk()->json('data.bots');
+
+    expect(array_column($bots, 'bot_id'))->toBe([$off->id, $plain->id, $rita->id, $viewer->id])
+        ->and($bots[2])->toBe(['bot_id' => $rita->id, 'enabled' => true, 'reviews' => true, 'cli' => 'claude', 'model' => 'sonnet', 'models' => ['review' => 'opus']])
+        ->and($bots[1])->toMatchArray(['enabled' => false, 'reviews' => true, 'model' => 'sonnet', 'models' => []])
+        ->and($bots[3]['reviews'])->toBeFalse();
+
+    // the saved reviewer stays in the list after it left the project, so the choice still shows it
+    $this->putJson('/api/v1/projects/WEB/agents', $body(['review_bot_id' => $rita->id]))->assertOk();
+    app(RoleAssignments::class)->removeFromProject($rita, $project);
+    Visibility::forget();
+    $bots = $this->getJson('/api/v1/projects/WEB/agents')->json('data.bots');
+    expect(array_column($bots, 'bot_id'))->toContain($rita->id)
+        ->and(collect($bots)->firstWhere('bot_id', $rita->id)['reviews'])->toBeFalse()
+        ->and(array_column($bots, 'bot_id'))->not->toContain($outside->id);
 });

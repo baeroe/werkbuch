@@ -47,6 +47,8 @@ export default defineConfig({
         'resources/js/features/settings/org/runners/**': { lines: 100 },
         'resources/js/features/settings/org/github/**': { lines: 100 },
         'resources/js/features/settings/org/bots/**': { lines: 100 },
+        'resources/js/features/settings/org/agents/**': { lines: 100 },
+        'resources/js/features/settings/agents/**': { lines: 100 },
         'resources/js/features/settings/org/*.{ts,tsx}': { lines: 100 },
         'resources/js/features/settings/project/**': { lines: 100 },
         'resources/js/features/projects/**': { lines: 100 },

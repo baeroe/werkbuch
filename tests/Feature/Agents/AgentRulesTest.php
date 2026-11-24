@@ -22,7 +22,15 @@ it('reads the standards in the language of the organization with the contract of
     expect(array_column($rules, 'type'))->toBe(RunType::VALUES)
         ->and($rules[0])->toMatchArray(['type' => 'task', 'standard' => true, 'contract' => Contract::for(RunType::Task)])
         ->and($rules[0]['body'])->toStartWith('## Ein Item umsetzen')
-        ->and($rules[3]['body'])->toBe(AgentRules::standard(RunType::Review, Locale::De));
+        ->and($rules[3]['body'])->toBe(AgentRules::standard(RunType::Review, Locale::De))
+        ->and($rules[3]['standard_body'])->toBe(AgentRules::standard(RunType::Review, Locale::De));
+});
+
+it('names the standard beside an own text, so the settings restore it before they save (A620)', function () {
+    $this->actingAs(User::factory()->admin()->create())->putJson('/api/v1/agent-rules/task', ['body' => 'Mine.'])->assertOk()
+        ->assertJsonPath('data.body', 'Mine.')->assertJsonPath('data.standard_body', AgentRules::standard(RunType::Task, Locale::En));
+
+    expect($this->getJson('/api/v1/agent-rules')->json('data.0'))->toMatchArray(['body' => 'Mine.', 'standard' => false, 'standard_body' => AgentRules::standard(RunType::Task, Locale::En)]);
 });
 
 it('reaches only unchanged texts with a new standard of the rules', function () {

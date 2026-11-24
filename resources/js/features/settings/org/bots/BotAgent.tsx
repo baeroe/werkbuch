@@ -1,8 +1,10 @@
 /*
  * Bot → Agent (spec 10.4, `/settings/bots?agent=<bot>`): whether a bot works as an agent, on which runners, with which
- * CLI and default model. A view of the section "Bots", like the delivery log of a webhook; a port of the click dummy
- * (`prototypes/clickdummy/src/features/settings/org/BotAgent.tsx`) without its list of projects and its models per kind
- * of run (WEBU-32): those models go back to the server as they are, only what a change of CLI takes away drops out.
+ * CLI, default model and model per kind of run ("Wie Standard" takes the default), and in which projects. A view of the
+ * section "Bots", like the delivery log of a webhook; a port of the click dummy
+ * (`prototypes/clickdummy/src/features/settings/org/BotAgent.tsx`). The projects are those the bot is a member of, each
+ * with why it does not work there (it only reads, the project is archived, its workflow lacks a step of the agents);
+ * the click dummy's "not set up yet" does not exist: a project without saved settings works with the defaults.
  * The pool may stay empty: the agent then works on every runner of the organization, also on ones that come later
  * (the click dummy did not know that case). The CLI says per runner of the pool whether it is there and logged in; a
  * CLI no runner reports still saves, its runs wait. A bot that cannot be an agent (the default bot, one without a
@@ -23,7 +25,7 @@ import { Select } from '@/components/ui/Select';
 import { labelClass } from '@/components/ui/styles';
 import { Switch } from '@/components/ui/Switch';
 import { toast } from '@/components/ui/toast';
-import { CLI_MODELS, CLI_NAMES, modelsFor, whyNotAgent, type NotAgentReason } from '@/domain/agents';
+import { CLI_MODELS, CLI_NAMES, modelsFor, RUN_TYPES, whyNotAgent, type NotAgentReason } from '@/domain/agents';
 import { useAgentConfig, useSaveAgentConfig } from '@/hooks/agents';
 import { useRunners } from '@/hooks/runners';
 import { useAllUsers } from '@/hooks/users';
@@ -31,11 +33,15 @@ import { notifyError } from '@/lib/errors';
 import { intlLocale, t, tn, type TranslationKey } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
-import type { AgentCli, AgentConfig, Runner, User } from '@/types';
+import type { AgentCli, AgentConfig, RunType, Runner, User } from '@/types';
+import { ModelField } from '../../agents/ModelField';
+import { runName } from '../../agents/runTypes';
+import { SaveBar } from '../../agents/SaveBar';
+import { AgentProjects } from './AgentProjects';
 import { fieldErrors, useDraft, useFieldErrors, useSaveShortcut } from '../../frame/form';
 import { formatDateTime, useOrgZone } from '../../frame/format';
 import { LeaveGuard } from '../../frame/LeaveGuard';
-import { FieldGroup, FormActions, FormSkeleton, Loaded, SectionHeader, SettingsCard } from '../../frame/parts';
+import { FieldGroup, FormSkeleton, Loaded, SectionHeader, SettingsCard } from '../../frame/parts';
 
 interface Form {
   enabled: boolean;
@@ -43,7 +49,7 @@ interface Form {
   runner_ids: string[];
   cli: AgentCli;
   model: string;
-  /** The models per kind of run: not edited here (WEBU-32), sent back as they are. */
+  /** The models per kind of run; a kind left out takes the default model. */
   models: AgentConfig['models'];
 }
 
@@ -68,6 +74,14 @@ const REASONS: Record<NotAgentReason, TranslationKey> = {
 
 /** The fields a 422 is shown at; everything else is a toast. */
 const PLACED = ['enabled', 'runner_ids', 'cli', 'model'] as const;
+
+/** The models per kind with one changed; `''` ("Wie Standard") leaves the kind out. */
+const modelsWith = (models: AgentConfig['models'], type: RunType, model: string): AgentConfig['models'] => {
+  const next = { ...models };
+  if (model === '') delete next[type];
+  else next[type] = model;
+  return next;
+};
 
 export type CliState = 'ready' | 'not_logged_in' | 'not_installed';
 
@@ -163,8 +177,9 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
     } catch (error) {
       // `runner_ids.2` (a runner revoked meanwhile) stands at the pool
       const fields = Object.entries(fieldErrors(error)).reduce<Record<string, string>>((found, [path, message]) => {
-        const field = path.split('.')[0]!;
-        if ((PLACED as readonly string[]).includes(field) && !found[field]) found[field] = message;
+        // a model per kind stands at its field, `models` itself above them
+        const field = path.startsWith('models.') ? path : path.split('.')[0]!;
+        if (((PLACED as readonly string[]).includes(field) || field.startsWith('models.')) && !found[field]) found[field] = message;
         return found;
       }, {});
       if (Object.keys(fields).length > 0) problems.show(fields);
@@ -218,6 +233,8 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
           />
         </div>
       </SettingsCard>
+
+      <AgentProjects bot={bot} />
 
       <SettingsCard title={t('settings.bot_agent.pool.title')} description={t('settings.bot_agent.pool.description')}>
         <Loaded queries={[runners]} failure={t('settings.bot_agent.pool.load_failed')} skeleton={<p className="text-ui text-muted">{t('settings.bot_agent.pool.loading')}</p>}>
@@ -329,20 +346,33 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
           ]}
           onValueChange={(model) => model && edit({ model }, 'model')}
         />
+        <FieldGroup legend={t('settings.bot_agent.models.legend')} hint={t('settings.bot_agent.models.hint')}>
+          <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
+            {RUN_TYPES.map((type) => (
+              <ModelField
+                key={type}
+                label={runName(type)}
+                cli={value.cli}
+                inherit={t('settings.bot_agent.models.as_default', { model: value.model })}
+                value={value.models[type] ?? ''}
+                error={problems.errors[`models.${type}`]}
+                onChange={(model) => edit({ models: modelsWith(value.models, type, model) }, `models.${type}`)}
+              />
+            ))}
+          </div>
+        </FieldGroup>
       </SettingsCard>
 
-      <div className="flex flex-wrap items-center justify-end gap-2 rounded-card border border-line bg-surface px-4 py-3 shadow-elev-1 md:px-5">
-        <FormActions
-          dirty={draft.dirty}
-          pending={save.isPending}
-          quiet={draft.quiet}
-          onReset={() => {
-            draft.reset();
-            problems.clearAll();
-            setCliNote(null);
-          }}
-        />
-      </div>
+      <SaveBar
+        dirty={draft.dirty}
+        pending={save.isPending}
+        quiet={draft.quiet}
+        onReset={() => {
+          draft.reset();
+          problems.clearAll();
+          setCliNote(null);
+        }}
+      />
     </form>
   );
 }

@@ -260,6 +260,20 @@ describe('useLiveSync', () => {
     expect(items.fetches()).toBe(2);
   });
 
+  it('loads the agent settings of a project again when they change or a member comes or goes (WEBU-32)', async () => {
+    const agents = await shown(qk.projectAgents.detail('p_web'));
+    const repository = await shown(qk.repository.detail('p_web'));
+    renderHook(() => useLiveSync(), { wrapper });
+
+    send({ event_id: 'ev_1', type: 'project.agent_settings_updated', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect([agents.fetches(), repository.fetches()]).toEqual([2, 1]);
+
+    send({ event_id: 'ev_2', type: 'project.member_added', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect([agents.fetches(), repository.fetches()]).toEqual([3, 1]);
+  });
+
   it('loads the repo of a project and the GitHub page again when the repo or its guard changes, the runners on a run (WEBU-27)', async () => {
     const repository = await shown(qk.repository.detail('p_web'));
     const github = await shown(qk.github.detail('status'));

@@ -5,7 +5,7 @@
  * `SaveAgentConfig::refusal`. Texts stay with the screens: these give codes.
  */
 
-import type { AgentCli, AgentStep, RunType, State, StateCategory, User } from '@/types';
+import type { AgentCli, AgentStep, Label, Project, ProjectAgentBot, ProjectRole, RunType, State, StateCategory, User, Workflow } from '@/types';
 
 export const AGENT_STEPS: readonly AgentStep[] = ['working', 'review', 'correction', 'merged'];
 
@@ -100,4 +100,49 @@ export function whyNotAgent(bot: Pick<User, 'is_default_bot' | 'owner_id' | 'dis
   else if (bot.owner_id === null) reasons.push('no_owner');
   if (bot.disabled_at !== null) reasons.push('disabled');
   return reasons;
+}
+
+/** The kinds of run in the order of the spec (`RunType::VALUES`). */
+export const RUN_TYPES: readonly RunType[] = ['task', 'correction', 'conflict', 'review', 'comment'];
+
+/** A model as a label or a project names it: the CLI and one of its models (`AgentModel`, stored as `cli:model`). */
+export interface ModelRef {
+  cli: AgentCli;
+  model: string;
+}
+
+/** `claude:haiku` as a model of a CLI; null for anything the lists do not know. */
+export function parseModel(value: string | null | undefined): ModelRef | null {
+  const [cli, model, ...rest] = (value ?? '').split(':');
+  if (rest.length > 0 || !(cli === 'claude' || cli === 'codex') || !CLI_MODELS[cli].includes(model ?? '')) return null;
+  return { cli, model: model! };
+}
+
+export const modelValue = (ref: ModelRef): string => `${ref.cli}:${ref.model}`;
+
+/** A label with a model for agents (spec 7.7). */
+export const isModelLabel = (label: Pick<Label, 'agent_model'>): boolean => label.agent_model !== null && label.agent_model !== '';
+
+/** The name a model label is suggested: "Haiku Agent" for `haiku`. */
+export function modelLabelName(model: string): string {
+  const trimmed = model.trim();
+  return trimmed === '' ? '' : `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)} Agent`;
+}
+
+/** What each agent of a project takes for a kind of run without a model of the project: its model for the kind, else its default. */
+export function botModels(bots: readonly ProjectAgentBot[], type: RunType): { bot_id: string; model: string }[] {
+  return bots.filter((bot) => bot.enabled).map((bot) => ({ bot_id: bot.bot_id, model: bot.models[type] || bot.model }));
+}
+
+export type AgentProjectReason = 'viewer' | 'archived' | 'steps';
+
+/**
+ * Why an agent does not work in a project it is a member of (`AgentFlow::refusal`): it only reads there, the project is
+ * archived, or its workflow lacks a step of the agents. Null: it works there.
+ */
+export function agentProjectReason(role: ProjectRole, project: Pick<Project, 'archived_at'>, workflow: Pick<Workflow, 'states' | 'agent_states'> | undefined): AgentProjectReason | null {
+  if (role === 'viewer') return 'viewer';
+  if (project.archived_at !== null) return 'archived';
+  if (!workflow || !stepsComplete(workflow.states, workflow.agent_states)) return 'steps';
+  return null;
 }

@@ -145,6 +145,7 @@ describe('Types', () => {
       icon: 'lightbulb',
       tone: 'plum',
       description: 'Ein Einfall.',
+      agent_guidance: null,
       is_epic: true,
       properties: [
         { property_id: 'pr_environment', required: false },
@@ -248,6 +249,34 @@ describe('Types', () => {
     await waitFor(() => expect(document.activeElement).toBe(add));
   });
 
+  it('writes the guidance for agents of a type, shows a refusal at it, and clears it with an empty text', async () => {
+    const user = userEvent.setup();
+    let refuse = true;
+    const bug = { ...types[1]!, agent_guidance: 'Beginne mit einem fehlschlagenden Test.' };
+    renderWith(
+      <Types readOnlyReason={null} />,
+      routes([types[0]!, bug, types[2]!], { 'PUT /api/v1/work-item-types/t_bug': (body) => (refuse ? invalid({ agent_guidance: ['Höchstens 5000 Zeichen.'] }) : { body: { data: { ...bug, ...(body as object) } } }) }),
+    );
+    answerSlowly();
+
+    await user.click(within(await rowOf('Bug')).getByRole('button', { name: 'Typ „Bug“ bearbeiten' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Typ „Bug“ bearbeiten' });
+    const guidance = within(dialog).getByRole<HTMLTextAreaElement>('textbox', { name: /Vorgehen für Agenten/ });
+    expect(guidance.value).toBe('Beginne mit einem fehlschlagenden Test.');
+    expect(guidance.placeholder).toBe('Etwa: Beginne mit einem fehlschlagenden Test, wenn möglich.');
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    expect(await within(dialog).findByText('Höchstens 5000 Zeichen.')).toBeTruthy();
+    expect(guidance.getAttribute('aria-invalid')).toBe('true');
+
+    refuse = false;
+    await user.clear(guidance);
+    await user.type(guidance, '   ');
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(callsTo('PUT', '/api/v1/work-item-types/t_bug')).toHaveLength(2));
+    expect(callsTo('PUT', '/api/v1/work-item-types/t_bug')[1]!.body).toMatchObject({ agent_guidance: null });
+    expect(callsTo('PUT', '/api/v1/work-item-types/t_bug')[0]!.body).toMatchObject({ agent_guidance: 'Beginne mit einem fehlschlagenden Test.' });
+  });
+
   it('keeps the archive stamp of an archived type when it is changed, and restores it with null', async () => {
     const user = userEvent.setup();
     let all = [...types, archived];
@@ -275,6 +304,7 @@ describe('Types', () => {
       icon: 'bug',
       tone: 'ochre',
       description: archived.description,
+      agent_guidance: null,
       is_epic: false,
       properties: [
         { property_id: 'pr_customer', required: false },

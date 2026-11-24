@@ -6,7 +6,8 @@ import { cx } from './cx';
 import { describedBy, Field, fieldIds, type FieldText } from './Field';
 import { fieldClass, fieldSize, keptSide, optionClass, popupFocus, popupSurface } from './styles';
 
-export type SelectOption = { value: string; label: string; icon?: ReactNode; disabled?: boolean };
+/** `group` puts the option under a heading; options of one group stand together, in the order of the list. */
+export type SelectOption = { value: string; label: string; icon?: ReactNode; disabled?: boolean; group?: string };
 
 type SelectProps = FieldText & {
   options: SelectOption[];
@@ -26,6 +27,33 @@ type SelectProps = FieldText & {
   /** Keep the list below the field even without room. */
   keepSide?: boolean;
 };
+
+/** The options in runs of the same group, in the order of the list; options without a group stand on their own. */
+function groupsOf(options: SelectOption[]): { group: string | undefined; entries: SelectOption[] }[] {
+  const runs: { group: string | undefined; entries: SelectOption[] }[] = [];
+  for (const option of options) {
+    const last = runs.at(-1);
+    if (last && last.group === option.group) last.entries.push(option);
+    else runs.push({ group: option.group, entries: [option] });
+  }
+  return runs;
+}
+
+function renderOption(option: SelectOption) {
+  return (
+    <BaseSelect.Item key={option.value} value={option.value} disabled={option.disabled} className={optionClass}>
+      {option.icon && (
+        <span className="inline-flex shrink-0" aria-hidden="true">
+          {option.icon}
+        </span>
+      )}
+      <BaseSelect.ItemText className="min-w-0 flex-1 truncate">{option.label}</BaseSelect.ItemText>
+      <BaseSelect.ItemIndicator className="ml-auto inline-flex shrink-0 text-accent-text">
+        <Check className="size-4" aria-hidden="true" />
+      </BaseSelect.ItemIndicator>
+    </BaseSelect.Item>
+  );
+}
 
 /**
  * Pick one value from a short list; the list floats on tracing paper below the field. When the list closes, the focus
@@ -87,19 +115,16 @@ export function Select({ label, hint, error, options, value, onValueChange, plac
         <BaseSelect.Positioner alignItemWithTrigger={false} sideOffset={6} collisionAvoidance={keepSide ? keptSide : undefined} className="z-50 outline-none">
           <BaseSelect.Popup {...popupFocus} className={cx(popupSurface, 'min-w-[var(--anchor-width)]')}>
             <BaseSelect.List className={cx('overflow-y-auto overscroll-contain p-1', keepSide ? 'max-h-80' : 'max-h-[min(20rem,var(--available-height))]')}>
-              {options.map((option) => (
-                <BaseSelect.Item key={option.value} value={option.value} disabled={option.disabled} className={optionClass}>
-                  {option.icon && (
-                    <span className="inline-flex shrink-0" aria-hidden="true">
-                      {option.icon}
-                    </span>
-                  )}
-                  <BaseSelect.ItemText className="min-w-0 flex-1 truncate">{option.label}</BaseSelect.ItemText>
-                  <BaseSelect.ItemIndicator className="ml-auto inline-flex shrink-0 text-accent-text">
-                    <Check className="size-4" aria-hidden="true" />
-                  </BaseSelect.ItemIndicator>
-                </BaseSelect.Item>
-              ))}
+              {groupsOf(options).map(({ group, entries }, index) =>
+                group === undefined ? (
+                  entries.map(renderOption)
+                ) : (
+                  <BaseSelect.Group key={`${index}-${group}`} className="not-first:mt-1 not-first:border-t not-first:border-line not-first:pt-1">
+                    <BaseSelect.GroupLabel className="px-2.5 py-1 text-sm font-medium text-muted">{group}</BaseSelect.GroupLabel>
+                    {entries.map(renderOption)}
+                  </BaseSelect.Group>
+                ),
+              )}
             </BaseSelect.List>
           </BaseSelect.Popup>
         </BaseSelect.Positioner>

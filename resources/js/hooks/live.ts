@@ -97,7 +97,10 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (event.type === 'project.repository_changed' || event.type === 'project.merge_guard_detected' || event.type === 'project.merge_guard_confirmed') {
     return [qk.projects.all, qk.members.all, qk.repository.all, qk.github.all];
   }
-  if (group === 'project') return [qk.projects.all, qk.members.all];
+  // the agent settings of a project (WEBU-32): Projekt → Agenten reads them
+  if (event.type === 'project.agent_settings_updated') return [qk.projectAgents.all];
+  // a member came or went: the bots of the agent settings follow (A621)
+  if (group === 'project') return [qk.projects.all, qk.members.all, qk.projectAgents.all];
   // a run of an agent (A478): what runs where on the runner cards and their places
   if (group === 'agent_run') return [qk.runs.all, qk.runners.all];
   if (event.type === 'page.updated' || event.type === 'page.moved' || event.type === 'page.deleted') return [...WIKI, qk.references.all];

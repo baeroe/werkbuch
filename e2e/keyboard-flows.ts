@@ -298,6 +298,11 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'disconnect GitHub', file: 'github.spec.ts', test: 'disconnects GitHub with the keyboard' },
   { flow: 'set up a bot as agent', file: 'agents-bot.spec.ts', test: 'sets up a bot as an agent with the keyboard: on, one runner as its pool, Codex, saved with mod+enter' },
   { flow: 'set the agent steps of a workflow', file: 'agents-bot.spec.ts', test: 'sets the steps of the agents in a workflow with the keyboard: takes the proposal and saves it' },
+  { flow: 'set the working rules of the agents', file: 'agent-settings.spec.ts', test: 'sets the working rules of a kind of run and restores the standard of another, keyboard only' },
+  { flow: 'give a type guidance for agents', file: 'agent-settings.spec.ts', test: 'gives a type guidance for agents and a label a model for agents, keyboard only' },
+  { flow: 'give a label a model for agents', file: 'agent-settings.spec.ts', test: 'gives a type guidance for agents and a label a model for agents, keyboard only' },
+  { flow: 'set the agents of a project', file: 'agent-settings.spec.ts', test: 'sets the agents of a project: merge method, brakes, a model per kind of run and the text, saved with mod+enter' },
+  { flow: 'choose the models of an agent per kind of run', file: 'agent-settings.spec.ts', test: 'chooses the model of an agent per kind of run, keyboard only' },
 ];
 
 /**

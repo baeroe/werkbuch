@@ -463,6 +463,7 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
   settings('organization', 'webhooks'),
   settings('organization', 'runners'),
   settings('organization', 'github'),
+  settings('organization', 'agents'),
   settings('organization', 'system', 'system page'),
   settings('personal', 'security'),
   settings('personal', 'notifications'),
@@ -526,6 +527,40 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
     state: async (page) => {
       await press(page, page.getByRole('link', { name: new RegExp(`${en('settings.bots.agent.for', { name: 'Kira' })}$`) }));
       await expect(page.getByRole('switch', { name: en('settings.bot_agent.enabled') })).toBeVisible();
+    },
+  }),
+  state({
+    name: 'agent rules with the contract open',
+    page: 'Settings/Organization',
+    path: () => '/settings/agents',
+    // the working rules of "Review" with its contract unfolded (WEBU-32)
+    state: async (page) => {
+      await press(page, page.getByRole('tab', { name: en('settings.runners.run.type.review') }));
+      await press(page, page.getByText(en('settings.agent_rules.contract.title', { type: en('settings.runners.run.type.review') })));
+      await expect(page.locator('pre[lang="en"]')).toBeVisible();
+    },
+  }),
+  state({
+    name: 'type dialog',
+    page: 'Settings/Organization',
+    path: () => '/settings/types',
+    // a new type with the field "Guidance for agents" (WEBU-32)
+    state: async (page) => {
+      await press(page, page.getByRole('button', { name: en('settings.types.create'), exact: true }).first());
+      await expect(page.getByRole('dialog', { name: en('settings.types.create') }).getByRole('textbox', { name: new RegExp(en('settings.types.dialog.guidance_label').replace(/[()]/g, '\\$&')) })).toBeVisible();
+    },
+  }),
+  state({
+    name: 'label dialog with a model',
+    page: 'Settings/Organization',
+    path: () => '/settings/labels',
+    // a new label with a model for agents chosen, the hint of its CLI below (WEBU-32)
+    state: async (page) => {
+      await press(page, page.getByRole('button', { name: en('settings.labels.create'), exact: true }).first());
+      const dialog = page.getByRole('dialog', { name: en('settings.labels.create') });
+      await press(page, dialog.getByRole('combobox', { name: new RegExp(`^${en('settings.labels.dialog.model')}`) }));
+      await press(page, page.getByRole('option', { name: 'haiku', exact: true }));
+      await expect(dialog.getByText(en('settings.agents.model_for_cli', { cli: 'Claude Code' }))).toBeVisible();
     },
   }),
   state({
