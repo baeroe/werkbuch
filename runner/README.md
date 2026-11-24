@@ -41,13 +41,15 @@ names the daemon's clock (`now`), from which the TUI counts the times of runs.
 ## Git
 
 For a project with a repository werkbuch sends the repository and an installation token of GitHub with every run
-(valid an hour). The runner keeps the token in a file 0600 in a private folder of the run, never in the environment,
-in arguments or in `.git/config`; a credential helper reads the file on every call of git (the helpers of the machine,
-such as osxkeychain, are switched off for the run, so the token never lands in a keychain). Ten minutes before the token
-runs out the runner asks werkbuch for a new one and replaces the file at once: a `git push` the agent starts later
-pushes with the new token, also when the agent started before. When `gh` is installed, the run finds a wrapper first in
-its `PATH` that hands `gh` the current token as `GH_TOKEN`. Without a repository in werkbuch a run works in a folder of
-its strand, or in a worktree of the local repository `repos` of `config.yaml` names for the project (for development).
+(valid an hour). The runner keeps the token in files 0600 in a private folder of the run, never in the environment, in
+arguments or in `.git/config`: a credential helper for the host of the repository reads the token file on every call of
+git (the helpers of the machine, such as osxkeychain, are switched off for the run, so the token never lands in a
+keychain), and `gh` reads the same token from its own config folder (`GH_CONFIG_DIR`), also when an agent calls it by
+its full path; the token variables of the machine (`GH_TOKEN`, `GITHUB_TOKEN`) are empty in a run. Ten minutes before
+the token runs out the runner asks werkbuch for a new one and replaces the files at once: a `git push` or `gh` call the
+agent starts later uses the new token, also when the agent started before. A review or a comment never sees the token;
+the runner uses it for the clone only. Without a repository in werkbuch a run works in a folder of its strand, or in a
+worktree of the local repository `repos` of `config.yaml` names for the project (for development).
 
 ## TUI
 

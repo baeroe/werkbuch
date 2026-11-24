@@ -44,7 +44,7 @@ func New(root string) (*Server, error) {
 	backend := &cgi.Handler{
 		Path: gitPath,
 		Args: []string{"http-backend"},
-		Env:  []string{"GIT_PROJECT_ROOT=" + root, "GIT_HTTP_EXPORT_ALL=1"},
+		Env:  []string{"GIT_PROJECT_ROOT=" + root, "GIT_HTTP_EXPORT_ALL=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"},
 	}
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, token, ok := r.BasicAuth()
@@ -111,7 +111,9 @@ func (s *Server) Seed(name string) (string, error) {
 
 // Head is the commit a branch of a repository points at ("" without it).
 func (s *Server) Head(name, branch string) string {
-	out, err := exec.Command("git", "-C", filepath.Join(s.Root, name+".git"), "rev-parse", "--verify", "--quiet", "refs/heads/"+branch).Output()
+	cmd := exec.Command("git", "-C", filepath.Join(s.Root, name+".git"), "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
@@ -120,7 +122,8 @@ func (s *Server) Head(name, branch string) string {
 
 func git(args ...string) error {
 	cmd := exec.Command("git", args...)
-	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
+	// no config of the machine (a credential helper, a hook) acts on the seed
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git %v: %v %s", args, err, out)
 	}

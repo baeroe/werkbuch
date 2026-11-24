@@ -16,7 +16,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -62,7 +61,7 @@ type Executor struct {
 	Heartbeat time.Duration
 	// Retry is how long the runner tries to deliver a result.
 	Retry time.Duration
-	// LookPath finds the binary of a CLI and of gh (tests point it at a fake).
+	// LookPath finds the binary of a CLI (tests point it at a fake).
 	LookPath func(string) (string, error)
 	// RenewBefore is how long before its expiry the git token of a run is renewed (WEBU-31: 10 min).
 	RenewBefore time.Duration
@@ -320,27 +319,32 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 	defer release()
 
 	// the token of git lives in a private folder of its own from the clone on (not in the one a light run may read, A531)
-	var extraEnv []string
 	if run.Git != nil && run.Git.RepoURL != "" && run.Git.Token != "" {
 		secret, err := mcpconfig.Folder()
 		if err != nil {
 			return failed("git token: " + err.Error()), ""
 		}
 		defer secret.Remove()
-		tok.file = git.NewTokenFile(secret.Dir)
+		tok.file = git.NewTokenFile(secret.Dir, run.Git.RepoURL)
 		if err := tok.file.Write(run.Git.Token); err != nil {
 			return failed("git token: " + err.Error()), ""
 		}
-		spec.TokenFile = tok.file.Path
-		// gh only gets GH_TOKEN when the machine has gh: a wrapper first in PATH reads the current token
-		if gh, err := x.LookPath("gh"); err == nil {
-			bin, err := git.GhWrapper(secret.Dir, tok.file.Path, gh)
-			if err != nil {
-				return failed("gh: " + err.Error()), ""
+		spec.Auth = tok.file
+		r := x.newRenewer(l, run, tok, s, log)
+		floor := time.Duration(0)
+		// a token that is (nearly) out already is renewed before the clone; a failure that may pass goes on in the background
+		if r.due() {
+			switch r.try(ctx) {
+			case giveUp:
+				if ctx.Err() != nil {
+					return protocol.Result{}, l.reason()
+				}
+				r.expires = nil
+			case tryAgain:
+				floor = x.RenewRetry
 			}
-			extraEnv = append(extraEnv, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 		}
-		defer x.renewGit(l, run, tok, s, log)()
+		defer r.start(floor)()
 	}
 
 	ws, err := x.Git.Prepare(ctx, spec)
@@ -361,7 +365,7 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 	}
 	s.add(protocol.Event{Kind: protocol.KindSystem, Text: "working in " + ws.Dir, At: time.Now().UTC()})
 	if ws.Created && run.SetupCommand != nil && *run.SetupCommand != "" {
-		out, err := hooks.Run(ctx, ws.Dir, *run.SetupCommand, slices.Concat(ws.Env, extraEnv))
+		out, err := hooks.Run(ctx, ws.Dir, *run.SetupCommand, ws.Env)
 		if out != "" {
 			s.add(protocol.Event{Kind: protocol.KindSystem, Text: adapters.Cut("setup: "+out, protocol.EventTextMax), At: time.Now().UTC()})
 		}
@@ -396,7 +400,11 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 		}
 	}
 	cmd := adapter.Command(job)
-	cmd.Env = slices.Concat(os.Environ(), ws.Env, extraEnv)
+	// a light run pushes nothing: the token is the runner's for clone and fetch, its CLI gets neither file nor gh (A531)
+	cmd.Env = os.Environ()
+	if !protocol.Light(run.Type) {
+		cmd.Env = append(cmd.Env, ws.Env...)
+	}
 	cmd.Env = append(cmd.Env,
 		"WERKBUCH_RUN_ID="+run.ID,
 		"GIT_AUTHOR_NAME="+run.CommitIdentity.Name, "GIT_AUTHOR_EMAIL="+run.CommitIdentity.Email,

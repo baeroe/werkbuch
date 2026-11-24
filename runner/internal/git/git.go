@@ -3,10 +3,8 @@
 // session of the CLI hangs on it), per review without a strand one worktree at its commit (`worktrees/run-<id>`,
 // removed after the run), and per strand of a project without repository a plain folder (`work/<strand>`).
 //
-// A token for git (WEBU-24) is never written into a config, into argv or into the environment: it lives in a file 0600
-// in the private folder of the run (TokenFile), which the runner replaces when it renews the token (WEBU-31). A credential
-// helper reads that file on every call (Env), so a git started by a CLI that runs since before the renewal still pushes
-// with the new token; `gh` gets it as GH_TOKEN from a wrapper that reads the same file (GhWrapper).
+// A token for git (WEBU-24) is never written into a config of git, into argv or into the environment: it lives in files
+// of a private folder of the run (TokenFile, token.go), which the runner replaces when it renews the token (WEBU-31).
 package git
 
 import (
@@ -15,7 +13,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,13 +22,6 @@ import (
 	"sync"
 	"time"
 )
-
-// TokenFileEnv names the token file to the credential helper (the path, never the token).
-const TokenFileEnv = "WERKBUCH_GIT_TOKEN_FILE"
-
-// helper answers `get` with the token of the file and nothing else (`store` and `erase` are no-ops: no token reaches a
-// keychain).
-const helper = `!f() { test "$1" = get || exit 0; t=$(cat "$` + TokenFileEnv + `" 2>/dev/null) || exit 0; echo username=x-access-token; printf 'password=%s\n' "$t"; }; f`
 
 // KeepFor is how long a worktree stays after its last run (A497).
 const KeepFor = 72 * time.Hour
@@ -71,13 +61,13 @@ type Meta struct {
 
 // Spec says what a run needs.
 type Spec struct {
-	Name      string // strand ID, or run-<id>
-	Repo      string // URL or local path, "" without a repository
-	Branch    string // the branch of the strand
-	Base      string // its base, "" for the default branch
-	Head      string // a commit to look at (review without strand)
-	TokenFile string // the file of the installation token, "" without one
-	Teardown  string
+	Name     string     // strand ID, or run-<id>
+	Repo     string     // URL or local path, "" without a repository
+	Branch   string     // the branch of the strand
+	Base     string     // its base, "" for the default branch
+	Head     string     // a commit to look at (review without strand)
+	Auth     *TokenFile // the installation token, nil without one
+	Teardown string
 }
 
 var (
@@ -95,73 +85,6 @@ func Name(raw string) (string, error) {
 	}
 	return name, nil
 }
-
-// Env is the environment git, the setup command and the CLI get for a token file: the helpers of the machine are reset
-// (an empty `credential.helper` empties the list: osxkeychain or `gh auth git-credential` neither answer with a stale
-// token nor store this one), then the helper that reads the file. The token itself is in no variable.
-func Env(tokenFile string) []string {
-	if tokenFile == "" {
-		return nil
-	}
-	return []string{
-		TokenFileEnv + "=" + tokenFile,
-		"GIT_TERMINAL_PROMPT=0",
-		"GIT_CONFIG_COUNT=2",
-		"GIT_CONFIG_KEY_0=credential.helper",
-		"GIT_CONFIG_VALUE_0=",
-		"GIT_CONFIG_KEY_1=credential.helper",
-		"GIT_CONFIG_VALUE_1=" + helper,
-	}
-}
-
-// TokenFile holds the git token of a run (0600 in the private folder of the run).
-type TokenFile struct {
-	Path string
-	dir  string
-	mu   sync.Mutex
-}
-
-// NewTokenFile names the token file in dir (written by Write).
-func NewTokenFile(dir string) *TokenFile {
-	return &TokenFile{Path: filepath.Join(dir, "git-token"), dir: dir}
-}
-
-// Write replaces the token at once: a new file 0600 next to it, renamed over it. A reader sees the old or the new
-// token, never half of one.
-func (f *TokenFile) Write(token string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	tmp, err := os.CreateTemp(f.dir, ".git-token-*")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	_, werr := tmp.WriteString(token)
-	cerr := tmp.Close()
-	if err := errors.Join(werr, cerr, os.Chmod(name, 0o600)); err != nil {
-		os.Remove(name)
-		return err
-	}
-	if err := os.Rename(name, f.Path); err != nil {
-		os.Remove(name)
-		return err
-	}
-	return nil
-}
-
-// GhWrapper writes `<dir>/bin/gh`, which sets GH_TOKEN from the token file and runs the real gh, and returns the folder
-// to put in front of PATH. GH_TOKEN reaches only gh and what gh starts, and always the current token.
-func GhWrapper(dir, tokenFile, gh string) (string, error) {
-	bin := filepath.Join(dir, "bin")
-	if err := os.MkdirAll(bin, 0o700); err != nil {
-		return "", err
-	}
-	script := "#!/bin/sh\nGH_TOKEN=$(cat " + quote(tokenFile) + ") || exit 1\nexport GH_TOKEN\nexec " + quote(gh) + ` "$@"` + "\n"
-	return bin, os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0o700)
-}
-
-// quote quotes a word for sh.
-func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 func (m *Manager) run(ctx context.Context, env []string, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
@@ -254,7 +177,7 @@ func (m *Manager) Prepare(ctx context.Context, s Spec) (*Workspace, error) {
 	if s.Head != "" && !shaRe.MatchString(s.Head) {
 		return nil, fmt.Errorf("invalid commit %q", s.Head)
 	}
-	env := Env(s.TokenFile)
+	env := s.Auth.Env()
 	if s.Repo == "" {
 		dir := filepath.Join(m.Data, "work", name)
 		ws := &Workspace{Dir: dir, Env: env, meta: dir + ".json"}
