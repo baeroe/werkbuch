@@ -13,6 +13,7 @@ use App\Events\EventRecorder;
 use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Jobs\PostPullRequestComment;
+use App\Models\AgentProjectSettings;
 use App\Models\Event;
 use App\Models\Project;
 use App\Models\ProjectRepository;
@@ -56,7 +57,7 @@ use RuntimeException;
  *
  * PRs of agents (AgentPullRequests: the app opened them, or a strand has them) are linked as any other, with their
  * strand; what they set off is the flow's (WEBU-26), which takes them where this answers `agent`. The comment at a PR of
- * a person comes after the commit (PostPullRequestComment). Locks: the organization and the project shared, the repo
+ * a person comes after the commit (PostPullRequestComment), unless the project switched it off (`comment_on_pr`, A547). Locks: the organization and the project shared, the repo
  * row of the project (one delivery of the repo at a time), the items in order of their ID, then the links of the PR.
  * Answers `ignored` (not a PR of a project's repo), `linked` or `agent`.
  */
@@ -161,7 +162,7 @@ final class SyncPullRequest
             }
 
             if ($existing === null) {
-                $added = WorkItemLink::query()->create([...$fields, 'work_item_id' => $item->id, 'closes' => $kind === KeywordHit::CLOSES,
+                $added = WorkItemLink::query()->create([...$fields, 'work_item_id' => $item->id, 'closes' => $kind === KeywordHit::CLOSES, 'head_seen_at' => $fields['head_seen_at'] ?? now(),
                     'merged_seen_at' => $fields['merged_seen_at'] ?? (($fields['state'] ?? null) === WorkItemLink::MERGED ? now() : null)]);
                 EventRecorder::record(EventType::WorkItemLinkAdded, $events, $item, $project, ['pull_request' => ['old' => null, 'new' => self::snapshot($added)]]);
                 $changed = true;
@@ -181,6 +182,7 @@ final class SyncPullRequest
             if (! $stale && $existing->head_sha !== $pr['head_sha']) {
                 // a push: the checks of the commit before no longer say anything about the PR
                 WorkItemLinkCheck::query()->where('work_item_link_id', $existing->id)->delete();
+                $existing->head_seen_at = now();
             }
 
             // a merged PR stays merged, whatever a later delivery says of its state
@@ -199,7 +201,7 @@ final class SyncPullRequest
             }
         }
 
-        if (! $agent && $changed) {
+        if (! $agent && $changed && AgentProjectSettings::of($project->id)->comment_on_pr) {
             PostPullRequestComment::dispatch($pr['repository_github_id'], $pr['number'])->afterCommit();
         }
 
@@ -308,7 +310,7 @@ final class SyncPullRequest
      */
     private static function fieldsOf(WorkItemLink $link): array
     {
-        return $link->only(['kind', 'repository_github_id', 'repository', 'number', 'title', 'url', 'state', 'draft', 'head_branch', 'base_branch', 'head_sha', 'author', 'thread_id', 'merged_at', 'closed_at', 'pr_updated_at', 'merged_seen_at']);
+        return $link->only(['kind', 'repository_github_id', 'repository', 'number', 'title', 'url', 'state', 'draft', 'head_branch', 'base_branch', 'head_sha', 'head_seen_at', 'author', 'thread_id', 'merged_at', 'closed_at', 'pr_updated_at', 'merged_seen_at']);
     }
 
     /**

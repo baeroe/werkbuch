@@ -1,0 +1,95 @@
+<?php
+
+namespace App\Actions\Agents;
+
+use App\Actions\AgentRuns\EnqueueRun;
+use App\Domain\Agents\RunType;
+use App\Domain\Workflow\StateCategory;
+use App\Exceptions\Problem;
+use App\Models\AgentRun;
+use App\Models\AgentThread;
+use App\Models\User;
+use App\Models\WorkItem;
+use App\Support\Actor;
+use App\Support\AgentFlow;
+use App\Support\ItemLock;
+use Illuminate\Support\Facades\DB;
+use Lorisleiva\Actions\Concerns\AsAction;
+
+/**
+ * An item (or epic) assigned to an agent (spec 7.1, 7.2, 7.6): a new strand and its first `task`, or what the strand
+ * the item has needs:
+ * - the strand of the bot (open or paused): a `correction` with what people wrote since its last run; the brakes start
+ *   again (spec 7.2, „Mensch greift ein“);
+ * - a strand of another bot: it pauses, the new bot starts afresh;
+ * - a child of an epic the bot works through (rule A): the child joins the strand of the epic, its task comes when the
+ *   strand is free;
+ * - an epic: a strand at the epic on the branch of the epic, a task for its first open child that nobody or the bot
+ *   has (in order of rank); an epic without children is a task of its own.
+ * Nothing when the bot is no agent in the project (the assignment stays a plain one) or the item went to someone else
+ * meanwhile. Locks the item, then the strand (as every action of the flow).
+ */
+final class StartTask
+{
+    use AsAction;
+
+    public function handle(Actor $actor, WorkItem $item, User $bot, ?string $triggerId = null): ?AgentRun
+    {
+        return DB::transaction(function () use ($actor, $item, $bot, $triggerId): ?AgentRun {
+            $locked = ItemLock::take($item);
+            if ($locked->assignee_id !== $bot->id || $locked->archived_at !== null || AgentFlow::refusal($bot, $locked->project) !== null) {
+                return null;
+            }
+
+            $thread = AgentFlow::threadAt($locked->id);
+            if ($thread !== null && $thread->bot_id === $bot->id) {
+                return StartCorrection::run($actor, $thread, 'comments', AgentFlow::commentsSince($thread, $locked), null, true);
+            }
+
+            if ($thread !== null) {
+                PauseThread::run($actor, $thread, 'reassigned');
+            }
+
+            $epic = $locked->parent_id === null || $locked->type->is_epic ? null : AgentFlow::threadAt($locked->parent_id);
+            if ($epic !== null && $epic->bot_id === $bot->id && $epic->status === AgentThread::OPEN) {
+                return AgentFlow::openRuns($epic)->isEmpty() ? self::enqueue($actor, $bot, $epic, $locked, $triggerId) : null;
+            }
+
+            $repo = AgentFlow::repositoryOf($locked->project_id);
+            $thread = AgentThread::query()->create([
+                'bot_id' => $bot->id, 'project_id' => $locked->project_id, 'work_item_id' => $locked->id, 'status' => AgentThread::OPEN,
+                'repository_github_id' => $repo?->repository->github_id, 'base_branch' => $repo?->base_branch,
+                'branch' => AgentThread::branchFor($locked), 'corrections' => 0, 'conflicts' => 0,
+            ]);
+
+            $hasChildren = $locked->type->is_epic && WorkItem::query()->where('parent_id', $locked->id)->exists();
+            $first = $hasChildren ? self::nextChild($thread, $locked, $bot) : $locked;
+
+            return $first === null ? null : self::enqueue($actor, $bot, $thread, $first, $triggerId);
+        }, 3);
+    }
+
+    /**
+     * The next child of an epic the agent works on (rule A): open (not Completed or Canceled), not archived, nobody's or
+     * the bot's, and not done in this strand yet; in order of rank.
+     */
+    public static function nextChild(AgentThread $thread, WorkItem $epic, User $bot): ?WorkItem
+    {
+        return WorkItem::query()->where('parent_id', $epic->id)->whereNull('archived_at')
+            ->where(fn ($query) => $query->whereNull('assignee_id')->orWhere('assignee_id', $bot->id))
+            ->whereHas('state', fn ($query) => $query->whereNotIn('category', [StateCategory::Completed->value, StateCategory::Canceled->value]))
+            ->whereNotExists(fn ($done) => $done->selectRaw('1')->from('agent_runs')->where('agent_runs.thread_id', $thread->id)
+                ->whereColumn('agent_runs.work_item_id', 'work_items.id')->where('agent_runs.type', RunType::Task->value)->where('agent_runs.status', 'succeeded'))
+            ->orderBy('rank')->orderBy('id')->first();
+    }
+
+    /** Queues the task of an item at a strand; an agent switched off meanwhile queues nothing. */
+    public static function enqueue(Actor $actor, User $bot, AgentThread $thread, WorkItem $item, ?string $triggerId): ?AgentRun
+    {
+        try {
+            return EnqueueRun::run($actor, $bot, $item->project, $item, RunType::Task->value, $thread, ['trigger_event_id' => $triggerId]);
+        } catch (Problem) {
+            return null;
+        }
+    }
+}

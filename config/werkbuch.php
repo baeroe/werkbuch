@@ -1,5 +1,6 @@
 <?php
 
+use App\Agents\AgentConsumer;
 use App\Live\LiveConsumer;
 use App\Models\Attachment;
 use App\Notifications\NotificationConsumer;
@@ -54,7 +55,7 @@ return [
     // classes implementing App\Events\EventConsumer: each receives every domain event once, after the commit, in its own
     // queue (App\Events\Outbox): the search index, the notifications, the live updates and the webhooks (rows only, the
     // HTTP in jobs of their own). Off in tests (Tests\TestCase), where consumers() switches them on.
-    'event_consumers' => [SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class],
+    'event_consumers' => [SearchConsumer::class, NotificationConsumer::class, LiveConsumer::class, WebhookConsumer::class, AgentConsumer::class],
 
     // where the browser opens the WebSocket of the live updates (in Docker APP_URL, nginx forwards /app/ to Reverb);
     // apart from broadcasting.connections.reverb.options, where the server sends to (in Docker http://reverb:6001

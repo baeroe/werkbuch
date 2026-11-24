@@ -99,11 +99,17 @@ final class TypeInput
             'icon' => $valid['icon'],
             'tone' => Tone::from($valid['tone']),
             'description' => $valid['description'] ?? '',
-            'agent_guidance' => trim($valid['agent_guidance'] ?? '') === '' ? null : ($valid['agent_guidance'] ?? null),
+            'agent_guidance' => self::guidance($valid['agent_guidance'] ?? null),
             'is_epic' => (bool) $valid['is_epic'],
             'properties' => $properties,
             'archived' => ($valid['archived_at'] ?? null) !== null,
         ];
+    }
+
+    /** The guidance for agents as stored: a text, or null for none. */
+    private static function guidance(?string $text): ?string
+    {
+        return $text === null || trim($text) === '' ? null : $text;
     }
 
     /**

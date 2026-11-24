@@ -236,12 +236,12 @@ final class UpdateWorkItem
      *
      * @param  array<string, list<User>>  $mentioned  source → accounts mentioned anew
      */
-    public static function announceBots(Actor $actor, WorkItem $item, array $mentioned, ?string $commentId = null): void
+    public static function announceBots(Actor $actor, WorkItem $item, array $mentioned, ?string $commentId = null, bool $edited = false): void
     {
         foreach ($mentioned as $source => $accounts) {
             foreach ($accounts as $account) {
                 if ($account->isBot()) {
-                    EventRecorder::record(EventType::BotMentioned, $actor, $item, $item->project, null, ['bot_id' => $account->id, 'source' => $source] + ($commentId === null ? [] : ['comment_id' => $commentId]));
+                    EventRecorder::record(EventType::BotMentioned, $actor, $item, $item->project, null, ['bot_id' => $account->id, 'source' => $source] + ($commentId === null ? [] : ['comment_id' => $commentId]) + ($edited ? ['edited' => true] : []));
                 }
             }
         }
