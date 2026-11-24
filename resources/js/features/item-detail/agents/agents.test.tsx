@@ -675,8 +675,11 @@ describe('review round of PR #77', () => {
     runs = [makeRun({ type: 'review' })];
     events = { run_1: [] };
     const comment = { id: 'c_1', work_item_id: item.id, author_id: 'u_kira', body: 'Ohne Befunde.', body_json: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Ohne Befunde.' }] }] }, created_at: minutesAgo(10), edited_at: null, reactions: [], run_id: 'run_1' };
-    renderItem({ [`GET /api/v1/work-items/${item.id}/comments`]: () => ({ body: list([comment]) }) });
+    const elsewhere = { ...comment, id: 'c_2', body: 'Anderswo.', body_json: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Anderswo.' }] }] }, run_id: 'run_other' };
+    renderItem({ [`GET /api/v1/work-items/${item.id}/comments`]: () => ({ body: list([comment, elsewhere]) }) });
     const link = await screen.findByRole('button', { name: 'Ergebnis eines Auftrags' });
+    // only a run of the item's own runs has a line to jump to
+    expect(screen.getAllByRole('button', { name: 'Ergebnis eines Auftrags' })).toHaveLength(1);
     await userEvent.click(link);
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('article', { name: 'Auftrag „Review“ von Kira' })));
   });
@@ -709,6 +712,13 @@ describe('review round of PR #77', () => {
     expect(status()).toBe('1 neue Zeile im Protokoll');
     await act(() => vi.advanceTimersByTimeAsync(ANNOUNCE_MS));
     expect(status()).toBe('2 neue Zeilen im Protokoll');
+    // the same words again are new text for a screen reader: a new node
+    const before = view.container.querySelector('[role="status"] span');
+    await add('l_5');
+    await add('l_6');
+    await act(() => vi.advanceTimersByTimeAsync(ANNOUNCE_MS));
+    expect(status()).toBe('2 neue Zeilen im Protokoll');
+    expect(view.container.querySelector('[role="status"] span')).not.toBe(before);
     view.unmount();
     // a finished run says nothing
     const done = render(
@@ -716,7 +726,7 @@ describe('review round of PR #77', () => {
         <RunLog run={makeRun()} id="log" enabled={false} />
       </QueryClientProvider>,
     );
-    await add('l_5');
+    await add('l_7');
     await act(() => vi.advanceTimersByTimeAsync(ANNOUNCE_MS));
     expect(done.container.querySelector('[role="status"]')!.textContent).toBe('');
   });

@@ -121,6 +121,8 @@ export function Activity({ detail, runs = [] }: { detail: WorkItemDetail; runs?:
   const hidden = useHiddenComments();
   const entries = (activity.data ?? []).filter((entry) => !(entry.kind === 'comment' && hidden.has(entry.id)));
   const lines = withRuns(buildTimeline(entries, filter === 'runs' ? 'all' : filter), runs, filter);
+  // a comment links its run only when the run is one of the item's (its line is there to jump to)
+  const runIds = new Set(runs.map((run) => run.id));
   const earlier = Math.max(0, lines.length - shown);
   const showMore = () => {
     setShown((count) => count + SHOWN_LINES);
@@ -179,7 +181,7 @@ export function Activity({ detail, runs = [] }: { detail: WorkItemDetail; runs?:
               .slice(earlier)
               .map((line) =>
                 line.kind === 'comment' ? (
-                  <CommentCard key={line.key} comment={line.comment} item={item} />
+                  <CommentCard key={line.key} comment={line.comment} item={item} runIds={runIds} />
                 ) : line.kind === 'run' ? (
                   <RunLine key={line.key} run={line.run} runs={runs} item={item} thread={detail.agent?.thread} />
                 ) : (

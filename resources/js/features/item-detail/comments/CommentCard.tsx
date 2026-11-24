@@ -59,7 +59,7 @@ export function useHiddenComments(): ReadonlySet<string> {
 
 /* ------------------------------------------------------------------------- card */
 
-export function CommentCard({ comment, item }: { comment: Comment; item: WorkItem }) {
+export function CommentCard({ comment, item, runIds }: { comment: Comment; item: WorkItem; runIds?: ReadonlySet<string> }) {
   const me = useCurrentUser()?.id;
   const users = useUserMap();
   const { reason, can } = usePermissions();
@@ -138,7 +138,7 @@ export function CommentCard({ comment, item }: { comment: Comment; item: WorkIte
               </span>
             </Tooltip>
           )}
-          {comment.run_id && (
+          {comment.run_id && runIds?.has(comment.run_id) && (
             // a comment of a bot that answers a run: jumps to the run's line in the activity (spec 10.6)
             <button
               type="button"

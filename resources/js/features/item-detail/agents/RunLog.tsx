@@ -40,8 +40,8 @@ export const ANNOUNCE_MS = 5000;
  * "3 neue Zeilen": what came since the last announcement, at most every `ANNOUNCE_MS` while the run runs; the lines
  * the log had when it opened are not new.
  */
-function useNewLines(count: number, live: boolean): string {
-  const [said, setSaid] = useState('');
+function useNewLines(count: number, live: boolean): { text: string; at: number } {
+  const [said, setSaid] = useState({ text: '', at: 0 });
   /** The lines already told about (or there when the log loaded); null before. */
   const known = useRef<number | null>(null);
   const current = useRef(count);
@@ -59,7 +59,8 @@ function useNewLines(count: number, live: boolean): string {
       () => {
         timer.current = null;
         last.current = Date.now();
-        setSaid(tn('items.agents.log.new_lines', current.current - known.current!));
+        // the same words twice are no change to a screen reader: say them as new text
+        setSaid({ text: tn('items.agents.log.new_lines', current.current - known.current!), at: Date.now() });
         known.current = current.current;
       },
       Math.max(0, last.current + ANNOUNCE_MS - Date.now()),
@@ -91,7 +92,7 @@ export function RunLog({ run, id, enabled = true }: { run: AgentRun; id: string;
   return (
     <div id={id} className="mt-2 rounded-ctl border border-line bg-sunken">
       <p role="status" className="sr-only">
-        {said}
+        <span key={said.at}>{said.text}</span>
       </p>
       {log.isError && !log.data ? (
         <div role="alert" className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">

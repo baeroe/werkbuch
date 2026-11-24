@@ -35,6 +35,9 @@ const ITEM_PAGES: QueryKey = [...qk.pages.all, 'item'];
  */
 const ITEM_DETAILS: QueryKey = [...qk.workItems.all, 'detail'];
 
+/** Messages about an item that do not light its row up: what they change is not what a row shows. */
+const QUIET = new Set(['work_item.checks_changed', 'agent_run.log']);
+
 /** The templates with their runs and the automations of a project (the preview of a schedule is no live data). */
 const AUTOMATION: readonly QueryKey[] = [qk.templates.all, qk.templateRuns.all, qk.automations.all];
 
@@ -88,6 +91,8 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (event.type === 'work_item.created' && event.template_id !== null) return [qk.workItems.all, qk.activity.all, qk.templates.all, qk.templateRuns.all];
   // a renamed or deleted item: the references that show it (a closed parent chip, `#` in a text) read it again (14b2-M1a)
   if ((event.type === 'work_item.updated' || event.type === 'work_item.deleted') && event.item_id !== null) return [qk.workItems.all, qk.activity.all, qk.references.item(event.item_id)];
+  // the checks of a linked pull request changed (A648): only the details of items show them, no list, group or count
+  if (event.type === 'work_item.checks_changed') return [ITEM_DETAILS];
   if (group === 'work_item') return [qk.workItems.all, qk.activity.all];
   if (event.type === 'template.deleted') return [qk.templates.all, qk.templateRuns.all, qk.workItems.all];
   if (group === 'template') return [qk.templates.all, qk.templateRuns.all];
@@ -381,7 +386,8 @@ export function useLiveSync(): void {
       if (event.type === 'user.role_changed') roleChanged = true;
       for (const queryKey of keysOf(event)) burst.set(JSON.stringify(queryKey), queryKey);
       // only a change lights up, never what the browser says about a channel (`live.*`)
-      if (event.item_id && !event.type.startsWith('live.')) flashes.add(event.item_id);
+      // a line of a log or a check of a pull request is no change of the item a list would light up
+      if (event.item_id && !event.type.startsWith('live.') && !QUIET.has(event.type)) flashes.add(event.item_id);
       if (quiet !== null) clearTimeout(quiet);
       quiet = setTimeout(flush, LIVE_BURST_MS);
       longest ??= setTimeout(flush, LIVE_MAX_WAIT_MS);

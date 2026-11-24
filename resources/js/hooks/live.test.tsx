@@ -296,16 +296,20 @@ describe('useLiveSync', () => {
     expect(counts()).toEqual([3, 3, 2, 2]);
   });
 
-  it('reads the item again when its checks changed, a message without an event (A648)', async () => {
+  it('reads only the details of items when checks changed, no list, and lights no row up (A648)', async () => {
     const detail = await shown(qk.workItems.detail('WEB-47'));
+    const list = await shown(qk.workItems.list({ project: 'p_web' }));
+    const activity = await shown(qk.activity.list({ item: 'wi_47' }));
     renderHook(() => useLiveSync(), { wrapper });
     send({ event_id: null, type: 'work_item.checks_changed', item_id: 'wi_47' });
     await pass(LIVE_BURST_MS);
-    expect(detail.fetches()).toBe(2);
-    // the next one, without an event too, is no repeat
+    expect([detail.fetches(), list.fetches(), activity.fetches()]).toEqual([2, 1, 1]);
+    // the next one, without an event too, is no repeat; a line of a log lights nothing up either
     send({ event_id: null, type: 'work_item.checks_changed', item_id: 'wi_47' });
+    send({ event_id: null, type: 'agent_run.log', item_id: 'wi_47', run_id: 'run_1' });
     await pass(LIVE_BURST_MS);
-    expect(detail.fetches()).toBe(3);
+    expect([detail.fetches(), list.fetches(), activity.fetches()]).toEqual([3, 1, 1]);
+    expect(useUiStore.getState().flashIds).toEqual([]);
   });
 
   it('reads the detail of an item again when a run there is queued, starts, ends or is canceled (WEBU-28)', async () => {
