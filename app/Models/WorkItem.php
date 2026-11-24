@@ -474,6 +474,16 @@ final class WorkItem extends Model
     }
 
     /**
+     * The PRs linked to the item (spec 12), oldest link first.
+     *
+     * @return HasMany<WorkItemLink, $this>
+     */
+    public function links(): HasMany
+    {
+        return $this->hasMany(WorkItemLink::class)->orderBy('id');
+    }
+
+    /**
      * @return HasMany<WorkItemSubscriber, $this>
      */
     public function subscriptions(): HasMany

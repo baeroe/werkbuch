@@ -109,7 +109,7 @@ Reading needs a token with `read`, changing one with `write`. Items are addresse
 |---|---|
 | `GET /api/v1/work-items` | Items you see: `view`, a short form such as `filter[project]`, `filter[assignee]=me`, `filter[q]` (a key or part of the title), `sort`, `show_sub_items`, `include_archived`, `lean`, `cursor`, `per_page`. Filters, groups and counts are described under [views](/en/concepts/views#rest). |
 | `POST /api/v1/work-items` | `201` with the new item. |
-| `GET /api/v1/work-items/{item}` | The item; `?include=children,relations,type,workflow,attachments` embeds those (`children`: the first 100 by rank, archived ones included; `children_progress.total` counts all, the list `?filter[parent]=WEB-30&include_archived=1` has the rest). |
+| `GET /api/v1/work-items/{item}` | The item; `?include=children,relations,type,workflow,attachments,links` embeds those (`links`: the linked pull requests) (`children`: the first 100 by rank, archived ones included; `children_progress.total` counts all, the list `?filter[parent]=WEB-30&include_archived=1` has the rest). |
 | `PATCH /api/v1/work-items/{item}` | `200` with the item. |
 | `POST /api/v1/work-items/{item}/transition` | `200`; `to_state_id`, `resolution_id`. |
 | `PUT /api/v1/work-items/{item}/type` | `200`; `type_id`, `values`. |

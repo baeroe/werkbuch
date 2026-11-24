@@ -109,7 +109,7 @@ Lesen braucht ein Token mit `read`, Ändern eines mit `write`. Items sprichst du
 |---|---|
 | `GET /api/v1/work-items` | Items, die du siehst: `view`, eine Kurzform wie `filter[project]`, `filter[assignee]=me`, `filter[q]` (ein Key oder ein Teil des Titels), `sort`, `show_sub_items`, `include_archived`, `lean`, `cursor`, `per_page`. Filter, Gruppen und Zahlen stehen unter [Views](/de/concepts/views#rest). |
 | `POST /api/v1/work-items` | `201` mit dem neuen Item. |
-| `GET /api/v1/work-items/{item}` | Das Item; `?include=children,relations,type,workflow,attachments` bettet diese mit ein (`children`: die ersten 100 nach Rang, archivierte eingeschlossen; `children_progress.total` zählt alle, die Liste `?filter[parent]=WEB-30&include_archived=1` hat den Rest). |
+| `GET /api/v1/work-items/{item}` | Das Item; `?include=children,relations,type,workflow,attachments,links` bettet diese mit ein (`links`: die verknüpften Pull Requests) (`children`: die ersten 100 nach Rang, archivierte eingeschlossen; `children_progress.total` zählt alle, die Liste `?filter[parent]=WEB-30&include_archived=1` hat den Rest). |
 | `PATCH /api/v1/work-items/{item}` | `200` mit dem Item. |
 | `POST /api/v1/work-items/{item}/transition` | `200`; `to_state_id`, `resolution_id`. |
 | `PUT /api/v1/work-items/{item}/type` | `200`; `type_id`, `values`. |

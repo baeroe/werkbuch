@@ -286,7 +286,7 @@ it('shows an item and embeds children, type and workflow on request', function (
         ->assertJsonPath('data.type.is_epic', true);
 
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include=children,comments')->assertUnprocessable()
-        ->assertJsonPath('errors.include.0', __('field.include.unknown', ['name' => 'comments', 'allowed' => 'children, type, workflow, relations, attachments']));
+        ->assertJsonPath('errors.include.0', __('field.include.unknown', ['name' => 'comments', 'allowed' => 'children, type, workflow, relations, attachments, links']));
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-1?include[]=type')->assertOk()->assertJsonPath('data.type.id', $epic->type_id);
     $this->actingAs($mara)->getJson('/api/v1/work-items/WEB-9')->assertNotFound();
 });

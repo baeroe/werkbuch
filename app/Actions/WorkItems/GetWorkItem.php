@@ -21,7 +21,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * archived ones included, A449; `children_progress.total` counts them all, the rest come from the item list with
  * `parent`), `type`, `workflow`, and
  * `relations` as the account reads them: ListRelations::of() with the account as reader, hidden ends blanked, and
- * `attachments`, the files of the file list oldest first, never the pictures and files of the texts); all of it is
+ * `attachments`, the files of the file list oldest first, never the pictures and files of the texts, and `links`, the
+ * linked PRs with the check runs of their head commits, spec 12); all of it is
  * loaded here, the resource asks nothing.
  */
 final class GetWorkItem
@@ -29,7 +30,7 @@ final class GetWorkItem
     use AsAction;
 
     /** What an item can embed, in the order the resource answers it. */
-    public const INCLUDES = ['children', 'type', 'workflow', 'relations', 'attachments'];
+    public const INCLUDES = ['children', 'type', 'workflow', 'relations', 'attachments', 'links'];
 
     /** How many children `include=children` embeds at most (A449): an epic with thousands of them stays one cheap read. */
     public const CHILDREN_MAX = 100;
@@ -69,6 +70,9 @@ final class GetWorkItem
         if (in_array('attachments', $include, true)) {
             // the file list only: the pictures and files of the texts are named by the texts themselves
             $item->load(['attachments' => fn (MorphMany $files) => $files->where('kind', 'file')->with('media')]);
+        }
+        if (in_array('links', $include, true)) {
+            $item->load('links.checks');
         }
 
         return $item;

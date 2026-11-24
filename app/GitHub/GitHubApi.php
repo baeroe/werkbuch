@@ -86,6 +86,30 @@ final class GitHubApi
             ->get('/repos/'.self::repoPath($fullName).'/rules/branches/'.rawurlencode($branch), ['per_page' => 100, 'page' => $page]), 'rules/branches'), null);
     }
 
+    /**
+     * Writes a comment at a PR (an issue comment) and answers its ID.
+     */
+    public static function createComment(string $token, string $fullName, int $number, string $body): int
+    {
+        $answer = self::json(self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->post('/repos/'.self::repoPath($fullName).'/issues/'.$number.'/comments', ['body' => $body]), 'issues/comments'));
+
+        if (! is_int($answer['id'] ?? null)) {
+            throw new GitHubUnavailable(GitHubUnavailable::GITHUB, 'GitHub answered issues/comments without an id.', GitHubUnavailable::MALFORMED);
+        }
+
+        return $answer['id'];
+    }
+
+    /**
+     * Changes the text of a comment werkbuch wrote.
+     */
+    public static function updateComment(string $token, string $fullName, int $commentId, string $body): void
+    {
+        self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->patch('/repos/'.self::repoPath($fullName).'/issues/comments/'.$commentId, ['body' => $body]), 'issues/comments');
+    }
+
     /** `owner/name` with both parts encoded, never a path of its own. */
     private static function repoPath(string $fullName): string
     {

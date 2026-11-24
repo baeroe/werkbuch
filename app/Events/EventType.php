@@ -28,6 +28,10 @@ enum EventType: string
     case WorkItemDeleted = 'work_item.deleted';
     case WorkItemRelationAdded = 'work_item.relation_added';
     case WorkItemRelationRemoved = 'work_item.relation_removed';
+    // a PR linked to the item, merged, or unlinked by `skip` (spec 12, WEBU-25): no webhook (A541)
+    case WorkItemLinkAdded = 'work_item.link_added';
+    case WorkItemLinkMerged = 'work_item.link_merged';
+    case WorkItemLinkRemoved = 'work_item.link_removed';
     case WorkItemSubscribed = 'work_item.subscribed';
     case WorkItemUnsubscribed = 'work_item.unsubscribed';
 

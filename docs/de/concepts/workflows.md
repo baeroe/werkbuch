@@ -59,6 +59,25 @@ Projekt-Admins wechseln den Workflow ihres Projekts unter **Projekteinstellungen
 
 Ohne Items ist das eine einfache Bestätigung. Sonst nennt der Dialog jeden Status, der Items hat, mit ihrer Zahl und einem Vorschlag (der Status gleichen Namens, sonst der erste gleicher Kategorie), und sagt, was der Wechsel mit ihnen macht: Geschlossene Items, die in einem offenen Status landen, verlieren ihre Resolution, offene, die in einem geschlossenen landen, bekommen dessen Standard. Bestätigen kannst du, sobald jeder Status sein Ziel hat. Dieselbe Frage kommt, wenn du einen Workflow ohne einen Status speicherst, der noch Items hat (**Status ersetzen**): Ziele sind die bleibenden und die neuen Status. werkbuch schreibt die Items sofort um, bewusst ohne Übergangsregeln, und ihre History nennt die Person, die es ausgelöst hat. Benachrichtigt wird darüber niemand. Ist [Auto-Close](/de/concepts/automations#wenn-der-workflow-wechselt) an, sagt der Dialog auch, welchen Canceled-Status es danach nimmt oder dass es ausgeschaltet wird.
 
+## Schritte der Agenten
+
+Ein Workflow nennt den Status, den jeder Schritt der Agenten setzt, und jedes Projekt des Workflows nutzt ihn, auch für Pull Requests von Personen:
+
+| Schritt | Kategorie | Beispiel |
+|---|---|---|
+| `working` (In Arbeit) | Started | In Progress |
+| `review` (In Review) | Started | ein eigener Status „In Review“ (im Standard-Workflow: Pending) |
+| `correction` (Korrektur) | Backlog oder Unstarted | Todo |
+| `merged` (Gemergt) | Completed | Done |
+
+Org-Admins setzen sie über REST und MCP (`agent_states` des Workflows, Schritt → ID eines Status; der Editor zeigt sie später). Fehlen sie beim Speichern, bleiben die Schritte. Ein Schritt auf einem Status anderer Kategorie ist ein `422` am Schritt; ein Status, den ein Schritt nennt, behält seine Kategorie (`422` am Status). Geht ein Status, folgt sein Schritt dem Status, der seine Items übernimmt (`state_mapping`), wenn der passt, sonst ist der Schritt leer. Nur ein Workflow mit allen vier Schritten lässt Pull Requests Items bewegen.
+
+### Pull Requests
+
+Ein Pull Request im Repo eines Projekts verknüpft sich mit den Items, die er nennt: in Titel oder Beschreibung (nicht in Code) nach `fix`, `fixes`, `fixed`, `fixing`, `close`, `closes`, `closed`, `closing`, `resolve`, `resolves`, `resolved` oder `resolving` schließt er sie beim Merge; nach `ref`, `refs`, `references`, `part of`, `relates to` oder `related to` und als Key ohne Wort im Text oder im Branch-Namen verknüpft er sie nur; `skip` oder `ignore` vor einem Key hebt eine Verknüpfung auf. Ein Wort darf einen Doppelpunkt haben, mehrere Keys gehen per Komma oder `and`: `Fixes: WEB-12, WEB-13 and WEB-14`. Es zählen nur Keys des Projekts, auch frühere Kennungen.
+
+Was ein Pull Request einer Person auslöst: ein Entwurf nichts. Geöffnet oder bereit zum Review, setzt er jedes seiner Items in einem Backlog- oder Unstarted-Status auf den Schritt `review`; Items, die schon begonnen haben oder geschlossen sind, bleiben. In den Basis-Branch des Projekts gemergt, setzt er die Items, die er schließt, auf den Schritt `merged`, außer am Item hängt noch ein anderer offener Pull Request (auch ein Entwurf). Erlaubt der Workflow einen Wechsel nicht, bleibt der Status, und ein Kommentar am Item sagt es. Die App schreibt einen Kommentar am Pull Request, der seine Items nennt, und hält ihn aktuell. `GET /work-items/{item}?include=links` liest die Pull Requests eines Items mit ihren Checks.
+
 ## Löschen
 
 Ein Workflow lässt sich nur löschen, solange kein Projekt ihn nutzt; archivierte Projekte zählen mit, ebenso ein Projekt, das gerade gelöscht wird, bis es endgültig weg ist. Der Standard-Workflow lässt sich nie löschen. Die Oberfläche sagt, welche Projekte einen Workflow noch nutzen, und die API antwortet `409` mit `reason: in_use` und ihren Kennungen in `projects`; ihr `detail` kennzeichnet ein Projekt, das gerade gelöscht wird.
