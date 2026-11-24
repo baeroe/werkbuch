@@ -1,9 +1,11 @@
 <?php
 
 use App\Access\ProjectRole;
+use App\Actions\Comments\AddComment;
 use App\Actions\Links\SyncPullRequest;
 use App\Actions\Workflows\SaveWorkflow;
 use App\Events\EventType;
+use App\Exceptions\Problem;
 use App\Models\AgentThread;
 use App\Models\Comment;
 use App\Models\GitHubDelivery;
@@ -16,6 +18,7 @@ use App\Models\WorkItem;
 use App\Models\WorkItemLink;
 use App\Notifications\NotificationConsumer;
 use App\Support\Actor;
+use Illuminate\Support\Facades\Exceptions;
 use Tests\Support\FakeGitHub;
 use Tests\Support\Mcp\McpClient;
 use Tests\Support\WorkflowFixtures;
@@ -183,6 +186,29 @@ it('leaves the state when the workflow does not allow the move and says so at th
     expect($backlog->fresh()->state_id)->toBe($workflow->initial_state_id)
         ->and($comment->author_id)->toBe(User::defaultBot()->id)
         ->and($comment->body_text)->toContain('feldwerk/website#17')->toContain('Review')->toContain('Backlog');
+});
+
+it('reports a comment at the item it cannot write and keeps the link', function () {
+    $actor = actor(User::factory()->admin()->create());
+    $input = WorkflowFixtures::agencyInput('Streng 2');
+    $input['agent_states'] = ['working' => 'app_progress', 'review' => 'app_review', 'correction' => 'app_todo', 'merged' => 'app_done'];
+    $workflow = SaveWorkflow::run($actor, null, $input);
+    $this->project->forceFill(['workflow_id' => $workflow->id])->save();
+    $backlog = WorkItem::factory()->for($this->project)->create(['state_id' => $workflow->initial_state_id]);
+    Exceptions::fake();
+    app()->bind(AddComment::class, fn () => throw Problem::conflict('archived'));
+
+    FakeGitHub::deliver($this, 'pull_request', FakeGitHub::pullRequest('opened', 25, ['body' => "Fixes WEBU-{$backlog->number}"]))->assertStatus(202);
+
+    expect(WorkItemLink::query()->sole()->work_item_id)->toBe($backlog->id)
+        ->and(Comment::query()->exists())->toBeFalse();
+    Exceptions::assertReported(fn (RuntimeException $e) => str_contains($e->getMessage(), $backlog->id));
+});
+
+it('leaves a check suite to the flow', function () {
+    FakeGitHub::deliver($this, 'check_suite', ['action' => 'completed', 'check_suite' => ['id' => 1]], 'suite-1')->assertStatus(202);
+
+    expect(GitHubDelivery::query()->where('delivery_id', 'suite-1')->value('outcome'))->toBe('ignored');
 });
 
 it('links a PR of an agent with its strand and leaves what it sets off to the flow', function () use ($item, $deliver, $stateOf) {

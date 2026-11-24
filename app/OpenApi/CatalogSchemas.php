@@ -351,7 +351,7 @@ final class CatalogSchemas
 
         return [
             'type' => ['object', 'null'],
-            'description' => 'The state each step of the agents and of PR links sets: `working` and `review` started, `correction` backlog or unstarted, `merged` completed; an id of `states` or `null`. Left out, the steps stay; a step on a removed state follows `state_mapping` when it fits.',
+            'description' => 'The state each agent step sets (`working`, `review`: started; `correction`: backlog/unstarted; `merged`: completed): an id of `states` or `null`. Left out, they stay; a removed state passes its step on along `state_mapping` when it fits.',
             'properties' => ['working' => $state, 'review' => $state, 'correction' => $state, 'merged' => $state],
             'additionalProperties' => false,
         ];
