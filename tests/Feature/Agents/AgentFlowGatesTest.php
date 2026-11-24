@@ -109,6 +109,25 @@ it('decides nothing on the CI of a strand while its run that changes code is at 
         ->and(StartCorrection::run($this->system, AgentThread::query()->sole(), 'ci', 'red', str_repeat('c', 40)))->not->toBeNull();
 });
 
+it('takes no findings of CI or review while a run of the strand that changes code runs, and starts nothing for a run stopped by hand', function () use ($claim, $assign) {
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
+    $assign($this, $item, $this->kira);
+    $task = $claim($this);
+    $thread = AgentThread::query()->sole();
+    expect(StartCorrection::run($this->system, $thread, 'ci', 'red', str_repeat('a', 40)))->toBeNull()
+        ->and(StartCorrection::run($this->system, $thread, 'review', 'Important: no test', str_repeat('a', 40)))->toBeNull()
+        ->and(AgentRun::query()->where('type', 'correction')->count())->toBe(0);
+
+    // a child of an epic whose task someone stops by hand: the strand does not start it again
+    $epic = WorkItem::factory()->for($this->project)->epic()->create(['state_id' => $this->states['Todo']]);
+    $child = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo']]);
+    $this->postJson("/api/runner/runs/{$task['id']}/result", ['attempt' => 1, 'status' => 'succeeded'], AgentWorld::headers($this->token))->assertOk();
+    $assign($this, $epic, $this->kira);
+    $run = AgentRun::query()->where('work_item_id', $child->id)->sole();
+    $run->forceFill(['status' => RunStatus::Canceled, 'finished_at' => now()])->save();
+    expect(HandleRunResult::run($this->system, $run))->toBe('nothing')->and(AgentRun::query()->where('work_item_id', $child->id)->count())->toBe(1);
+});
+
 it('reads the check runs GitHub had of a head before the PR had it', function () use ($claim, $finish, $assign, $pr, $ci, $listed) {
     $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
     [$a, $b] = [str_repeat('a', 40), str_repeat('b', 40)];

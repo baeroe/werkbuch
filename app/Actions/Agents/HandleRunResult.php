@@ -71,7 +71,13 @@ final class HandleRunResult
     private static function canceled(Actor $actor, AgentRun $run): string
     {
         $thread = $run->thread;
-        if ($run->type !== RunType::Task || $thread === null || $run->work_item_id === null || $thread->work_item_id === $run->work_item_id || $thread->status !== AgentThread::OPEN) {
+        $child = $run->workItem?->fresh(['state']);
+        if ($run->type !== RunType::Task || $thread === null || $child === null || $thread->work_item_id === $child->id || $thread->status !== AgentThread::OPEN) {
+            return 'nothing';
+        }
+
+        // a child still with the agent: someone stopped the run itself, the strand waits for them
+        if (in_array($child->assignee_id, [$run->bot_id, null], true) && ! $child->state->category->isClosed()) {
             return 'nothing';
         }
 
