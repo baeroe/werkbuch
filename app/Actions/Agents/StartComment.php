@@ -4,7 +4,6 @@ namespace App\Actions\Agents;
 
 use App\Actions\AgentRuns\EnqueueRun;
 use App\Domain\Agents\RunType;
-use App\Exceptions\Problem;
 use App\Models\AgentRun;
 use App\Models\AgentThread;
 use App\Models\Comment;
@@ -32,13 +31,9 @@ final class StartComment
 
             $thread = AgentThread::query()->where('work_item_id', $item->id)->where('bot_id', $bot->id)->where('status', AgentThread::OPEN)->orderByDesc('id')->first();
 
-            try {
-                return EnqueueRun::run($actor, $bot, $item->project, $item, RunType::Comment->value, $thread, [
-                    'comment_id' => $comment->id, 'author' => $comment->author->name, 'question' => $comment->body_text,
-                ]);
-            } catch (Problem) {
-                return null;
-            }
+            return EnqueueRun::run($actor, $bot, $item->project, $item, RunType::Comment->value, $thread, [
+                'comment_id' => $comment->id, 'author' => $comment->author->name, 'question' => $comment->body_text,
+            ]);
         }, 3);
     }
 }

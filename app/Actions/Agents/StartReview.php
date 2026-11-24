@@ -6,7 +6,6 @@ use App\Actions\AgentRuns\CancelRun;
 use App\Actions\AgentRuns\EnqueueRun;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
-use App\Exceptions\Problem;
 use App\Models\AgentProjectSettings;
 use App\Models\AgentRun;
 use App\Models\AgentThread;
@@ -50,14 +49,11 @@ final class StartReview
                 CancelRun::stop($actor, $stale);
             }
 
-            try {
-                return EnqueueRun::run($actor, $reviewer, $project, $item, RunType::Review->value, $thread, [
-                    'head_sha' => $pr['head_sha'], 'repository_github_id' => $pr['repository_github_id'], 'pr_number' => $pr['number'],
-                    'repository' => $pr['repository'], 'base_branch' => $pr['base_branch'], 'person' => $thread === null,
-                ]);
-            } catch (Problem) {
-                return null;
-            }
+            // the reviewer can work in the project (AgentFlow::refusal): EnqueueRun never refuses it as switched off
+            return EnqueueRun::run($actor, $reviewer, $project, $item, RunType::Review->value, $thread, [
+                'head_sha' => $pr['head_sha'], 'repository_github_id' => $pr['repository_github_id'], 'pr_number' => $pr['number'],
+                'repository' => $pr['repository'], 'base_branch' => $pr['base_branch'], 'person' => $thread === null,
+            ]);
         }, 3);
     }
 

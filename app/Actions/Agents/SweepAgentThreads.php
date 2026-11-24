@@ -43,7 +43,8 @@ final class SweepAgentThreads
         return $count;
     }
 
-    private static function noPr(AgentThread $thread): int
+    /** A strand without a PR two minutes after its task: a comment and „Korrektur“; read again under its lock. */
+    public static function noPr(AgentThread $thread): int
     {
         return DB::transaction(function () use ($thread): int {
             $item = WorkItem::query()->findOrFail($thread->work_item_id);

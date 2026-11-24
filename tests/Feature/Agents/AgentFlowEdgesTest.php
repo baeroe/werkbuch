@@ -40,6 +40,7 @@ use App\Models\AgentRun;
 use App\Models\AgentThread;
 use App\Models\Comment;
 use App\Models\Event;
+use App\Models\GitHubDelivery;
 use App\Models\Label;
 use App\Models\Project;
 use App\Models\User;
@@ -238,8 +239,13 @@ it('reviews with the review agent of the project and falls back to the bot of th
     $pr = ['repository_github_id' => 700_000_001, 'repository' => 'feldwerk/website', 'number' => 3, 'head_sha' => str_repeat('a', 40), 'base_branch' => 'main'];
     $thread = $strand();
 
-    expect(StartReview::run($this->system, $this->project, $pr, $thread, null)->bot_id)->toBe($rita->id)
+    $first = StartReview::run($this->system, $this->project, $pr, $thread, null);
+    expect($first->bot_id)->toBe($rita->id)
         ->and(StartReview::run($this->system, $this->project, $pr, $thread, null))->toBeNull();
+
+    // a new head: the review of the old one goes
+    StartReview::run($this->system, $this->project, [...$pr, 'head_sha' => str_repeat('c', 40)], $thread, null);
+    expect($first->fresh()->status)->toBe(RunStatus::Canceled);
 
     AgentConfig::query()->where('bot_id', $rita->id)->update(['enabled' => false]);
     expect(StartReview::reviewer($this->project, $thread)?->id)->toBe($this->kira->id)
@@ -560,4 +566,68 @@ it('builds the job of every kind with the layers of the organization, the type a
         ->and($make(RunType::Conflict, [])['prompt'])->toContain('base branch `main`')
         ->and($make(RunType::Comment, ['author' => 'Mara', 'question' => 'Why?'])['prompt'])->toContain('Mara asked you')
         ->and($make(RunType::Review, ['repository' => 'feldwerk/website', 'base_branch' => 'main'], ['pr_number' => 3, 'head_sha' => 'abc', 'work_item_id' => null])['prompt'])->toContain('It names no item of the project.');
+});
+
+it('makes a correction of the findings of a review at the head of the strand', function () use ($strand, $ended) {
+    $sha = str_repeat('a', 40);
+    $thread = $strand(['repository_github_id' => 700_000_001, 'pr_number' => 12, 'head_sha' => $sha]);
+    Queue::fake([PostReviewVerdictJob::class]);
+
+    $review = $ended($thread, RunType::Review, RunStatus::Succeeded, ['head_sha' => $sha, 'repository_github_id' => 700_000_001, 'pr_number' => 12,
+        'result' => ['verdict' => 'changes', 'text' => 'Important: no test.']]);
+
+    expect(HandleRunResult::run($this->system, $review))->toBe('changes')
+        ->and(AgentRun::query()->where('type', 'correction')->sole()->context)->toMatchArray(['source' => 'review', 'findings' => 'Important: no test.'])
+        ->and($thread->fresh()->only(['review_sha', 'review_verdict']))->toBe(['review_sha' => $sha, 'review_verdict' => 'changes']);
+    Queue::assertPushed(PostReviewVerdictJob::class);
+});
+
+it('cancels what of a strand still runs when it completes', function () use ($strand) {
+    $thread = $strand();
+    $run = AgentRun::factory()->type(RunType::Task)->create(['bot_id' => $this->kira->id, 'project_id' => $this->project->id, 'work_item_id' => $thread->work_item_id, 'thread_id' => $thread->id]);
+
+    CompleteThread::run($this->system, $thread, 'merged');
+
+    expect($run->fresh()->status)->toBe(RunStatus::Canceled)->and($thread->fresh()->status)->toBe(AgentThread::MERGED);
+});
+
+it('decides again under the lock: a strand that ended meanwhile or got its PR', function () use ($strand) {
+    FakeGitHub::connected();
+    FakeGitHub::link($this->project);
+    $thread = $strand(['repository_github_id' => 700_000_001, 'pr_number' => 12, 'branch' => 'agent/x']);
+    $meanwhile = function (AgentThread $thread, array $changes) {
+        $done = false;
+        DB::connection()->beforeExecuting(function (string $sql) use (&$done, $changes, $thread) {
+            if (! $done && str_contains($sql, 'from `agent_threads`') && str_contains($sql, 'for update')) {
+                $done = true;
+                AgentThread::query()->whereKey($thread->id)->update($changes);
+            }
+        });
+    };
+
+    $meanwhile($thread, ['status' => AgentThread::MERGED]);
+    expect(HandleAgentPullRequest::run($this->system, FakeGitHub::pullRequest('synchronize', 12, ['head' => ['ref' => 'agent/x', 'sha' => str_repeat('c', 40)]])))->toBe('ended');
+
+    $waiting = $strand(['awaiting_pr_since' => now()->subMinutes(5)]);
+    $meanwhile($waiting, ['pr_number' => 30]);
+    expect(SweepAgentThreads::noPr($waiting))->toBe(0);
+});
+
+it('takes a merge GitHub answers without its commit as refused', function () use ($strand) {
+    $github = FakeGitHub::connected();
+    FakeGitHub::link($this->project);
+    $sha = str_repeat('a', 40);
+    $thread = $strand(['repository_github_id' => 700_000_001, 'pr_number' => 12, 'head_sha' => $sha, 'merge_sha' => $sha]);
+    $github->pulls[12] = ['head' => ['sha' => $sha]];
+    $github->mergeAnswer = ['merged' => true];
+
+    expect(MergeThread::run($this->system, $thread->id, $sha))->toBe('refused');
+});
+
+it('ignores a delivery of an event it does not work, and keeps one sweep at a time', function () {
+    FakeGitHub::connected();
+    FakeGitHub::deliver($this, 'issues', ['action' => 'opened'], 'issue-1')->assertStatus(202);
+
+    expect(GitHubDelivery::query()->where('delivery_id', 'issue-1')->value('outcome'))->toBe('ignored')
+        ->and((new SweepAgentThreadsJob)->middleware())->toHaveCount(1);
 });

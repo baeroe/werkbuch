@@ -79,6 +79,9 @@ final class FakeGitHub
     /** @var list<string> the branches werkbuch deleted */
     public array $deletedBranches = [];
 
+    /** @var array<string, mixed>|null an answer to a merge GitHub should not give */
+    public ?array $mergeAnswer = null;
+
     /** The commit GitHub answers a merge with. */
     public string $mergeSha = 'f00dfeed00000000000000000000000000000001';
 
@@ -208,7 +211,7 @@ final class FakeGitHub
         $number = (int) explode('/', $path)[5];
         $this->merges[] = ['number' => $number, 'sha' => (string) ($request->data()['sha'] ?? ''), 'method' => (string) ($request->data()['merge_method'] ?? '')];
 
-        return Http::response(['sha' => $this->mergeSha, 'merged' => true, 'message' => 'Pull Request successfully merged'], 200);
+        return Http::response($this->mergeAnswer ?? ['sha' => $this->mergeSha, 'merged' => true, 'message' => 'Pull Request successfully merged'], 200);
     }
 
     private function review(string $path, Request $request): mixed
