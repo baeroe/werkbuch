@@ -22,7 +22,7 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * A review of a PR once its CI is green on the head commit (spec 7.1, 7.2): once per head commit, with a fresh session.
  * The review agent of the project reviews; without one (or one that cannot work in the project) the bot of the strand
  * does, and PRs of persons are not reviewed. A review of an older commit of the PR that waits or runs is canceled: an
- * approve frees only its own commit.
+ * approve frees only its own commit. No review while a conflict of the strand waits or runs.
  */
 final class StartReview
 {
@@ -35,7 +35,8 @@ final class StartReview
     {
         return DB::transaction(function () use ($actor, $project, $pr, $thread, $item): ?AgentRun {
             $reviewer = self::reviewer($project, $thread);
-            if ($reviewer === null) {
+            // a conflict goes before CI and review (spec 7.1): its push brings a new head commit
+            if ($reviewer === null || ($thread !== null && AgentFlow::openRuns($thread, RunType::Conflict)->isNotEmpty())) {
                 return null;
             }
 
