@@ -3,6 +3,7 @@
 namespace App\OpenApi;
 
 use App\Access\ProjectRole;
+use App\Domain\Agents\AgentModel;
 use App\Domain\Automations\AutomationKey;
 use App\Domain\Catalog\Tone;
 use App\Domain\Catalog\TypeIcon;
@@ -14,6 +15,7 @@ use App\Enums\ProjectVisibility;
 use App\Support\CatalogInput;
 use App\Support\ProjectInput;
 use App\Support\PropertyInput;
+use App\Support\TypeInput;
 use App\Support\WorkflowInput;
 
 /**
@@ -372,6 +374,7 @@ final class CatalogSchemas
                 'icon' => ['type' => 'string', 'enum' => TypeIcon::NAMES],
                 'tone' => self::tone('type'),
                 'description' => ['type' => ['string', 'null'], 'maxLength' => CatalogInput::DESCRIPTION_MAX],
+                'agent_guidance' => ['type' => ['string', 'null'], 'maxLength' => TypeInput::GUIDANCE_MAX, 'description' => 'How agents work on such items (Markdown).'],
                 'is_epic' => ['type' => 'boolean', 'description' => 'An epic can have child items and no parent; it shows in the timeline. Switching it off needs an epic without children, on a type without parents.'],
                 'properties' => [
                     'type' => 'array',
@@ -470,6 +473,7 @@ final class CatalogSchemas
             'id' => self::echoed('string'),
             'name' => self::name(),
             'color' => self::tone('label'),
+            'agent_model' => ['type' => ['string', 'null'], 'enum' => [...AgentModel::values(), null], 'description' => 'The model of runs at its items, `cli:model`.'],
         ], ['name', 'color'], true);
     }
 

@@ -32,10 +32,10 @@ final class SaveWorkItemType
     use AsAction;
 
     /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
-    public const FIELDS = ['name', 'icon', 'tone', 'description', 'is_epic', 'properties', 'archived_at'];
+    public const FIELDS = ['name', 'icon', 'tone', 'description', 'agent_guidance', 'is_epic', 'properties', 'archived_at'];
 
     /**
-     * @param  array<array-key, mixed>  $input  `name`, `icon`, `tone`, `description`, `is_epic`, `properties`, `archived_at`
+     * @param  array<array-key, mixed>  $input  `name`, `icon`, `tone`, `description`, `agent_guidance`, `is_epic`, `properties`, `archived_at`
      *
      * @throws ValidationException
      * @throws Problem 409 `default_type` with the identifiers of the projects, 404 for a type deleted meanwhile
@@ -72,6 +72,7 @@ final class SaveWorkItemType
                 'icon' => $valid['icon'],
                 'tone' => $valid['tone'],
                 'description' => $valid['description'],
+                'agent_guidance' => $valid['agent_guidance'],
                 'is_epic' => $valid['is_epic'],
                 'archived_at' => CatalogInput::archivedStamp($saved->archived_at, $valid['archived']),
             ])->save();
@@ -135,7 +136,7 @@ final class SaveWorkItemType
     /**
      * What an event compares: the fields, the properties in order and the archive stamp.
      *
-     * @return array{name: string, icon: string, tone: string, description: string, is_epic: bool, properties: list<array{property_id: string, required: bool}>, archived_at: ?string}
+     * @return array{name: string, icon: string, tone: string, description: string, agent_guidance: ?string, is_epic: bool, properties: list<array{property_id: string, required: bool}>, archived_at: ?string}
      */
     private static function snapshot(WorkItemType $type): array
     {
@@ -144,6 +145,7 @@ final class SaveWorkItemType
             'icon' => $type->icon,
             'tone' => $type->tone->value,
             'description' => $type->description,
+            'agent_guidance' => $type->agent_guidance,
             'is_epic' => $type->is_epic,
             'properties' => array_values($type->typeProperties->map(fn (TypeProperty $row) => [
                 'property_id' => $row->property_id,

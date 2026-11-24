@@ -28,6 +28,7 @@ final class WorkItemTypeResource extends JsonResource
             'icon' => $type->icon,
             'tone' => $type->tone->value,
             'description' => $type->description,
+            'agent_guidance' => $type->agent_guidance,
             'is_epic' => $type->is_epic,
             'properties' => $type->typeProperties->map(fn (TypeProperty $row) => [
                 'property_id' => $row->property_id,

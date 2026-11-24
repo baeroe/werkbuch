@@ -6,11 +6,15 @@ use App\Actions\AgentRuns\GetRun;
 use App\Actions\AgentRuns\ListRunEvents;
 use App\Actions\AgentRuns\ListRuns;
 use App\Actions\Agents\GetAgentConfig;
+use App\Actions\Agents\GetProjectAgents;
+use App\Actions\Agents\ListAgentRules;
 use App\Actions\GitHub\GetGitHub;
 use App\Actions\GitHub\GetProjectRepository;
 use App\Actions\Runners\GetRunner;
 use App\Actions\Runners\ListRunners;
 use App\Http\Resources\AgentConfigResource;
+use App\Http\Resources\AgentProjectSettingsResource;
+use App\Http\Resources\AgentRuleResource;
 use App\Http\Resources\AgentRunEventResource;
 use App\Http\Resources\AgentRunResource;
 use App\Http\Resources\GitHubResource;
@@ -43,7 +47,7 @@ final class AgentsTool extends ReadTool
 
     protected string $title = 'Agents';
 
-    protected string $description = 'Reads runners (org admins), the agent configuration of a bot (org admins), the runs of agents with their logs (who sees the project), the GitHub app and the repo of a project.';
+    protected string $description = 'Reads runners (org admins), the agent configuration of a bot (org admins), the runs of agents with their logs (who sees the project), the GitHub app, the repo and the agent settings of a project, the working rules of the agents.';
 
     protected function actions(): array
     {
@@ -114,6 +118,20 @@ final class AgentsTool extends ReadTool
                 parameters: ['project' => ToolSchema::reference('project')],
                 required: ['project'],
                 twin: 'GET projects/{project}/repository',
+            ),
+            new McpAction(
+                name: 'list-rules',
+                summary: 'The working rules of the organization per kind of run, each with the contract of the kind.',
+                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::body(['data' => AgentRuleResource::collection(ListAgentRules::run($actor))->resolve(request())]),
+                twin: 'GET agent-rules',
+            ),
+            new McpAction(
+                name: 'get-project-agents',
+                summary: 'The agent settings of a project: review agent, text for agents, models, brakes, switches.',
+                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::resource(new AgentProjectSettingsResource(GetProjectAgents::run($actor, References::project($args->reference('project'))))),
+                parameters: ['project' => ToolSchema::reference('project')],
+                required: ['project'],
+                twin: 'GET projects/{project}/agents',
             ),
         ];
     }

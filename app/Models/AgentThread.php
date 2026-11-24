@@ -26,6 +26,13 @@ use Illuminate\Support\Str;
  * @property string|null $worktree
  * @property string|null $session_id
  * @property int|null $pr_number
+ * @property string|null $head_sha
+ * @property bool $pr_draft
+ * @property string|null $review_sha
+ * @property string|null $review_verdict
+ * @property string|null $merge_sha
+ * @property Carbon|null $awaiting_pr_since
+ * @property Carbon|null $ready_requested_at
  * @property string $status
  * @property string|null $pause_reason
  * @property int $corrections
@@ -34,7 +41,7 @@ use Illuminate\Support\Str;
  * @property Carbon|null $updated_at
  * @property-read Runner|null $runner
  */
-#[Fillable(['bot_id', 'project_id', 'work_item_id', 'runner_id', 'repository_github_id', 'branch', 'base_branch', 'worktree', 'session_id', 'pr_number', 'status', 'pause_reason', 'corrections', 'conflicts'])]
+#[Fillable(['bot_id', 'project_id', 'work_item_id', 'runner_id', 'repository_github_id', 'branch', 'base_branch', 'worktree', 'session_id', 'pr_number', 'head_sha', 'pr_draft', 'review_sha', 'review_verdict', 'merge_sha', 'awaiting_pr_since', 'ready_requested_at', 'status', 'pause_reason', 'corrections', 'conflicts'])]
 final class AgentThread extends Model
 {
     /** @use HasFactory<AgentThreadFactory> */
@@ -52,7 +59,7 @@ final class AgentThread extends Model
 
     protected function casts(): array
     {
-        return ['repository_github_id' => 'integer', 'pr_number' => 'integer', 'corrections' => 'integer', 'conflicts' => 'integer'];
+        return ['repository_github_id' => 'integer', 'pr_number' => 'integer', 'pr_draft' => 'boolean', 'awaiting_pr_since' => 'datetime', 'ready_requested_at' => 'datetime', 'corrections' => 'integer', 'conflicts' => 'integer'];
     }
 
     /** The branch of a strand of an item: `agent/<KEY>-<slug of the title>` (spec 7.6). */

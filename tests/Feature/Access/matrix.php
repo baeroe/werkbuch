@@ -21,7 +21,11 @@ use App\Actions\AgentRuns\RecordRunEvents;
 use App\Actions\AgentRuns\RenewGitToken;
 use App\Actions\AgentRuns\RetryRun;
 use App\Actions\Agents\GetAgentConfig;
+use App\Actions\Agents\GetProjectAgents;
+use App\Actions\Agents\ListAgentRules;
 use App\Actions\Agents\SaveAgentConfig;
+use App\Actions\Agents\SaveAgentRule;
+use App\Actions\Agents\SaveProjectAgents;
 use App\Actions\Attachments\DeleteAttachment;
 use App\Actions\Attachments\GetAttachment;
 use App\Actions\Attachments\IssueUploadUrl;
@@ -1660,6 +1664,34 @@ return [
         'allowed' => $projectAdmins,
         'hidden' => ['outsider_private'],
         'event' => EventType::ProjectMergeGuardConfirmed,
+    ],
+    // the working rules of the agents and the agent settings of a project (WEBU-26, spec 7.3, 10.3, 10.5)
+    'ListAgentRules' => [
+        'action' => ListAgentRules::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ListAgentRules::run($a),
+        'allowed' => $everyone,
+    ],
+    'SaveAgentRule' => [
+        'action' => SaveAgentRule::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveAgentRule::run($a, 'review', ['body' => "Matrix rules {$column}"]),
+        'allowed' => $catalogAdmins,
+        'event' => EventType::AgentRulesUpdated,
+    ],
+    'GetProjectAgents' => [
+        'action' => GetProjectAgents::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetProjectAgents::run($a, $w->project($column)),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'SaveProjectAgents' => [
+        'action' => SaveProjectAgents::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveProjectAgents::run($a, $w->project($column), [
+            'review_bot_id' => null, 'instructions' => "Matrix {$column}", 'models' => ['review' => 'claude:opus'], 'max_corrections' => 2, 'max_conflicts' => 1,
+            'review_person_prs' => false, 'comment_on_pr' => true, 'merge_method' => 'squash', 'setup_command' => null, 'teardown_command' => null,
+        ]),
+        'allowed' => $projectAdmins,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::ProjectAgentSettingsUpdated,
     ],
     // the webhook of GitHub and the token of a run (WEBU-24): no account, the actor is the system
     'ReceiveGitHubDelivery' => [

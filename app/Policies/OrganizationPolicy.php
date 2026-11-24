@@ -45,6 +45,13 @@ final class OrganizationPolicy
     }
 
     /** The agent configuration of bots (spec 10.4): accounts with `org.manage`. */
+    public function manageAgentRules(User $user): Response
+    {
+        return Visibility::can($user, Permission::OrgManageCatalog)
+            ? Response::allow()
+            : Response::deny(__('problem.detail.agent_rules_admins_only'));
+    }
+
     public function manageAgents(User $user): Response
     {
         return Visibility::can($user, Permission::OrgManage)

@@ -2,7 +2,6 @@
 
 namespace App\Actions\AgentRuns;
 
-use App\Domain\Agents\Contract;
 use App\Domain\Agents\Protocol;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
@@ -12,6 +11,7 @@ use App\Exceptions\Problem;
 use App\GitHub\GitHubUnavailable;
 use App\GitHub\InstallationTokens;
 use App\Models\AgentConfig;
+use App\Models\AgentProjectSettings;
 use App\Models\AgentRun;
 use App\Models\AgentThread;
 use App\Models\Project;
@@ -19,6 +19,7 @@ use App\Models\ProjectRepository;
 use App\Models\Runner;
 use App\Support\Actor;
 use App\Support\RunnerProtocol;
+use App\Support\RunPrompts;
 use App\Support\RunQueue;
 use App\Support\RunTokens;
 use Illuminate\Database\Eloquent\Builder;
@@ -267,8 +268,8 @@ final class ClaimRun
 
     /**
      * What the runner needs to run it (spec 6.3): `git` is the repo of the project and an installation token for it
-     * with the permissions of the kind (spec 11.3, null for a project without a repo). Setup and teardown of the
-     * project and the prompt built from its layers come with the tickets of the projects and the flow (WEBU-26).
+     * with the permissions of the kind (spec 11.3, null for a project without a repo), the setup and teardown commands of
+     * the project (spec 8.4) and the prompts built from their layers (spec 7.3, RunPrompts).
      *
      * @param  array{repo_url: string, token: string, expires_at: string}|null  $git
      * @return array<string, mixed>
@@ -279,6 +280,7 @@ final class ClaimRun
         $thread = $run->type === RunType::Review ? null : $run->thread;
         $bot = $run->bot;
         $host = parse_url((string) config('app.url'), PHP_URL_HOST);
+        $settings = AgentProjectSettings::of($run->project_id);
 
         return [
             'id' => $run->id,
@@ -297,11 +299,10 @@ final class ClaimRun
                 'worktree' => $thread->worktree, 'session_id' => $thread->session_id,
             ],
             'head_sha' => $run->head_sha,
-            'setup_command' => null,
-            'teardown_command' => null,
+            'setup_command' => $settings->setup_command,
+            'teardown_command' => $settings->teardown_command,
             'commit_identity' => ['name' => $bot->name, 'email' => $bot->handle.'@users.noreply.'.(is_string($host) ? $host : 'localhost')],
-            'system_prompt' => Contract::for($run->type),
-            'prompt' => Contract::placeholder($run->type, $item?->key, $item?->title),
+            ...RunPrompts::for($run),
             'werkbuch' => ['mcp_url' => url('/mcp'), 'server_name' => 'werkbuch-run', 'token' => $token],
             'git' => $git,
         ];

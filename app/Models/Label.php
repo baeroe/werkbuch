@@ -16,10 +16,11 @@ use Illuminate\Support\Carbon;
  * @property string $id
  * @property string $name
  * @property Tone $color
+ * @property string|null $agent_model
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'color'])]
+#[Fillable(['name', 'color', 'agent_model'])]
 final class Label extends Model
 {
     /** @use HasFactory<LabelFactory> */

@@ -5,12 +5,16 @@ namespace App\Mcp\Tools;
 use App\Actions\AgentRuns\CancelRun;
 use App\Actions\AgentRuns\RetryRun;
 use App\Actions\Agents\SaveAgentConfig;
+use App\Actions\Agents\SaveAgentRule;
+use App\Actions\Agents\SaveProjectAgents;
 use App\Actions\GitHub\ConfirmMergeGuard;
 use App\Actions\GitHub\LinkRepository;
 use App\Actions\GitHub\SyncGitHub;
 use App\Actions\Runners\RevokeRunner;
 use App\Actions\Runners\UpdateRunner;
 use App\Http\Resources\AgentConfigResource;
+use App\Http\Resources\AgentProjectSettingsResource;
+use App\Http\Resources\AgentRuleResource;
 use App\Http\Resources\AgentRunResource;
 use App\Http\Resources\GitHubResource;
 use App\Http\Resources\RunnerResource;
@@ -42,7 +46,7 @@ final class ManageAgentsTool extends WriteTool
 
     protected string $title = 'Manage agents';
 
-    protected string $description = 'Changes runners (name, places, revoke; org admins), the agent configuration of a bot (org admins), runs (cancel, start again; who may change the item), the GitHub app (sync) and the repo of a project.';
+    protected string $description = 'Changes runners (name, places, revoke; org admins), the agent configuration of a bot (org admins), runs (cancel, start again; who may change the item), the GitHub app (sync), the repo and the agent settings of a project, the working rules of the agents.';
 
     protected function actions(): array
     {
@@ -115,6 +119,24 @@ final class ManageAgentsTool extends WriteTool
                 parameters: ['project' => ToolSchema::reference('project')],
                 required: ['project'],
                 twin: 'POST projects/{project}/repository/confirm-guard',
+            ),
+            new McpAction(
+                name: 'save-rule',
+                summary: 'Sets the working rules of a kind of run; `null` restores the standard (org admins).',
+                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::resource(new AgentRuleResource(SaveAgentRule::run($actor, $args->reference('kind'), $args->input()))),
+                parameters: ['kind' => ToolSchema::reference('kind')],
+                input: AgentSchemas::ruleBody(),
+                required: ['kind', 'input'],
+                twin: 'PUT agent-rules/{kind}',
+            ),
+            new McpAction(
+                name: 'save-project-agents',
+                summary: 'Sets the agent settings of a project as a whole (admins of the project).',
+                run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::resource(new AgentProjectSettingsResource(SaveProjectAgents::run($actor, References::project($args->reference('project')), $args->input()))),
+                parameters: ['project' => ToolSchema::reference('project')],
+                input: AgentSchemas::projectAgents(),
+                required: ['project', 'input'],
+                twin: 'PUT projects/{project}/agents',
             ),
         ];
     }

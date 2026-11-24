@@ -19,12 +19,13 @@ use Illuminate\Support\Carbon;
  * @property string $icon
  * @property Tone $tone
  * @property string $description
+ * @property string|null $agent_guidance
  * @property bool $is_epic
  * @property Carbon|null $archived_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'icon', 'tone', 'description', 'is_epic', 'archived_at'])]
+#[Fillable(['name', 'icon', 'tone', 'description', 'agent_guidance', 'is_epic', 'archived_at'])]
 final class WorkItemType extends Model
 {
     /** @use HasFactory<WorkItemTypeFactory> */

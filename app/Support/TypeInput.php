@@ -19,6 +19,9 @@ use Illuminate\Validation\ValidationException;
  */
 final class TypeInput
 {
+    /** The longest text of „how agents work on items of the type“ (spec 7.3, layer 3). */
+    public const GUIDANCE_MAX = 5000;
+
     /**
      * The input with its texts trimmed and the ids of the properties in lower case.
      *
@@ -27,7 +30,7 @@ final class TypeInput
      */
     public static function normalize(array $input): array
     {
-        $input = CatalogInput::blankArchive(CatalogInput::trim($input, ['name', 'icon', 'description']));
+        $input = CatalogInput::blankArchive(CatalogInput::trim($input, ['name', 'icon', 'description', 'agent_guidance']));
 
         if (is_array($input['properties'] ?? null)) {
             foreach ($input['properties'] as $index => $property) {
@@ -44,13 +47,13 @@ final class TypeInput
      * The type as it is to be saved, its properties in the order they were sent.
      *
      * @param  array<array-key, mixed>  $input
-     * @return array{name: string, icon: string, tone: Tone, description: string, is_epic: bool, properties: list<array{property_id: string, required: bool}>, archived: bool}
+     * @return array{name: string, icon: string, tone: Tone, description: string, agent_guidance: ?string, is_epic: bool, properties: list<array{property_id: string, required: bool}>, archived: bool}
      *
      * @throws ValidationException
      */
     public static function validate(array $input, ?WorkItemType $existing): array
     {
-        /** @var array{name: string, icon: string, tone: string, description?: ?string, is_epic: bool|int|string, properties: array<array-key, array{property_id: string, required: bool|int|string}>, archived_at?: ?string} $valid */
+        /** @var array{name: string, icon: string, tone: string, description?: ?string, agent_guidance?: ?string, is_epic: bool|int|string, properties: array<array-key, array{property_id: string, required: bool|int|string}>, archived_at?: ?string} $valid */
         $valid = Validator::make($input, [
             'name' => CatalogInput::name('work_item_types', $existing),
             'icon' => [
@@ -63,6 +66,7 @@ final class TypeInput
             ],
             'tone' => CatalogInput::tone(),
             'description' => CatalogInput::description(),
+            'agent_guidance' => ['nullable', 'string', 'max:'.self::GUIDANCE_MAX],
             'is_epic' => ['required', 'boolean'],
             'properties' => ['bail', 'present', 'array', 'list'],
             'properties.*' => ['array'],
@@ -95,6 +99,7 @@ final class TypeInput
             'icon' => $valid['icon'],
             'tone' => Tone::from($valid['tone']),
             'description' => $valid['description'] ?? '',
+            'agent_guidance' => trim($valid['agent_guidance'] ?? '') === '' ? null : ($valid['agent_guidance'] ?? null),
             'is_epic' => (bool) $valid['is_epic'],
             'properties' => $properties,
             'archived' => ($valid['archived_at'] ?? null) !== null,

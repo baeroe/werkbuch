@@ -3,10 +3,15 @@
 namespace App\OpenApi;
 
 use App\Actions\Agents\SaveAgentConfig;
+use App\Actions\Agents\SaveAgentRule;
+use App\Actions\Agents\SaveProjectAgents;
 use App\Actions\Runners\UpdateRunner;
 use App\Domain\Agents\AgentCli;
+use App\Domain\Agents\AgentModel;
+use App\Domain\Agents\Brakes;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
+use App\Models\AgentProjectSettings;
 use App\Models\AgentRun;
 use App\Models\AgentRunEvent;
 use App\Models\Runner;
@@ -98,6 +103,84 @@ final class AgentSchemas
     }
 
     /**
+     * One working rule (spec 7.3, 10.5) as it is answered.
+     *
+     * @return array<string, mixed>
+     */
+    private static function ruleOut(): array
+    {
+        return self::object('The working rules of the organization for a kind of run.', [
+            'type' => ['type' => 'string', 'enum' => RunType::VALUES],
+            'body' => ['type' => 'string', 'description' => 'Markdown; the standard of werkbuch in the language of the organization while nobody changed it.'],
+            'standard' => ['type' => 'boolean', 'description' => 'Whether the text is the standard (a new standard of a release reaches it).'],
+            'contract' => ['type' => 'string', 'description' => 'The contract of the kind, fixed in code and first in every prompt; read only.'],
+        ], ['type', 'body', 'standard', 'contract'], false);
+    }
+
+    /**
+     * `GET /agent-rules`.
+     *
+     * @return array<string, mixed>
+     */
+    public static function rules(): array
+    {
+        return self::object('The rules of every kind of run, in the order of the kinds.', ['data' => ['type' => 'array', 'items' => self::ruleOut()]], ['data'], false);
+    }
+
+    /**
+     * `PUT /agent-rules/{kind}` (the answer).
+     *
+     * @return array<string, mixed>
+     */
+    public static function rule(): array
+    {
+        return self::object('The rules of the kind after the change.', ['data' => self::ruleOut()], ['data'], false);
+    }
+
+    /**
+     * `PUT /agent-rules/{kind}` (the body).
+     *
+     * @return array<string, mixed>
+     */
+    public static function ruleBody(): array
+    {
+        return self::object('The rules of the kind; org admins write.', [
+            'body' => ['type' => ['string', 'null'], 'maxLength' => SaveAgentRule::BODY_MAX, 'description' => 'Markdown; `null` or empty restores the standard.'],
+            'type' => ['type' => 'string', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
+            'standard' => ['type' => 'boolean', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
+            'contract' => ['type' => 'string', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
+        ], SaveAgentRule::FIELDS);
+    }
+
+    /**
+     * `PUT /projects/{project}/agents`.
+     *
+     * @return array<string, mixed>
+     */
+    public static function projectAgents(): array
+    {
+        $text = fn (int $max, string $what) => ['type' => ['string', 'null'], 'maxLength' => $max, 'description' => $what];
+        $brake = fn (string $what) => ['type' => 'integer', 'minimum' => 1, 'maximum' => Brakes::MAX, 'description' => $what];
+        $model = ['type' => 'string', 'enum' => AgentModel::values()];
+
+        return self::object('The agent settings of the project as a whole (every key required); its admins write.', [
+            'review_bot_id' => ['type' => ['string', 'null'], 'pattern' => self::ULID, 'description' => 'The review agent: a bot with a responsible person that may edit items of the project; `null`: the bot of the strand reviews, PRs of persons are not reviewed.'],
+            'instructions' => $text(SaveProjectAgents::TEXT_MAX, 'Markdown for every run of the project (after the rules and the guidance of the type).'),
+            'models' => ['type' => ['object', 'array'], 'maxItems' => 0, 'properties' => array_fill_keys(RunType::VALUES, $model), 'additionalProperties' => false, 'description' => 'A model per kind of run, `cli:model`; it counts only for agents with that CLI. An empty map may come as `[]`.'],
+            'max_corrections' => $brake('Corrections per strand before it pauses.'),
+            'max_conflicts' => $brake('Conflicts per strand before it pauses.'),
+            'review_person_prs' => ['type' => 'boolean', 'description' => 'Whether PRs of persons get a review.'],
+            'comment_on_pr' => ['type' => 'boolean', 'description' => 'Whether the app comments the linked items at a PR.'],
+            'merge_method' => ['type' => 'string', 'enum' => AgentProjectSettings::MERGE_METHODS],
+            'setup_command' => $text(SaveProjectAgents::COMMAND_MAX, 'Run by the runner after it made a worktree.'),
+            'teardown_command' => $text(SaveProjectAgents::COMMAND_MAX, 'Run by the runner before it removes a worktree.'),
+            'project_id' => ['type' => 'string', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
+            'steps_complete' => ['type' => 'boolean', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
+            'updated_at' => ['type' => ['string', 'null'], 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
+        ], SaveProjectAgents::FIELDS);
+    }
+
+    /**
      * What Scramble cannot read of the resources, resource → property → schema.
      *
      * @return array<string, array<string, array<string, mixed>>>
@@ -156,6 +239,12 @@ final class AgentSchemas
             'AgentRunEventResource' => [
                 'kind' => ['type' => 'string', 'enum' => AgentRunEvent::KINDS],
                 'at' => $time,
+            ],
+            'AgentProjectSettingsResource' => [
+                'models' => ['type' => 'object', 'additionalProperties' => ['type' => 'string', 'enum' => AgentModel::values()], 'description' => 'A model per kind of run, `cli:model`.'],
+                'merge_method' => ['type' => 'string', 'enum' => AgentProjectSettings::MERGE_METHODS],
+                'steps_complete' => ['type' => 'boolean', 'description' => 'Whether the workflow of the project names every step of the agents; without them no run starts.'],
+                'updated_at' => $nullTime,
             ],
             'AgentConfigResource' => [
                 'cli' => ['type' => 'string', 'enum' => AgentCli::VALUES],
