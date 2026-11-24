@@ -1,6 +1,7 @@
 // Package config reads and writes the one file of settings on the runner (spec 8.4): the instance it is paired with.
-// Name, places and the commands of projects are set in werkbuch and come with every answer. Until projects have
-// repositories (WEBU-24), `repos` maps a project identifier to a local repository for development (A491).
+// Name, places and the commands of projects are set in werkbuch and come with every answer. `repos` maps a project
+// identifier to a local repository, only for a run whose claim names no `git` (A491, A530: a project without a repository
+// in werkbuch, development).
 package config
 
 import (
@@ -19,8 +20,8 @@ import (
 type Config struct {
 	// Instance is the base URL of werkbuch (`https://werkbuch.example.com`).
 	Instance string `yaml:"instance"`
-	// Repos maps a project identifier to a repository (a local path or URL) for projects werkbuch sends no repository
-	// for yet (A491, development until WEBU-24).
+	// Repos maps a project identifier to a repository (a local path or URL), the fallback for a run whose claim names
+	// no `git` (A491, A530).
 	Repos map[string]string `yaml:"repos,omitempty"`
 }
 

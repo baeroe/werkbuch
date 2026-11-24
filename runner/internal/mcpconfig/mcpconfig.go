@@ -17,8 +17,9 @@ type File struct {
 	Path string
 }
 
-// Write creates the folder and the file for the run.
-func Write(run protocol.Run) (*File, error) {
+// Folder creates a private folder of the run (0700) without a file: the token of git lives in one of its own, out of
+// the folder a light run may read (A531).
+func Folder() (*File, error) {
 	dir, err := os.MkdirTemp("", "werkbuch-run-")
 	if err != nil {
 		return nil, err
@@ -27,6 +28,16 @@ func Write(run protocol.Run) (*File, error) {
 		os.RemoveAll(dir)
 		return nil, err
 	}
+	return &File{Dir: dir}, nil
+}
+
+// Write creates the folder and the file for the run.
+func Write(run protocol.Run) (*File, error) {
+	f, err := Folder()
+	if err != nil {
+		return nil, err
+	}
+	dir := f.Dir
 	name := run.Werkbuch.ServerName
 	if name == "" {
 		name = "werkbuch-run"

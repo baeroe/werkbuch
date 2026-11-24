@@ -38,6 +38,17 @@ The daemon listens on `~/.local/state/werkbuch-runner/runner.sock` (`GET /status
 `GET /runs/{id}/events`, `POST /runs/{id}/cancel`, `GET /load`, `GET /doctor`, `POST /update`) for the TUI; `GET /status`
 names the daemon's clock (`now`), from which the TUI counts the times of runs.
 
+## Git
+
+For a project with a repository werkbuch sends the repository and an installation token of GitHub with every run
+(valid an hour). The runner keeps the token in a file 0600 in a private folder of the run, never in the environment,
+in arguments or in `.git/config`; a credential helper reads the file on every call of git (the helpers of the machine,
+such as osxkeychain, are switched off for the run, so the token never lands in a keychain). Ten minutes before the token
+runs out the runner asks werkbuch for a new one and replaces the file at once: a `git push` the agent starts later
+pushes with the new token, also when the agent started before. When `gh` is installed, the run finds a wrapper first in
+its `PATH` that hands `gh` the current token as `GH_TOKEN`. Without a repository in werkbuch a run works in a folder of
+its strand, or in a worktree of the local repository `repos` of `config.yaml` names for the project (for development).
+
 ## TUI
 
 `werkbuch-runner` without a command opens the TUI. It reads the daemon over its socket every two seconds; nothing is set

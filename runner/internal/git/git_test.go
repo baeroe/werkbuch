@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/baeroe/werkbuch/runner/internal/fakegit"
 )
 
 func sh(t *testing.T, dir string, args ...string) string {
@@ -122,17 +124,137 @@ func TestReviewWorktreeAndSweep(t *testing.T) {
 
 func TestEnv(t *testing.T) {
 	if Env("") != nil {
-		t.Fatal("no token, no env")
+		t.Fatal("no token file, no env")
 	}
-	env := strings.Join(Env("ghs_x"), "\n")
-	if !strings.Contains(env, "GH_TOKEN=ghs_x") || !strings.Contains(env, "credential.helper") {
-		t.Fatal(env)
+	env := strings.Join(Env("/private/run/git-token"), "\n")
+	for _, want := range []string{TokenFileEnv + "=/private/run/git-token", "GIT_CONFIG_KEY_0=credential.helper\nGIT_CONFIG_VALUE_0=\n", "GIT_CONFIG_KEY_1=credential.helper", "GIT_TERMINAL_PROMPT=0"} {
+		if !strings.Contains(env, want) {
+			t.Fatalf("no %q in\n%s", want, env)
+		}
 	}
-	if strings.Count(env, "ghs_x") != 2 {
-		t.Fatal("the token only in the two variables")
+	if strings.Contains(env, "GH_TOKEN") {
+		t.Fatal("GH_TOKEN goes only through the wrapper of gh")
 	}
 }
 
+func TestTokenFile(t *testing.T) {
+	dir := t.TempDir()
+	f := NewTokenFile(dir)
+	if err := f.Write("ghs_first0000000000000000000000"); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(f.Path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v %v", info, err)
+	}
+	if err := f.Write("ghs_second000000000000000000000"); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(f.Path)
+	entries, _ := os.ReadDir(dir)
+	if string(data) != "ghs_second000000000000000000000" || len(entries) != 1 {
+		t.Fatalf("%q %v", data, entries)
+	}
+}
+
+// remote is a fake GitHub remote with one repository.
+func remote(t *testing.T) (*fakegit.Server, string) {
+	fg, err := fakegit.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(fg.Close)
+	url, err := fg.Seed("origin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fg, url
+}
+
+func TestTheHelperReadsTheTokenFileOnEveryCall(t *testing.T) {
+	ctx := context.Background()
+	fg, url := remote(t)
+	// a helper of the machine (osxkeychain, `gh auth setup-git`) never answers or stores: the list is reset
+	global := filepath.Join(t.TempDir(), "gitconfig")
+	os.WriteFile(global, []byte("[credential]\n\thelper = \"!f() { echo username=x-access-token; echo password=stale-machine-token; }; f\"\n"), 0o600)
+	t.Setenv("GIT_CONFIG_GLOBAL", global)
+
+	first, second := "ghs_first0000000000000000000000", "ghs_second000000000000000000000"
+	fg.Accept(first, time.Now().Add(time.Hour))
+	file := NewTokenFile(t.TempDir())
+	file.Write(first)
+	m := &Manager{Data: t.TempDir()}
+	ws, err := m.Prepare(ctx, Spec{Name: "thread-1", Repo: url, Branch: "agent/WEB-1-x", TokenFile: file.Path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the token is renewed and the first one runs out: a push after it uses the new one, with the same environment
+	fg.Accept(second, time.Now().Add(time.Hour))
+	fg.Accept(first, time.Now())
+	file.Write(second)
+	os.WriteFile(filepath.Join(ws.Dir, "a.txt"), []byte("a"), 0o644)
+	sh(t, ws.Dir, "add", ".")
+	sh(t, ws.Dir, "commit", "--quiet", "-m", "work")
+	push := exec.Command("git", "push", "--quiet")
+	push.Dir = ws.Dir
+	push.Env = append(os.Environ(), ws.Env...)
+	if out, err := push.CombinedOutput(); err != nil {
+		t.Fatalf("push: %v %s", err, out)
+	}
+	if fg.Head("origin", "agent/WEB-1-x") != m.Head(ctx, ws) {
+		t.Fatal("not pushed")
+	}
+	var pushed []string
+	for _, r := range fg.Requests() {
+		if r.Token == "stale-machine-token" {
+			t.Fatal("a helper of the machine answered")
+		}
+		if r.Push && r.Allowed {
+			pushed = append(pushed, r.Token)
+		}
+	}
+	if len(pushed) == 0 || pushed[0] != second {
+		t.Fatalf("pushed with %v", pushed)
+	}
+	for _, dir := range []string{m.mirror(url), ws.Dir} {
+		cfg, _ := os.ReadFile(filepath.Join(dir, "config"))
+		if strings.Contains(string(cfg), "ghs_") {
+			t.Fatal("a token in a config")
+		}
+	}
+}
+
+func TestGhWrapper(t *testing.T) {
+	dir := t.TempDir()
+	fakeGh := filepath.Join(dir, "real-gh")
+	os.WriteFile(fakeGh, []byte("#!/bin/sh\nprintf '%s %s' \"$GH_TOKEN\" \"$*\"\n"), 0o700)
+	private := filepath.Join(t.TempDir(), "it's private")
+	os.MkdirAll(private, 0o700)
+	file := NewTokenFile(private)
+	file.Write("ghs_first0000000000000000000000")
+	bin, err := GhWrapper(private, file.Path, fakeGh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func() string {
+		out, err := exec.Command(filepath.Join(bin, "gh"), "pr", "view").Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(out)
+	}
+	if got := run(); got != "ghs_first0000000000000000000000 pr view" {
+		t.Fatalf("%q", got)
+	}
+	file.Write("ghs_second000000000000000000000")
+	if got := run(); got != "ghs_second000000000000000000000 pr view" {
+		t.Fatalf("%q", got)
+	}
+	script, _ := os.ReadFile(filepath.Join(bin, "gh"))
+	if strings.Contains(string(script), "ghs_") {
+		t.Fatal("the token in the wrapper")
+	}
+}
 func TestNamesAndRefs(t *testing.T) {
 	for in, want := range map[string]string{"01abc": "01abc", "run-01x": "run-01x", "a b/c": "a-b-c"} {
 		if got, err := Name(in); err != nil || got != want {

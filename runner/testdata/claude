@@ -10,7 +10,10 @@
 #   review    answers a review with the verdict approve
 #   leak      prints the run token of its MCP config (the runner has to blank it)
 #   second-access  shows a second MCP server with werkbuch's tools
-# FAKE_ARGS (a file) gets the arguments of a run, FAKE_LINES the number of text lines (default 3).
+#   awaitrenew  waits until the runner renewed the git token (its file changes), then FAKE_PUSH_DELAY seconds
+#   usegh     runs `gh pr view` (the wrapper of the runner gives gh its token)
+# FAKE_ARGS (a file) gets the arguments of a run, FAKE_ENV its environment, FAKE_LINES the number of text lines
+# (default 3).
 case "$1" in
 --version) echo "2.1.330 (Claude Code)"; exit 0 ;;
 auth) echo '{"loggedIn": true, "authMethod": "claude.ai"}'; exit 0 ;;
@@ -27,6 +30,7 @@ for a in "$@"; do
 	prev="$a"
 done
 [ -n "$FAKE_ARGS" ] && printf '%s\n' "$@" > "$FAKE_ARGS"
+[ -n "$FAKE_ENV" ] && env > "$FAKE_ENV"
 # the prepared context of a light run, kept for the test (the private folder goes with the run)
 [ -n "$FAKE_CONTEXT" ] && [ -n "$adddir" ] && cp "$adddir"/*.txt "$adddir"/*.diff "$FAKE_CONTEXT"/ 2>/dev/null
 prompt=$(cat | tr "[:upper:]" "[:lower:]")
@@ -79,6 +83,20 @@ case "$prompt" in
 	token=$(sed -n 's/.*"Bearer \([^"]*\)".*/\1/p' "$mcp")
 	printf '{"type":"assistant","message":{"content":[{"type":"text","text":"my token is %s, env %s"}]}}\n' "$token" "${WERKBUCH_RUN_TOKEN:-unset}"
 	;;
+esac
+case "$prompt" in
+*awaitrenew*)
+	first=$(cat "$WERKBUCH_GIT_TOKEN_FILE")
+	i=0
+	while [ "$(cat "$WERKBUCH_GIT_TOKEN_FILE")" = "$first" ] && [ "$i" -lt 400 ]; do
+		sleep 0.05
+		i=$((i + 1))
+	done
+	sleep "${FAKE_PUSH_DELAY:-0}"
+	;;
+esac
+case "$prompt" in
+*usegh*) gh pr view >/dev/null 2>&1 ;;
 esac
 case "$prompt" in
 *commit*)

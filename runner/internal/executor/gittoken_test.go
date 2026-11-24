@@ -1,0 +1,306 @@
+package executor
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/baeroe/werkbuch/runner/internal/fakegit"
+	"github.com/baeroe/werkbuch/runner/internal/protocol"
+)
+
+const firstToken = "ghs_firstfirstfirstfirstfirst0001"
+
+func renewed(n int) string { return fmt.Sprintf("ghs_renewedrenewedrenewed%08d", n) }
+
+// gitWorld is a world whose project has a repository on a fake GitHub remote that takes a token until it expires.
+type gitWorld struct {
+	*world
+	remote *fakegit.Server
+	url    string
+	env    string
+
+	mu     sync.Mutex
+	issued []string
+}
+
+func newGitWorld(t *testing.T) *gitWorld {
+	w := &gitWorld{world: newWorld(t)}
+	fg, err := fakegit.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(fg.Close)
+	w.remote = fg
+	if w.url, err = fg.Seed("origin"); err != nil {
+		t.Fatal(err)
+	}
+	w.env = filepath.Join(t.TempDir(), "env")
+	t.Setenv("FAKE_ENV", w.env)
+	// no helper of the machine answers in a test
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "gitconfig"))
+	w.x.RenewRetry = 100 * time.Millisecond
+	return w
+}
+
+// claim queues a run with git: the first token lives `life`, werkbuch renews it `before` its end.
+func (w *gitWorld) claim(id, prompt string, life time.Duration) protocol.Run {
+	expires := time.Now().Add(life)
+	w.remote.Accept(firstToken, expires)
+	return w.run(id, protocol.Task, prompt, func(r *protocol.Run) {
+		r.Git = &protocol.Git{RepoURL: w.url, Token: firstToken, ExpiresAt: &expires}
+	})
+}
+
+// renewEvery hands out a new token of the given life on every renewal, after `fail` answers of 503.
+func (w *gitWorld) renewEvery(life time.Duration, fail int) {
+	w.fake.RenewGit = func(_ string, n int) (*protocol.Git, int, string) {
+		if n <= fail {
+			return nil, 503, "github_unavailable"
+		}
+		token, expires := renewed(n), time.Now().Add(life)
+		w.remote.Accept(token, expires)
+		w.mu.Lock()
+		w.issued = append(w.issued, token)
+		w.mu.Unlock()
+		return &protocol.Git{RepoURL: w.url, Token: token, ExpiresAt: &expires}, 0, ""
+	}
+}
+
+// story logs (with -v) what happened, the tokens as labels: the requests of the remote, the lines werkbuch got and what
+// the runner logged of the token.
+func (w *gitWorld) story(id string, started time.Time) {
+	w.t.Helper()
+	label := func(token string) string {
+		for i, t := range w.tokens() {
+			if t == token {
+				if i == 0 {
+					return "token #1 (claim)"
+				}
+				return fmt.Sprintf("token #%d (renewed)", i+1)
+			}
+		}
+		return "unknown token"
+	}
+	for _, r := range w.remote.Requests() {
+		what, verdict := "fetch", "accepted"
+		if r.Push {
+			what = "push "
+		}
+		if !r.Allowed {
+			verdict = "refused"
+		}
+		w.t.Logf("remote  +%5.2fs  %s  %-18s %s", r.At.Sub(started).Seconds(), what, label(r.Token), verdict)
+	}
+	for _, e := range w.fake.State(id).Events {
+		if strings.Contains(e.Text, "git token") || strings.Contains(e.Text, "working in") {
+			w.t.Logf("event   %s: %s", e.Kind, e.Text)
+		}
+	}
+	for _, line := range strings.Split(w.log.String(), "\n") {
+		if strings.Contains(line, "git token") || strings.Contains(line, "run ended") {
+			w.t.Logf("runner  %s", line[strings.Index(line, "level="):])
+		}
+	}
+}
+
+func (w *gitWorld) tokens() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]string{firstToken}, w.issued...)
+}
+
+// leaks fails when any token shows in the log of the runner, the arguments or the environment of the CLI, or the
+// events werkbuch got.
+func (w *gitWorld) leaks(id string) {
+	w.t.Helper()
+	args, _ := os.ReadFile(w.args)
+	env, _ := os.ReadFile(w.env)
+	for _, token := range w.tokens() {
+		for where, text := range map[string]string{"log": w.log.String(), "args": string(args), "env": string(env), "events": w.texts(id)} {
+			if strings.Contains(text, token) {
+				w.t.Fatalf("a git token in the %s", where)
+			}
+		}
+	}
+	if strings.Contains(string(env), "GH_TOKEN") {
+		w.t.Fatal("GH_TOKEN in the environment of the CLI")
+	}
+}
+
+func TestRenewsTheGitTokenWhileTheAgentWorks(t *testing.T) {
+	w := newGitWorld(t)
+	w.x.RenewBefore = 1500 * time.Millisecond
+	w.renewEvery(2*time.Second, 1)
+	t.Setenv("FAKE_PUSH_DELAY", "2.5")
+	started := time.Now()
+	run := w.claim("01renew", "awaitrenew commit", 2*time.Second)
+	e, status := w.execute(run)
+	w.story(run.ID, started)
+	if status != protocol.Succeeded {
+		t.Fatalf("status %q\n%s", status, w.log.String())
+	}
+	// the CLI started with the first token and pushed after it ran out: git asked the helper, the helper read the file
+	branch := "agent/WEB-1-a-thing"
+	if w.remote.Head("origin", branch) == "" {
+		t.Fatalf("not pushed to the remote of werkbuch\n%s", w.log.String())
+	}
+	var pushes, refused int
+	for _, r := range w.remote.Requests() {
+		if !r.Push {
+			continue
+		}
+		if !r.Allowed {
+			refused++
+			continue
+		}
+		pushes++
+		if r.Token == firstToken || !r.At.After(started.Add(2*time.Second)) {
+			t.Fatalf("pushed with the first token or before it ran out (%v)", r.At.Sub(started))
+		}
+	}
+	if pushes == 0 || refused != 0 {
+		t.Fatalf("pushes %d, refused %d", pushes, refused)
+	}
+	// a local repository of config.yaml (A491) is only the fallback without git
+	if out, _ := exec.Command("git", "-C", w.origin, "rev-parse", "--verify", "--quiet", branch).Output(); len(out) > 0 {
+		t.Fatal("pushed to the local repository")
+	}
+	if st := w.fake.State(run.ID); st.Renewals < 3 {
+		t.Fatalf("renewals %d (one 503, then at least two)", st.Renewals)
+	}
+	if !strings.Contains(w.texts(run.ID), "system:git token renewed, valid until ") {
+		t.Fatalf("no line of the renewal:\n%s", w.texts(run.ID))
+	}
+	if !strings.Contains(w.log.String(), "git token renewal failed, again") {
+		t.Fatal("the 503 was not tried again")
+	}
+	w.leaks(run.ID)
+	env, _ := os.ReadFile(w.env)
+	file := ""
+	for _, line := range strings.Split(string(env), "\n") {
+		if v, ok := strings.CutPrefix(line, "WERKBUCH_GIT_TOKEN_FILE="); ok {
+			file = v
+		}
+	}
+	if !strings.Contains(file, "werkbuch-run-") || filepath.Base(file) != "git-token" {
+		t.Fatalf("token file %q", file)
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Fatal("the token file outlived the run")
+	}
+	if strings.Contains(string(env), "PATH="+filepath.Join(filepath.Dir(file), "bin")) {
+		t.Fatal("a wrapper of gh on a machine without gh")
+	}
+	if e.Summary().Result != protocol.Succeeded {
+		t.Fatalf("%+v", e.Summary())
+	}
+}
+
+func TestReplacedOnRenewalStopsTheRun(t *testing.T) {
+	w := newGitWorld(t)
+	w.x.RenewBefore = 700 * time.Millisecond
+	w.fake.RenewGit = func(string, int) (*protocol.Git, int, string) { return nil, 409, "run_replaced" }
+	started := time.Now()
+	run := w.claim("01gone", "sleep", time.Second)
+	e, status := w.execute(run)
+	w.story(run.ID, started)
+	if status != "" || w.fake.State(run.ID).Result != nil || e.Summary().Result != replaced {
+		t.Fatalf("status %q, result %v, summary %+v", status, w.fake.State(run.ID).Result, e.Summary())
+	}
+	w.leaks(run.ID)
+}
+
+func TestOtherRefusalsOnlyEndTheRenewal(t *testing.T) {
+	for _, reason := range []string{"no_repository", "repository_unavailable", "run_canceling", "merge_guard_open"} {
+		t.Run(reason, func(t *testing.T) {
+			w := newGitWorld(t)
+			w.x.RenewBefore = 5900 * time.Millisecond
+			w.fake.RenewGit = func(string, int) (*protocol.Git, int, string) { return nil, 409, reason }
+			started := time.Now()
+			run := w.claim("01"+strings.ReplaceAll(reason, "_", ""), "nap commit", 6*time.Second)
+			_, status := w.execute(run)
+			w.story(run.ID, started)
+			if status != protocol.Succeeded {
+				t.Fatalf("status %q\n%s", status, w.log.String())
+			}
+			if n := w.fake.State(run.ID).Renewals; n != 1 {
+				t.Fatalf("renewals %d", n)
+			}
+			if !strings.Contains(w.texts(run.ID), "error:git token not renewed: 409 "+reason) {
+				t.Fatalf("no line:\n%s", w.texts(run.ID))
+			}
+			// the push of the nap went with the first token, still valid
+			if w.remote.Head("origin", "agent/WEB-1-a-thing") == "" {
+				t.Fatal("not pushed")
+			}
+			w.leaks(run.ID)
+		})
+	}
+}
+
+func TestGhGetsTheTokenThroughItsWrapper(t *testing.T) {
+	w := newGitWorld(t)
+	dir := t.TempDir()
+	gh, seen := filepath.Join(dir, "gh"), filepath.Join(dir, "seen")
+	os.WriteFile(gh, []byte("#!/bin/sh\nprintf '%s' \"$GH_TOKEN\" > "+seen+"\n"), 0o700)
+	cli := fakeCLI(t)
+	w.x.LookPath = func(name string) (string, error) {
+		switch name {
+		case "claude":
+			return cli, nil
+		case "gh":
+			return gh, nil
+		}
+		return "", exec.ErrNotFound
+	}
+	run := w.claim("01gh", "usegh", time.Hour)
+	if _, status := w.execute(run); status != protocol.Succeeded {
+		t.Fatalf("status %q\n%s", status, w.log.String())
+	}
+	got, _ := os.ReadFile(seen)
+	if string(got) != firstToken {
+		t.Fatal("gh did not get the token of the run")
+	}
+	// an hour of life: nothing to renew yet
+	if n := w.fake.State(run.ID).Renewals; n != 0 {
+		t.Fatalf("renewals %d", n)
+	}
+	w.leaks(run.ID)
+}
+
+func TestALightRunCannotReadTheGitToken(t *testing.T) {
+	w := newGitWorld(t)
+	expires := time.Now().Add(time.Hour)
+	w.remote.Accept(firstToken, expires)
+	run := w.run("01look", protocol.Review, "review", func(r *protocol.Run) {
+		r.Git = &protocol.Git{RepoURL: w.url, Token: firstToken, ExpiresAt: &expires}
+	})
+	if _, status := w.execute(run); status != protocol.Succeeded {
+		t.Fatalf("status %q\n%s", status, w.log.String())
+	}
+	args, _ := os.ReadFile(w.args)
+	env, _ := os.ReadFile(w.env)
+	readable := ""
+	lines := strings.Split(string(args), "\n")
+	for i := 1; i < len(lines); i++ {
+		if lines[i-1] == "--add-dir" {
+			readable = lines[i]
+		}
+	}
+	file := ""
+	for _, line := range strings.Split(string(env), "\n") {
+		if v, ok := strings.CutPrefix(line, "WERKBUCH_GIT_TOKEN_FILE="); ok {
+			file = v
+		}
+	}
+	if readable == "" || file == "" || strings.HasPrefix(file, readable+"/") {
+		t.Fatalf("the light run may read %q, the token is at %q", readable, file)
+	}
+	w.leaks(run.ID)
+}
