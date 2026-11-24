@@ -157,7 +157,7 @@ it('times a run out after the fixed limit of its type (60/30/20/10 minutes)', fu
     expect(ReapLostRuns::run($system())['timed_out'])->toBe(1)
         ->and([$run->fresh()->status, $run->fresh()->error])->toBe([RunStatus::TimedOut, 'timed_out']);
     $beat($run)->assertConflict();
-})->with([[RunType::Task, 60], [RunType::Correction, 60], [RunType::Conflict, 30], [RunType::Review, 20], [RunType::Comment, 10]]);
+})->with([[RunType::Task, 120], [RunType::Correction, 120], [RunType::Conflict, 30], [RunType::Review, 20], [RunType::Comment, 10]]);
 
 it('ends a run being canceled whose runner went quiet', function () use ($claimed, $system) {
     [$run] = $claimed();
@@ -177,7 +177,7 @@ it('revokes the run token when the run ends in any status', function (string $ho
         'succeeded', 'failed', 'canceled', 'timed_out' => $finish($run, ['status' => $how])->assertOk(),
         'revoked' => RevokeRunner::run(actor($admin), $this->runner),
         'reaped' => (function () use ($system) {
-            $this->travel(2)->hours();
+            $this->travel(3)->hours();
             ReapLostRuns::run($system());
         })(),
     };

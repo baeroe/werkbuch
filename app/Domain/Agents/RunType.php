@@ -27,7 +27,7 @@ enum RunType: string
     public function timeoutMinutes(): int
     {
         return match ($this) {
-            self::Task, self::Correction => 60,
+            self::Task, self::Correction => 120,
             self::Conflict => 30,
             self::Review => 20,
             self::Comment => 10,

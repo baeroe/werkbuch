@@ -108,7 +108,7 @@ it('leaves run tokens out of the token list', function () {
     $this->deleteJson("/api/v1/tokens/{$runToken->id}")->assertNotFound();
     expect($runToken->fresh())->not->toBeNull()
         ->and($runToken->abilities)->toBe(['read', 'write', 'mcp'])
-        ->and($runToken->expires_at->diffInMinutes(now()->addMinutes(70), true))->toBeLessThan(1);
+        ->and($runToken->expires_at->diffInMinutes(now()->addMinutes(130), true))->toBeLessThan(1);
 });
 
 it('refuses a state change through MCP with the token of a run, as over REST', function () {

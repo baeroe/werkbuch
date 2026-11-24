@@ -7,7 +7,7 @@ use App\Domain\Agents\RunType;
 
 it('knows the kinds of run with their fixed limits, pots, order and abilities', function () {
     expect(array_map(fn (RunType $type) => $type->value, RunType::cases()))->toBe(RunType::VALUES)
-        ->and(array_map(fn (RunType $type) => $type->timeoutMinutes(), RunType::cases()))->toBe([60, 60, 30, 20, 10])
+        ->and(array_map(fn (RunType $type) => $type->timeoutMinutes(), RunType::cases()))->toBe([120, 120, 30, 20, 10])
         ->and(array_map(fn (RunType $type) => $type->light(), RunType::cases()))->toBe([false, false, false, true, true])
         ->and(array_map(fn (RunType $type) => $type->urgent(), RunType::cases()))->toBe([false, true, true, true, false])
         ->and(RunType::Task->abilities())->toBe(['read', 'write', 'mcp'])

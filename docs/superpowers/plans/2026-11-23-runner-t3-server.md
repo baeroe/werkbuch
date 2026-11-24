@@ -22,7 +22,7 @@
 
 ### Domain (`app/Domain/Agents/`, rein)
 
-`RunType` (Enum, `light()`, `timeoutMinutes()` 60/60/30/20/10, `urgent()` für conflict/correction/review, `abilities()`), `RunStatus` (Enum, `active()`, `finished()`, `retryable()`), `AgentCli` (Enum `claude`, `codex`, `models()`, `defaultModel()`), `Protocol` (`VERSION` 1, `LEASE_SECONDS` 60, `TAKEOVER_MINUTES` 30), `Places` (freie Plätze aus Einstellung und Belegung, leichte nur im eigenen Topf), `Contract` (Vertrag je Typ, englisch, bis WEBU-26 auch der Platzhalter des Prompts).
+`RunType` (Enum, `light()`, `timeoutMinutes()` 60/60/30/20/10 (seit WEBU-26 120/120/30/20/10, A605), `urgent()` für conflict/correction/review, `abilities()`), `RunStatus` (Enum, `active()`, `finished()`, `retryable()`), `AgentCli` (Enum `claude`, `codex`, `models()`, `defaultModel()`), `Protocol` (`VERSION` 1, `LEASE_SECONDS` 60, `TAKEOVER_MINUTES` 30), `Places` (freie Plätze aus Einstellung und Belegung, leichte nur im eigenen Topf), `Contract` (Vertrag je Typ, englisch, bis WEBU-26 auch der Platzhalter des Prompts).
 
 ### Protokoll (`routes/runner.php`, Präfix `api/runner`, ohne Middleware-Gruppe)
 

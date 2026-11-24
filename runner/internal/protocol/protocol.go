@@ -195,7 +195,7 @@ func (r Run) Deadline(started time.Time) time.Time {
 	}
 	minutes := r.TimeoutMinutes
 	if minutes <= 0 {
-		minutes = 60
+		minutes = 120
 	}
 	return started.Add(time.Duration(minutes) * time.Minute)
 }

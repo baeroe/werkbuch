@@ -59,7 +59,7 @@ it('hands a queued run with everything the runner needs and starts it', function
 
     expect($answer['run'])->toMatchArray([
         'id' => $run->id, 'attempt' => 1, 'type' => 'task', 'cli' => 'claude', 'model' => 'sonnet', 'model_source' => 'default',
-        'timeout_minutes' => 60, 'deadline_at' => now()->addHour()->toJSON(), 'lease_expires_at' => now()->addMinute()->toJSON(),
+        'timeout_minutes' => 120, 'deadline_at' => now()->addHours(2)->toJSON(), 'lease_expires_at' => now()->addMinute()->toJSON(),
         'project' => ['id' => $this->project->id, 'identifier' => 'WEB'],
         'item' => ['id' => $item->id, 'key' => $item->key, 'title' => 'Login mit Passkey'],
         'thread' => ['id' => $thread->id, 'branch' => "agent/{$item->key}-login-mit-passkey", 'base_branch' => 'main', 'worktree' => null, 'session_id' => null],
