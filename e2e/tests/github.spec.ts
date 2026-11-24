@@ -93,6 +93,14 @@ test('posts the manifest to GitHub when connecting, with the keyboard', async ({
   const manifest = JSON.parse(new URLSearchParams(posts[0]!.body).get('manifest')!) as { redirect_url: string; default_events: string[] };
   expect(manifest.redirect_url).toMatch(/\/github\/manifest$/);
   expect(manifest.default_events).toContain('push');
+
+  // The post leaves the app for the fulfilled GitHub page. Back to a page of the app: the coverage fixture reads the
+  // pages that stand on the app at the end, and while the post was still under way it read the GitHub document (no
+  // `__coverage__`, a race in the CI). The app document stashed its counters at `pagehide` in the sessionStorage of the
+  // app; the next document of the app in this tab hands them over, so nothing of the test is lost.
+  await page.waitForURL(/^https:\/\/github\.com\//);
+  await page.goto('/settings/github');
+  await expect(page.getByRole('heading', { level: 2, name: label('settings.org.section.github') })).toBeVisible();
 });
 
 test('chooses the repo of a project with the keyboard', async ({ page }) => {
