@@ -90,8 +90,14 @@ export const qk = {
   /** Runners (`qk.runners.list({ pages: 'all' })`) and a pairing code while its dialog waits (`qk.pairings.detail(id)`). */
   runners: resource('runners'),
   pairings: resource('pairings'),
-  /** The runs of agents that still have to happen or happen now: `qk.runs.list({ active: true })`. */
-  runs: resource('runs'),
+  /**
+   * The runs of agents: those that still have to happen or happen now (`qk.runs.list({ active: true })`), those of an
+   * item (`qk.runs.list({ item })`), and the log of a run (`qk.runs.log(id)`, the lines so far).
+   */
+  runs: {
+    ...resource('runs'),
+    log: (id: string) => ['runs', 'log', id] as const,
+  },
   /** The agent configuration of a bot: `qk.agentConfigs.detail(botId)`. */
   agentConfigs: resource('agent-configs'),
   /** The working rules of the organization (`qk.agentRules.list({})`) and the agent settings of a project (`qk.projectAgents.detail(projectId)`). */

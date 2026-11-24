@@ -104,7 +104,7 @@ it('describes a comment with its reactions and its text in both forms', function
     $properties = $comment['properties'];
     $reaction = $properties['reactions']['items'];
 
-    expect($comment['required'])->toBe(['id', 'work_item_id', 'author_id', 'body', 'body_json', 'created_at', 'edited_at', 'reactions'])
+    expect($comment['required'])->toBe(['id', 'work_item_id', 'author_id', 'run_id', 'body', 'body_json', 'created_at', 'edited_at', 'reactions'])
         ->and($properties['body_json']['$ref'])->toBe('#/components/schemas/RichTextDocument')
         ->and($reaction['required'])->toBe(['emoji', 'user_ids'])
         ->and($reaction['properties']['user_ids']['items']['type'])->toBe('string')

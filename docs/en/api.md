@@ -138,7 +138,7 @@ Without `sort`, every list keeps its own order (the default in the table). Fixed
 | `GET /templates/{template}/runs` | – | – | newest first | – |
 | `GET /runners` | – | `name`, `created_at` | `name` | – |
 | `GET /runs` | `work_item_id`, `runner_id`, `bot_id`, `project_id`, `status` (`queued`, `waiting`, `running`, `canceling`, `succeeded`, `failed`, `canceled`, `timed_out`, `lost`), `type` (`task`, `correction`, `conflict`, `review`, `comment`) | `created_at` | `-created_at` (newest first) | – |
-| `GET /runs/{run}/events` | – | – | the order they came | – |
+| `GET /runs/{run}/events` | `after` (the ULID of a line: only the lines after it) | – | the order they came | – |
 <!-- lists:end -->
 
 `created_at` sorts by the ULID, which grows with creation; "catalog order" is the order in which the entries were created, as the interface shows them. `include=members` adds `members` to every project of the page, `include=types` adds `types`: the types the project switched on, in catalog order and as `GET /work-item-types/{workItemType}` gives them (name, `is_epic`, the IDs of the properties they ask for and which of them are required), archived ones that stay switched on included; only a type with `archived_at: null` takes new items, and the keys for `values` come from `GET /properties`. `GET /projects/{project}?include=types` embeds them for one project: before you create an item in a project, that names its types (an epic is the type with `is_epic`), and `default_type_id` is the one an item gets without `type_id`. The reference lists the values of every filter.

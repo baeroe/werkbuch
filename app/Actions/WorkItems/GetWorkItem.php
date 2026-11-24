@@ -7,6 +7,7 @@ use App\Exceptions\Problem;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\Includes;
+use App\Support\ItemAgentState;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
@@ -22,7 +23,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * `parent`), `type`, `workflow`, and
  * `relations` as the account reads them: ListRelations::of() with the account as reader, hidden ends blanked, and
  * `attachments`, the files of the file list oldest first, never the pictures and files of the texts, and `links`, the
- * linked PRs with the check runs of their head commits, spec 12); all of it is
+ * linked PRs with the check runs of their head commits, spec 12, and `agent`, what the agents do at it: ItemAgentState,
+ * WEBU-28); all of it is
  * loaded here, the resource asks nothing.
  */
 final class GetWorkItem
@@ -30,7 +32,7 @@ final class GetWorkItem
     use AsAction;
 
     /** What an item can embed, in the order the resource answers it. */
-    public const INCLUDES = ['children', 'type', 'workflow', 'relations', 'attachments', 'links'];
+    public const INCLUDES = ['children', 'type', 'workflow', 'relations', 'attachments', 'links', 'agent'];
 
     /** How many children `include=children` embeds at most (A449): an epic with thousands of them stays one cheap read. */
     public const CHILDREN_MAX = 100;
@@ -73,6 +75,9 @@ final class GetWorkItem
         }
         if (in_array('links', $include, true)) {
             $item->load('links.checks');
+        }
+        if (in_array('agent', $include, true)) {
+            $item->agent_state = ItemAgentState::of($item);
         }
 
         return $item;

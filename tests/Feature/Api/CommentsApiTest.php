@@ -33,7 +33,7 @@ it('adds a comment in Markdown or JSON and answers 201 with the comment', functi
         ->assertJsonPath('data.reactions', []);
     $json = $this->actingAs($lene)->postJson('/api/v1/work-items/WEB-1/comments', ['body_json' => F::doc(F::p('  zwei  Leerzeichen '))])->assertCreated();
 
-    expect(array_keys($created->json('data')))->toBe(['id', 'work_item_id', 'author_id', 'body', 'body_json', 'created_at', 'edited_at', 'reactions'])
+    expect(array_keys($created->json('data')))->toBe(['id', 'work_item_id', 'author_id', 'run_id', 'body', 'body_json', 'created_at', 'edited_at', 'reactions'])
         // the spaces of a text node in JSON stay (RichTextInput::RAW_KEYS)
         ->and($json->json('data.body_json'))->toBe(F::doc(F::p('  zwei  Leerzeichen ')));
 });

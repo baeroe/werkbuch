@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AgentConfigsController;
 use App\Http\Controllers\Api\AgentRulesController;
+use App\Http\Controllers\Api\AgentThreadsController;
 use App\Http\Controllers\Api\AttachmentsController;
 use App\Http\Controllers\Api\AutomationsController;
 use App\Http\Controllers\Api\BotsController;
@@ -186,6 +187,8 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
         // the wiki pages that name the item (A456)
         Route::get('work-items/{item}/pages', [PagesController::class, 'item']);
         Route::post('work-items/{item}/comments', [CommentsController::class, 'store']);
+        // the strand of an agent goes on after GitHub was disconnected (WEBU-28)
+        Route::post('work-items/{item}/agent/resume', [AgentThreadsController::class, 'resume']);
     });
     Route::get('comments/{comment}', [CommentsController::class, 'show']);
     Route::patch('comments/{comment}', [CommentsController::class, 'update']);

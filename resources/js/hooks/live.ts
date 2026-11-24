@@ -29,6 +29,12 @@ const WIKI: readonly QueryKey[] = [qk.pages.all, qk.pageVersions.all];
 /** The wiki pages that name an item (`qk.pages.item(id)`), all of them. */
 const ITEM_PAGES: QueryKey = [...qk.pages.all, 'item'];
 
+/**
+ * The details of items (`qk.workItems.detail(ref)`, by key or id): a run that starts or ends at an item changes what
+ * its `include=agent` and `include=links` say (strand, counters, brake, verdict), without a `work_item.*` of its own.
+ */
+const ITEM_DETAILS: QueryKey = [...qk.workItems.all, 'detail'];
+
 /** The templates with their runs and the automations of a project (the preview of a schedule is no live data). */
 const AUTOMATION: readonly QueryKey[] = [qk.templates.all, qk.templateRuns.all, qk.automations.all];
 
@@ -95,13 +101,20 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (event.type === 'project.deleted') return [qk.projects.all, qk.members.all, ITEM_PAGES];
   // the repo of a project and the guard against an unauthorized merge (WEBU-24): the agent settings and the GitHub page read them
   if (event.type === 'project.repository_changed' || event.type === 'project.merge_guard_detected' || event.type === 'project.merge_guard_confirmed') {
-    return [qk.projects.all, qk.members.all, qk.repository.all, qk.github.all];
+    return [qk.projects.all, qk.members.all, qk.repository.all, qk.github.all, qk.workItems.all];
   }
   // the agent settings of a project (WEBU-32): Projekt → Agenten reads them
   if (event.type === 'project.agent_settings_updated') return [qk.projectAgents.all];
   // a member came or went: the bots of the agent settings follow (A621)
   if (group === 'project') return [qk.projects.all, qk.members.all, qk.projectAgents.all];
-  // a run of an agent (A478): what runs where on the runner cards and their places
+  // the log of a run grew (on the channel of its item, throttled): only that log reads its new lines (WEBU-28)
+  if (event.type === 'agent_run.log') return event.run_id ? [qk.runs.log(event.run_id)] : [];
+  // a run of an agent (A478): what runs where on the runner cards and their places, and the runs of its item; a run
+  // that is queued, starts or ends changes what the item's detail says of its agent (`include=agent`: runs, strand,
+  // counters, brake, WEBU-28)
+  if (event.type === 'agent_run.queued' || event.type === 'agent_run.started' || event.type === 'agent_run.finished' || event.type === 'agent_run.canceled') {
+    return event.item_id ? [qk.runs.all, qk.runners.all, ITEM_DETAILS] : [qk.runs.all, qk.runners.all];
+  }
   if (group === 'agent_run') return [qk.runs.all, qk.runners.all];
   if (event.type === 'page.updated' || event.type === 'page.moved' || event.type === 'page.deleted') return [...WIKI, qk.references.all];
   if (group === 'page') return WIKI;

@@ -439,7 +439,7 @@ Reads runners and the agent configuration of bots (org admins), the runs of agen
 
 ### `manage-agents`
 
-Changes runners and the agent configuration of bots (org admins), steers runs (who may change the item), syncs the GitHub app, sets the repo and the agent settings of a project and changes the working rules of the agents (org admins). Pairing a runner and connecting or disconnecting GitHub work only in the web app. An agent never steers runs with the token of its own run (403 `agent_forbidden`). (Needs `write`.)
+Changes runners and the agent configuration of bots (org admins), steers runs and resumes the strand of an item after GitHub was disconnected (who may change the item), syncs the GitHub app, sets the repo and the agent settings of a project and changes the working rules of the agents (org admins). Pairing a runner and connecting or disconnecting GitHub work only in the web app. An agent never steers runs with the token of its own run (403 `agent_forbidden`). (Needs `write`.)
 
 | Action | Purpose | Required | REST twin |
 |---|---|---|---|
@@ -447,6 +447,7 @@ Changes runners and the agent configuration of bots (org admins), steers runs (w
 | `revoke-runner` | Revokes a runner; what runs on it ends as canceled. Answers {canceled}. | `runner` | `DELETE /runners/{runner}` |
 | `cancel-run` | Cancels a run; one on a runner ends once the runner stopped it. | `run` | `POST /runs/{run}/cancel` |
 | `retry-run` | Starts a run that ended without success again; answers the new run. | `run` | `POST /runs/{run}/retry` |
+| `resume-thread` | Resumes a strand paused by a GitHub disconnect; the brakes keep counting. Answers `{run, braked}`. | `item` | `POST /work-items/{item}/agent/resume` |
 | `save-config` | Sets the agent configuration of a bot as a whole. | `bot`, `input` | `PUT /bots/{user}/agent` |
 | `sync-github` | Reads the installations of the GitHub app and their repos from GitHub again (org admins). | – | `POST /github/sync` |
 | `set-repository` | Gives a project its repo (one the app reaches, at most one project per repo) and base branch, or none; admins of the project. | `project`, `input` | `PUT /projects/{project}/repository` |

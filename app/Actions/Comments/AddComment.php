@@ -30,7 +30,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * A person who comments watches the item (reason `commented`) without lifting an opt-out (A246); who the comment
  * mentions watches it with an opt-out lifted (Mentions), and a mentioned bot gets `bot.mentioned` with the comment.
  * `comment.created` hangs on the item (A227) with `meta.comment_id` and `meta.mentioned` (only when it names somebody).
- * A comment changes nothing of the item: its `updated_at` stays (P1).
+ * A comment changes nothing of the item: its `updated_at` stays (P1). A comment of a bot that answers a run of an agent
+ * names it (`$runId`, never from the input: `comments.run_id` and `meta.run_id`, A643).
  */
 final class AddComment
 {
@@ -41,24 +42,26 @@ final class AddComment
 
     /**
      * @param  array<array-key, mixed>  $input  `body` (Markdown) or `body_json` (Tiptap JSON)
+     * @param  string|null  $runId  the run of an agent the comment answers (AgentFlow::comment)
      *
      * @throws ValidationException
      * @throws Problem
      */
-    public function handle(Actor $actor, WorkItem $item, array $input): Comment
+    public function handle(Actor $actor, WorkItem $item, array $input, ?string $runId = null): Comment
     {
         Authorize::check($actor, 'create', Comment::class, $item);
 
         // reading Markdown is the expensive step: never under a lock
         [$body, $key] = CommentInput::body($input, $item->project, $actor->user, null);
 
-        $comment = DB::transaction(function () use ($actor, $item, $body, $key): Comment {
+        $comment = DB::transaction(function () use ($actor, $item, $body, $key, $runId): Comment {
             $locked = ItemLock::take($item);
             ItemLock::refuseArchived($locked);
 
             $comment = Comment::query()->create([
                 'work_item_id' => $locked->id,
                 'author_id' => $actor->user->id,
+                'run_id' => $runId,
                 'body' => $body->toJson(),
                 'body_text' => $body->toText(),
             ]);
@@ -70,7 +73,7 @@ final class AddComment
             }
             $mentioned = ['comment' => Mentions::after($locked, [], $body->mentionedUserIds(), $actor->user)];
 
-            EventRecorder::record(EventType::CommentCreated, $actor, $locked, $locked->project, null, ['comment_id' => $comment->id] + Mentions::meta($mentioned));
+            EventRecorder::record(EventType::CommentCreated, $actor, $locked, $locked->project, null, ['comment_id' => $comment->id] + ($runId === null ? [] : ['run_id' => $runId]) + Mentions::meta($mentioned));
             UpdateWorkItem::announceBots($actor, $locked, $mentioned, $comment->id);
             ItemReferences::queue($actor, $locked, ItemReferences::anew($locked, [], [$key => $body]));
 

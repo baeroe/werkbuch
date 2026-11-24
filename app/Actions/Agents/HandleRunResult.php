@@ -61,7 +61,7 @@ final class HandleRunResult
         }
 
         $reason = $run->error ?? $run->status->value;
-        AgentFlow::comment($run->bot, $item, __('agents.comment.failed', ['type' => $run->type->value, 'reason' => $reason], AgentFlow::locale()));
+        AgentFlow::comment($run->bot, $item, __('agents.comment.failed', ['type' => $run->type->value, 'reason' => $reason], AgentFlow::locale()), $run->id);
         // a review of the PR of an agent that failed holds the strand as a failed correction would (A598)
         if (! $run->type->light() || ($run->type === RunType::Review && $run->thread !== null)) {
             AgentFlow::move($run->bot, $item, AgentStep::Correction);
@@ -110,7 +110,7 @@ final class HandleRunResult
     private static function answer(AgentRun $run): string
     {
         if ($run->workItem !== null) {
-            AgentFlow::comment($run->bot, $run->workItem, (string) ($run->result['text'] ?? $run->result['summary'] ?? __('agents.comment.no_answer', [], AgentFlow::locale())));
+            AgentFlow::comment($run->bot, $run->workItem, (string) ($run->result['text'] ?? $run->result['summary'] ?? __('agents.comment.no_answer', [], AgentFlow::locale())), $run->id);
         }
 
         return 'answered';
@@ -151,7 +151,7 @@ final class HandleRunResult
             $body = ($held ? __('agents.comment.review.held', ['pr' => '#'.$run->pr_number, 'sha' => $sha], AgentFlow::locale())
                 : __('agents.comment.review.'.$verdict, ['pr' => '#'.$run->pr_number, 'sha' => $sha], AgentFlow::locale()))."\n\n".$text;
             foreach ($thread === null ? $items : $items->where('id', $thread->work_item_id) as $item) {
-                AgentFlow::comment($run->bot, $item, $body);
+                AgentFlow::comment($run->bot, $item, $body, $run->id);
             }
             if (! $held) {
                 PostReviewVerdictJob::dispatch($run->id)->afterCommit();
@@ -250,7 +250,7 @@ final class HandleRunResult
                 return 'recheck';
             }
 
-            PauseThread::run($actor, $locked, 'no_change', isset($run->result['summary']) ? (string) $run->result['summary'] : null);
+            PauseThread::run($actor, $locked, 'no_change', isset($run->result['summary']) ? (string) $run->result['summary'] : null, $run->id);
 
             return 'no_change';
         }, 3);
@@ -262,7 +262,7 @@ final class HandleRunResult
         $mine = fn (WorkItem $of): bool => in_array($of->fresh()?->assignee_id, [$run->bot_id, null], true);
 
         if ($thread->repository_github_id === null) {
-            AgentFlow::comment($run->bot, $item, (string) ($run->result['summary'] ?? __('agents.comment.done', [], AgentFlow::locale())));
+            AgentFlow::comment($run->bot, $item, (string) ($run->result['summary'] ?? __('agents.comment.done', [], AgentFlow::locale())), $run->id);
             if ($thread->work_item_id === $item->id) {
                 CompleteThread::run($actor, $thread, 'merged');
 

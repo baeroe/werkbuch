@@ -10,8 +10,8 @@
  *
  * A route is `<METHOD> <path>` without the query; it gets the parsed JSON body and the full URL. An answer without
  * `body` is empty (204 unless `status` says otherwise); a body is sent as JSON, as a problem document from 400 on. A call
- * no route knows rejects, so a test never waits on a request it did not expect; only the search, the comments and the wiki pages of an
- * item answer empty without a route (`fallbackRoute`).
+ * no route knows rejects, so a test never waits on a request it did not expect; only the search, the runs of agents, the
+ * comments and the wiki pages of an item answer empty without a route (`fallbackRoute`).
  */
 
 import { emptySearch } from './fixtures';
@@ -55,10 +55,14 @@ const commentsRoute: MockRoute = () => ({ body: { data: [], links: {}, meta: { n
 /** Answers the wiki pages of any item with none until a test sets the route itself (every item detail reads them). */
 const itemPagesRoute: MockRoute = () => ({ body: { data: [], links: {}, meta: { next_cursor: null, total: 0 } } });
 
+/** Answers the runs of agents (of an item) with none until a test sets the route itself (every item detail reads them). */
+const runsRoute: MockRoute = () => ({ body: { data: [], links: {}, meta: { next_cursor: null, total: 0 } } });
+
 /** The route a test left out but every screen of its kind asks for. */
 function fallbackRoute(method: string, path: string): MockRoute | undefined {
   if (method !== 'GET') return undefined;
   if (path === '/api/v1/search') return searchRoute;
+  if (path === '/api/v1/runs') return runsRoute;
   if (/^\/api\/v1\/work-items\/[^/]+\/pages$/.test(path)) return itemPagesRoute;
   return /^\/api\/v1\/work-items\/[^/]+\/comments$/.test(path) ? commentsRoute : undefined;
 }

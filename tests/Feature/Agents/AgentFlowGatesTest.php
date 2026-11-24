@@ -108,7 +108,8 @@ it('decides nothing on the CI of a strand while its run that changes code is at 
     // held: no approve at the PR, the links keep no verdict, the item says why (A610)
     expect(collect($this->github->comments)->contains(fn (array $comment) => str_contains($comment['body'], "werkbuch-run:{$review['id']}")))->toBeFalse()
         ->and(WorkItemLink::query()->sole()->review)->toBeNull()
-        ->and(Comment::query()->where('work_item_id', $item->id)->latest('id')->first()->body_text)->toContain('approved while a correction runs');
+        ->and(Comment::query()->where('work_item_id', $item->id)->latest('id')->first()->body_text)->toContain('approved while a correction runs')
+        ->and(Comment::query()->where('work_item_id', $item->id)->latest('id')->first()->run_id)->toBe($review['id']);
     expect($this->github->merges)->toBe([])->and($heads('correction'))->toHaveCount(1)
         ->and(ApproveAndMerge::run($this->system, AgentThread::query()->sole()))->toBeFalse()
         ->and(StartCorrection::run($this->system, AgentThread::query()->sole(), 'ci', 'red', str_repeat('c', 40)))->not->toBeNull()
@@ -123,6 +124,7 @@ it('decides nothing on the CI of a strand while its run that changes code is at 
         ->and($thread->only(['status', 'pause_reason']))->toBe(['status' => 'paused', 'pause_reason' => 'no_change'])
         ->and($item->fresh()->only(['state_id', 'assignee_id']))->toBe(['state_id' => $this->states['Todo'], 'assignee_id' => $this->mara->id])
         ->and(Comment::query()->where('work_item_id', $item->id)->latest('id')->first()->body_text)->toContain('No change')->toContain('Nothing to change here.')
+        ->and(Comment::query()->where('work_item_id', $item->id)->latest('id')->first()->run_id)->toBe($correction['id'])
         ->and($heads('review'))->toBe([$b])->and($claim($this))->toBeNull();
 });
 

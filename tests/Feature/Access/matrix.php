@@ -38,6 +38,7 @@ use App\Actions\Agents\PauseThread;
 use App\Actions\Agents\PostReviewVerdict;
 use App\Actions\Agents\ReadyEpic;
 use App\Actions\Agents\ResumeAfterGuard;
+use App\Actions\Agents\ResumeThread;
 use App\Actions\Agents\SaveAgentConfig;
 use App\Actions\Agents\SaveAgentRule;
 use App\Actions\Agents\SaveProjectAgents;
@@ -1555,6 +1556,14 @@ return [
     'RetryRun' => [
         'action' => RetryRun::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => RetryRun::run($a, $w->run($column, ['status' => RunStatus::Failed, 'finished_at' => now()])),
+        'allowed' => $itemWriters,
+        'hidden' => ['outsider_private'],
+        'event' => EventType::AgentRunQueued,
+    ],
+    // „Weitermachen“ after GitHub was disconnected (WEBU-28): who may change the item, never an agent through its run
+    'ResumeThread' => [
+        'action' => ResumeThread::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ResumeThread::run($a, $w->resumable($column)),
         'allowed' => $itemWriters,
         'hidden' => ['outsider_private'],
         'event' => EventType::AgentRunQueued,

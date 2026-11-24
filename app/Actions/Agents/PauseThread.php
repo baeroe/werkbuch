@@ -26,9 +26,10 @@ final class PauseThread
 
     public const REASONS = ['brake', 'no_change', 'reassigned', 'canceled'];
 
-    public function handle(Actor $actor, AgentThread $thread, string $reason, ?string $finding = null): AgentThread
+    /** @param  string|null  $runId  the run that ended without a change (`no_change`): its comment names it (A643) */
+    public function handle(Actor $actor, AgentThread $thread, string $reason, ?string $finding = null, ?string $runId = null): AgentThread
     {
-        return DB::transaction(function () use ($actor, $thread, $reason, $finding): AgentThread {
+        return DB::transaction(function () use ($actor, $thread, $reason, $finding, $runId): AgentThread {
             // the item before the runs and the strand, as every action of the flow locks them
             ItemLock::take(WorkItem::query()->findOrFail($thread->work_item_id));
 
@@ -51,7 +52,7 @@ final class PauseThread
                     AgentFlow::assign($bot, $item, $bot->owner_id);
                 }
                 $said = $reason === 'brake' ? __('agents.comment.brake', [], AgentFlow::locale()) : __('agents.comment.no_change', [], AgentFlow::locale());
-                AgentFlow::comment($bot, $item, rtrim($said."\n\n".($finding ?? '')));
+                AgentFlow::comment($bot, $item, rtrim($said."\n\n".($finding ?? '')), $runId);
             }
 
             return $locked;

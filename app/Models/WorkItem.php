@@ -87,7 +87,7 @@ final class WorkItem extends Model
 
     /**
      * Set by GetWorkItem, never stored: what WorkItemResource embeds besides the item (`children`, `type`, `workflow`,
-     * `relations`, `attachments`), loaded there already (`attachments` only the files of the file list).
+     * `relations`, `attachments`, `links`, `agent`), loaded there already (`attachments` only the files of the file list).
      *
      * @var list<string>
      */
@@ -100,6 +100,14 @@ final class WorkItem extends Model
      * @var list<array{relation: WorkItemRelation, other: ?WorkItem, direction: 'outward'|'inward', hidden: bool}>
      */
     public array $relation_entries = [];
+
+    /**
+     * Set by GetWorkItem with `include=agent`, never stored: what the agents do at the item (ItemAgentState::of(),
+     * WEBU-28), embedded by WorkItemResource.
+     *
+     * @var array<string, mixed>|null
+     */
+    public ?array $agent_state = null;
 
     /**
      * Set by loadForResource(), never stored: whether WorkItemResource leaves out the description and the Markdown of

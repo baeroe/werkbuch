@@ -279,7 +279,13 @@ it('knows why a bot cannot be an agent in a project', function () {
         ->and(AgentFlow::refusal($this->kira, Project::factory()->create(['archived_at' => now()])))->toBe('archived');
 
     AgentConfig::factory()->create(['bot_id' => $default->id]);
-    expect(AgentFlow::refusal($default, $this->project))->toBe('no_owner');
+    expect(AgentFlow::refusal($default, $this->project))->toBe('default_bot');
+
+    // a bot without a responsible person, and a deactivated one, each with its own code (A647)
+    $this->kira->forceFill(['owner_id' => null])->save();
+    expect(AgentFlow::refusal($this->kira, $this->project))->toBe('no_owner');
+    $this->kira->forceFill(['disabled_at' => now()])->save();
+    expect(AgentFlow::refusal($this->kira, $this->project))->toBe('disabled');
 });
 
 it('moves only where the workflow lets it and says so otherwise', function () {

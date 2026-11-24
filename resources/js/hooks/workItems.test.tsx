@@ -113,7 +113,7 @@ describe('reading', () => {
       'GET /api/v1/state-usage?project=WEB',
       'GET /api/v1/work-items/WEB-47/comments',
       'GET /api/v1/work-items/WEB-47/history',
-      'GET /api/v1/work-items/WEB-47?include=children,relations,type,workflow,attachments',
+      'GET /api/v1/work-items/WEB-47?include=children,relations,type,workflow,attachments,links,agent',
       'POST /api/v1/work-items/query',
     ]);
     expect(api.calls.find((call) => call.method === 'POST')!.body).toEqual({ shorthand: { project: 'WEB' } });

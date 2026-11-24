@@ -6,6 +6,7 @@ use App\Events\EventType;
 use App\Models\Event;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\PresenceChannel;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 
 /**
@@ -103,6 +104,44 @@ final class LiveMessage implements ShouldBroadcastNow
             'actor_id' => null,
             'unread_changed' => true,
         ], $socket);
+    }
+
+    /**
+     * New lines in the log of a run at an item (`agent_run.log` on `private-work-item.{id}`, WEBU-28, A641): the item
+     * reads them through the API (`filter[after]`); no event behind it, sent by RunLog at most once a run and second.
+     */
+    public static function runLog(string $runId, string $itemId, string $projectId): self
+    {
+        return new self([new PrivateChannel("work-item.{$itemId}")], [
+            'event_id' => null,
+            'type' => 'agent_run.log',
+            'project_id' => $projectId,
+            'page_id' => null,
+            'template_id' => null,
+            'item_id' => $itemId,
+            'comment_id' => null,
+            'actor_id' => null,
+            'run_id' => $runId,
+        ]);
+    }
+
+    /**
+     * The checks of a PR linked to an item changed (`work_item.checks_changed` on `private-project.{id}`, WEBU-28, A648):
+     * a check run, a workflow run or a commit status came or changed; no event behind it, sent by ChecksChanged. The
+     * browser loads the item again as for every `work_item.*`.
+     */
+    public static function checksChanged(string $itemId, string $projectId): self
+    {
+        return new self([new PrivateChannel("project.{$projectId}")], [
+            'event_id' => null,
+            'type' => 'work_item.checks_changed',
+            'project_id' => $projectId,
+            'page_id' => null,
+            'template_id' => null,
+            'item_id' => $itemId,
+            'comment_id' => null,
+            'actor_id' => null,
+        ]);
     }
 
     /**

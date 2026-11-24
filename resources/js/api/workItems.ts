@@ -12,6 +12,7 @@ import type {
   BulkResult,
   Filter,
   GroupBy,
+  ItemAgentState,
   ItemEvent,
   ItemGroups,
   ListedItem,
@@ -23,6 +24,7 @@ import type {
   StateUsage,
   WorkItem,
   WorkItemDetail,
+  WorkItemLink,
   WorkItemType,
   Workflow,
 } from '@/types';
@@ -103,12 +105,14 @@ interface IncludedItem extends WorkItem {
   relations: RelationEntry[];
   type: WorkItemType;
   workflow: Workflow;
+  links?: WorkItemLink[];
+  agent?: ItemAgentState | null;
 }
 
 /** One item with everything the detail view shows besides the activity, in one call; a former key answers the item. */
 export async function getWorkItem(keyOrId: string): Promise<WorkItemDetail> {
-  const { attachments, children, relations, type, workflow, ...item } = await one(
-    get<{ data: IncludedItem }>(itemPath(keyOrId), { include: 'children,relations,type,workflow,attachments' }),
+  const { attachments, children, relations, type, workflow, links, agent, ...item } = await one(
+    get<{ data: IncludedItem }>(itemPath(keyOrId), { include: 'children,relations,type,workflow,attachments,links,agent' }),
   );
 
   return {
@@ -121,6 +125,8 @@ export async function getWorkItem(keyOrId: string): Promise<WorkItemDetail> {
     relations,
     attachments,
     subscribed: item.subscribed,
+    links: links ?? [],
+    agent: agent ?? null,
   };
 }
 

@@ -2,12 +2,17 @@
 
 namespace App\OpenApi;
 
+use App\Actions\Agents\PauseThread;
+use App\Actions\GitHub\DetectUnauthorizedPush;
+use App\Actions\GitHub\DisconnectGitHub;
 use App\Actions\WorkItems\BulkUpdateWorkItems;
 use App\Actions\WorkItems\GetWorkItem;
 use App\Domain\Views\GroupBy;
 use App\Domain\Workflow\StateCategory;
 use App\Domain\WorkItems\Priority;
+use App\Models\AgentThread;
 use App\Support\Actor;
+use App\Support\AgentFlow;
 use App\Support\ItemInput;
 
 /**
@@ -370,7 +375,40 @@ final class WorkItemSchemas
             'relations' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/RelationEntryResource'], 'description' => 'With `include=relations`, as the reader sees them.'],
             'attachments' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/AttachmentResource'], 'description' => 'With `include=attachments`: the file list (not the pictures and files of the texts).'],
             'links' => ['type' => 'array', 'items' => self::link(), 'description' => 'With `include=links`: the linked pull requests, oldest link first.'],
+            'agent' => self::agent(),
         ];
+    }
+
+    /**
+     * What the agents do at an item (`include=agent`, `ItemAgentState`, WEBU-28).
+     *
+     * @return array<string, mixed>
+     */
+    public static function agent(): array
+    {
+        $nullable = ['type' => ['string', 'null']];
+
+        return self::object('With `include=agent`: what the agents do at the item.', [
+            'thread' => ['anyOf' => [self::object('The open or paused strand of an agent at the item.', [
+                'id' => ['type' => 'string'], 'bot_id' => ['type' => 'string'],
+                'status' => ['type' => 'string', 'enum' => [AgentThread::OPEN, AgentThread::PAUSED]],
+                'pause_reason' => ['type' => ['string', 'null'], 'enum' => [...PauseThread::REASONS, DetectUnauthorizedPush::REASON, DisconnectGitHub::REASON, null],
+                    'description' => '`brake`: too many corrections or conflicts; `no_change`: a run pushed nothing; `reassigned`, `canceled`: by a person; `guard`: an unauthorized merge; `github`: GitHub was disconnected (resume with `POST /work-items/{item}/agent/resume`).'],
+                'corrections' => ['type' => 'integer'], 'conflicts' => ['type' => 'integer'],
+                'pr_number' => ['type' => ['integer', 'null']], 'branch' => $nullable, 'runner_id' => $nullable,
+            ], ['id', 'bot_id', 'status', 'pause_reason', 'corrections', 'conflicts', 'pr_number', 'branch', 'runner_id'], false), ['type' => 'null']]],
+            'runs' => ['type' => 'integer', 'description' => 'How many runs of agents the item had, in any status (`GET /runs?filter[work_item_id]=` lists them).'],
+            'refusal' => ['type' => ['string', 'null'], 'enum' => [...AgentFlow::REFUSALS, null],
+                'description' => 'Why the bot the item is assigned to does not work on it as an agent; `null` for a person or an agent that does.'],
+            'brakes' => self::object('The brakes of the project: at most so many corrections and conflicts per strand.', [
+                'max_corrections' => ['type' => 'integer'], 'max_conflicts' => ['type' => 'integer'],
+            ], ['max_corrections', 'max_conflicts'], false),
+            'repository' => ['type' => 'boolean', 'description' => 'Whether the project has a repo.'],
+            'guard' => ['anyOf' => [self::object('An unauthorized merge holds the project.', [
+                'branch' => $nullable, 'sha' => $nullable,
+                'here' => ['type' => 'boolean', 'description' => 'A run of this item came before it.'],
+            ], ['branch', 'sha', 'here'], false), ['type' => 'null']]],
+        ], ['thread', 'runs', 'refusal', 'brakes', 'repository', 'guard'], false);
     }
 
     /**

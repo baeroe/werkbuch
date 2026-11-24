@@ -60,6 +60,8 @@ export interface LiveEvent {
   page_ids?: string[] | null;
   /** Only on `notifications.changed`. */
   unread_changed?: boolean;
+  /** Only on `agent_run.log`: the run whose log grew (on the channel of its item, at most once a second). */
+  run_id?: string;
 }
 
 export type LiveStatus = 'connecting' | 'connected' | 'unavailable';

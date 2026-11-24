@@ -7,8 +7,8 @@
 
 import type { ActivityEntry, Comment, ItemEvent } from '@/types';
 
-/** "Alles", "Kommentare" or "Änderungen". */
-export type ActivityFilter = 'all' | 'comments' | 'changes';
+/** "Alles", "Kommentare", "Änderungen" or "Aufträge" (the runs of agents, which `buildTimeline` leaves to `withRuns`). */
+export type ActivityFilter = 'all' | 'comments' | 'changes' | 'runs';
 
 /** One line: a comment, or the events of one account, made the same way (`via`) for the same reason, within the window. */
 export type TimelineEntry =

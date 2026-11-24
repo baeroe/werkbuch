@@ -140,6 +140,11 @@ const FLOWS = [
   'give a label a model for agents', // 7.7, 10.5, WEBU-32
   'set the agents of a project', // 10.3, WEBU-32
   'choose the models of an agent per kind of run', // 7.7, 10.4, WEBU-32
+  'follow the log of a run at an item', // 6.4, 10.6, WEBU-28
+  'cancel a run at an item', // 6.4, 10.6, WEBU-28
+  'start a run of an agent again', // 7.2, 10.6, WEBU-28
+  'give an item back to its agent', // 7.2, 10.6, WEBU-28
+  'go on with a strand GitHub paused', // 7.2, 10.6, WEBU-28
 ];
 /** A name of `GAPS` with a space is a flow, one without a key of the catalog or the widgets. */
 const isFlow = (name) => /\s/.test(name);

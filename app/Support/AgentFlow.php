@@ -38,10 +38,14 @@ final class AgentFlow
     /** How long a PR without any check waits before it counts as green, and a strand for the PR of its task (spec 7.2). */
     public const SETTLE_MINUTES = 2;
 
+    /** The answers of `refusal`, in its order. */
+    public const REFUSALS = ['agent_off', 'default_bot', 'disabled', 'no_owner', 'archived', 'no_steps', 'not_member'];
+
     /**
      * Why a bot cannot work on items of a project as an agent (spec 7.2, 7.4), null when it can: an agent switched on,
      * a bot with a responsible person (not the default bot), active, that may edit items of the project, and a workflow
-     * that names every step of the agents; the project neither archived nor being deleted.
+     * that names every step of the agents; the project neither archived nor being deleted. The default bot, a deactivated
+     * bot and one without a responsible person each have their own code (A647).
      */
     public static function refusal(User $bot, Project $project): ?string
     {
@@ -50,7 +54,9 @@ final class AgentFlow
 
         return match (true) {
             ! $bot->isBot() || $config === null || ! $config->enabled => 'agent_off',
-            $bot->is_default_bot || $bot->owner_id === null || $bot->isDisabled() => 'no_owner',
+            $bot->is_default_bot => 'default_bot',
+            $bot->isDisabled() => 'disabled',
+            $bot->owner_id === null => 'no_owner',
             $project->archived_at !== null || $project->deleting_at !== null => 'archived',
             $workflow === null || ! $workflow->agentStepsComplete() => 'no_steps',
             ! Visibility::can($bot, Permission::ItemEdit, $project) => 'not_member',
@@ -153,11 +159,14 @@ final class AgentFlow
         }
     }
 
-    /** A comment of the agent at an item in Markdown; one that cannot be written (gone, archived) is reported. */
-    public static function comment(User $bot, WorkItem $item, string $markdown): void
+    /**
+     * A comment of the agent at an item in Markdown; one that cannot be written (gone, archived) is reported. A comment
+     * that answers a run names it (`$runId`, A643): the item links the card of the run.
+     */
+    public static function comment(User $bot, WorkItem $item, string $markdown, ?string $runId = null): void
     {
         try {
-            AddComment::run(Actor::agent($bot), $item, ['body' => $markdown]);
+            AddComment::run(Actor::agent($bot), $item, ['body' => $markdown], $runId);
         } catch (Problem|ValidationException|ModelNotFoundException $e) {
             report(new RuntimeException("The agent could not comment at item {$item->id}.", 0, $e));
         }

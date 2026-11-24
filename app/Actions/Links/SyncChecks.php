@@ -2,6 +2,7 @@
 
 namespace App\Actions\Links;
 
+use App\Live\ChecksChanged;
 use App\Models\WorkItemLink;
 use App\Models\WorkItemLinkCheck;
 use App\Support\Actor;
@@ -13,7 +14,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * the commit of the run gets the run (name, app, status, conclusion, link); a run of another commit says nothing about
  * a PR and is passed over. A run that ended stays ended: a delivery that comes late (`in_progress` after `completed`)
  * does not make it run again. Locks the links of the commit, then writes its row per link. Answers `ignored` (no link
- * has the commit, or the payload is no check run) or `ok`. `check_suite` stays with the flow (WEBU-26).
+ * has the commit, or the payload is no check run) or `ok`. `check_suite` stays with the flow (WEBU-26). Each item whose
+ * checks changed hears it after the commit, once per delivery (ChecksChanged, A648).
  */
 final class SyncChecks
 {
@@ -24,13 +26,33 @@ final class SyncChecks
      */
     public function handle(Actor $actor, array $payload): string
     {
+        $changed = self::store($payload);
+        if ($changed === null) {
+            return 'ignored';
+        }
+
+        ChecksChanged::tell($changed);
+
+        return 'ok';
+    }
+
+    /**
+     * Writes the run of a `check_run` payload to the links of its commit; answers the links whose row changed (new or
+     * other values), or null when no link has the commit or the payload is no check run. Tells nobody (LoadChecks tells
+     * once for all the runs it read).
+     *
+     * @param  array<array-key, mixed>  $payload
+     * @return list<WorkItemLink>|null
+     */
+    public static function store(array $payload): ?array
+    {
         $run = is_array($payload['check_run'] ?? null) ? $payload['check_run'] : [];
         $repository = is_array($payload['repository'] ?? null) ? $payload['repository'] : [];
         $app = is_array($run['app'] ?? null) ? $run['app'] : [];
 
         if (! is_int($repository['id'] ?? null) || ! is_int($run['id'] ?? null) || ! is_string($run['head_sha'] ?? null)
             || ! is_string($run['status'] ?? null) || ! is_string($run['name'] ?? null)) {
-            return 'ignored';
+            return null;
         }
 
         $fields = [
@@ -43,20 +65,25 @@ final class SyncChecks
             'head_sha' => $run['head_sha'],
         ];
 
-        return DB::transaction(function () use ($repository, $fields): string {
+        return DB::transaction(function () use ($repository, $fields): ?array {
             $links = WorkItemLink::query()->where('repository_github_id', $repository['id'])->where('head_sha', $fields['head_sha'])
                 ->orderBy('id')->lockForUpdate()->get();
 
+            $changed = [];
             foreach ($links as $link) {
                 $check = WorkItemLinkCheck::query()->where('work_item_link_id', $link->id)->where('kind', 'check')->where('check_run_id', $fields['check_run_id'])->first()
                     ?? new WorkItemLinkCheck(['work_item_link_id' => $link->id]);
 
                 if ($check->status !== 'completed' || $fields['status'] === 'completed') {
-                    $check->fill($fields)->save();
+                    $check->fill($fields);
+                    if ($check->isDirty()) {
+                        $check->save();
+                        $changed[] = $link;
+                    }
                 }
             }
 
-            return $links->isEmpty() ? 'ignored' : 'ok';
+            return $links->isEmpty() ? null : $changed;
         }, 3);
     }
 }
