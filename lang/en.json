@@ -2220,6 +2220,7 @@
     "settings.github.permission.contents": "Contents",
     "settings.github.permission.metadata": "Metadata",
     "settings.github.permission.pull_requests": "Pull requests",
+    "settings.github.permission.statuses": "Commit statuses",
     "settings.github.permission_line": ":permission: :access",
     "settings.github.repo.guarded": "Unauthorized merge: paused",
     "settings.github.repo.no_project": "No project",

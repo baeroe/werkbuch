@@ -151,7 +151,7 @@ describe('GitHub, not connected', () => {
     const nav = screen.getByRole('navigation', { name: 'Bereiche der Einstellungen' });
     expect(within(nav).getByRole('link', { name: 'GitHub' }).getAttribute('href')).toBe('/settings/github');
     const panel = await screen.findByRole('region', { name: 'Mit GitHub verbinden' });
-    expect(within(panel).getByText('Inhalte schreiben, Pull Requests schreiben, Checks lesen, Actions lesen, Metadaten lesen')).toBeTruthy();
+    expect(within(panel).getByText('Inhalte schreiben, Pull Requests schreiben, Checks lesen, Actions lesen, Commit-Status lesen, Metadaten lesen')).toBeTruthy();
     expect(within(panel).getByText(`${window.location.origin}/github/webhook`).getAttribute('translate')).toBe('no');
     expect(await within(panel).findByText(/Vorgeschlagener Name: Feldwerk werkbuch\./)).toBeTruthy();
     expect(screen.queryByText('Verbunden')).toBeNull();
