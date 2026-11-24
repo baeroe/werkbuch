@@ -107,20 +107,30 @@ it('takes a signed delivery larger than the JSON limit of the API, up to the 25 
         ->assertStatus(413)->assertJsonPath('reason', 'payload_too_large')->assertJsonPath('detail', __('problem.detail.github_too_large'));
 });
 
-it('counts only unsigned requests against their address', function () {
+it('counts only unsigned requests against their address and refuses a throttled one before reading it', function () {
     Queue::fake([ProcessGitHubDelivery::class]);
+    // GitHub itself (signed) is never counted
+    foreach (range(1, VerifyGitHubSignature::UNSIGNED_PER_MINUTE + 5) as $n) {
+        FakeGitHub::deliver($this, 'ping', ['zen' => 'x'], "s-{$n}")->assertStatus(202);
+    }
     foreach (range(1, VerifyGitHubSignature::UNSIGNED_PER_MINUTE) as $n) {
         FakeGitHub::deliver($this, 'ping', ['zen' => 'x'], "u-{$n}", 'wrong secret')->assertUnauthorized();
     }
     FakeGitHub::deliver($this, 'ping', ['zen' => 'x'], 'u-last', 'wrong secret')->assertStatus(429)->assertHeader('Retry-After');
-
-    // GitHub itself (signed) is never throttled, not even from the same address
-    foreach (range(1, VerifyGitHubSignature::UNSIGNED_PER_MINUTE + 5) as $n) {
-        FakeGitHub::deliver($this, 'ping', ['zen' => 'x'], "s-{$n}")->assertStatus(202);
-    }
+    // a throttled address is refused before its body is read or its signature computed: also a signed delivery from it
+    FakeGitHub::deliver($this, 'ping', ['zen' => 'x'], 's-throttled')->assertStatus(429);
+    expect(GitHubDelivery::query()->where('delivery_id', 's-throttled')->exists())->toBeFalse();
 
     $this->travel(61)->seconds();
     FakeGitHub::deliver($this, 'ping', ['zen' => 'x'], 'u-again', 'wrong secret')->assertUnauthorized();
+    FakeGitHub::deliver($this, 'ping', ['zen' => 'x'], 's-again')->assertStatus(202);
+});
+
+it('stops reading a body without Content-Length after 25 MB', function () {
+    $body = str_repeat('x', VerifyGitHubSignature::MAX_BYTES + 1);
+    $this->call('POST', '/github/webhook', [], [], [], ['CONTENT_TYPE' => 'application/json', 'CONTENT_LENGTH' => '', 'HTTP_X_HUB_SIGNATURE_256' => WebhookSignature::sign(GitHubApp::query()->sole()->webhook_secret, $body)], $body)
+        ->assertStatus(413)->assertJsonPath('detail', __('problem.detail.github_too_large'));
+    expect(GitHubDelivery::query()->exists())->toBeFalse();
 });
 
 it('forgets deliveries after 30 days', function () {

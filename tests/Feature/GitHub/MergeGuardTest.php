@@ -1,6 +1,9 @@
 <?php
 
+use App\Access\OrgRole;
 use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
+use App\Access\Visibility;
 use App\Actions\GitHub\ConfirmMergeGuard;
 use App\Actions\GitHub\DetectUnauthorizedPush;
 use App\Actions\GitHub\DisconnectGitHub;
@@ -203,6 +206,28 @@ it('guards without any run and tells the org admins, and in a project being dele
     ProjectRepository::factory()->create(['project_id' => $deleting->id, 'repository_id' => $repository->id]);
     expect(DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), FakeGitHub::push(str_repeat('f', 40), repositoryId: 700_000_005, fullName: 'feldwerk/gone')))->toBe('foreign')
         ->and(ProjectRepository::query()->where('project_id', $deleting->id)->sole()->guarded())->toBeFalse();
+});
+
+it('takes the notification of a guard from an org admin who is one no longer, inbox and mail', function () {
+    consumers(NotificationConsumer::class);
+    config(['mail.default' => 'smtp']);
+    Mail::fake();
+    Queue::fake([SendNotificationMailJob::class]);
+    // a member of the project, so the project alone would still let them see it
+    $this->project->update(['visibility' => 'private']);
+    app(RoleAssignments::class)->setProjectRole($this->admin, $this->project, ProjectRole::Member);
+    DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), FakeGitHub::push(str_repeat('f', 40)));
+    $notification = Notification::query()->where('user_id', $this->admin->id)->sole();
+    expect(Notification::query()->inboxOf($this->admin)->count())->toBe(1);
+
+    app(RoleAssignments::class)->setOrgRole($this->admin, OrgRole::Member);
+    Visibility::forget();
+    expect(Notification::query()->inboxOf($this->admin)->count())->toBe(0)
+        ->and(Notification::query()->whereKey($notification->id)->visibleTo($this->admin)->exists())->toBeFalse()
+        // other notifications of the project stay
+        ->and(Notification::factory()->for($this->admin)->create(['project_id' => $this->project->id])->newQuery()->inboxOf($this->admin)->count())->toBe(1)
+        ->and(SendNotificationMail::run(Actor::system(User::defaultBot(), 'test'), NotificationMail::query()->where('user_id', $this->admin->id)->sole()->id))->toBe(NotificationMail::SKIPPED);
+    Mail::assertNothingSent();
 });
 
 it('sends no mail of a guard that an admin confirmed meanwhile', function () {

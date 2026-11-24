@@ -101,6 +101,8 @@ it('lets a run wait without counting an attempt while GitHub does not answer or 
     $run->refresh();
     expect([$run->status, $run->waiting_reason, $run->attempt, $run->runner_id])->toBe([RunStatus::Waiting, 'github_unavailable', 1, null])
         ->and($run->retry_at->getTimestamp())->toBe(now()->addSeconds(ClaimRun::RETRY_SECONDS)->getTimestamp())
+        // the event says what the run is now: waiting, for GitHub
+        ->and([eventsOf(EventType::AgentRunQueued)->last()->changes['status']['new'], eventsOf(EventType::AgentRunQueued)->last()->meta['reason']])->toBe(['waiting', 'github_unavailable'])
         ->and(PersonalAccessToken::query()->where('agent_run_id', $run->id)->exists())->toBeFalse();
     // the reason holds while it waits
     RunQueue::refreshReasons();

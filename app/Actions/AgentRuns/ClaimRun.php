@@ -108,8 +108,7 @@ final class ClaimRun
             }
 
             if ($cause instanceof GitHubUnavailable && $cause->transient()) {
-                ReapLostRuns::requeue($locked, self::GITHUB_UNAVAILABLE, false);
-                $locked->forceFill(['status' => RunStatus::Waiting, 'waiting_reason' => self::GITHUB_UNAVAILABLE, 'retry_at' => now()->addSeconds(self::RETRY_SECONDS)])->save();
+                ReapLostRuns::requeue($locked, self::GITHUB_UNAVAILABLE, false, now()->addSeconds(self::RETRY_SECONDS));
             } elseif ($locked->attempt >= Protocol::MAX_ATTEMPTS) {
                 FinishRun::end($locked, RunStatus::Failed, ['error' => self::GIT_TOKEN]);
             } else {

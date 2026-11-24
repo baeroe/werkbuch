@@ -30,8 +30,8 @@ use RuntimeException;
  * base branch of a project whose commit is no merge of werkbuch (OwnMerges), or the app deleting the base branch, is
  * something an agent did itself (directly or by merging through the API with its token). Then every open strand of the
  * project pauses (`guard`), what runs of it is canceled and what waits waits (`merge_guard`), until a project admin
- * confirms (ConfirmMergeGuard). Under the shared lock of the project and the lock of its repo row, the base branch
- * compared again there: a second push while the guard holds changes nothing. `project.merge_guard_detected` tells every
+ * confirms (ConfirmMergeGuard). Locks: the project shared, its repo row (the base branch compared again there), its
+ * runs, then its strands: a second push while the guard holds changes nothing. `project.merge_guard_detected` tells every
  * active org admin (the notification `merge_guard_detected`, always); werkbuch says it besides at the items of the runs
  * it takes for the push (`suspects`). Answers `ignored` (not the app, not a base branch, no project), `own`, `pending`
  * (a merge of werkbuch is under way: look again later) or `foreign`.
@@ -96,11 +96,8 @@ final class DetectUnauthorizedPush
             $runs = $suspects->map(fn (AgentRun $run) => ['run_id' => $run->id, 'item_id' => $run->work_item_id, 'bot_id' => $run->bot_id])->values()->all();
             $locked->forceFill(['guard_detected_at' => now(), 'guard_sha' => $sha, 'guard_branch' => $branch, 'guard_runs' => $runs])->save();
 
-            $threads = AgentThread::query()->lockForUpdate()->where('project_id', $project->id)->where('status', AgentThread::OPEN)->orderBy('id')->get();
-            foreach ($threads as $thread) {
-                $thread->forceFill(['status' => AgentThread::PAUSED, 'pause_reason' => self::REASON])->save();
-            }
-
+            // runs before strands, as FinishRun and DisconnectGitHub lock them: a run that reports its result while the
+            // push comes waits here or makes this wait, never both
             $canceled = 0;
             $open = AgentRun::query()->lockForUpdate()->where('project_id', $project->id)
                 ->whereIn('status', [RunStatus::Queued->value, RunStatus::Waiting->value, RunStatus::Running->value])->orderBy('id')->get();
@@ -111,6 +108,11 @@ final class DetectUnauthorizedPush
                 } else {
                     $run->forceFill(['status' => RunStatus::Waiting, 'waiting_reason' => self::WAITING])->save();
                 }
+            }
+
+            $threads = AgentThread::query()->lockForUpdate()->where('project_id', $project->id)->where('status', AgentThread::OPEN)->orderBy('id')->get();
+            foreach ($threads as $thread) {
+                $thread->forceFill(['status' => AgentThread::PAUSED, 'pause_reason' => self::REASON])->save();
             }
 
             $items = array_values(array_unique(array_filter(array_column($runs, 'item_id'))));

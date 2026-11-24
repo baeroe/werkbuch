@@ -10,6 +10,7 @@ use App\Models\AgentRun;
 use App\Support\Actor;
 use App\Support\RunQueue;
 use App\Support\RunTokens;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
@@ -87,17 +88,19 @@ final class ReapLostRuns
     /**
      * Puts a busy run read `for update` back into the queue as a new attempt (the runner of the old one gets 409
      * `run_replaced`), its run token revoked: a lost run (A475) or one GitHub gave no token for (A511); a run GitHub did
-     * not answer for keeps its attempt.
+     * not answer for keeps its attempt and waits until `waitUntil` (`waiting` with the reason, `retry_at`), and its
+     * `agent_run.queued` says `waiting` as the status.
      */
-    public static function requeue(AgentRun $run, string $reason, bool $newAttempt = true): void
+    public static function requeue(AgentRun $run, string $reason, bool $newAttempt = true, ?CarbonInterface $waitUntil = null): void
     {
+        $status = $waitUntil === null ? RunStatus::Queued : RunStatus::Waiting;
         $run->forceFill([
-            'status' => RunStatus::Queued,
+            'status' => $status, 'waiting_reason' => $waitUntil === null ? null : $reason, 'retry_at' => $waitUntil,
             'attempt' => $run->attempt + ($newAttempt ? 1 : 0), 'runner_id' => null, 'lease_expires_at' => null, 'started_at' => null, 'error' => $reason,
         ])->save();
         RunTokens::revoke($run);
         EventRecorder::record(EventType::AgentRunQueued, Actor::agent($run->bot)->withReason($reason), $run, $run->project, [
-            'status' => ['old' => RunStatus::Running->value, 'new' => RunStatus::Queued->value],
+            'status' => ['old' => RunStatus::Running->value, 'new' => $status->value],
         ], ['item_id' => $run->work_item_id, 'type' => $run->type->value, 'attempt' => $run->attempt]);
     }
 }
