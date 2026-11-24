@@ -311,10 +311,13 @@ func TestATokenRunningOutIsRenewedBeforeTheClone(t *testing.T) {
 	// the claim's token runs out at once (a run that waited long for its slot)
 	expires := time.Now().Add(50 * time.Millisecond)
 	w.remote.Accept(firstToken, expires)
+	started := time.Now()
 	run := w.run("01late", protocol.Task, "commit", func(r *protocol.Run) {
 		r.Git = &protocol.Git{RepoURL: w.url, Token: firstToken, ExpiresAt: &expires}
 	})
-	if _, status := w.execute(run); status != protocol.Succeeded {
+	_, status := w.execute(run)
+	w.story(run.ID, started)
+	if status != protocol.Succeeded {
 		t.Fatalf("status %q\n%s", status, w.log.String())
 	}
 	requests := w.remote.Requests()
@@ -353,7 +356,9 @@ func TestARenewalThatKeepsFailingEndsAfterTheExpiry(t *testing.T) {
 		t.Fatal("giving up ended the run")
 	}
 	e.Cancel()
-	if status := <-done; status != protocol.Canceled {
+	status := <-done
+	w.story(run.ID, e.Started)
+	if status != protocol.Canceled {
 		t.Fatalf("status %q", status)
 	}
 	w.leaks(run.ID)
