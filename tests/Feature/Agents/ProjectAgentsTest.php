@@ -87,7 +87,7 @@ it('names the bots that could review in the project with their agent and models 
     $bots = $this->actingAs(User::factory()->admin()->create())->getJson('/api/v1/projects/WEB/agents')->assertOk()->json('data.bots');
 
     expect(array_column($bots, 'bot_id'))->toBe([$off->id, $plain->id, $rita->id, $viewer->id])
-        ->and($bots[2])->toBe(['bot_id' => $rita->id, 'enabled' => true, 'reviews' => true, 'cli' => 'claude', 'model' => 'sonnet', 'models' => ['review' => 'opus']])
+        ->and($bots[2])->toBe(['bot_id' => $rita->id, 'enabled' => true, 'member' => true, 'reviews' => true, 'cli' => 'claude', 'model' => 'sonnet', 'models' => ['review' => 'opus']])
         ->and($bots[1])->toMatchArray(['enabled' => false, 'reviews' => true, 'model' => 'sonnet', 'models' => []])
         ->and($bots[3]['reviews'])->toBeFalse();
 
@@ -124,6 +124,8 @@ it('offers an org admin bot as review agent without a membership, and as a viewe
 
     expect(array_column($bots, 'bot_id'))->toContain($boss->id, $viewer->id)
         ->and(collect($bots)->firstWhere('bot_id', $boss->id)['reviews'])->toBeTrue()
+        ->and(collect($bots)->firstWhere('bot_id', $boss->id)['member'])->toBeFalse()
+        ->and(collect($bots)->firstWhere('bot_id', $viewer->id)['member'])->toBeTrue()
         ->and(collect($bots)->firstWhere('bot_id', $viewer->id)['reviews'])->toBeTrue();
     // as the backend allows it
     $this->putJson('/api/v1/projects/WEB/agents', $body(['review_bot_id' => $boss->id]))->assertOk();

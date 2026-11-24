@@ -2091,7 +2091,7 @@
     "settings.bot_agent.projects.load_failed": "The projects could not be loaded",
     "settings.bot_agent.projects.none": ":name is not a member of any project. Add the bot in the project settings under “Members”.",
     "settings.bot_agent.projects.not_sr": ": does not work here",
-    "settings.bot_agent.projects.org_admin": ":name is an org admin: it may review the PRs in every project. Items it takes only where it is a member.",
+    "settings.bot_agent.projects.org_admin": ":name is an org admin and may review the PRs in every project; :name takes items only where :name is a member.",
     "settings.bot_agent.projects.reason.archived": "The project is archived.",
     "settings.bot_agent.projects.reason.steps": "The workflow of the project does not have all steps of the agents yet.",
     "settings.bot_agent.projects.reason.viewer": "Only reads here: give it the role Member or Admin in the project.",

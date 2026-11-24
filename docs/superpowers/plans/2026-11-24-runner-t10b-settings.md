@@ -11,7 +11,7 @@
 ## Backend-Ergänzungen (klein)
 
 - `AgentRuleResource` nennt `standard_body` (der Standard in der Sprache der Organisation): „Standard wiederherstellen“ zeigt ihn vor dem Speichern, und der Browser vergleicht ohne eigene Kopie (A620).
-- `AgentProjectSettingsResource` nennt `bots`: die Bots, die im Projekt Review-Agent sein könnten (Mitglieder, ohne Standard-Bot, aktiv, dazu der gespeicherte Review-Agent), je `{bot_id, enabled, reviews, cli, model, models}`. Projekt-Admins sind nicht immer Org-Admins und lesen `GET /bots/{bot}/agent` nicht; der Review-Agent und „Wie beim Bot (sonnet)“ brauchen es (A621).
+- `AgentProjectSettingsResource` nennt `bots`: die Bots, die im Projekt Review-Agent sein könnten (Mitglieder, ohne Standard-Bot, aktiv, dazu der gespeicherte Review-Agent), je `{bot_id, enabled, member, reviews, cli, model, models}`. Projekt-Admins sind nicht immer Org-Admins und lesen `GET /bots/{bot}/agent` nicht; der Review-Agent und „Wie beim Bot (sonnet)“ brauchen es (A621).
 - OpenAPI (`AgentSchemas`), Body-Echos `readOnly`; MCP bleibt im Budget (readOnly fällt in `tools/list` weg).
 
 ## Tasks

@@ -247,14 +247,15 @@ final class AgentSchemas
                 'models' => ['type' => 'object', 'additionalProperties' => ['type' => 'string', 'enum' => AgentModel::values()], 'description' => 'A model per kind of run, `cli:model`.'],
                 'merge_method' => ['type' => 'string', 'enum' => AgentProjectSettings::MERGE_METHODS],
                 'steps_complete' => ['type' => 'boolean', 'description' => 'Whether the workflow of the project names every step of the agents; without them no run starts.'],
-                'bots' => ['type' => 'array', 'description' => 'The active bots of the project (not the default bot) and the saved review agent, by name, with their agent (A621).', 'items' => self::object('A bot of the project.', [
+                'bots' => ['type' => 'array', 'description' => 'The active bots of the project and the active org admin bots (not the default bot) and the saved review agent, by name, with their agent (A621).', 'items' => self::object('A bot of the project.', [
                     'bot_id' => ['type' => 'string'],
                     'enabled' => ['type' => 'boolean', 'description' => 'Whether it works as an agent.'],
+                    'member' => ['type' => 'boolean', 'description' => 'Whether it is a member of the project: only a member takes items; an org admin bot may review without.'],
                     'reviews' => ['type' => 'boolean', 'description' => 'Whether it may be the review agent here: a responsible person, active, may edit items.'],
                     'cli' => ['type' => 'string', 'enum' => AgentCli::VALUES],
                     'model' => ['type' => 'string', 'description' => 'Its default model.'],
                     'models' => ['type' => 'object', 'additionalProperties' => ['type' => 'string'], 'description' => 'Its model per kind of run.'],
-                ], ['bot_id', 'enabled', 'reviews', 'cli', 'model', 'models'], false)],
+                ], ['bot_id', 'enabled', 'member', 'reviews', 'cli', 'model', 'models'], false)],
                 'updated_at' => $nullTime,
             ],
             'AgentConfigResource' => [

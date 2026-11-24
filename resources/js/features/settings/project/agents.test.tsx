@@ -109,9 +109,9 @@ const defaults: ProjectAgents = {
   setup_command: null,
   teardown_command: null,
   bots: [
-    { bot_id: 'u_kira', enabled: true, reviews: true, cli: 'claude', model: 'sonnet', models: { review: 'opus' } },
-    { bot_id: 'u_rita', enabled: false, reviews: true, cli: 'claude', model: 'haiku', models: {} },
-    { bot_id: 'u_vera', enabled: true, reviews: false, cli: 'codex', model: 'gpt-5-codex', models: {} },
+    { bot_id: 'u_kira', enabled: true, member: true, reviews: true, cli: 'claude', model: 'sonnet', models: { review: 'opus' } },
+    { bot_id: 'u_rita', enabled: false, member: true, reviews: true, cli: 'claude', model: 'haiku', models: {} },
+    { bot_id: 'u_vera', enabled: true, member: true, reviews: false, cli: 'codex', model: 'gpt-5-codex', models: {} },
   ],
   steps_complete: true,
   updated_at: null,
@@ -538,10 +538,18 @@ describe('Agents: settings (WEBU-32)', () => {
     await waitFor(() => expect(screen.queryByText('Nicht gespeicherte Änderungen')).toBeNull());
   });
 
+  it('counts an org admin bot that is no member only for reviews in what the kinds inherit', async () => {
+    signedIn = mara;
+    renderAgents({ agents: { ...defaults, bots: [...defaults.bots, { bot_id: 'u_gone', enabled: true, member: false, reviews: true, cli: 'claude', model: 'haiku', models: {} }] } });
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /^Review(?!-)/ }).textContent).toContain('Wie beim Bot (Kira: opus, Vera: gpt-5-codex, Gabi: haiku)'));
+    expect(screen.getByRole('combobox', { name: /^Umsetzen/ }).textContent).toContain('Wie beim Bot (Kira: sonnet, Vera: gpt-5-codex)');
+  });
+
   it('names a deactivated saved review agent as such, and locks the review of PRs of persons without a review agent', async () => {
     const user = userEvent.setup();
     signedIn = mara;
-    renderAgents({ agents: { ...defaults, review_bot_id: 'u_gone', bots: [...defaults.bots, { bot_id: 'u_gone', enabled: true, reviews: false, cli: 'claude', model: 'sonnet', models: {} }] } });
+    renderAgents({ agents: { ...defaults, review_bot_id: 'u_gone', bots: [...defaults.bots, { bot_id: 'u_gone', enabled: true, member: true, reviews: false, cli: 'claude', model: 'sonnet', models: {} }] } });
 
     const reviewer = await screen.findByRole('combobox', { name: /Review-Agent/ });
     await waitFor(() => expect(reviewer.textContent).toContain('Gabi (deaktiviert)'));

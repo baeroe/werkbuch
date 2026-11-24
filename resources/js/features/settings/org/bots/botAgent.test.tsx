@@ -452,7 +452,7 @@ describe('BotAgent', () => {
       },
     });
 
-    expect(await screen.findByText('Kira ist Org-Admin: Er darf die PRs in jedem Projekt reviewen. Items übernimmt er nur, wo er Mitglied ist.')).toBeTruthy();
+    expect(await screen.findByText('Kira ist Org-Admin und darf die PRs in jedem Projekt reviewen; Items übernimmt Kira nur, wo Kira Mitglied ist.')).toBeTruthy();
     expect(within(screen.getByRole('list', { name: 'Projekte von Kira' })).getByRole('listitem').textContent).toContain('Arbeitet hier');
   });
 

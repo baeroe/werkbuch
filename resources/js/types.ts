@@ -997,6 +997,8 @@ export interface ProjectAgentBot {
   bot_id: string;
   /** Whether it works as an agent. */
   enabled: boolean;
+  /** Whether it is a member of the project: only a member takes items; an org admin bot may review without. */
+  member: boolean;
   /** Whether it may be the review agent here: a responsible person, active, may edit items. */
   reviews: boolean;
   cli: AgentCli;

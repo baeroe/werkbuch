@@ -72,11 +72,17 @@ describe('models of agents', () => {
 
   it('says what each agent of a project takes for a kind of run: its model for the kind, else its default', () => {
     const bots = [
-      { bot_id: 'u_kira', enabled: true, reviews: true, cli: 'claude' as const, model: 'sonnet', models: { review: 'opus' } },
-      { bot_id: 'u_off', enabled: false, reviews: true, cli: 'claude' as const, model: 'haiku', models: {} },
+      { bot_id: 'u_kira', enabled: true, member: true, reviews: true, cli: 'claude' as const, model: 'sonnet', models: { review: 'opus' } },
+      { bot_id: 'u_off', enabled: false, member: true, reviews: true, cli: 'claude' as const, model: 'haiku', models: {} },
     ];
     expect(botModels(bots, 'review')).toEqual([{ bot_id: 'u_kira', model: 'opus' }]);
     expect(botModels(bots, 'task')).toEqual([{ bot_id: 'u_kira', model: 'sonnet' }]);
+  });
+
+  it('counts an org admin bot without a membership only for reviews: it takes no items there', () => {
+    const boss = { bot_id: 'u_boss', enabled: true, member: false, reviews: true, cli: 'claude' as const, model: 'haiku', models: {} };
+    expect(botModels([boss], 'review')).toEqual([{ bot_id: 'u_boss', model: 'haiku' }]);
+    expect([botModels([boss], 'task'), botModels([boss], 'correction'), botModels([boss], 'conflict'), botModels([boss], 'comment')]).toEqual([[], [], [], []]);
   });
 });
 

@@ -131,7 +131,8 @@ export function modelLabelName(model: string): string {
 
 /** What each agent of a project takes for a kind of run without a model of the project: its model for the kind, else its default. */
 export function botModels(bots: readonly ProjectAgentBot[], type: RunType): { bot_id: string; model: string }[] {
-  return bots.filter((bot) => bot.enabled).map((bot) => ({ bot_id: bot.bot_id, model: bot.models[type] || bot.model }));
+  // only a member takes items; an org admin bot without a membership runs only reviews here
+  return bots.filter((bot) => bot.enabled && (bot.member || type === 'review')).map((bot) => ({ bot_id: bot.bot_id, model: bot.models[type] || bot.model }));
 }
 
 export type AgentProjectReason = 'viewer' | 'archived' | 'steps';
