@@ -3,9 +3,15 @@
  * and stores a `reference` node with the id and the kind only (`{id, kind: 'item' | 'page'}`): no key, no title, so a
  * text never names an item or a page to a reader who may not see it (A229). A reference is resolved when it shows
  * (`useItemRef` and `usePageRef`, one `GET /references` for every reference of a tick): an item with the type and the
- * key it has now, its title for screen readers, a link to the item while reading; a page with its emoji and the title
- * it has now, a link into the wiki of its project while reading; "verborgen" for what the reader does not see (or
- * what is gone), "…" while it loads. Without a project there is no `#`.
+ * key it has now, its title for screen readers, a link to the item; a page with its emoji and the title it has now, a
+ * link into the wiki of its project; "verborgen" for what the reader does not see (or what is gone), "…" while it loads.
+ * Without a project there is no `#`.
+ *
+ * A reference is a link while reading and in an editor alike (WEBU-38): a plain click opens an item in the preview,
+ * as a row of a list does, and a page as the page; a click with a modifier or the middle button leaves it to the
+ * browser (a new tab). In a modal dialog a plain click only selects a reference of an editor and takes a reference read
+ * there to its page: a preview or a visit would happen behind the dialog. In an editor the link is no tab stop: the arrows select the reference (`selectable`) and Enter opens it
+ * (`OpenSelectedKey`, nodes.tsx), Backspace and Delete remove it, a click beside it places the cursor.
  */
 
 import { Link } from '@inertiajs/react';
@@ -13,8 +19,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import Mention from '@tiptap/extension-mention';
 import { NodeViewWrapper, ReactNodeViewRenderer, useEditorState, type ReactNodeViewProps } from '@tiptap/react';
 import { EyeOff } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useLayoutEffect, useRef, type MouseEvent, type ReactNode } from 'react';
 import { isGone } from '@/api/client';
+import { isPlainClick } from '@/components/items/ItemLink';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
 import { PageGlyph } from '@/features/wiki/PageGlyph';
 import { useProjects } from '@/hooks/projects';
@@ -24,6 +31,7 @@ import { useSearch } from '@/hooks/search';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
+import { useUiStore } from '@/store/ui';
 import type { EditorEnvRef } from './EditorEnv';
 import { Glued } from './glued';
 import { fitsAt } from './mentions';
@@ -121,20 +129,28 @@ function HiddenReference() {
   );
 }
 
-/** A reference that is no link: while it loads, when it failed, and in an editor. */
+/** A reference that is no link: while it loads and when it failed. */
 function Loading({ failed }: { failed: boolean }) {
   return <span className="rt-ref">{failed ? t('editor.reference.unknown') : '…'}</span>;
 }
 
+/** Whether an element stands in a modal dialog: a preview or a visit from there would happen behind it. */
+const inDialog = (element: Element): boolean => element.closest('[role="dialog"], [role="alertdialog"]') !== null;
+
 /**
- * A link while reading, plain text while editing. `label` names the link for screen readers in full: a visually
- * hidden span after the text would be read with a space before its comma (Chrome sets a positioned element apart).
+ * The link of a reference, while reading and in an editor (WEBU-38). `onOpen` takes a plain click over (the preview of
+ * an item); without it, or with a modifier, the link does what links do. In a modal dialog a plain click neither opens
+ * a preview nor loads a page behind it: in an editor there (the dialog to create an item stays open over visits) it
+ * only selects the reference, while reading there (the versions of a page) it goes to the page of the item. `label`
+ * names the link for screen readers in full: a visually hidden span after the text would be read with a space before
+ * its comma (Chrome sets a positioned element apart).
  */
 function Shown({
   href,
   editable,
   label,
   wraps = false,
+  onOpen,
   children,
 }: {
   href: string;
@@ -142,14 +158,40 @@ function Shown({
   label?: string;
   /** A title wraps like text (WEBU-14); a key stays in one piece. */
   wraps?: boolean;
+  onOpen?: () => void;
   children: ReactNode;
 }) {
-  const className = wraps ? 'rt-ref rt-ref-flow' : 'rt-ref';
-  return editable ? (
-    <span className={className}>{children}</span>
-  ) : (
-    <Link href={href} className={className} aria-label={label}>
-      {children}
+  const link = useRef<HTMLElement | null>(null);
+  // in an editor the browser would drag the address into the text: ProseMirror takes `draggable` off the link after a
+  // mousedown on the selected node, so it is set again after every render; while reading a link may be dragged
+  useLayoutEffect(() => {
+    if (editable && link.current) link.current.draggable = false;
+  });
+  return (
+    <Link
+      ref={link}
+      href={href}
+      className={wraps ? 'rt-ref rt-ref-flow' : 'rt-ref'}
+      aria-label={label}
+      // in an editor the arrows select the reference and Enter opens it: a tab stop per reference would only stand
+      // between the text and the next control
+      tabIndex={editable ? -1 : undefined}
+      draggable={editable ? false : undefined}
+      onClick={(event: MouseEvent) => {
+        if (!isPlainClick(event)) return;
+        if (inDialog(event.currentTarget)) {
+          // a prevented click is one Inertia leaves alone: in an editor of a dialog it only selects
+          if (editable) event.preventDefault();
+          return;
+        }
+        if (!onOpen) return;
+        event.preventDefault();
+        onOpen();
+      }}
+    >
+      <span className="contents" draggable={editable ? false : undefined}>
+        {children}
+      </span>
     </Link>
   );
 }
@@ -163,7 +205,7 @@ function ItemReference({ id, editable }: { id: string; editable: boolean }) {
   if (!item) return <Loading failed={reference.isError} />;
   const type = types?.find((entry) => entry.id === item.type_id);
   return (
-    <Shown href={paths.item(item.key)} editable={editable}>
+    <Shown href={paths.item(item.key)} editable={editable} onOpen={() => useUiStore.getState().openPeek(item.id)}>
       {type && <TypeGlyph type={type} className="size-3" />}
       <span translate="no">{item.key}</span> <span className="sr-only">{item.title}</span>
     </Shown>
@@ -205,6 +247,8 @@ function ReferenceView({ node, editor }: ReactNodeViewProps) {
 export function referenceExtension(env: EditorEnvRef) {
   return Mention.extend({
     name: 'reference',
+    // the arrows select a reference, so Enter can open it (WEBU-38); a mention stays a stretch of text
+    selectable: true,
     addAttributes() {
       return {
         ...this.parent?.(),

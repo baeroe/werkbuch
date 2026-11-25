@@ -183,6 +183,7 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 | <kbd>↵ / Eingabe</kbd> / <kbd>Tab</kbd> | Eintrag übernehmen |
 | <kbd>Esc</kbd> | Liste schließen |
 | <kbd>↵ / Eingabe</kbd> | Ausgewähltes Bild groß anzeigen |
+| <kbd>↵ / Eingabe</kbd> | Ausgewählten Verweis öffnen (ein Item in der Vorschau) bzw. ausgewählte Datei herunterladen |
 | <kbd>⌥ / Alt</kbd>+<kbd>F10</kbd> | Tabelle bearbeiten (Cursor in einer Tabelle) |
 | <kbd>⌥ / Alt</kbd>+<kbd>F10</kbd> | Bild bearbeiten (ein Bild ausgewählt) |
 

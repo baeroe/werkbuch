@@ -51,7 +51,7 @@ import type { RichText } from '@/types';
 import './editor.css';
 import { EditorEnvContext, type EditorEnv, type EditorEnvRef } from './EditorEnv';
 import { mentionExtension } from './mentions';
-import { AttachmentFile, AttachmentImage, ImageAltKey } from './nodes';
+import { AttachmentFile, AttachmentImage, OpenSelectedKey } from './nodes';
 import { PRESET_LABEL, PRESET_PLACEHOLDER, PRESET_PLACEHOLDER_PLAIN, PRESETS, type EditorPreset } from './presets';
 import { referenceExtension } from './references';
 import { slashMenu } from './slashMenu';
@@ -238,7 +238,7 @@ function buildExtensions(preset: EditorPreset, env: EditorEnvRef, placeholder: (
     AttachmentFile,
     mentionExtension(env),
     referenceExtension(env),
-    ...(placeholder === null ? [] : [slashMenu(preset, env), ImageAltKey, ...uploadExtensions(env), Placeholder.configure({ placeholder })]),
+    ...(placeholder === null ? [] : [slashMenu(preset, env), OpenSelectedKey, ...uploadExtensions(env), Placeholder.configure({ placeholder })]),
   ];
 }
 

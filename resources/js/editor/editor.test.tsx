@@ -1,15 +1,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { router } from '@inertiajs/react';
+import { NodeSelection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { Component, createRef, useState, type ReactNode } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import schemaPhp from '/app/RichText/Schema.php?raw';
 import { Dialog } from '@/components/ui/Dialog';
 import { qk } from '@/hooks/keys';
 import { textDoc } from '@/lib/richtext';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
-import { ida, list, makePage, mara, pageSummary, person, project, searchResults, types, web47 } from '@/test/fixtures';
+import { ida, list, makeAttachment, makePage, mara, pageSummary, person, project, searchResults, types, web47 } from '@/test/fixtures';
+import { useUiStore } from '@/store/ui';
 import type { RichText, User } from '@/types';
 import { PRESETS, type EditorPreset } from './presets';
 import { EMPTY_DOC, isEmptyDoc, LateBoundary, LateChunkError, preloadEditor, RichTextEditor, TABLE_CELL_MIN_PX } from './RichTextEditor';
@@ -815,10 +818,11 @@ describe('the menus of the editor', () => {
     await user.keyboard('{Enter}');
     // only the id and the kind: no key, no title in the stored text
     await waitFor(() => expect(nodesOf(lastDoc(onChange), 'reference').map((node) => node.attrs)).toEqual([{ id: 'wi_web_47', label: null, mentionSuggestionChar: '#', kind: 'item' }]));
-    // the chosen item shows at once, without asking the server; while editing it is no link
+    // the chosen item shows at once, without asking the server; while editing a link too, but no tab stop (WEBU-38)
     await waitFor(() => expect(editor.querySelector('.rt-ref')?.textContent).toBe('WEB-47 Kontaktformular sendet doppelt'));
     expect(editor.querySelector('.rt-ref svg')).not.toBeNull();
-    expect(editor.querySelector('a.rt-ref')).toBeNull();
+    expect(editor.querySelector('a.rt-ref')?.getAttribute('href')).toBe('/items/WEB-47');
+    expect(editor.querySelector('a.rt-ref')?.getAttribute('tabindex')).toBe('-1');
     expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/references'))).toEqual([]);
   });
 
@@ -848,9 +852,9 @@ describe('the menus of the editor', () => {
     await user.keyboard('{ArrowDown}{Enter}');
     // only the id and the kind: no title in the stored text (A229)
     await waitFor(() => expect(nodesOf(lastDoc(onChange), 'reference').map((node) => node.attrs)).toEqual([{ id: 'pg_web_structure', label: null, mentionSuggestionChar: '#', kind: 'page' }]));
-    // the chosen page shows its emoji and title at once, without asking the server; while editing it is no link
+    // the chosen page shows its emoji and title at once, without asking the server; a link while editing (WEBU-38)
     await waitFor(() => expect(editor.querySelector('.rt-ref')?.textContent).toBe('🧭Seitenstruktur'));
-    expect(editor.querySelector('a.rt-ref')).toBeNull();
+    await waitFor(() => expect(editor.querySelector('a.rt-ref')?.getAttribute('href')).toBe('/projects/WEB/wiki/pg_web_structure'));
     expect(api!.calls.filter((call) => call.url.startsWith('/api/v1/references'))).toEqual([]);
   });
 
@@ -1013,22 +1017,193 @@ describe('the menus of the editor', () => {
     await waitFor(() => expect(document.querySelector('.rt-ref')?.textContent).toBe('Verweis'));
   });
 
-  it('turns a reference into a link as soon as the editor becomes read-only (F22)', async () => {
+  it('makes the link of a reference a tab stop as soon as the editor becomes read-only (F22)', async () => {
     const value = paragraph(reference('wi_web_47'));
     const routes = {
       'GET /api/v1/references': () => ({ body: { data: { items: [web47] } } }),
       'GET /api/v1/work-item-types': () => ({ body: list(types) }),
     };
     const { rerender, client } = renderWithData(<RichTextEditor value={value} onChange={vi.fn()} preset="comment" projectId="p_web" />, routes);
-    await waitFor(() => expect(document.querySelector('span.rt-ref')?.textContent).toBe('WEB-47 Kontaktformular sendet doppelt'));
-    expect(screen.queryByRole('link')).toBeNull();
+    // while editing the arrows reach it, not Tab (WEBU-38)
+    const editing = await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' });
+    expect(editing.getAttribute('tabindex')).toBe('-1');
 
     rerender(
       <QueryClientProvider client={client}>
         <RichTextEditor value={value} onChange={vi.fn()} preset="comment" projectId="p_web" readOnly />
       </QueryClientProvider>,
     );
-    expect((await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' })).getAttribute('href')).toBe('/items/WEB-47');
+    await waitFor(() => expect(screen.getByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' }).hasAttribute('tabindex')).toBe(false));
+    expect(screen.getByRole('link').getAttribute('href')).toBe('/items/WEB-47');
+  });
+
+  describe('opening references (WEBU-38)', () => {
+    /** Selects the node at `pos` and focuses the editor at once (Tiptap's focus command waits a frame). */
+    const select = (tiptap: Editor, pos: number) =>
+      act(() => {
+        tiptap.commands.setNodeSelection(pos);
+        tiptap.view.focus();
+      });
+    const itemRoutes = {
+      'GET /api/v1/references': () => ({ body: { data: { items: [web47], pages: [structure] } } }),
+      'GET /api/v1/work-item-types': () => ({ body: list(types) }),
+      'GET /api/v1/projects': () => ({ body: list([project('WEB', 'member')]) }),
+    };
+    let visit: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      visit = vi.spyOn(router, 'visit').mockImplementation(() => {});
+      useUiStore.getState().openPeek(null);
+    });
+    afterEach(() => {
+      visit.mockRestore();
+      useUiStore.getState().openPeek(null);
+    });
+
+    it('opens an item in the preview on a plain click, in an editor and while reading', async () => {
+      const value = paragraph({ type: 'text', text: 'Siehe ' }, reference('wi_web_47'));
+      const { rerender, client } = renderWithData(<RichTextEditor value={value} onChange={vi.fn()} preset="page" projectId="p_web" />, itemRoutes);
+      const link = await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' });
+      fireEvent.click(link);
+      expect(useUiStore.getState().peekItemId).toBe('wi_web_47');
+      expect(visit).not.toHaveBeenCalled();
+
+      // a modifier or another button is the browser's: a new tab, no preview
+      useUiStore.getState().openPeek(null);
+      for (const init of [{ metaKey: true }, { ctrlKey: true }, { shiftKey: true }, { button: 1 }]) {
+        expect(fireEvent.click(link, init)).toBe(true);
+      }
+      expect(useUiStore.getState().peekItemId).toBeNull();
+
+      rerender(
+        <QueryClientProvider client={client}>
+          <RichTextView value={value} preset="page" />
+        </QueryClientProvider>,
+      );
+      fireEvent.click(await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' }));
+      expect(useUiStore.getState().peekItemId).toBe('wi_web_47');
+      client.clear();
+    });
+
+    it('goes to the page of an item from a modal dialog, where a preview would open behind it', async () => {
+      const { client } = renderWithData(
+        <div role="dialog">
+          <RichTextView value={paragraph(reference('wi_web_47'))} preset="page" />
+        </div>,
+        itemRoutes,
+      );
+      const link = await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' });
+      fireEvent.click(link);
+      expect(useUiStore.getState().peekItemId).toBeNull();
+      expect(visit.mock.calls[0][0]).toBe('/items/WEB-47');
+      // while reading a link may be dragged
+      expect(link.hasAttribute('draggable')).toBe(false);
+      client.clear();
+    });
+
+    it('only selects a reference on a plain click in an editor of a dialog, which stays open over visits', async () => {
+      const { client } = renderWithData(
+        <div role="dialog">
+          <RichTextEditor value={paragraph(reference('wi_web_47'), { type: 'text', text: ' und ' }, reference('pg_web_structure', 'page'))} onChange={vi.fn()} preset="description" projectId="p_web" />
+        </div>,
+        itemRoutes,
+      );
+      const item = await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' });
+      const page = await screen.findByRole('link', { name: 'Seitenstruktur, Wiki WEB' });
+      // no preview, no page loaded behind the dialog: the click is prevented, so Inertia leaves it alone
+      expect(fireEvent.click(item)).toBe(false);
+      expect(fireEvent.click(page)).toBe(false);
+      expect(useUiStore.getState().peekItemId).toBeNull();
+      expect(visit).not.toHaveBeenCalled();
+      // a modifier or the middle button is still the browser's: a new tab
+      expect(fireEvent.click(item, { metaKey: true })).toBe(true);
+      expect(fireEvent.click(page, { button: 1 })).toBe(true);
+      expect(visit).not.toHaveBeenCalled();
+      // never dragged into the text, the link nor what is in it
+      expect(item.getAttribute('draggable')).toBe('false');
+      expect(item.firstElementChild?.getAttribute('draggable')).toBe('false');
+      client.clear();
+    });
+
+    it('sets draggable again after ProseMirror took it off the link', async () => {
+      const { client } = renderWithData(<RichTextEditor value={paragraph(reference('wi_web_47'))} onChange={vi.fn()} preset="page" projectId="p_web" />, itemRoutes);
+      const link = await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' });
+      link.removeAttribute('draggable');
+      // the next render of the reference (here: a new title) sets it again
+      act(() => void client.setQueryData(qk.references.item('wi_web_47'), { ...web47, title: 'Formular sendet doppelt' }));
+      await waitFor(() => expect(screen.getByRole('link', { name: 'WEB-47 Formular sendet doppelt' })).toBe(link));
+      expect(link.getAttribute('draggable')).toBe('false');
+      client.clear();
+    });
+
+    it('opens a page as the page on a plain click in an editor', async () => {
+      const { client } = renderWithData(<RichTextEditor value={paragraph(reference('pg_web_structure', 'page'))} onChange={vi.fn()} preset="page" projectId="p_web" />, itemRoutes);
+      const link = await screen.findByRole('link', { name: 'Seitenstruktur, Wiki WEB' });
+      expect(link.getAttribute('tabindex')).toBe('-1');
+      fireEvent.click(link);
+      expect(visit.mock.calls[0][0]).toBe('/projects/WEB/wiki/pg_web_structure');
+      expect(useUiStore.getState().peekItemId).toBeNull();
+      client.clear();
+    });
+
+    it('opens a selected reference with Enter and never splits the line there; Enter in text still does', async () => {
+      const user = userEvent.setup();
+      const editorRef = createRef<Editor | null>();
+      const onChange = vi.fn();
+      const value = paragraph({ type: 'text', text: 'ab' }, reference('wi_web_47'), { type: 'text', text: 'cd' });
+      const { client } = renderWithData(<RichTextEditor value={value} onChange={onChange} preset="page" projectId="p_web" editorRef={editorRef} />, itemRoutes);
+      await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' });
+      const tiptap = editorRef.current!;
+      // the reference can be selected (the arrows select it in a browser, e2e/tests/editor.spec.ts)
+      expect(NodeSelection.isSelectable(tiptap.state.doc.nodeAt(3)!)).toBe(true);
+      select(tiptap, 3);
+      expect(document.querySelector('.ProseMirror-selectednode .rt-ref')).not.toBeNull();
+
+      await user.keyboard('{Enter}');
+      expect(useUiStore.getState().peekItemId).toBe('wi_web_47');
+      // still one line with the reference in it
+      expect(tiptap.getJSON()).toEqual(value);
+      expect(onChange).not.toHaveBeenCalled();
+
+      // with the cursor in text Enter splits the line as ever (a selected reference without a link: the next test)
+      act(() => {
+        tiptap.commands.setTextSelection(2);
+        tiptap.view.focus();
+      });
+      await user.keyboard('{Enter}');
+      expect(tiptap.getJSON().content).toHaveLength(2);
+      client.clear();
+    });
+
+    it('leaves a hidden reference as it is on Enter', async () => {
+      const editorRef = createRef<Editor | null>();
+      const value = paragraph(reference('wi_hidden'));
+      renderWithData(<RichTextEditor value={value} onChange={vi.fn()} preset="page" projectId="p_web" editorRef={editorRef} />, {
+        'GET /api/v1/references': () => ({ body: { data: { items: [], pages: [] } } }),
+      });
+      await waitFor(() => expect(document.querySelector('.rt-ref-hidden')).not.toBeNull());
+      const tiptap = editorRef.current!;
+      select(tiptap, 1);
+      await userEvent.setup().keyboard('{Enter}');
+      expect(tiptap.getJSON()).toEqual(value);
+      expect(useUiStore.getState().peekItemId).toBeNull();
+    });
+
+    it('downloads a selected file with Enter', async () => {
+      const editorRef = createRef<Editor | null>();
+      const file = makeAttachment({ id: '01jattachmentfile0000000000', filename: 'angebot.pdf', kind: 'inline' });
+      const value = paragraph({ type: 'attachment', attrs: { attachmentId: file.id, filename: 'angebot.pdf' } });
+      renderWithData(<RichTextEditor value={value} onChange={vi.fn()} preset="page" projectId="p_web" editorRef={editorRef} />, {
+        [`GET /api/v1/attachments/${file.id}`]: () => ({ body: { data: file } }),
+      });
+      const link = await screen.findByRole('link', { name: /angebot\.pdf/ });
+      const clicked = vi.fn((event: Event) => event.preventDefault());
+      link.addEventListener('click', clicked);
+      const tiptap = editorRef.current!;
+      select(tiptap, 1);
+      await userEvent.setup().keyboard('{Enter}');
+      expect(clicked).toHaveBeenCalledTimes(1);
+      expect(tiptap.getJSON()).toEqual(value);
+    });
   });
 
   it('opens the / menu only at the start of a line or after a blank, never right after a mark or a mention (F22)', async () => {
