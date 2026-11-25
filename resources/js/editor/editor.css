@@ -294,6 +294,9 @@
   height: 0.75rem;
   align-self: center;
 }
+.rt a.rt-ref:hover {
+  text-decoration-color: currentColor;
+}
 .rt .rt-ref-hidden {
   color: var(--muted);
   text-decoration: none;
@@ -317,13 +320,18 @@
   vertical-align: -0.0625rem;
 }
 /* a node view sits in Tiptap's own element, which takes the class of the selected node (a selected file chip, WEBU-14,
-   and a selected image, WEBU-15, showed no frame); mentions and references are `selectable: false` and never take it.
-   Only in an editable text: ProseMirror selects a clicked node while reading too, and the frame would stay after the
-   click */
+   and a selected image, WEBU-15, showed no frame; a reference the arrows selected, WEBU-38); mentions are
+   `selectable: false` and never take it. Only in an editable text: ProseMirror selects a clicked node while reading
+   too, and the frame would stay after the click */
 .rt .ProseMirror[contenteditable='true'] .ProseMirror-selectednode > .rt-file,
+.rt .ProseMirror[contenteditable='true'] .ProseMirror-selectednode > .rt-ref-wrap > .rt-ref,
 .rt .ProseMirror[contenteditable='true'] .ProseMirror-selectednode > .rt-image :is(img, .rt-image-missing) {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
+}
+/* a reference stands close to the next word or mark: its frame takes nothing of them */
+.rt .ProseMirror[contenteditable='true'] .ProseMirror-selectednode > .rt-ref-wrap > .rt-ref {
+  outline-offset: 0;
 }
 
 /* images: only from attachments; a missing one keeps its place and says so */

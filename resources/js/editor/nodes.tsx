@@ -3,12 +3,12 @@
  * - `image`: a block with `attachmentId` and `alt`. It shows the attachment (`useAttachment`): its preview once the
  *   queue made one, else the file itself, as `<img loading="lazy">`. While it loads, and when it cannot be loaded (gone,
  *   not visible, the picture breaks), a box with the alternative text says so. A click while reading, and Enter on the
- *   selected image in an editor, open the large view of the text's pictures (`imageViewer.ts`, WEBU-7); while reading
+ *   selected image in an editor (`OpenSelectedKey`), open the large view of the text's pictures (`imageViewer.ts`, WEBU-7); while reading
  *   the picture stays a link to the original, so a click with a modifier or the middle button opens it in a new tab.
  *   In an editor a double click, or „Alt-Text bearbeiten …“ of the image menu (imageMenu.tsx), edits the alternative
  *   text (Enter saves, Escape cancels, leaving the field keeps it; empty is none).
  * - `attachment`: a file in the text with `attachmentId` and `filename`: a chip with its name and size, a link that
- *   downloads it (`?download=1`).
+ *   downloads it (`?download=1`), in an editor too; Enter on the selected chip downloads it (`OpenSelectedKey`).
  *
  * External images (`<img src>` from pasted HTML) are not taken over: only an `<img data-attachment-id>` becomes an
  * image (A236). Uploading is uploads.ts.
@@ -171,19 +171,27 @@ export const AttachmentImage = Image.extend({
 }).configure({ inline: false, allowBase64: false });
 
 /**
- * Enter on a selected image opens the large view of the text's pictures (WEBU-7); the focus comes back to the editor,
- * the image still selected. An extension of its own, before the keymaps that would split the line: given to the image
- * node, a higher priority would move images before paragraphs in the schema.
+ * Enter on a selected node opens it: an image in the large view of the text's pictures (WEBU-7; the focus comes back to
+ * the editor, the image still selected), a reference (an item in the preview, a page as the page) and a file (it
+ * downloads) by the click of their own link (WEBU-38). A reference without a link (hidden, loading) stays as it is:
+ * Enter never replaces a selected node with a new line. An extension of its own, before the keymaps that would split
+ * the line: given to the image node, a higher priority would move images before paragraphs in the schema.
  */
-export const ImageAltKey = Extension.create({
-  name: 'imageAltKey',
+export const OpenSelectedKey = Extension.create({
+  name: 'openSelectedKey',
   priority: 150,
   addKeyboardShortcuts() {
     return {
       Enter: ({ editor }) => {
         const { selection } = editor.state;
-        if (!(selection instanceof NodeSelection) || selection.node.type.name !== 'image') return false;
-        viewImageAt(editor.state.doc, selection.from, editor.view.dom);
+        if (!(selection instanceof NodeSelection)) return false;
+        const { name } = selection.node.type;
+        if (name === 'image') {
+          viewImageAt(editor.state.doc, selection.from, editor.view.dom);
+          return true;
+        }
+        if (name !== 'reference' && name !== 'attachment') return false;
+        (editor.view.nodeDOM(selection.from) as HTMLElement | null)?.querySelector<HTMLElement>('a[href]')?.click();
         return true;
       },
     };

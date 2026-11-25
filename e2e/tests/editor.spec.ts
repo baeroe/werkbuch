@@ -175,9 +175,9 @@ test('refers to a wiki page with # in a description', async ({ page }) => {
     await expect(menu.getByRole('group', { name: tr('en', 'editor.reference.items') })).toHaveCount(0);
     await page.keyboard.press('Enter');
 
-    // while editing: the title the page has now, no link
+    // while editing: the title the page has now, a link that is no tab stop (the arrows select it, WEBU-38)
     await expect(section.locator('.rt-ref')).toHaveText(`E2E Leuchtfeuer ${searchToken()}`);
-    await expect(section.locator('a.rt-ref')).toHaveCount(0);
+    await expect(section.locator('a.rt-ref')).toHaveAttribute('tabindex', '-1');
     // the stored text names the page by its id; its Markdown carries the title the page has now
     await expect.poll(() => storedDescription(page, item.id)).toMatch(new RegExp(`^Mehr dazu in \\[E2E Leuchtfeuer ${searchToken()}\\]\\(page:${target.id}\\)\\s*$`));
 
@@ -193,6 +193,96 @@ test('refers to a wiki page with # in a description', async ({ page }) => {
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/wiki/${target.id}$`));
     await expect(page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') })).toHaveValue(`E2E Leuchtfeuer ${searchToken()}`);
+  } finally {
+    await page.goto('/my-items');
+    await removeE2eProject(page, identifier);
+  }
+});
+
+/** A paragraph of Tiptap JSON: a reference (`kind` item or page) and a text after it. */
+const referring = (id: string, kind: 'item' | 'page', after: string) => ({
+  type: 'paragraph',
+  content: [
+    { type: 'reference', attrs: { id, label: null, mentionSuggestionChar: '#', kind } },
+    { type: 'text', text: after },
+  ],
+});
+
+test('opens a reference of a wiki page from its editor with the arrows and Enter (WEBU-38)', async ({ page }) => {
+  const { id, identifier } = await createE2eProject(page, name('open refs'), { types: ['Task'] });
+  try {
+    const target = await createItem(page, { project_id: id, title: 'E2E Funkmast prüfen' });
+    const plan = await createE2ePage(page, id, { title: 'E2E Bauplan' });
+    const notes = await createE2ePage(page, id, {
+      title: 'E2E Notizen',
+      content_json: { type: 'doc', content: [referring(target.id, 'item', ' is open'), referring(plan.id, 'page', ' to read')] },
+    });
+    const preview = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+
+    /** Opens the notes and puts the cursor at the start of their text: from the title, Enter goes on into it. */
+    const startOfText = async () => {
+      await page.goto(`/projects/${identifier}/wiki/${notes.id}`);
+      const title = page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') });
+      await expect(title).toHaveValue('E2E Notizen');
+      await expect(page.locator('.ProseMirror a.rt-ref')).toHaveCount(2);
+      await tabTo(page, title, { max: 120 });
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('textbox', { name: tr('en', 'editor.label.page') })).toBeFocused();
+    };
+
+    // the arrow selects the reference at the start (framed), Enter opens the item in the preview; the text stays
+    await startOfText();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator('.ProseMirror-selectednode a.rt-ref')).toContainText(target.key);
+    await page.keyboard.press('Enter');
+    await expect(preview.getByRole('heading', { name: 'E2E Funkmast prüfen' })).toBeVisible();
+    await expect(page.locator('.ProseMirror p')).toHaveCount(2);
+
+    // a page opens as the page
+    await startOfText();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator('.ProseMirror-selectednode a.rt-ref')).toHaveText('E2E Bauplan');
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/wiki/${plan.id}$`));
+    await expect(page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') })).toHaveValue('E2E Bauplan');
+  } finally {
+    await page.goto('/my-items');
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('opens a reference in a description with a click, in a new tab with a modifier (WEBU-38)', async ({ page, context }) => {
+  const { id, identifier } = await createE2eProject(page, name('click refs'), { types: ['Task'] });
+  try {
+    const target = await createItem(page, { project_id: id, title: 'E2E Leitung verlegen' });
+    const item = await createItem(page, {
+      project_id: id,
+      title: 'E2E Verweise klicken',
+      description_json: { type: 'doc', content: [referring(target.id, 'item', ' first')] },
+    });
+    await page.goto(`/items/${item.key}`);
+    const section = page.getByRole('region', { name: tr('en', 'items.detail.description.title') });
+    await expect(section.getByRole('textbox', { name: tr('en', 'editor.label.description') })).toBeVisible();
+    const link = section.getByRole('link', { name: new RegExp(target.key) });
+
+    // a plain click opens the item in the preview, the page stays
+    await link.click();
+    const preview = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+    await expect(preview.getByRole('heading', { name: 'E2E Leitung verlegen' })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/items/${item.key}$`));
+    await preview.getByRole('button', { name: tr('en', 'items.peek.close') }).click();
+    await expect(preview).toHaveCount(0);
+
+    // with a modifier the browser opens the page of the item in a new tab, no preview here
+    const opened = context.waitForEvent('page');
+    await link.click({ modifiers: ['ControlOrMeta'] });
+    const tab = await opened;
+    await expect(tab).toHaveURL(new RegExp(`/items/${target.key}$`));
+    await tab.close();
+    await expect(preview).toHaveCount(0);
+    // the description is as it was
+    await expect.poll(() => storedDescription(page, item.id)).toBe(`${target.key} first`);
   } finally {
     await page.goto('/my-items');
     await removeE2eProject(page, identifier);

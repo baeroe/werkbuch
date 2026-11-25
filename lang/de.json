@@ -3776,6 +3776,7 @@
     "shortcuts.widget.editor.list_move": "Eintrag der Liste wählen",
     "shortcuts.widget.editor.list_take": "Eintrag übernehmen",
     "shortcuts.widget.editor.mention": "Person oder Bot erwähnen (mit Projekt)",
+    "shortcuts.widget.editor.open": "Ausgewählten Verweis öffnen (ein Item in der Vorschau) bzw. ausgewählte Datei herunterladen",
     "shortcuts.widget.editor.reference": "Auf ein Item oder eine Seite verweisen (mit Projekt)",
     "shortcuts.widget.editor.slash": "Block einfügen (am Zeilenanfang oder nach einem Leerzeichen)",
     "shortcuts.widget.editor.submit": "Speichern bzw. absenden",

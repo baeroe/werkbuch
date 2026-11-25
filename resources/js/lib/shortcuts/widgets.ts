@@ -83,6 +83,7 @@ export const WIDGET_KEYS: WidgetGroup[] = [
       { keys: 'tab', label: 'shortcuts.widget.editor.list_take' },
       { keys: 'escape', label: 'shortcuts.widget.editor.list_close' },
       { keys: 'enter', label: 'shortcuts.widget.editor.image_view' },
+      { keys: 'enter', label: 'shortcuts.widget.editor.open' },
       { keys: 'alt+F10', label: 'shortcuts.widget.editor.table_menu' },
       { keys: 'alt+F10', label: 'shortcuts.widget.editor.image_menu' },
     ],
