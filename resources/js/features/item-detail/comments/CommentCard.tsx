@@ -4,8 +4,9 @@
  * - Its actions: "Bearbeiten" only for its author, "Löschen" for its author and project admins (`item.delete` stands in
  *   for the project role admin, A241). An archived item or project takes neither (A240), and no reaction either.
  * - Editing happens in place (`CommentEditor`); an edit waiting as a draft opens the editor again.
- * - Deleting waits for its undo toast (5 s, mod+z): the card goes at once, the focus moves on to the next card (else to
- *   the composer), the `DELETE` follows; a failure brings the card back and offers to try again. The cards hidden that
+ * - Deleting waits for its undo toast (5 s, mod+z): the card goes at once, the focus moves on to the next card below
+ *   (the older one: the activity stands newest first), else to the one above, else to the composer on top, the
+ *   `DELETE` follows; a failure brings the card back and offers to try again. The cards hidden that
  *   way are the module's (`useHiddenComments`), so a view opened again meanwhile leaves them out too.
  */
 
@@ -85,11 +86,17 @@ export function CommentCard({ comment, item, runIds }: { comment: Comment; item:
   function deleteIt() {
     const list = card.current?.closest('ol');
     const cards = Array.from(list?.querySelectorAll<HTMLElement>('[data-comment-card]') ?? []);
-    const next = cards[cards.indexOf(card.current!) + 1];
+    const index = cards.indexOf(card.current!);
+    // newest first: the next card below is the older one, else the one above
+    const neighbours = [cards[index + 1], cards[index - 1]];
     const section = card.current?.closest('section');
     setHidden(comment.id, true);
-    // the card and its menu go: the focus moves on to the next card, else to the composer
-    focusWhenLost(() => (next?.isConnected ? next : section?.querySelector<HTMLElement>('[aria-keyshortcuts="M"], [data-comment-composer] [contenteditable="true"]')));
+    // the card and its menu go: the focus moves on to a neighbour, else to the composer
+    focusWhenLost(
+      () =>
+        neighbours.find((neighbour) => neighbour?.isConnected) ??
+        section?.querySelector<HTMLElement>('[aria-keyshortcuts="M"], [data-comment-composer] [contenteditable="true"]'),
+    );
     const back = () => setHidden(comment.id, false);
     runWithUndo({
       label: t('items.comments.deleted'),

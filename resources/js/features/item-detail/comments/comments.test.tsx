@@ -817,11 +817,17 @@ describe('CommentCard', () => {
     const timeline = await screen.findByRole('list', { name: 'Verlauf' });
     await waitFor(() => expect(within(timeline).getAllByRole('article')).toHaveLength(2));
 
-    // the card goes at once; the focus moves on to the next one
-    await userEvent.setup().click(within(timeline).getAllByRole('button', { name: 'Aktionen für den Kommentar von Lene Vogt' })[0]!);
+    const actions = () => within(timeline).getAllByRole('button', { name: 'Aktionen für den Kommentar von Lene Vogt' });
+    const text = (article: HTMLElement) => article.querySelector('.rt')?.textContent;
+    // newest first: the second stands on top
+    expect(within(timeline).getAllByRole('article').map(text)).toEqual(['Zweitens.', 'Erstens.']);
+
+    // the card goes at once; the focus moves on to the next one below
+    await userEvent.setup().click(actions()[0]!);
     await choose('Löschen');
     await waitFor(() => expect(within(timeline).getAllByRole('article')).toHaveLength(1));
     const next = within(timeline).getByRole('article');
+    expect(text(next)).toBe('Erstens.');
     await waitFor(() => expect(document.activeElement).toBe(next));
     const undo = currentToasts().at(-1)!;
     expect(undo).toMatchObject({ title: 'Kommentar gelöscht', action: { label: 'Rückgängig' } });
@@ -830,13 +836,26 @@ describe('CommentCard', () => {
     await waitFor(() => expect(within(timeline).getAllByRole('article')).toHaveLength(2));
     expect(api!.calls.filter((call) => call.method === 'DELETE')).toEqual([]);
 
-    // the last card: the focus goes to the composer
-    await userEvent.setup().click(within(timeline).getAllByRole('button', { name: 'Aktionen für den Kommentar von Lene Vogt' })[1]!);
+    // the card at the bottom: the focus moves to the one above; the time runs out and it goes for good
+    await userEvent.setup().click(actions()[1]!);
+    await choose('Löschen');
+    const above = await waitFor(() => {
+      const [only] = within(timeline).getAllByRole('article');
+      expect(within(timeline).getAllByRole('article')).toHaveLength(1);
+      return only!;
+    });
+    expect(text(above)).toBe('Zweitens.');
+    await waitFor(() => expect(document.activeElement).toBe(above));
+    act(() => dismissToast(currentToasts().find((toast) => toast.title === 'Kommentar gelöscht')!.id));
+    await waitFor(() => expect(api!.calls.filter((call) => call.method === 'DELETE')).toHaveLength(1));
+
+    // the last card: the focus goes to the composer on top
+    await userEvent.setup().click(actions()[0]!);
     await choose('Löschen');
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: /Kommentar schreiben/ })));
-    // the time runs out: the server refuses, the card comes back with the reason and a retry
+    // the time runs out: the server refuses, the card comes back with the reason and a retry (the list was gone meanwhile)
     act(() => dismissToast(currentToasts().find((toast) => toast.title === 'Kommentar gelöscht')!.id));
-    await waitFor(() => expect(within(timeline).getAllByRole('article')).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(1));
     const failed = await waitFor(() => {
       const toast = currentToasts().find((entry) => entry.tone === 'error');
       expect(toast).toMatchObject({ title: 'Kommentar nicht gelöscht', action: { label: 'Erneut versuchen' } });
@@ -844,8 +863,8 @@ describe('CommentCard', () => {
     });
     down = false;
     act(() => runToastAction(failed.id));
-    await waitFor(() => expect(within(timeline).getAllByRole('article')).toHaveLength(1));
-    expect(api!.calls.filter((call) => call.method === 'DELETE').map((call) => call.url)).toEqual(['/api/v1/comments/c_second', '/api/v1/comments/c_second']);
+    await waitFor(() => expect(screen.queryAllByRole('article')).toHaveLength(0));
+    expect(api!.calls.filter((call) => call.method === 'DELETE').map((call) => call.url)).toEqual(['/api/v1/comments/c_first', '/api/v1/comments/c_second', '/api/v1/comments/c_second']);
   });
 
   it('hides the earlier version of a comment while its deletion waits, and takes a 404 as deleted (F26)', async () => {

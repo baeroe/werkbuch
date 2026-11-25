@@ -1,5 +1,6 @@
 /*
- * The lines of an item's activity (spec 4.10): comments and the history in one order, oldest first, with the changes of
+ * The lines of an item's activity (spec 4.10): comments and the history in one order, oldest first (the activity shows them
+ * turned around, newest first, WEBU-37), with the changes of
  * one account read as one line while they follow each other within a few minutes ("Ida Brenner hat die Priorität …
  * geändert und das Due-Date … verschoben."). A bulk edit writes up to three events for one item at once (fields,
  * assignee, move): they read as one line too. Every comment is a line of its own.

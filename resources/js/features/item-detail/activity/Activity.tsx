@@ -1,16 +1,23 @@
 /*
- * The activity of an item (spec 4.10): its comments and its history in one timeline, oldest first, filtered to
- * everything ("Alles"), the comments ("Kommentare") or the changes ("Änderungen"); the comment composer stands at its
- * end. The runs of agents (WEBU-28, spec 10.6) stand between them at the time they were queued (`RunLine`), and the
- * filter "Aufträge" shows only them; it is offered only where there are runs. A run that is asked for (the chip under
- * the title) brings a filter that hides runs back to "Alles".
+ * The activity of an item (spec 4.10): its comments and its history in one timeline, newest first (WEBU-37, A690),
+ * filtered to everything ("Alles"), the comments ("Kommentare") or the changes ("Änderungen"); the comment composer
+ * stands on top, right under the heading, so writing and the newest entry are where the section begins. The runs of
+ * agents (WEBU-28, spec 10.6) stand between them at the time they were queued (`RunLine`), and the filter "Aufträge"
+ * shows only them; it is offered only where there are runs. A run that is asked for (the chip under the title) brings
+ * a filter that hides runs back to "Alles".
  * - The whole history and every comment load (every page, `useActivity`): the server pages from the oldest entry on,
  *   and the newest must never be missing. The timeline shows the newest `SHOWN_LINES` lines (a comment is a line);
- *   "Mehr laden" above them shows the earlier ones, `SHOWN_LINES` at a time.
+ *   "Mehr laden" under them shows the earlier ones, `SHOWN_LINES` at a time, and the focus moves to the first of them
+ *   (a card itself, a change its line).
+ * - A line that comes in on top (a comment sent here, a change of someone else, live) shows where it lands while the
+ *   start of the list is in sight; further down, the view keeps the line being read in place (`useReadingPlace`, in
+ *   every browser). Lines of the same filter that come in on top widen the window by as many, so
+ *   the line at the bottom never drops out while it is read.
  * - A comment is a card (`CommentCard`) with its actions and reactions; one deleted while its undo toast stands is left
  *   out (`useHiddenComments`).
  * - Changes by the same account, made the same way for the same reason within five minutes, read as one line
- *   (`buildTimeline`); every field change reads as old → new (`phrasesOf`), a reason stands under its line.
+ *   (`buildTimeline`, which reads oldest first and is turned around to show); every field change reads as old → new
+ *   (`phrasesOf`), a reason stands under its line.
  * - On the page the filter is part of the address (`?activity=changes`), so it can be linked; the preview keeps it.
  * - The lines wait for the catalogs they take their names from (people, labels, resolutions, types, properties); a
  *   catalog that fails to load leaves its names as gone ("ein gelöschtes Label").
@@ -19,7 +26,7 @@
 
 import { router, usePage } from '@inertiajs/react';
 import { RotateCw } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useUserMap } from '@/components/fields/itemData';
 import { Button } from '@/components/ui/Button';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
@@ -35,11 +42,11 @@ import { RunLine } from '../agents/RunLine';
 import { SHOW_RUNS_EVENT } from '../agents/runFocus';
 import { CommentCard, useHiddenComments } from '../comments/CommentCard';
 import { CommentComposer } from '../comments/CommentComposer';
-import { focusWhenLost } from '@/lib/focusOrigin';
 import { Section, useDetail } from '../shared';
 import { EventLine } from './EventLine';
 import type { PhraseContext } from './phrases';
 import { buildTimeline, type ActivityFilter, type TimelineEntry } from './timeline';
+import { useReadingPlace } from './useReadingPlace';
 
 /** Lines the timeline shows at first and adds with every "Mehr laden". */
 export const SHOWN_LINES = 50;
@@ -69,7 +76,7 @@ function useFilter(): [ActivityFilter, (next: ActivityFilter) => void] {
 /** A line of the timeline, or a run of an agent placed at the time it was queued. */
 type Line = TimelineEntry | { kind: 'run'; key: string; at: string; run: AgentRun };
 
-/** Puts the runs between the lines by time; "Kommentare" and "Änderungen" leave them out, "Aufträge" shows only them. */
+/** Puts the runs between the lines by time, oldest first (the activity turns them around to show); "Kommentare" and "Änderungen" leave them out, "Aufträge" shows only them. */
 export function withRuns(lines: readonly TimelineEntry[], runs: readonly AgentRun[], filter: ActivityFilter): Line[] {
   const runLines: Line[] = filter === 'all' || filter === 'runs' ? runs.map((run) => ({ kind: 'run', key: run.id, at: run.created_at ?? '', run })) : [];
   if (filter === 'runs') return runLines;
@@ -107,6 +114,8 @@ export function Activity({ detail, runs = [] }: { detail: WorkItemDetail; runs?:
     return () => window.removeEventListener(SHOW_RUNS_EVENT, show);
   }, [hidesRuns]);
   const [shown, setShown] = useState(SHOWN_LINES);
+  /** The lines shown at the last render, per filter: lines that come in on top widen the window, the last stays in. */
+  const [counted, setCounted] = useState<{ filter: ActivityFilter; count: number } | null>(null);
   const list = useRef<HTMLOListElement>(null);
 
   const ctx: PhraseContext = {
@@ -123,12 +132,33 @@ export function Activity({ detail, runs = [] }: { detail: WorkItemDetail; runs?:
   const lines = withRuns(buildTimeline(entries, filter === 'runs' ? 'all' : filter), runs, filter);
   // a comment links its run only when the run is one of the item's (its line is there to jump to)
   const runIds = new Set(runs.map((run) => run.id));
+  const ready = activity.data !== undefined && named;
+  if (ready && (counted?.filter !== filter || counted.count !== lines.length)) {
+    // new lines of the same filter (live, a comment sent) come in on top: the line at the bottom stays where it is read
+    if (counted?.filter === filter && lines.length > counted.count) setShown((count) => count + lines.length - counted.count);
+    setCounted({ filter, count: lines.length });
+  }
   const earlier = Math.max(0, lines.length - shown);
+  // newest first: the newest `shown` lines, turned around
+  const newestFirst = lines.slice(earlier).reverse();
+  /** The first line "Mehr laden" brings, to take the focus once it is drawn. */
+  const reveal = useRef<number | null>(null);
   const showMore = () => {
+    reveal.current = newestFirst.length;
     setShown((count) => count + SHOWN_LINES);
-    // the button goes once nothing earlier is left: the focus moves on to the timeline
-    focusWhenLost(() => list.current);
   };
+  useLayoutEffect(() => {
+    const index = reveal.current;
+    if (index === null) return;
+    reveal.current = null;
+    // the earlier lines come under the ones read so far: reading goes on with the first of them (the button may go),
+    // a card (comment, run) itself, a change its line
+    const line = list.current?.children.item(index) as HTMLElement | null | undefined;
+    const card = line?.querySelector<HTMLElement>(':scope > article') ?? line;
+    if (card && !card.hasAttribute('tabindex')) card.tabIndex = -1;
+    card?.focus();
+  });
+  useReadingPlace(list);
 
   return (
     <Section
@@ -143,6 +173,8 @@ export function Activity({ detail, runs = [] }: { detail: WorkItemDetail; runs?:
         />
       }
     >
+      {/* on top: writing and the newest entry are where the section begins (WEBU-37) */}
+      <CommentComposer item={item} />
       {activity.isError && !activity.data ? (
         <div role="alert" className="mt-3 flex flex-wrap items-center gap-2 rounded-ctl bg-danger-soft px-3 py-2 text-ui text-ink">
           <p className="min-w-0 flex-1 text-pretty">{t('items.activity.failed', { message: activity.error?.message ?? '' })}</p>
@@ -163,35 +195,32 @@ export function Activity({ detail, runs = [] }: { detail: WorkItemDetail; runs?:
         <p className="mt-2 text-ui text-muted">{t(`items.activity.empty.${filter}`)}</p>
       ) : (
         <>
-          {earlier > 0 && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={showMore}>
-                {t('items.activity.more')}
-              </Button>
-              <span className="text-sm text-muted">{tn('items.activity.earlier', earlier)}</span>
-            </div>
-          )}
           <ol
             ref={list}
             tabIndex={-1}
             aria-label={t('items.activity.list')}
             className="relative mt-3 flex flex-col gap-3 outline-none before:absolute before:top-3 before:bottom-3 before:left-2.5 before:border-l before:border-dashed before:border-line-strong"
           >
-            {lines
-              .slice(earlier)
-              .map((line) =>
-                line.kind === 'comment' ? (
-                  <CommentCard key={line.key} comment={line.comment} item={item} runIds={runIds} />
-                ) : line.kind === 'run' ? (
-                  <RunLine key={line.key} run={line.run} runs={runs} item={item} thread={detail.agent?.thread} />
-                ) : (
-                  <EventLine key={line.key} line={line} ctx={ctx} hidden={hidden} />
-                ),
-              )}
+            {newestFirst.map((line) =>
+              line.kind === 'comment' ? (
+                <CommentCard key={line.key} comment={line.comment} item={item} runIds={runIds} />
+              ) : line.kind === 'run' ? (
+                <RunLine key={line.key} run={line.run} runs={runs} item={item} thread={detail.agent?.thread} />
+              ) : (
+                <EventLine key={line.key} line={line} ctx={ctx} hidden={hidden} />
+              ),
+            )}
           </ol>
+          {earlier > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 pl-7.5">
+              <Button variant="ghost" size="sm" onClick={showMore}>
+                {t('items.activity.more')}
+              </Button>
+              <span className="text-sm text-muted">{tn('items.activity.earlier', earlier)}</span>
+            </div>
+          )}
         </>
       )}
-      <CommentComposer item={item} />
     </Section>
   );
 }

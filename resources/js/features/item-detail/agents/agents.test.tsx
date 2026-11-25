@@ -267,7 +267,8 @@ describe('a run in the activity', () => {
     expect(await within(task).findByText('3 frühere Zeilen gingen über die Grenze des Protokolls.')).toBeTruthy();
     expect((within(task).getByRole('log')).getAttribute('aria-live')).toBe('off');
 
-    const [approve, changes] = await screen.findAllByRole('article', { name: 'Auftrag „Review“ von Kira' });
+    // newest first: the later review stands above the earlier one
+    const [changes, approve] = await screen.findAllByRole('article', { name: 'Auftrag „Review“ von Kira' });
     expect(within(approve).getByText('Ohne Befunde')).toBeTruthy();
     expect(within(approve).getByText('Standard')).toBeTruthy();
     await userEvent.click(within(approve).getByRole('button', { name: 'Protokoll' }));
@@ -320,11 +321,11 @@ describe('a run in the activity', () => {
       makeRun({ status: 'queued', started_at: null, finished_at: null, runner_name: null }),
     ];
     renderItem();
-    const [first, second] = await screen.findAllByRole('article', { name: 'Auftrag „Umsetzen“ von Kira' });
+    // newest first: the waiting run on top, then the two canceled ones
+    const [waiting, second, first] = await screen.findAllByRole('article', { name: 'Auftrag „Umsetzen“ von Kira' });
     expect(within(first).getByText(/Abgebrochen von Mara Lindqvist um \d\d:\d\d\./)).toBeTruthy();
     expect(within(second).getByText('Abgebrochen von Ida Brenner.')).toBeTruthy();
-    const cards = screen.getAllByRole('article', { name: 'Auftrag „Umsetzen“ von Kira' });
-    await userEvent.click(within(cards[2]).getByRole('button', { name: 'Abbrechen' }));
+    await userEvent.click(within(waiting).getByRole('button', { name: 'Abbrechen' }));
     expect(await screen.findByText(/Der Auftrag kommt aus der Warteschlange/)).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'Weiterlaufen lassen' }));
   });
