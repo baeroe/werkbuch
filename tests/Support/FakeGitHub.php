@@ -139,6 +139,11 @@ final class FakeGitHub
         }
 
         $path = (string) parse_url($request->url(), PHP_URL_PATH);
+        // like GitHub (WEBU-34): a JSON array as the body of a write is 422, an empty one too
+        if ($request->method() !== 'GET' && str_starts_with(ltrim($request->body()), '[')) {
+            return Http::response(['message' => 'Invalid request.', 'errors' => ["For 'links/0/schema', [] is not a null or object."]], 422);
+        }
+
         foreach ($this->refuse as $pattern => $status) {
             if (Str::is($pattern, $path)) {
                 return Http::response(['message' => 'Refused by the fake', 'documentation_url' => 'https://docs.github.com/rest'], $status);
