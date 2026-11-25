@@ -410,10 +410,6 @@ export function reposByApp(github: GitHubStatus): Map<string, GitHubRepository[]
 }
 
 /**
- * Settings → GitHub. Disconnecting lives here and not in a panel of an app: the panel goes as soon as the status is
- * read anew, before the answer of the call comes back, and what the call says must still reach the person.
- */
-/**
  * A way back from GitHub that failed with a way on (A721: GitHub did not answer while creating the app): the sentence
  * and the list of the apps of the account stay on the page for this visit, beside the toast that goes after a while.
  */
@@ -439,6 +435,10 @@ function FailedConnect() {
   );
 }
 
+/**
+ * Settings → GitHub. Disconnecting lives here and not in a panel of an app: the panel goes as soon as the status is
+ * read anew, before the answer of the call comes back, and what the call says must still reach the person.
+ */
 export default function GitHub(_props: SectionProps) {
   const github = useGitHub();
   const connected = (github.data?.apps.length ?? 0) > 0;
