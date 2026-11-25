@@ -70,3 +70,12 @@ func TestHandler(t *testing.T) {
 		t.Fatalf("lost a number: %s", out)
 	}
 }
+
+// After a percent escape `\b` does not hold (`%3Aghs_…`): the token the runner holds is blanked by Hold (A730).
+func TestHeldTokenInAnEncodedURL(t *testing.T) {
+	Hold(jwt)
+	defer Release(jwt)
+	if got := String("https://x-access-token%3A" + jwt + "%40github.com"); got != "https://x-access-token%3A[token]%40github.com" {
+		t.Fatalf("%q", got)
+	}
+}
