@@ -29,7 +29,7 @@ export const FLASH_LINK_MS = 20_000;
 
 /**
  * Shows what the server flashed once per visit: a message of success (`status`, e.g. the welcome after accepting an
- * invitation) and an error (an expired page, a refusal); an error with a link opens that page in a new tab.
+ * invitation) and an error (an expired page, a refusal); an error with a link offers that page as a link in a new tab.
  */
 function useFlash(): void {
   const { flash } = useSharedProps();
@@ -41,7 +41,7 @@ function useFlash(): void {
     if (flash.status) toast({ title: flash.status, tone: 'success' });
     const link = flash.error_link;
     if (flash.error && link) {
-      toast({ title: flash.error, tone: 'error', duration: FLASH_LINK_MS, stack: true, action: { label: link.label, onClick: () => window.open(link.url, '_blank', 'noopener,noreferrer') } });
+      toast({ title: flash.error, tone: 'error', duration: FLASH_LINK_MS, stack: true, action: { label: link.label, href: link.url, onClick: () => {} } });
     } else if (flash.error) toast({ title: flash.error, tone: 'error' });
   }, [flash]);
 }

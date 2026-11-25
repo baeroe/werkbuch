@@ -96,16 +96,20 @@ describe('Shell', () => {
     expect(errors()).toEqual([['Die Seite ist abgelaufen.', 1]]);
   });
 
-  it('opens the way on of a flashed error in a new tab and keeps it longer (A721)', () => {
-    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+  it('offers the way on of a flashed error as a link and keeps it longer (A721)', () => {
     flash = { status: null, error: 'GitHub hat nicht geantwortet.', error_link: { label: 'Apps bei GitHub öffnen', url: 'https://github.com/settings/apps' } };
     render(<Shell>Inhalt</Shell>);
 
     const [shown] = currentToasts();
-    expect([shown.title, shown.tone, shown.duration, shown.action?.label]).toEqual(['GitHub hat nicht geantwortet.', 'error', FLASH_LINK_MS, 'Apps bei GitHub öffnen']);
-    shown.action?.onClick();
-    expect(open).toHaveBeenCalledWith('https://github.com/settings/apps', '_blank', 'noopener,noreferrer');
-    open.mockRestore();
+    expect([shown.title, shown.tone, shown.duration, shown.stack, shown.action]).toEqual([
+      'GitHub hat nicht geantwortet.',
+      'error',
+      FLASH_LINK_MS,
+      true,
+      { label: 'Apps bei GitHub öffnen', href: 'https://github.com/settings/apps', onClick: expect.any(Function) },
+    ]);
+    // following the link is all it does
+    expect(shown.action?.onClick()).toBeUndefined();
   });
 
   it('shows a flashed status as a success toast once per visit', () => {

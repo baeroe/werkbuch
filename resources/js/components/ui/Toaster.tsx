@@ -3,7 +3,7 @@ import type { ComponentProps, CSSProperties } from 'react';
 import { t } from '@/lib/i18n';
 import { cx } from './cx';
 import { IconButton } from './IconButton';
-import { dismissToast, runToastAction, setToastFocused, setToastHovered, useToasts, useToastsPaused, type Toast } from './toast';
+import { dismissToast, runToastAction, setToastFocused, setToastHovered, useToasts, useToastsPaused, type Toast, type ToastAction } from './toast';
 
 /**
  * Toasts on tracing paper at the bottom, errors below the others. Every toast is announced politely, errors too: they
@@ -62,9 +62,9 @@ export function ToastCard({ item, className, ...rest }: { item: Omit<Toast, 'kee
         <p className={cx('font-medium break-words text-pretty', item.tone === 'error' ? 'text-danger' : 'text-ink')}>{item.title}</p>
         {item.description && <p className="mt-0.5 text-sm break-words text-pretty text-muted">{item.description}</p>}
         {/* a long message keeps its width: the action stands below it */}
-        {item.stack && item.action && <ToastActionButton id={item.id} label={item.action.label} className="mt-1 -ml-2" />}
+        {item.stack && item.action && <ToastActionButton id={item.id} action={item.action} className="mt-1 -ml-2" />}
       </div>
-      {!item.stack && item.action && <ToastActionButton id={item.id} label={item.action.label} />}
+      {!item.stack && item.action && <ToastActionButton id={item.id} action={item.action} />}
       <IconButton icon={X} label={t('ui.toaster.close')} tooltip={false} onClick={() => dismissToast(item.id)} />
       {/* a new round (the same error again) draws the time line anew */}
       <span
@@ -77,17 +77,23 @@ export function ToastCard({ item, className, ...rest }: { item: Omit<Toast, 'kee
   );
 }
 
-function ToastActionButton({ id, label, className }: { id: number; label: string; className?: string }) {
+/** The action of a toast: a button, or a link that opens a page outside the app in a new tab and says so. */
+function ToastActionButton({ id, action, className }: { id: number; action: ToastAction; className?: string }) {
+  const look = cx(
+    'inline-flex h-11 shrink-0 cursor-pointer items-center rounded-ctl px-2 text-ui font-semibold text-accent-text transition-colors duration-120 hover:bg-hover md:h-7',
+    className,
+  );
+  if (action.href) {
+    return (
+      <a href={action.href} target="_blank" rel="noopener noreferrer" onClick={() => runToastAction(id)} className={look}>
+        {action.label}
+        <span className="sr-only"> {t('ui.toaster.new_tab')}</span>
+      </a>
+    );
+  }
   return (
-    <button
-      type="button"
-      onClick={() => runToastAction(id)}
-      className={cx(
-        'inline-flex h-11 shrink-0 cursor-pointer items-center rounded-ctl px-2 text-ui font-semibold text-accent-text transition-colors duration-120 hover:bg-hover md:h-7',
-        className,
-      )}
-    >
-      {label}
+    <button type="button" onClick={() => runToastAction(id)} className={look}>
+      {action.label}
     </button>
   );
 }

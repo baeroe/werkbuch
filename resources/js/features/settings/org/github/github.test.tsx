@@ -20,9 +20,10 @@ import { proposedName, reposByApp } from './GitHub';
 import { MANIFEST_PERMISSIONS, permissionText } from './permissions';
 
 let signedIn: User = maraUser;
+let flash: { status: string | null; error: string | null; error_link: { label: string; url: string } | null } | undefined;
 
 vi.mock('@inertiajs/react', () => ({
-  usePage: () => ({ props: { auth: { user: signedIn, permissions: [] }, organization } }),
+  usePage: () => ({ props: { auth: { user: signedIn, permissions: [] }, organization, flash } }),
   Link: ({ href, children, ref, ...rest }: { href: string; children: ReactNode; ref?: Ref<HTMLAnchorElement> }) => (
     <a href={href} ref={ref} {...rest}>
       {children}
@@ -139,6 +140,7 @@ afterEach(() => {
   api?.restore();
   api = undefined;
   signedIn = maraUser;
+  flash = undefined;
   resetToasts();
   vi.restoreAllMocks();
   document.body.querySelectorAll('form[hidden]').forEach((form) => form.remove());
@@ -474,3 +476,25 @@ describe('GitHub, the states', () => {
     expect(await screen.findByRole('region', { name: 'Mit GitHub verbinden' })).toBeTruthy();
   });
 });
+
+describe('a way back from GitHub that failed', () => {
+  it('keeps the sentence and the list of the apps of the account on the page (A721)', async () => {
+    const error = 'GitHub hat beim Anlegen der App nicht geantwortet oder ist gescheitert.';
+    flash = { status: null, error, error_link: { label: 'Apps bei GitHub öffnen', url: 'https://github.com/settings/apps' } };
+    renderGitHub();
+
+    const banner = (await screen.findByText(error)).closest('div.rounded-ctl') as HTMLElement;
+    expect(within(banner).getByText('GitHub nicht verbunden')).toBeTruthy();
+    const link = within(banner).getByRole('link', { name: /Apps bei GitHub öffnen/ });
+    expect([link.getAttribute('href'), link.getAttribute('target'), link.getAttribute('rel'), link.textContent?.trim()])
+      .toEqual(['https://github.com/settings/apps', '_blank', 'noopener noreferrer', 'Apps bei GitHub öffnen (öffnet in neuem Tab)']);
+  });
+
+  it('shows no banner for an error without a way on', async () => {
+    flash = { status: null, error: 'Dieser Rückweg von GitHub gehört nicht dir.', error_link: null };
+    renderGitHub();
+    await screen.findByRole('button', { name: /Mit GitHub verbinden/ });
+    expect(screen.queryByText('GitHub nicht verbunden')).toBeNull();
+  });
+});
+

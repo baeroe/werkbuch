@@ -20,8 +20,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Ends the manifest flow (spec 10.2): GitHub sends the person back with a temporary `code` and the `state` of
  * StartManifest. The state has to be the person's own and is taken once; the code becomes the app (within the hour GitHub
- * allows) through `POST /app-manifests/{code}/conversions`, outside any lock (no answer or a 5xx: the sentence names the
- * app GitHub may have created, A721), then its row under the lock of the
+ * allows) through `POST /app-manifests/{code}/conversions`, outside any lock (no answer, a 5xx or an answer without the app: the
+ * sentence names the app GitHub may have created, A721), then its row under the lock of the
  * organization: one app per GitHub account (A680), an account with an app is 409 `github_connected` (the person may
  * have registered under another account than the one StartManifest named). The private key and the webhook secret are
  * stored encrypted; the client secret is dropped (A510). `github.connected` names the app, never a secret.
@@ -54,7 +54,11 @@ final class CompleteManifest
         } catch (GitHubUnavailable $e) {
             report($e);
 
-            throw $e->transient() ? self::noAnswer($account) : Problem::unavailable('github_unavailable');
+            throw match (true) {
+                $e->transient() => self::refusal($account, 'failed'),
+                $e->status === GitHubUnavailable::MALFORMED => self::refusal($account, 'incomplete'),
+                default => Problem::unavailable('github_unavailable'),
+            };
         }
 
         return DB::transaction(function () use ($actor, $app): GitHubApp {
@@ -75,19 +79,23 @@ final class CompleteManifest
     }
 
     /**
-     * GitHub did not answer the conversion or failed (A721): the code holds once, so the way on is to connect again; and
-     * GitHub may have created the app before it failed, so the sentence names it and the extension `apps_url` the list
-     * of the apps of the account, where the person deletes it before connecting again. A state from before WEBU-40
-     * names no account: the sentence without a name.
+     * The conversion did not give werkbuch the app (A721): GitHub did not answer or failed (`failed`: the code holds once,
+     * so the way on is to connect again; GitHub may have created the app before it failed), or answered without what
+     * werkbuch keeps (`incomplete`: GitHub created the app, werkbuch cannot use it). The sentence names the app and the
+     * extension `apps_url` the list of the apps of the account, where the person deletes it before connecting again. A
+     * state from before WEBU-40 names no account: the sentence without a name, with the ways to both lists.
      */
-    private static function noAnswer(?string $account): Problem
+    private static function refusal(?string $account, string $case): Problem
     {
         [$type, $login] = array_pad(explode(':', (string) $account, 2), 2, null);
         if ($login === null) {
-            return Problem::unavailable('github_unavailable', __('problem.detail.github_conversion_failed'));
+            return Problem::unavailable('github_unavailable', $case === 'failed' ? __('problem.detail.github_conversion_failed') : __('problem.detail.github_conversion_incomplete'));
         }
 
-        return new Problem(503, 'github_unavailable', __('problem.detail.github_conversion_failed_app', ['name' => Manifest::name($login)]),
+        $name = ['name' => Manifest::name($login)];
+
+        return new Problem(503, 'github_unavailable',
+            $case === 'failed' ? __('problem.detail.github_conversion_failed_app', $name) : __('problem.detail.github_conversion_incomplete_app', $name),
             extensions: ['apps_url' => Manifest::appsUrl($login, (string) $type)]);
     }
 
@@ -113,7 +121,7 @@ final class CompleteManifest
 
         foreach ($fields as $key => $value) {
             if ($key === 'app_id' ? ! is_int($value) : (! is_string($value) || $value === '')) {
-                throw new GitHubUnavailable(GitHubUnavailable::GITHUB, "GitHub answered the conversion without {$key}.");
+                throw new GitHubUnavailable(GitHubUnavailable::GITHUB, "GitHub answered the conversion without {$key}.", GitHubUnavailable::MALFORMED);
             }
         }
 

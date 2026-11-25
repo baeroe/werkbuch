@@ -147,10 +147,14 @@ it('answers 503 and keeps nothing when GitHub refuses or answers without a key',
     expect(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $start($admin)['state']]))
         ->toThrow(fn (Problem $e) => expect([$e->getStatusCode(), $e->reason])->toBe([503, 'github_unavailable']));
 
+    // an answer without the key: GitHub created the app, werkbuch names it and the list where it is deleted (A721)
     $fake->refuse = [];
     $fake->conversionChanges = ['pem' => null];
     expect(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $start($admin)['state']]))
-        ->toThrow(fn (Problem $e) => expect($e->reason)->toBe('github_unavailable'))
+        ->toThrow(fn (Problem $e) => expect([$e->getStatusCode(), $e->reason, $e->detail, $e->extensions])->toBe([503, 'github_unavailable',
+            __('problem.detail.github_conversion_incomplete_app', ['name' => 'feldwerk werkbuch']), ['apps_url' => 'https://github.com/organizations/feldwerk/settings/apps']]))
+        ->and(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => StartManifest::issueState($admin->id)]))
+        ->toThrow(fn (Problem $e) => expect([$e->detail, $e->extensions])->toBe([__('problem.detail.github_conversion_incomplete'), []]))
         ->and(GitHubApp::query()->exists())->toBeFalse();
 });
 
