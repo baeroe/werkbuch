@@ -125,7 +125,7 @@ AI agents reach the [MCP server](/en/mcp) under `APP_URL/mcp` with `POST` reques
 
 ## Runners and GitHub
 
-[Runners](/en/runner) reach werkbuch under `APP_URL/runner/` (install script and binaries) and `APP_URL/api/runner/` (their protocol), [GitHub](/en/github) sends its webhooks to `APP_URL/github/webhook`. The examples above pass all of them. If your proxy puts a login or an IP allow list in front of werkbuch, let `/github/webhook` through without it (werkbuch checks GitHub's signature itself) and let the runners reach the other two, and allow bodies of 32 MB: GitHub sends up to 25 MB.
+[Runners](/en/runner) reach werkbuch under `APP_URL/runner/` (install script and binaries) and `APP_URL/api/runner/` (their protocol), [GitHub](/en/github) sends its webhooks to `APP_URL/github/webhook`. The examples above pass all of them. If your proxy puts a login or an IP allow list in front of werkbuch, let `/github/webhook` through without it (werkbuch checks GitHub's signature itself) and let the runners reach the other two, and allow bodies of 32 MB: GitHub sends up to 25 MB. The way back from GitHub after creating an app (`APP_URL/github/manifest`) waits up to 30 seconds for GitHub: a proxy that waits 60 seconds for an answer (the default of nginx) is enough.
 
 ## Checklist
 

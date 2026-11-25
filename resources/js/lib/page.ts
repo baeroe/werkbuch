@@ -17,7 +17,8 @@ export interface SharedProps {
     /** Minutes the mails about an item are collected (`NOTIFICATION_MAIL_DELAY`). */
     notification_mail_delay: number;
   };
-  flash: { status: string | null; error: string | null };
+  /** `error_link`: a way on from the error to a page outside werkbuch (A721: the apps of a GitHub account). */
+  flash: { status: string | null; error: string | null; error_link: { label: string; url: string } | null };
   errors: Record<string, string>;
 }
 

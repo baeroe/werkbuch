@@ -44,12 +44,15 @@ return [
         'timeout' => (int) env('GOTENBERG_TIMEOUT', 30),
     ],
 
-    // the one GitHub app of the instance (WEBU-24, spec 11.3): GitHub itself, no enterprise server (spec 2); seconds for
-    // one call (a claim waits for the token of its run)
+    // the GitHub apps of the instance (WEBU-24, WEBU-35, spec 11.3): GitHub itself, no enterprise server (spec 2); seconds
+    // for one call (a claim waits for the token of its run). The conversion of a manifest creates the app at GitHub and
+    // waits longer (A720): GitHub ends a request itself after 10 s with a server error, the browser waits for the way
+    // back, and 30 s stay below the 60 s many proxies wait for an answer
     'github' => [
         'api_url' => 'https://api.github.com',
         'web_url' => 'https://github.com',
         'timeout' => 10,
+        'manifest_timeout' => 30,
     ],
 
     // classes implementing App\Events\EventConsumer: each receives every domain event once, after the commit, in its own

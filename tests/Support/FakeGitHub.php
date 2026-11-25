@@ -10,6 +10,7 @@ use App\Models\Project;
 use App\Models\ProjectRepository;
 use Closure;
 use Database\Factories\GitHubAppFactory;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -48,6 +49,12 @@ final class FakeGitHub
 
     /** @var array<string, int> path pattern → status GitHub refuses with */
     public array $refuse = [];
+
+    /** @var list<string> path patterns GitHub does not answer in time (the client gives up: a ConnectionException) */
+    public array $silent = [];
+
+    /** @var array<string, int|float|null> path → the timeout werkbuch gave its last call, in seconds */
+    public array $timeouts = [];
 
     /** The `total_count` GitHub claims for the repos of an installation (null: as many as there are). */
     public ?int $totalCount = null;
@@ -148,7 +155,11 @@ final class FakeGitHub
 
     public function fake(): self
     {
-        Http::fake(fn (Request $request) => $this->answer($request));
+        Http::fake(function (Request $request, array $options) {
+            $this->timeouts[(string) parse_url($request->url(), PHP_URL_PATH)] = $options['timeout'] ?? null;
+
+            return $this->answer($request);
+        });
 
         return $this;
     }
@@ -163,6 +174,12 @@ final class FakeGitHub
         // like GitHub (WEBU-34): a JSON array as the body of a write is 422, an empty one too
         if ($request->method() !== 'GET' && str_starts_with(ltrim($request->body()), '[')) {
             return Http::response(['message' => 'Invalid request.', 'errors' => ["For 'links/0/schema', [] is not a null or object."]], 422);
+        }
+
+        foreach ($this->silent as $pattern) {
+            if (Str::is($pattern, $path)) {
+                throw new ConnectionException('cURL error 28: Operation timed out');
+            }
         }
 
         foreach ($this->refuse as $pattern => $status) {

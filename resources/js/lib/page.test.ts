@@ -26,7 +26,7 @@ const props: SharedProps = {
   locale: 'de',
   translations: {},
   features: { mail: true, pdf: true, live: { key: 'k', host: 'werkbuch.ddev.site', port: 6001, scheme: 'https' }, attachments_max_mb: 25, notification_mail_delay: 5 },
-  flash: { status: null, error: null },
+  flash: { status: null, error: null, error_link: null },
   errors: {},
 };
 

@@ -67,13 +67,18 @@ final class GitHubPageController extends Controller
         return redirect()->away(Manifest::installUrl($app->slug, StartManifest::issueState($actor->user->id, 'setup', $app->id)));
     }
 
-    /** Back to the settings with the sentence of the refusal. */
+    /**
+     * Back to the settings with the sentence of the refusal; a conversion GitHub did not answer adds the list of the apps
+     * of the account at GitHub as the link of the message (A721).
+     */
     private static function back(ValidationException|Problem $e): RedirectResponse
     {
         $message = $e instanceof ValidationException
             ? (string) $e->validator->errors()->first()
             : ($e->detail ?? __('problem.reason.'.$e->reason));
+        $back = redirect('/settings/github')->with('error', $message);
+        $apps = $e instanceof Problem ? ($e->extensions['apps_url'] ?? null) : null;
 
-        return redirect('/settings/github')->with('error', $message);
+        return is_string($apps) ? $back->with('error_link', ['label' => __('settings.github.apps_at_github'), 'url' => $apps]) : $back;
     }
 }

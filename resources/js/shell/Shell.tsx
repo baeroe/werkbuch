@@ -24,9 +24,12 @@ import { PaletteHost } from './PaletteHost';
 import { PeekHost } from './PeekHost';
 import { Sidebar } from './Sidebar';
 
+/** How long a flashed error with a way on stays: its sentence is longer, and the person may follow it (A721). */
+export const FLASH_LINK_MS = 20_000;
+
 /**
  * Shows what the server flashed once per visit: a message of success (`status`, e.g. the welcome after accepting an
- * invitation) and an error (an expired page, a refusal).
+ * invitation) and an error (an expired page, a refusal); an error with a link opens that page in a new tab.
  */
 function useFlash(): void {
   const { flash } = useSharedProps();
@@ -36,7 +39,10 @@ function useFlash(): void {
     if (shown.current === flash) return;
     shown.current = flash;
     if (flash.status) toast({ title: flash.status, tone: 'success' });
-    if (flash.error) toast({ title: flash.error, tone: 'error' });
+    const link = flash.error_link;
+    if (flash.error && link) {
+      toast({ title: flash.error, tone: 'error', duration: FLASH_LINK_MS, action: { label: link.label, onClick: () => window.open(link.url, '_blank', 'noopener,noreferrer') } });
+    } else if (flash.error) toast({ title: flash.error, tone: 'error' });
   }, [flash]);
 }
 

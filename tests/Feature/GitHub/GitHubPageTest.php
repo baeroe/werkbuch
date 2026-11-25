@@ -55,6 +55,21 @@ it('brings a way back that fails to the settings with its sentence', function ()
     expect(GitHubApp::query()->count())->toBe(1);
 });
 
+it('brings a conversion GitHub did not answer to the settings with the app and the way to the apps of the account (A721)', function () {
+    $fake = (new FakeGitHub)->fake();
+    $fake->silent = ['/app-manifests/*'];
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $state = StartManifest::run(Actor::system($admin, 'test'), ['owner' => 'baeroe', 'owner_type' => 'User'])['state'];
+
+    $this->get('/github/manifest?code=abc123&state='.$state)->assertRedirect('/settings/github')
+        ->assertSessionHas('error', __('problem.detail.github_conversion_failed_app', ['name' => 'baeroe werkbuch']))
+        ->assertSessionHas('error_link', ['label' => __('settings.github.apps_at_github'), 'url' => 'https://github.com/settings/apps']);
+    // any other refusal has no link
+    $this->get('/github/manifest?code=abc123&state=nope')->assertSessionMissing('error_link');
+    expect(GitHubApp::query()->exists())->toBeFalse();
+});
+
 it('reads the installation again only with the state werkbuch gave for the way back from GitHub', function () {
     $github = FakeGitHub::connected();
     $github->repositories[55_000_001][] = FakeGitHub::repositoryJson(700_000_003, 'feldwerk/neu');

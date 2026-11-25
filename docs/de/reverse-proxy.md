@@ -125,7 +125,7 @@ KI-Agenten erreichen den [MCP-Server](/de/mcp) unter `APP_URL/mcp` mit `POST`-An
 
 ## Runner und GitHub
 
-[Runner](/de/runner) erreichen werkbuch unter `APP_URL/runner/` (Installationsskript und Binaries) und `APP_URL/api/runner/` (ihr Protokoll), [GitHub](/de/github) schickt seine Webhooks an `APP_URL/github/webhook`. Die Beispiele oben reichen alle durch. Stellt dein Proxy eine Anmeldung oder eine Liste erlaubter Adressen vor werkbuch, lass `/github/webhook` ohne sie durch (werkbuch prüft die Signatur von GitHub selbst), lass die Runner die anderen beiden erreichen und erlaube Bodies von 32 MB: GitHub schickt bis zu 25 MB.
+[Runner](/de/runner) erreichen werkbuch unter `APP_URL/runner/` (Installationsskript und Binaries) und `APP_URL/api/runner/` (ihr Protokoll), [GitHub](/de/github) schickt seine Webhooks an `APP_URL/github/webhook`. Die Beispiele oben reichen alle durch. Stellt dein Proxy eine Anmeldung oder eine Liste erlaubter Adressen vor werkbuch, lass `/github/webhook` ohne sie durch (werkbuch prüft die Signatur von GitHub selbst), lass die Runner die anderen beiden erreichen und erlaube Bodies von 32 MB: GitHub schickt bis zu 25 MB. Der Rückweg von GitHub nach dem Anlegen einer App (`APP_URL/github/manifest`) wartet bis zu 30 Sekunden auf GitHub: Ein Proxy, der 60 Sekunden auf eine Antwort wartet (der Standard von nginx), reicht.
 
 ## Checkliste
 
