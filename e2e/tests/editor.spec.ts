@@ -213,36 +213,35 @@ test('opens a reference of a wiki page from its editor with the arrows and Enter
   try {
     const target = await createItem(page, { project_id: id, title: 'E2E Funkmast prüfen' });
     const plan = await createE2ePage(page, id, { title: 'E2E Bauplan' });
-    const notes = await createE2ePage(page, id, {
-      title: 'E2E Notizen',
-      content_json: { type: 'doc', content: [referring(target.id, 'item', ' is open'), referring(plan.id, 'page', ' to read')] },
-    });
+    const notes = await createE2ePage(page, id, { title: 'E2E Notizen', content_json: { type: 'doc', content: [referring(target.id, 'item', ' is open')] } });
+    const links = await createE2ePage(page, id, { title: 'E2E Links', content_json: { type: 'doc', content: [referring(plan.id, 'page', ' to read')] } });
     const preview = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+    const text = page.getByRole('textbox', { name: tr('en', 'editor.label.page') });
 
-    /** Opens the notes and puts the cursor at the start of their text: from the title, Enter goes on into it. */
-    const startOfText = async () => {
-      await page.goto(`/projects/${identifier}/wiki/${notes.id}`);
-      const title = page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') });
-      await expect(title).toHaveValue('E2E Notizen');
-      await expect(page.locator('.ProseMirror a.rt-ref')).toHaveCount(2);
-      await tabTo(page, title, { max: 120 });
+    /** Opens a page and puts the cursor at the start of its text: from the title, Enter goes on into it. */
+    const startOfText = async (pageId: string, title: string) => {
+      await page.goto(`/projects/${identifier}/wiki/${pageId}`);
+      const field = page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') });
+      await expect(field).toHaveValue(title);
+      await expect(text.locator('a.rt-ref')).toHaveCount(1);
+      await tabTo(page, field, { max: 120 });
       await page.keyboard.press('Enter');
-      await expect(page.getByRole('textbox', { name: tr('en', 'editor.label.page') })).toBeFocused();
+      await expect(text).toBeFocused();
     };
 
     // the arrow selects the reference at the start (framed), Enter opens the item in the preview; the text stays
-    await startOfText();
+    await startOfText(notes.id, 'E2E Notizen');
     await page.keyboard.press('ArrowRight');
-    await expect(page.locator('.ProseMirror-selectednode a.rt-ref')).toContainText(target.key);
+    await expect(text.locator('.ProseMirror-selectednode a.rt-ref')).toContainText(target.key);
     await page.keyboard.press('Enter');
     await expect(preview.getByRole('heading', { name: 'E2E Funkmast prüfen' })).toBeVisible();
-    await expect(page.locator('.ProseMirror p')).toHaveCount(2);
+    await expect(text.locator('p')).toHaveCount(1);
+    await expect(text).toContainText(`${target.key} E2E Funkmast prüfen is open`);
 
     // a page opens as the page
-    await startOfText();
-    await page.keyboard.press('ArrowDown');
+    await startOfText(links.id, 'E2E Links');
     await page.keyboard.press('ArrowRight');
-    await expect(page.locator('.ProseMirror-selectednode a.rt-ref')).toHaveText('E2E Bauplan');
+    await expect(text.locator('.ProseMirror-selectednode a.rt-ref')).toHaveText('E2E Bauplan');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(new RegExp(`/projects/${identifier}/wiki/${plan.id}$`));
     await expect(page.getByRole('textbox', { name: tr('en', 'wiki.page.title_label') })).toHaveValue('E2E Bauplan');
