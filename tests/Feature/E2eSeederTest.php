@@ -15,6 +15,7 @@ use App\Models\Attachment;
 use App\Models\Automation;
 use App\Models\Favorite;
 use App\Models\GitHubApp;
+use App\Models\GitHubInstallation;
 use App\Models\GitHubRepository;
 use App\Models\Invitation;
 use App\Models\Label;
@@ -400,22 +401,21 @@ it('revokes the runners of earlier runs through the revoke action', function () 
         ->and(eventsOf(EventType::RunnerRevoked)->map(fn ($e) => $e->meta['name'])->all())->toBe(['E2E desktop-light abc connect']);
 });
 
-it('disconnects the GitHub app of an earlier run and leaves one of the instance', function () {
+it('disconnects the GitHub apps of earlier runs and leaves the ones of the instance', function () {
     $this->seed(DemoSeeder::class);
     $erik = User::factory()->admin()->create();
-    GitHubApp::factory()->create(['slug' => 'feldwerk-werkbuch', 'created_by' => $erik->id]);
+    $own = GitHubApp::factory()->create(['created_by' => $erik->id]);
+    $ownLink = ProjectRepository::factory()->create(['project_id' => Project::query()->where('identifier', 'APP')->value('id'),
+        'repository_id' => GitHubRepository::factory()->create(['installation_id' => GitHubInstallation::factory()->create(['github_app_id' => $own->id])->id])->id]);
+    // one app per variant and account (A680)
+    $apps = collect(['desktop-light', 'phone-dark'])->map(fn (string $variant) => GitHubApp::factory()->account('e2e-'.$variant)->create(['created_by' => $erik->id]));
+    $link = ProjectRepository::factory()->create(['project_id' => Project::query()->where('identifier', 'WEB')->value('id'),
+        'repository_id' => GitHubRepository::factory()->create(['installation_id' => GitHubInstallation::factory()->create(['github_app_id' => $apps[0]->id])->id])->id]);
 
     $this->seed(E2eSeeder::class);
-    expect(GitHubApp::query()->count())->toBe(1);
 
-    GitHubApp::query()->delete();
-    GitHubApp::factory()->create(['slug' => 'e2e-werkbuch', 'created_by' => $erik->id]);
-    $link = ProjectRepository::factory()->create(['project_id' => Project::query()->where('identifier', 'WEB')->value('id')]);
-
-    $this->seed(E2eSeeder::class);
-
-    expect(GitHubApp::query()->count())->toBe(0)
+    expect(GitHubApp::query()->pluck('id')->all())->toBe([$own->id])
         ->and(GitHubRepository::query()->whereKey($link->repository_id)->exists())->toBeFalse()
-        ->and(ProjectRepository::query()->count())->toBe(0)
-        ->and(eventsOf(EventType::GitHubDisconnected)->count())->toBe(1);
+        ->and(ProjectRepository::query()->pluck('id')->all())->toBe([$ownLink->id])
+        ->and(eventsOf(EventType::GitHubDisconnected)->count())->toBe(2);
 });

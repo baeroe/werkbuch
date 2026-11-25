@@ -47,7 +47,7 @@ final class AgentsTool extends ReadTool
 
     protected string $title = 'Agents';
 
-    protected string $description = 'Reads runners (org admins), the agent configuration of a bot (org admins), the runs of agents with their logs (who sees the project), the GitHub app, the repo and the agent settings of a project, the working rules of the agents.';
+    protected string $description = 'Reads runners (org admins), the agent configuration of a bot (org admins), the runs of agents with their logs (who sees the project), the GitHub apps, the repo and the agent settings of a project, the working rules of the agents.';
 
     protected function actions(): array
     {
@@ -107,7 +107,7 @@ final class AgentsTool extends ReadTool
             ),
             new McpAction(
                 name: 'get-github',
-                summary: 'The GitHub app of the instance, its installations and repos with their project; never a key.',
+                summary: 'The GitHub apps (one per account), installations and repos with their project; never a key.',
                 run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::body(['data' => (new GitHubResource(GetGitHub::run($actor)))->resolve(request())]),
                 twin: 'GET github',
             ),

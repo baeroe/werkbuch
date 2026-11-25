@@ -21,8 +21,9 @@ use App\Support\OwnMerges;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * Works one webhook delivery (spec 11.4) in the queue: `installation` and `installation_repositories` read GitHub
- * again (SyncGitHub::pull: the payloads carry no default branch), a `push` goes to the guard (DetectUnauthorizedPush),
+ * Works one webhook delivery (spec 11.4) in the queue, of the app that sent it (A680; without it: `ignored`):
+ * `installation` and `installation_repositories` read GitHub again for that app (SyncGitHub::pull: the payloads carry no
+ * default branch), a `push` goes to the guard (DetectUnauthorizedPush),
  * `ping` is fine; a `pull_request` links the PR to its items (SyncPullRequest: `linked`, `agent` for a PR of an agent,
  * where the flow of WEBU-26 takes over), a `check_run` goes to the links of its commit (SyncChecks); a PR of an
  * agent and the CI of a commit go on into the flow of the agents (HandleAgentPullRequest, HandleCheckResult, WEBU-26), a
@@ -37,6 +38,9 @@ final class HandleGitHubDelivery
     /** The actions of a `pull_request` after which its head may be a commit werkbuch has no check runs of yet. */
     public const NEW_HEAD = ['opened', 'reopened', 'synchronize', 'ready_for_review'];
 
+    /** The events about a repo: worked only for a repo the app of the delivery reaches (A686). */
+    public const REPOSITORY_EVENTS = ['push', 'pull_request', 'check_run', 'check_suite'];
+
     /**
      * @throws GitHubUnavailable when GitHub does not answer the sync (the job tries again)
      */
@@ -47,9 +51,10 @@ final class HandleGitHubDelivery
             return null;
         }
 
-        $app = GitHubApp::current();
+        // the app that sent it (A680); gone since (disconnected), nothing of it is worked
+        $app = $delivery->github_app_id === null ? null : GitHubApp::query()->find($delivery->github_app_id);
         $outcome = match (true) {
-            $app === null => 'ignored',
+            $app === null, ! self::reaches($app, $delivery) => 'ignored',
             in_array($delivery->event, ['installation', 'installation_repositories'], true) => self::sync($app),
             $delivery->event === 'push' => self::push($actor, $delivery->data()),
             $delivery->event === 'pull_request' => self::pullRequest($actor, $delivery->data()),
@@ -148,6 +153,21 @@ final class HandleGitHubDelivery
         }
 
         return $outcome;
+    }
+
+    /**
+     * Whether an event of a repo (`push`, `pull_request`, `check_*`) is about a repo the app of the delivery reaches
+     * (A686): only then its bot and its tokens are the ones of that repo. Other events are the app's own.
+     */
+    private static function reaches(GitHubApp $app, GitHubDelivery $delivery): bool
+    {
+        if (! in_array($delivery->event, self::REPOSITORY_EVENTS, true)) {
+            return true;
+        }
+        $repository = $delivery->data()['repository'] ?? null;
+        $id = is_array($repository) ? ($repository['id'] ?? null) : null;
+
+        return is_int($id) && GitHubApp::ofRepository($id)?->id === $app->id;
     }
 
     private static function sync(GitHubApp $app): string

@@ -85,7 +85,7 @@ final class SyncPullRequest
         $identifiers = [$link->project->identifier, ...$link->project->identifiers->pluck('identifier')->all()];
         $hits = LinkKeywords::parse($pr['title']."\n\n".$pr['body'], $pr['head_branch'], $identifiers);
         $thread = AgentPullRequests::threadOf($link->project_id, $pr['repository_github_id'], $pr['number'], $pr['head_branch']);
-        $agent = AgentPullRequests::isAgent($thread, $pr['author']);
+        $agent = AgentPullRequests::isAgent($thread, $pr['author'], $pr['repository_github_id']);
         $pr['thread_id'] = $thread?->id;
 
         $refused = DB::transaction(fn () => self::write($actor, $link, $pr, $hits, $agent), 3);

@@ -10,21 +10,23 @@ use App\Http\Api\Answer;
 use App\Http\Api\Body;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\GitHubResource;
+use App\Models\GitHubApp;
 use App\OpenApi\GitHubSchemas;
 use App\Support\Actor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * The one GitHub app of the instance (spec 10.2): read by every account, synced by org admins; the manifest flow and
- * disconnecting only from the session (A397). Never a private key or a secret (A510).
+ * The GitHub apps of the instance, one per GitHub account (spec 10.2, A680): read by every account, synced by org
+ * admins; the manifest flow and disconnecting an app only from the session (A397). Never a private key or a secret
+ * (A510).
  */
 final class GitHubController extends Controller
 {
     /**
      * Read the GitHub connection.
      *
-     * The app (or `null`), its installations and the repos they reach with their project.
+     * The apps (one per GitHub account) with their installations, and the repos they reach with their project.
      */
     #[Answer(200, GitHubSchemas::class, 'status', 'The GitHub connection.')]
     public function show(Request $request): JsonResponse
@@ -35,7 +37,7 @@ final class GitHubController extends Controller
     /**
      * Sync installations and repos.
      *
-     * Reads the installations of the app and their repos from GitHub again, and whether a ruleset protects each base branch.
+     * Reads the installations of every app and their repos from GitHub again, and whether a ruleset protects each base branch.
      */
     #[Answer(200, GitHubSchemas::class, 'status', 'The GitHub connection after the sync.')]
     public function sync(Request $request): JsonResponse
@@ -46,8 +48,8 @@ final class GitHubController extends Controller
     /**
      * Start the manifest flow.
      *
-     * What the browser posts to GitHub to register the app: the address and the field `manifest`; GitHub sends the
-     * person back to `/github/manifest` with the `state`.
+     * What the browser posts to GitHub to register the app of a GitHub account: the address and the field `manifest`;
+     * GitHub sends the person back to `/github/manifest` with the `state`.
      */
     #[Body(GitHubSchemas::class, 'manifestBody')]
     #[Answer(200, GitHubSchemas::class, 'manifest', 'Where to post the manifest.')]
@@ -57,14 +59,14 @@ final class GitHubController extends Controller
     }
 
     /**
-     * Disconnect GitHub.
+     * Disconnect a GitHub app.
      *
-     * werkbuch forgets the app, its installations and repos; the strands of projects with a repo pause and their runs
-     * are canceled. The app stays at GitHub.
+     * werkbuch forgets the app, its installations and repos; the strands of projects with a repo of this app pause and
+     * their runs are canceled. The other apps stay; the app itself stays at GitHub.
      */
     #[Answer(200, GitHubSchemas::class, 'disconnected', 'How many runs it canceled.')]
-    public function destroy(Request $request): JsonResponse
+    public function destroy(Request $request, GitHubApp $githubApp): JsonResponse
     {
-        return response()->json(['canceled' => DisconnectGitHub::run(Actor::fromRequest($request))]);
+        return response()->json(['canceled' => DisconnectGitHub::run(Actor::fromRequest($request), $githubApp)]);
     }
 }

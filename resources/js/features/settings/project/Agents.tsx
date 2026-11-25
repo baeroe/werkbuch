@@ -294,7 +294,7 @@ function AgentsForm({ project, canManage, readOnlyReason, link, settings, github
   const complete = stepsComplete(workflow.states, workflow.agent_states);
   const none = missingSteps(workflow.agent_states).length === AGENT_STEPS.length;
   const catalog = can('org.manage_catalog');
-  const connected = github.app !== null;
+  const connected = github.apps.length > 0;
   const nameOf = (id: string) => users.get(id)?.name ?? t('items.someone');
 
   // here and not in the banner: the banner goes before the answer of the call comes back (the repo is read anew
@@ -382,19 +382,26 @@ function AgentsForm({ project, canManage, readOnlyReason, link, settings, github
     }
   }
 
-  // the repos the app reaches; the one of the project stays even when GitHub took it away, so the choice shows it
+  // the repos the apps reach, grouped by the app of their account (A680); the one of the project stays even when GitHub
+  // took it away, so the choice shows it
   const repos = github.repositories.filter((repo) => !repo.removed_at || repo.id === link?.repository.id);
+  const appOf = new Map(github.apps.flatMap((app) => app.installations.map((installation) => [installation.id, app] as const)));
   const repoOptions = [
     { value: NO_REPO, label: t('settings.project.agents.no_repo') },
-    ...repos.map((repo) => {
-      const other = repo.taken && repo.project?.id !== project.id;
-      return {
-        value: repo.id,
-        label: other ? t('settings.project.agents.repo_taken', { repo: repo.full_name, project: repo.project?.identifier ?? t('settings.project.agents.another_project') }) : repo.full_name,
-        icon: <GitBranch className="size-4 text-muted" aria-hidden="true" />,
-        disabled: other,
-      };
-    }),
+    ...github.apps.flatMap((app) =>
+      repos
+        .filter((repo) => appOf.get(repo.installation_id) === app)
+        .map((repo) => {
+          const other = repo.taken && repo.project?.id !== project.id;
+          return {
+            value: repo.id,
+            label: other ? t('settings.project.agents.repo_taken', { repo: repo.full_name, project: repo.project?.identifier ?? t('settings.project.agents.another_project') }) : repo.full_name,
+            icon: <GitBranch className="size-4 text-muted" aria-hidden="true" />,
+            disabled: other,
+            group: t('settings.github.app.title', { login: app.owner_login }),
+          };
+        }),
+    ),
   ];
   const chosen = repos.find((repo) => repo.id === value.repository_id);
   const workflowLink = paths.workflow(workflow.id);

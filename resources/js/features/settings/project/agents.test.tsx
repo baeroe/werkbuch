@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentToasts, resetToasts, runToastAction } from '@/components/ui/toast';
 import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { agency, ida, labels, lene, list, makeWorkItem, mara, organization, project, standard } from '@/test/fixtures';
-import type { GitHubRepository, GitHubStatus, Label, MergeGuard, ProjectAgents, ProjectRepository, User, Workflow } from '@/types';
+import type { GitHubApp, GitHubRepository, GitHubStatus, Label, MergeGuard, ProjectAgents, ProjectRepository, User, Workflow } from '@/types';
 import { ProjectSettings } from './ProjectSettings';
 
 let signedIn: User = ida;
@@ -42,7 +42,7 @@ const repo = (id: string, full_name: string, changes: Partial<GitHubRepository> 
   ...changes,
 });
 
-const app: GitHubStatus['app'] = {
+const app: GitHubApp = {
   id: 'a_1',
   app_id: 1,
   slug: 'feldwerk-werkbuch',
@@ -54,17 +54,28 @@ const app: GitHubStatus['app'] = {
   permissions: {},
   events: [],
   created_at: null,
+  installations: [{ id: 'i_1', installation_id: 1, account_login: 'feldwerk', account_type: 'Organization', repository_selection: 'all', suspended_at: null, removed_at: null }],
+};
+
+/** The app of a second GitHub account (A680) with one repo. */
+const labs: GitHubApp = {
+  ...app,
+  id: 'a_2',
+  slug: 'feldwerk-labs-werkbuch',
+  name: 'feldwerk-labs werkbuch',
+  owner_login: 'feldwerk-labs',
+  installations: [{ ...app.installations[0]!, id: 'i_2', installation_id: 2, account_login: 'feldwerk-labs' }],
 };
 
 const github: GitHubStatus = {
-  app,
-  installations: [],
+  apps: [app, labs],
   repositories: [
     repo('r_web', 'feldwerk/website', { taken: true, project: { id: 'p_web', identifier: 'WEB', name: 'Website', base_branch: 'main', protected: true, guarded: false } }),
     repo('r_app', 'feldwerk/kunden-app', { default_branch: 'develop' }),
     repo('r_ops', 'feldwerk/infrastruktur', { taken: true, project: { id: 'p_ops', identifier: 'OPS', name: 'Ops', base_branch: 'main', protected: null, guarded: false } }),
     repo('r_hidden', 'feldwerk/geheim', { taken: true }),
     repo('r_gone', 'feldwerk/alt', { removed_at: '2026-11-01T00:00:00.000Z' }),
+    repo('r_labs', 'feldwerk-labs/app', { installation_id: 'i_2' }),
   ],
 };
 
@@ -200,7 +211,7 @@ describe('Agents: repository', () => {
     expect(document.title).toBe('Agenten – Einstellungen WEB – werkbuch');
   });
 
-  it('offers the repos the app reaches, a taken one blocked with its project', async () => {
+  it('offers the repos the apps reach under the app of their account, a taken one blocked with its project', async () => {
     const user = userEvent.setup();
     renderAgents();
 
@@ -212,7 +223,10 @@ describe('Agents: repository', () => {
       'feldwerk/kunden-app',
       'feldwerk/infrastruktur (gehört zu OPS)',
       'feldwerk/geheim (gehört zu einem anderen Projekt)',
+      'feldwerk-labs/app',
     ]);
+    expect(screen.getByRole('group', { name: 'App für feldwerk' })).toBeTruthy();
+    expect(within(screen.getByRole('group', { name: 'App für feldwerk-labs' })).getByRole('option').textContent).toBe('feldwerk-labs/app');
     expect(options[3].getAttribute('aria-disabled')).toBe('true');
     expect(options[2].getAttribute('aria-disabled')).toBeNull();
   });
@@ -319,7 +333,7 @@ describe('Agents: repository', () => {
 
   it('says GitHub is not connected, with the way to it for org admins', async () => {
     signedIn = mara;
-    renderAgents({ status: { app: null, installations: [], repositories: [] }, link: null });
+    renderAgents({ status: { apps: [], repositories: [] }, link: null });
 
     expect(await screen.findByText('GitHub ist nicht verbunden')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Einstellungen → GitHub' }).getAttribute('href')).toBe('/settings/github');
@@ -338,7 +352,7 @@ describe('Agents: repository', () => {
 describe('Agents: readers', () => {
   it('reads repo, branch and steps without a form', async () => {
     signedIn = lene;
-    renderAgents({ role: 'viewer', workflow: standard, status: { app: null, installations: [], repositories: [] } });
+    renderAgents({ role: 'viewer', workflow: standard, status: { apps: [], repositories: [] } });
 
     expect(await screen.findByText('Eine Org-Admin verbindet GitHub in den Einstellungen der Organisation.')).toBeTruthy();
     expect(screen.getByText(/Die Schritte gehören zum Workflow; ein Org-Admin richtet sie dort ein\./)).toBeTruthy();

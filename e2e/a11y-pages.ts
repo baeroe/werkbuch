@@ -606,11 +606,26 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
     name: 'github connected',
     page: 'Settings/Organization',
     path: () => '/settings/github',
-    // the connected view: the app, an installation, a repo of a project with a guard and without a ruleset, a free repo
+    // two apps (A680): one with an installation, a repo of a project with a guard and without a ruleset, a free repo;
+    // one of an own account without installation
     state: async (page) => {
       await connectGitHub(page);
       await page.reload();
-      await expect(page.getByRole('list', { name: en('settings.github.repos.label') }).getByText(en('settings.github.repo.guarded'))).toBeVisible();
+      const login = a11yGitHub!.login;
+      await expect(page.getByRole('list', { name: en('settings.github.repos.label', { login }) }).getByText(en('settings.github.repo.guarded'))).toBeVisible();
+      await expect(page.getByRole('region', { name: en('settings.github.app.title', { login: `${login}-me` }) })).toBeVisible();
+    },
+    cleanup: disconnectGitHub,
+  }),
+  state({
+    name: 'add GitHub app dialog',
+    page: 'Settings/Organization',
+    path: () => '/settings/github',
+    state: async (page) => {
+      await connectGitHub(page);
+      await page.reload();
+      await press(page, page.getByRole('button', { name: en('settings.github.add.button') }));
+      await expect(page.getByRole('dialog', { name: en('settings.github.add.title') })).toBeVisible();
     },
     cleanup: disconnectGitHub,
   }),
@@ -621,8 +636,9 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
     state: async (page) => {
       await connectGitHub(page);
       await page.reload();
-      await press(page, page.getByRole('button', { name: en('settings.github.disconnect.button') }));
-      await expect(page.getByRole('alertdialog', { name: en('settings.github.disconnect.question') })).toBeVisible();
+      const login = a11yGitHub!.login;
+      await press(page, page.getByRole('region', { name: en('settings.github.app.title', { login }) }).getByRole('button', { name: `${en('settings.github.disconnect.title')} ${en('settings.github.app.for', { login })}` }));
+      await expect(page.getByRole('alertdialog', { name: en('settings.github.disconnect.question', { login }) })).toBeVisible();
     },
     cleanup: disconnectGitHub,
   }),
@@ -708,45 +724,40 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
 const DEFAULT_BOT = 'Automation';
 
 /** What `connectGitHub` made, for `disconnectGitHub`. */
-let a11yGitHub: { created: boolean; installation: string; identifier: string } | null = null;
+let a11yGitHub: { apps: string[]; identifier: string; login: string } | null = null;
 
 /**
- * GitHub for the states of Settings → GitHub and Project → Agenten: an app named e2e-werkbuch when the instance has none
- * (an app of the instance's own stays untouched), a suspended installation (so werkbuch asks GitHub nothing) with two
- * repos, the first the repo of an E2E project with the guard on and no ruleset. Answers the identifier of the project.
- * `disconnectGitHub` takes it all away again (else the E2eSeeder before the next run).
+ * Two GitHub apps of this variant (A680: one per account), an organization with a suspended installation (werkbuch asks
+ * GitHub nothing), a repo of an E2E project with the guard on and a free one, and an own account without installation.
+ * Answers the identifier of the project.
  */
 async function connectGitHub(page: Page): Promise<string> {
   const project = await createE2eProject(page, e2eName());
-  const repo = `e2e/${variant()}-${runId()}-a11y`;
+  const login = `e2e-${variant()}-${runId()}`;
+  const repo = `${login}/a11y`;
   const answer = JSON.parse(
     artisanEval(
       [
         "$erik = App\\Models\\User::query()->where('email', 'e2e@example.com')->firstOrFail();",
-        '$created = App\\Models\\GitHubApp::current() === null;',
-        "if ($created) { App\\Models\\GitHubApp::factory()->create(['slug' => 'e2e-werkbuch', 'name' => 'E2E werkbuch', 'owner_login' => 'e2e', 'created_by' => $erik->id]); }",
-        `$installation = App\\Models\\GitHubInstallation::factory()->create(['account_login' => 'e2e-${variant()}', 'suspended_at' => now()]);`,
+        `$org = App\\Models\\GitHubApp::factory()->account('${login}')->create(['created_by' => $erik->id]);`,
+        `$own = App\\Models\\GitHubApp::factory()->account('${login}-me', 'User')->create(['created_by' => $erik->id]);`,
+        `$installation = App\\Models\\GitHubInstallation::factory()->create(['github_app_id' => $org->id, 'account_login' => '${login}', 'suspended_at' => now()]);`,
         `$site = App\\Models\\GitHubRepository::factory()->create(['installation_id' => $installation->id, 'full_name' => '${repo}-site']);`,
         `App\\Models\\GitHubRepository::factory()->create(['installation_id' => $installation->id, 'full_name' => '${repo}-docs', 'private' => false]);`,
         `App\\Models\\ProjectRepository::query()->create(['project_id' => '${project.id}', 'repository_id' => $site->id, 'base_branch' => 'main', 'protected' => false, 'guard_detected_at' => now(), 'guard_sha' => 'a41c9e7d00ff11', 'guard_branch' => 'main']);`,
-        "echo json_encode(['created' => $created, 'installation' => $installation->id]), PHP_EOL;",
+        "echo json_encode(['apps' => [$org->id, $own->id]]), PHP_EOL;",
       ].join('\n'),
     ),
-  ) as { created: boolean; installation: string };
-  a11yGitHub = { ...answer, identifier: project.identifier };
+  ) as { apps: string[] };
+  a11yGitHub = { ...answer, identifier: project.identifier, login };
   return project.identifier;
 }
 
+/** The apps of `connectGitHub` with their installations, repos and links, and its project. */
 async function disconnectGitHub(page: Page): Promise<void> {
   const made = a11yGitHub;
   a11yGitHub = null;
   if (!made) return;
   await removeE2eProject(page, made.identifier);
-  artisanEval(
-    [
-      `App\\Models\\GitHubInstallation::query()->whereKey('${made.installation}')->delete();`,
-      made.created ? "App\\Models\\GitHubApp::query()->where('slug', 'e2e-werkbuch')->delete();" : '',
-      "echo 'ok', PHP_EOL;",
-    ].join('\n'),
-  );
+  artisanEval([`App\\Models\\GitHubApp::query()->whereIn('id', ${JSON.stringify(made.apps).replace(/"/g, "'")})->delete();`, "echo 'ok', PHP_EOL;"].join('\n'));
 }

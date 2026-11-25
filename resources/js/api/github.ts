@@ -1,29 +1,30 @@
 /*
- * The one GitHub app of the instance (spec 10.2, 11.3). Everybody reads its state; org admins start the manifest flow
- * (only from the session: the answer is what the browser posts to GitHub), sync it and disconnect it. A project picks
- * its repo and confirms the guard against an unauthorized merge (its admins).
+ * The GitHub apps of the instance, one per GitHub account (spec 10.2, 11.3, A680). Everybody reads their state; org
+ * admins start the manifest flow of the app of an account (only from the session: the answer is what the browser posts
+ * to GitHub), sync them and disconnect one. A project picks its repo and confirms the guard against an unauthorized
+ * merge (its admins).
  */
 
-import type { GitHubManifestStart, GitHubStatus, ProjectRepository } from '@/types';
+import type { GitHubManifestStart, GitHubOwnerType, GitHubStatus, ProjectRepository } from '@/types';
 import { del, get, one, post, put } from './http';
 
 export function getGitHub(): Promise<GitHubStatus> {
   return one(get<{ data: GitHubStatus }>('/github'));
 }
 
-/** Reads the installations and repos from GitHub again. */
+/** Reads the installations and repos of every app from GitHub again. */
 export function syncGitHub(): Promise<GitHubStatus> {
   return one(post<{ data: GitHubStatus }>('/github/sync'));
 }
 
-/** What to post to GitHub to register the app; `organization` is the login of a GitHub organization (else the own account). */
-export function startGitHubManifest(organization: string | null): Promise<GitHubManifestStart> {
-  return one(post<{ data: GitHubManifestStart }>('/github/manifest', { organization }));
+/** What to post to GitHub to register the app of a GitHub account: its login and whether it is the own account or an organization. */
+export function startGitHubManifest(input: { owner: string; owner_type: GitHubOwnerType }): Promise<GitHubManifestStart> {
+  return one(post<{ data: GitHubManifestStart }>('/github/manifest', input));
 }
 
-/** werkbuch forgets the app; answers how many runs it canceled. */
-export function disconnectGitHub(): Promise<{ canceled: number }> {
-  return del<{ canceled: number }>('/github');
+/** werkbuch forgets the app (its ULID); answers how many runs it canceled. */
+export function disconnectGitHub(app: string): Promise<{ canceled: number }> {
+  return del<{ canceled: number }>(`/github/apps/${encodeURIComponent(app)}`);
 }
 
 const repositoryPath = (project: string) => `/projects/${encodeURIComponent(project)}/repository`;

@@ -18,8 +18,9 @@ use Illuminate\Support\Str;
 use Tests\Support\FakeGitHub;
 
 /*
- * The webhook of the app (spec 11.4): `POST /github/webhook` without a middleware group, signed with the secret of the
- * app (401 otherwise), kept once per delivery ID and worked in the queue.
+ * The webhook of the apps (spec 11.4): `POST /github/webhook` without a middleware group, one address for every app
+ * (A680): the app named by `X-GitHub-Hook-Installation-Target-ID`, signed with its secret (401 otherwise), kept once per
+ * delivery ID with its app and worked in the queue.
  */
 
 beforeEach(function () {
@@ -41,14 +42,46 @@ it('verifies the webhook signature and handles a redelivery once', function () {
     $this->call('POST', '/github/webhook', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X_GITHUB_EVENT' => 'ping'], '{}')->assertUnauthorized();
     expect(GitHubDelivery::query()->count())->toBe(1);
 
-    GitHubApp::query()->delete();
-    FakeGitHub::deliver($this, 'ping', $payload, 'd-4', 'whatever')->assertUnauthorized();
+    // without the app, with an app werkbuch does not know, with a header that is no ID: 401
+    FakeGitHub::deliver($this, 'ping', $payload, 'd-5', target: false)->assertUnauthorized();
+    FakeGitHub::deliver($this, 'ping', $payload, 'd-6', target: '4100999')->assertUnauthorized();
+    FakeGitHub::deliver($this, 'ping', $payload, 'd-7', target: '0x10')->assertUnauthorized();
+
+    $app = GitHubApp::query()->sole();
+    $app->delete();
+    FakeGitHub::deliver($this, 'ping', $payload, 'd-4', app: $app)->assertUnauthorized();
+    expect(GitHubDelivery::query()->count())->toBe(1);
+});
+
+it('takes the deliveries of every app with its own secret, never with the secret of another one', function () {
+    Queue::fake([ProcessGitHubDelivery::class]);
+    $first = GitHubApp::query()->sole();
+    $second = $this->github->secondApp();
+
+    FakeGitHub::deliver($this, 'ping', ['zen' => 'a'], 'd-first', app: $first)->assertStatus(202);
+    FakeGitHub::deliver($this, 'ping', ['zen' => 'b'], 'd-second', app: $second)->assertStatus(202);
+    // signed with the secret of the first app, sent in the name of the second
+    FakeGitHub::deliver($this, 'ping', ['zen' => 'c'], 'd-crossed', $first->webhook_secret, app: $second)->assertUnauthorized();
+
+    expect(GitHubDelivery::query()->orderBy('delivery_id')->pluck('github_app_id', 'delivery_id')->all())->toBe(['d-first' => $first->id, 'd-second' => $second->id]);
+});
+
+it('reads GitHub again only for the app whose installation changed', function () {
+    $second = $this->github->secondApp();
+    $this->github->repositories[55_000_002][] = FakeGitHub::repositoryJson(700_000_003, 'feldwerk-labs/docs');
+    $this->github->repositories[55_000_001][] = FakeGitHub::repositoryJson(700_000_004, 'feldwerk/never');
+
+    FakeGitHub::deliver($this, 'installation_repositories', ['action' => 'added', 'installation' => ['id' => 55_000_002]], 'd-labs', app: $second)->assertStatus(202);
+
+    expect(GitHubRepository::query()->orderBy('full_name')->pluck('full_name')->all())->toBe(['feldwerk-labs/app', 'feldwerk-labs/docs', 'feldwerk/website'])
+        ->and(collect($this->github->issued)->pluck('app_id')->unique()->all())->toBe([$second->app_id]);
 });
 
 it('refuses a signed delivery without its headers or a JSON object', function () {
-    $secret = GitHubApp::query()->sole()->webhook_secret;
+    $app = GitHubApp::query()->sole();
     $send = fn (string $body, array $server) => $this->call('POST', '/github/webhook', [], [], [], [
-        'CONTENT_TYPE' => 'application/json', 'HTTP_X_HUB_SIGNATURE_256' => WebhookSignature::sign($secret, $body), ...$server,
+        'CONTENT_TYPE' => 'application/json', 'HTTP_X_HUB_SIGNATURE_256' => WebhookSignature::sign($app->webhook_secret, $body),
+        'HTTP_X_GITHUB_HOOK_INSTALLATION_TARGET_ID' => (string) $app->app_id, ...$server,
     ], $body);
 
     $send('{"a":1}', ['HTTP_X_GITHUB_EVENT' => 'push'])->assertUnprocessable()->assertJsonPath('errors.delivery.0', __('field.delivery.github'));

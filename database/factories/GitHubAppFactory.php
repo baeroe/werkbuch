@@ -9,13 +9,17 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use RuntimeException;
 
 /**
- * The app of the instance as the manifest flow leaves it: a fresh private key (made once per process), a webhook secret,
- * the permissions and events of spec 11.3, created by a new org admin. No events.
+ * An app as the manifest flow leaves it, by default the one of the organization `feldwerk`: a fresh private key (made
+ * once per process), a webhook secret, the permissions and events of spec 11.3, created by a new org admin. No events.
+ * `account()` makes the app of another GitHub account (one per account, A680).
  *
  * @extends Factory<GitHubApp>
  */
 class GitHubAppFactory extends Factory
 {
+    /** The ID at GitHub of the app of `feldwerk` (FakeGitHub answers its installations with it). */
+    public const DEFAULT_APP_ID = 4_200_123;
+
     private static ?string $key = null;
 
     /**
@@ -24,7 +28,7 @@ class GitHubAppFactory extends Factory
     public function definition(): array
     {
         return [
-            'app_id' => 4_100_000 + fake()->unique()->numberBetween(1, 99_999),
+            'app_id' => self::DEFAULT_APP_ID,
             'slug' => 'feldwerk-werkbuch',
             'name' => 'Feldwerk werkbuch',
             'client_id' => 'Iv23liFeldwerk',
@@ -40,6 +44,14 @@ class GitHubAppFactory extends Factory
     }
 
     /** A private key in PEM, the same within one process (making one costs). */
+    /** The app of another GitHub account: its login names the app (`<login> werkbuch`) as the manifest does. */
+    public function account(string $login, string $type = 'Organization'): static
+    {
+        $slug = strtolower($login).'-werkbuch';
+
+        return $this->state(['app_id' => 4_200_000 + crc32($login) % 99_000 + 1_000, 'slug' => $slug, 'name' => $login.' werkbuch', 'owner_login' => $login, 'owner_type' => $type, 'html_url' => 'https://github.com/apps/'.$slug]);
+    }
+
     public static function privateKey(): string
     {
         if (self::$key === null) {

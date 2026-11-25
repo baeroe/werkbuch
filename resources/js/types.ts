@@ -1149,21 +1149,25 @@ export interface ItemAgentState {
 
 /* ----------------------------------------------------------------------------- GitHub */
 
-/** The one GitHub app of the instance (spec 10.2); never its private key or webhook secret. */
+/** A GitHub app of the instance, one per GitHub account (spec 10.2, A680); never its private key or webhook secret. */
 export interface GitHubApp {
   id: string;
   app_id: number;
   slug: string;
   name: string;
   owner_login: string;
-  owner_type: string;
+  owner_type: GitHubOwnerType;
   html_url: string;
   install_url: string;
   /** Permission → `read` or `write`. */
   permissions: Record<string, string>;
   events: string[];
   created_at: string | null;
+  installations: GitHubInstallation[];
 }
+
+/** The kind of a GitHub account: the own account of a person or an organization. */
+export type GitHubOwnerType = 'User' | 'Organization';
 
 export interface GitHubInstallation {
   id: string;
@@ -1188,10 +1192,9 @@ export interface GitHubRepository {
   project: { id: string; identifier: string; name: string; base_branch: string; protected: boolean | null; guarded: boolean } | null;
 }
 
-/** The GitHub connection: the app (or none), its installations and the repos they reach. */
+/** The GitHub connection: the apps (by the login of their account) with their installations, and the repos they reach. */
 export interface GitHubStatus {
-  app: GitHubApp | null;
-  installations: GitHubInstallation[];
+  apps: GitHubApp[];
   repositories: GitHubRepository[];
 }
 

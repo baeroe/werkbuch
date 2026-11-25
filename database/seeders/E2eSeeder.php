@@ -116,11 +116,9 @@ class E2eSeeder extends Seeder
         // the runners earlier runs connected (all named "E2E …", e2e/tests/runners.spec.ts): revoked through the action
         Runner::query()->whereNull('revoked_at')->where('name', 'like', self::PROJECT_PREFIX.'%')->each(fn (Runner $runner) => RevokeRunner::run(Actor::automation('e2e_reset'), $runner));
 
-        // the GitHub app an earlier run of e2e/tests/github.spec.ts made (slug `e2e-…`; an instance has one app, the spec
-        // makes it only when there is none): disconnected through the action, with its installations, repos and links
-        if (GitHubApp::query()->where('slug', 'like', 'e2e-%')->exists()) {
-            DisconnectGitHub::run(Actor::automation('e2e_reset'));
-        }
+        // the GitHub apps earlier runs of the specs made (slug `e2e-…`, one per variant and account, A680): disconnected
+        // through the action, with their installations, repos and links
+        GitHubApp::query()->where('slug', 'like', 'e2e-%')->each(fn (GitHubApp $app) => DisconnectGitHub::run(Actor::automation('e2e_reset'), $app));
 
         // the demo webhooks stay off here (K8): the queue of DDEV would send every state change of every spec to hosts
         // that do not exist, and the system would switch "Deploy-Bot" off after a day and tell the org admins; only the

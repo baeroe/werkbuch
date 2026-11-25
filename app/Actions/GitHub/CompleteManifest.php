@@ -19,9 +19,10 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Ends the manifest flow (spec 10.2): GitHub sends the person back with a temporary `code` and the `state` of
  * StartManifest. The state has to be the person's own and is taken once; the code becomes the app (within the hour GitHub
- * allows) through `POST /app-manifests/{code}/conversions`, outside any lock, then the one row under the lock of the
- * organization. The private key and the webhook secret are stored encrypted; the client secret is dropped (A510).
- * `github.connected` names the app, never a secret.
+ * allows) through `POST /app-manifests/{code}/conversions`, outside any lock, then its row under the lock of the
+ * organization: one app per GitHub account (A680), an account with an app is 409 `github_connected` (the person may
+ * have registered under another account than the one StartManifest named). The private key and the webhook secret are
+ * stored encrypted; the client secret is dropped (A510). `github.connected` names the app, never a secret.
  */
 final class CompleteManifest
 {
@@ -44,9 +45,6 @@ final class CompleteManifest
         if (! StartManifest::takeState($state, $actor->user->id)) {
             throw Problem::forbidden(__('problem.detail.github_state'));
         }
-        if (GitHubApp::current() !== null) {
-            throw Problem::conflict('github_connected');
-        }
 
         try {
             $app = self::fields(GitHubApi::convertManifest($code));
@@ -58,8 +56,10 @@ final class CompleteManifest
 
         return DB::transaction(function () use ($actor, $app): GitHubApp {
             CatalogLock::take();
-            if (GitHubApp::query()->lockForUpdate()->exists()) {
-                throw Problem::conflict('github_connected');
+            // GitHub created the app already: the account (another one than StartManifest named, or one that got its app
+            // meanwhile) is refused with the app to delete at GitHub (A686)
+            if (GitHubApp::query()->where('owner_login', $app['owner_login'])->exists()) {
+                throw Problem::conflict('github_connected', detail: __('problem.detail.github_account_connected_created', ['login' => $app['owner_login'], 'slug' => $app['slug']]));
             }
 
             $created = GitHubApp::query()->create([...$app, 'created_by' => $actor->user->id]);

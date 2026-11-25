@@ -106,7 +106,7 @@ The image carries the [runner](/en/runner) of its own version for macOS and Linu
 | `GET /runner/install.sh`, `GET /runner/download/<os>/<arch>` and `….sha256` | the install script and the self-update of runners | 30 requests a minute per address |
 | `POST /api/runner/pair` | a runner with a one-time code | 10 a minute per address |
 | `/api/runner/*` | runners with their token: fetch runs, heartbeat, log, result | 3000 a minute per runner, without a valid token 60 a minute per address |
-| `POST /github/webhook` | GitHub, signed with the secret of the app, bodies up to 25 MB | 60 unsigned requests a minute per address |
+| `POST /github/webhook` | GitHub, signed with the secret of the app that sends it, bodies up to 25 MB | 60 unsigned requests a minute per address |
 
 Runners call werkbuch, never the other way round: the runner protocol needs no open port at the runner. Behind your proxy these paths need nothing of their own, but `/github/webhook` has to be reachable from the internet even when the rest is not ([GitHub](/en/github#the-webhook-behind-the-proxy)).
 

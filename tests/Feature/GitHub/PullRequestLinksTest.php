@@ -21,6 +21,7 @@ use App\Models\WorkItem;
 use App\Models\WorkItemLink;
 use App\Notifications\NotificationConsumer;
 use App\Support\Actor;
+use App\Support\AgentPullRequests;
 use Illuminate\Support\Facades\Exceptions;
 use Tests\Support\FakeGitHub;
 use Tests\Support\Mcp\McpClient;
@@ -391,4 +392,15 @@ it('leaves an item a person moved on after the merge when the PR that held it ba
     $deliver($this, 'closed', 38, ['state' => 'closed', 'draft' => true, 'closed_at' => '2026-11-24T11:00:00Z', 'body' => "Fixes WEBU-{$a->number}"]);
 
     expect($stateOf($this, $a))->toBe('Todo');
+});
+
+it('takes a PR for one of an agent only when the bot of the app of its repo opened it', function () {
+    $this->github->secondApp();
+
+    expect(AgentPullRequests::isAgent(null, 'feldwerk-werkbuch[bot]', 700_000_001))->toBeTrue()
+        ->and(AgentPullRequests::isAgent(null, 'FELDWERK-LABS-werkbuch[bot]', 700_000_002))->toBeTrue()
+        // the bot of another app (A680), a repo no app reaches, a person
+        ->and(AgentPullRequests::isAgent(null, 'feldwerk-werkbuch[bot]', 700_000_002))->toBeFalse()
+        ->and(AgentPullRequests::isAgent(null, 'feldwerk-werkbuch[bot]', 700_000_099))->toBeFalse()
+        ->and(AgentPullRequests::isAgent(null, 'mara-feldwerk', 700_000_001))->toBeFalse();
 });

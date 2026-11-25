@@ -126,10 +126,10 @@ const FLOWS = [
   'rename a runner', // 10.1, WEBU-27
   'revoke a runner', // 6.2, 10.1, WEBU-27
   'cancel a run on a runner', // 6.4, 10.1, WEBU-27
-  'connect GitHub', // 10.2, WEBU-27
+  'connect the app of a GitHub account', // 10.2, WEBU-27, WEBU-35
   'choose the repo of a project', // 10.3, WEBU-27
   'confirm an unauthorized merge', // 11.3, WEBU-27
-  'disconnect GitHub', // 10.2, WEBU-27
+  'disconnect the app of a GitHub account', // 10.2, WEBU-27, WEBU-35
   // no flow: "Neu einlesen" of Settings → GitHub (10.2). It asks GitHub itself for the installations and repos with a
   // token of the app, which no e2e run has (an app registered at github.com); a button and a toast, the same keys as the
   // other buttons of the page. Vitest proves it (org/github/github.test.tsx, "reads the repos again"), Pest the sync.

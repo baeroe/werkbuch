@@ -6,7 +6,7 @@ use App\Actions\GitHub\LinkRepository;
 use App\Actions\GitHub\StartManifest;
 
 /**
- * The hand-written bodies and answers of the GitHub app and the repo of a project (WEBU-24, spec 10.2, 10.3, 11.3):
+ * The hand-written bodies and answers of the GitHub apps (one per GitHub account, A680) and the repo of a project (WEBU-24, spec 10.2, 10.3, 11.3):
  * plain JSON Schema (OpenAPI 3.1). Never a private key or a secret (A510). The bodies are open (`x-werkbuch-open`): the
  * actions pass over keys they do not know (K2).
  */
@@ -65,7 +65,7 @@ final class GitHubSchemas
             'base_branch' => ['type' => 'string', 'description' => 'What agents branch from and werkbuch merges into.'],
             'protected' => ['type' => ['boolean', 'null'], 'description' => 'Whether a ruleset keeps a direct push off the base branch (only a hint); `null`: GitHub did not say.'],
             'protected_checked_at' => self::time(),
-            'guard' => ['anyOf' => [self::object('A push of the app to the base branch (or deleting it) no merge of werkbuch explains (spec 11.3): every strand of the project pauses until an admin of the project confirms.', [
+            'guard' => ['anyOf' => [self::object('A push of the app of the repo to the base branch (or deleting it) no merge of werkbuch explains (spec 11.3): every strand of the project pauses until an admin of the project confirms.', [
                 'detected_at' => self::time(false),
                 'sha' => ['type' => 'string', 'description' => 'The commit of the push.'],
                 'branch' => ['type' => 'string'],
@@ -86,32 +86,34 @@ final class GitHubSchemas
      */
     public static function status(): array
     {
-        return self::data(self::object('The one GitHub app of the instance (spec 10.2); never its private key or webhook secret.', [
-            'app' => ['anyOf' => [self::object('The app from the manifest flow.', [
+        $installation = self::object('An installation of the app on its GitHub account.', [
+            'id' => ['type' => 'string', 'pattern' => self::ULID],
+            'installation_id' => ['type' => 'integer'],
+            'account_login' => ['type' => 'string'],
+            'account_type' => ['type' => 'string'],
+            'repository_selection' => ['type' => 'string', 'description' => '`all` or `selected`.'],
+            'suspended_at' => self::time(),
+            'removed_at' => [...self::time(), 'description' => 'When it was uninstalled at GitHub.'],
+        ], ['id', 'installation_id', 'account_login', 'account_type', 'repository_selection', 'suspended_at', 'removed_at']);
+
+        return self::data(self::object('The GitHub apps of the instance, one per GitHub account (spec 10.2); never a private key or webhook secret.', [
+            'apps' => ['type' => 'array', 'description' => 'By the login of their account.', 'items' => self::object('An app from the manifest flow.', [
                 'id' => ['type' => 'string', 'pattern' => self::ULID],
                 'app_id' => ['type' => 'integer', 'description' => 'The ID of the app at GitHub.'],
                 'slug' => ['type' => 'string'],
                 'name' => ['type' => 'string'],
-                'owner_login' => ['type' => 'string'],
+                'owner_login' => ['type' => 'string', 'description' => 'The GitHub account it belongs to (one app per account).'],
                 'owner_type' => ['type' => 'string', 'description' => '`User` or `Organization`.'],
                 'html_url' => ['type' => 'string', 'format' => 'uri'],
                 'install_url' => ['type' => 'string', 'format' => 'uri', 'description' => 'Where to install it on more repos.'],
                 'permissions' => ['type' => 'object', 'additionalProperties' => ['type' => 'string'], 'description' => 'Permission → `read` or `write`.'],
                 'events' => ['type' => 'array', 'items' => ['type' => 'string']],
                 'created_at' => self::time(),
-            ], ['id', 'app_id', 'slug', 'name', 'owner_login', 'owner_type', 'html_url', 'install_url', 'permissions', 'events', 'created_at']), ['type' => 'null']]],
-            'installations' => ['type' => 'array', 'items' => self::object('An installation of the app on a GitHub account.', [
-                'id' => ['type' => 'string', 'pattern' => self::ULID],
-                'installation_id' => ['type' => 'integer'],
-                'account_login' => ['type' => 'string'],
-                'account_type' => ['type' => 'string'],
-                'repository_selection' => ['type' => 'string', 'description' => '`all` or `selected`.'],
-                'suspended_at' => self::time(),
-                'removed_at' => [...self::time(), 'description' => 'When it was uninstalled at GitHub.'],
-            ], ['id', 'installation_id', 'account_login', 'account_type', 'repository_selection', 'suspended_at', 'removed_at'])],
+                'installations' => ['type' => 'array', 'items' => $installation],
+            ], ['id', 'app_id', 'slug', 'name', 'owner_login', 'owner_type', 'html_url', 'install_url', 'permissions', 'events', 'created_at', 'installations'])],
             'repositories' => ['type' => 'array', 'items' => self::object('A repo an installation reaches.', [
                 'id' => ['type' => 'string', 'pattern' => self::ULID],
-                'installation_id' => ['type' => 'string', 'pattern' => self::ULID],
+                'installation_id' => ['type' => 'string', 'pattern' => self::ULID, 'description' => 'The installation (of one app) that reaches it.'],
                 'full_name' => ['type' => 'string'],
                 'private' => ['type' => 'boolean'],
                 'default_branch' => ['type' => 'string'],
@@ -127,7 +129,7 @@ final class GitHubSchemas
                     'guarded' => ['type' => 'boolean', 'description' => 'Whether the guard against an unauthorized merge holds the project.'],
                 ], ['id', 'identifier', 'name', 'base_branch', 'protected', 'guarded']), ['type' => 'null']]],
             ], ['id', 'installation_id', 'full_name', 'private', 'default_branch', 'html_url', 'removed_at', 'taken', 'project'])],
-        ], ['app', 'installations', 'repositories']));
+        ], ['apps', 'repositories']));
     }
 
     /**
@@ -137,9 +139,10 @@ final class GitHubSchemas
      */
     public static function manifestBody(): array
     {
-        return self::object('Org admins, only from the session; an instance with an app is 409 `github_connected`. Keys: `'.implode('`, `', StartManifest::FIELDS).'`.', [
-            'organization' => ['type' => ['string', 'null'], 'description' => 'The login of a GitHub organization to register the app under; left out or `null`: the own account.'],
-        ], [], true);
+        return self::object('Org admins, only from the session; one app per GitHub account: an account that has one is 409 `github_connected`. Keys: `'.implode('`, `', StartManifest::FIELDS).'`; every error comes in one 422.', [
+            'owner' => ['type' => 'string', 'description' => 'The login of the GitHub account the app belongs to (it names the app: `<login> werkbuch`).'],
+            'owner_type' => ['type' => 'string', 'enum' => StartManifest::OWNER_TYPES, 'description' => '`User`: the own account of the person at GitHub; `Organization`: a GitHub organization.'],
+        ], ['owner', 'owner_type'], true);
     }
 
     /**
@@ -157,13 +160,13 @@ final class GitHubSchemas
     }
 
     /**
-     * The answer of `DELETE /github`.
+     * The answer of `DELETE /github/apps/{githubApp}`.
      *
      * @return array<string, mixed>
      */
     public static function disconnected(): array
     {
-        return self::object('GitHub is disconnected.', ['canceled' => ['type' => 'integer', 'minimum' => 0, 'description' => 'How many runs ended as canceled or are being canceled.']], ['canceled']);
+        return self::object('The app is disconnected.', ['canceled' => ['type' => 'integer', 'minimum' => 0, 'description' => 'How many runs ended as canceled or are being canceled.']], ['canceled']);
     }
 
     /**
@@ -174,7 +177,7 @@ final class GitHubSchemas
     public static function repositoryBody(): array
     {
         return self::object('The admins of the project (`'.implode('`, `', LinkRepository::FIELDS).'`); every error comes in one 422. While the guard holds the project it is 409 `merge_guard_open`.', [
-            'repository_id' => ['type' => ['string', 'null'], 'description' => 'A repo the app reaches, by its ULID or `owner/name`; another project having it is 422; `null` takes the repo away.'],
+            'repository_id' => ['type' => ['string', 'null'], 'description' => 'A repo an app reaches, by its ULID or `owner/name`; another project having it is 422; `null` takes the repo away.'],
             'base_branch' => ['type' => ['string', 'null'], 'maxLength' => LinkRepository::BRANCH_MAX, 'description' => 'The base branch; left out or `null`: the default branch of the repo.'],
         ], ['repository_id'], true);
     }
