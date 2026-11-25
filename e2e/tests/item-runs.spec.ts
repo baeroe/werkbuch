@@ -132,13 +132,14 @@ test('follows a run of an agent at an item with the keyboard: its log live, canc
     await expect(page.getByText(label('items.agents.retry.done', { key: item.key, run: implement() })).first()).toBeVisible();
     const cards = page.getByRole('article', { name: label('items.agents.run.label', { run: implement(), bot: bot.name }) });
     await expect(cards).toHaveCount(2, LIVE);
-    await expect(cards.nth(1)).toBeFocused();
+    // newest first: the new run stands on top
+    await expect(cards.nth(0)).toBeFocused();
 
     // the runner takes the new run and finishes it
     const second = await runner.claim(item.id);
     await runner.result(second, 'succeeded', 'The banner uses the consent API v2.');
-    await expect(cards.nth(1)).toContainText(label('settings.runners.run.status.succeeded'), LIVE);
-    await expect(cards.nth(1)).toContainText('The banner uses the consent API v2.', LIVE);
+    await expect(cards.nth(0)).toContainText(label('settings.runners.run.status.succeeded'), LIVE);
+    await expect(cards.nth(0)).toContainText('The banner uses the consent API v2.', LIVE);
   } finally {
     await cleanup();
   }

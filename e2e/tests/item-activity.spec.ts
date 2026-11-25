@@ -95,11 +95,11 @@ test('names the reason of a remapped status', async ({ page }) => {
     const timeline = await timelineOf(page);
     const lines = timeline.getByRole('listitem');
     await expect(lines).toHaveCount(2);
-    // the move to Todo on creation was the person's own; the remap names why it happened
-    await expect(lines.nth(0)).toContainText(tr('en', 'items.activity.field.state', { old: 'Backlog', new: 'Todo' }));
-    await expect(lines.nth(1)).toContainText(tr('en', 'items.activity.field.state', { old: 'Todo', new: 'Review' }));
-    await expect(lines.nth(1)).toContainText(tr('en', 'items.activity.reason.workflow_changed'));
-    await expect(lines.nth(0)).not.toContainText(tr('en', 'items.activity.reason.workflow_changed'));
+    // newest first: the remap names why it happened; the move to Todo on creation below was the person's own
+    await expect(lines.nth(0)).toContainText(tr('en', 'items.activity.field.state', { old: 'Todo', new: 'Review' }));
+    await expect(lines.nth(0)).toContainText(tr('en', 'items.activity.reason.workflow_changed'));
+    await expect(lines.nth(1)).toContainText(tr('en', 'items.activity.field.state', { old: 'Backlog', new: 'Todo' }));
+    await expect(lines.nth(1)).not.toContainText(tr('en', 'items.activity.reason.workflow_changed'));
 
     // the filter "Changes" keeps the history, with the keyboard
     const filter = page.getByRole('group', { name: tr('en', 'items.activity.filter.label') });
@@ -125,9 +125,10 @@ test('filters to comments', async ({ page }) => {
     const timeline = await timelineOf(page);
     const lines = timeline.getByRole('listitem');
     const card = timeline.getByRole('article', { name: tr('en', 'items.comments.card', { name: PEOPLE.e2e.name }) });
-    // the creation, then the comment
+    // newest first: the comment on top, the creation under it
     await expect(lines).toHaveCount(2);
-    await expect(lines.nth(0)).toContainText(tr('en', 'items.activity.created'));
+    await expect(lines.nth(0).getByRole('article')).toContainText('Looks good to me.');
+    await expect(lines.nth(1)).toContainText(tr('en', 'items.activity.created'));
     await expect(card).toContainText('Looks good to me.');
 
     // "Comments" with the keyboard: only the comment stays, the address says so

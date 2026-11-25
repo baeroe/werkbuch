@@ -61,7 +61,7 @@ If wiki pages refer to an item with a `#` reference, the item shows them in the 
 
 ## Comments
 
-Anyone who can read an item can comment on it, viewers included; bots too, over the API. A comment is [rich text](/en/concepts/rich-text) at the comment level: text, lists, quotes, code, links, mentions, references, images and files. In the interface, `m` opens the comment field at the end of the activity, and `mod+enter` sends. A comment that fails to send stays in the field, and text you have not sent stays for this visit even if you close the item.
+Anyone who can read an item can comment on it, viewers included; bots too, over the API. A comment is [rich text](/en/concepts/rich-text) at the comment level: text, lists, quotes, code, links, mentions, references, images and files. In the interface, `m` opens the comment field at the top of the activity, and `mod+enter` sends; the new comment stands right under the field. A comment that fails to send stays in the field, and text you have not sent stays for this visit even if you close the item.
 
 You can edit and delete your own comments. An edited comment says **edited**, and the history keeps the earlier version; once the comment is deleted, the history only says that it was edited and deleted, without its text. Project admins and org admins can delete the comments of others, never edit them. Deleting waits five seconds with **Undo**.
 
@@ -99,7 +99,7 @@ The description is guarded: the interface sends the version of the description i
 
 ## History
 
-Every change is an entry in the history of the item, with who made it, when, and how (in the interface, over the API, by an [automation](/en/concepts/automations) or a template). An item a template created says "From template "…"" with the name the template had then; a step of an automation names its reason, such as "Automation: close parent". A change of a field shows the old and the new value; a move names both states as they were called then, even if a state was renamed or removed later. The interface groups the changes one person makes within five minutes and shows the comments in the same timeline; the filter switches between everything, comments and changes. Editing and deleting a comment, and adding and removing a file of the file list, are entries too. Watching, reactions and the manual order of items are not part of the history.
+Every change is an entry in the history of the item, with who made it, when, and how (in the interface, over the API, by an [automation](/en/concepts/automations) or a template). An item a template created says "From template "…"" with the name the template had then; a step of an automation names its reason, such as "Automation: close parent". A change of a field shows the old and the new value; a move names both states as they were called then, even if a state was renamed or removed later. The interface groups the changes one person makes within five minutes and shows the comments in the same timeline, newest first; the filter switches between everything, comments and changes. It shows the newest 50 lines; **Load more** under them brings earlier ones. What someone else writes or changes meanwhile comes in on top; while you read further down, the line you read stays where it is. Editing and deleting a comment, and adding and removing a file of the file list, are entries too. Watching, reactions and the manual order of items are not part of the history.
 
 ## REST
 

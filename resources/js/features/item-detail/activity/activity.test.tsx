@@ -101,12 +101,15 @@ function renderActivity(history: MockRoute, { surface = 'peek', routes = {} }: {
 /** The text of a line (without the initials of the avatar), its reason after " | ". */
 const textOf = (line: HTMLElement) => Array.from(line.querySelectorAll('p'), (paragraph) => paragraph.textContent).join(' | ');
 
-/** The lines of the timeline as text, once the names have loaded. */
+/** The lines of the timeline as text, as they stand (newest first), once the names have loaded. */
 async function linesOf(): Promise<string[]> {
   const timeline = await screen.findByRole('list', { name: 'Verlauf' });
   await waitFor(() => expect(timeline.textContent).not.toContain('Unbekannt hat'));
   return within(timeline).getAllByRole('listitem').map(textOf);
 }
+
+/** The lines in the order the changes were made: the phrases below read like the history they come from. */
+const oldestFirst = async () => (await linesOf()).reverse();
 
 beforeAll(async () => {
   // jsdom has no layout; the editor (the cards' text, an earlier version) measures the selection
@@ -215,7 +218,7 @@ describe('phrases', () => {
     const timeline = await screen.findByRole('list', { name: 'Verlauf' });
     // the former parent loads its detail
     await waitFor(() => expect(timeline.textContent).toContain('WEB-31'));
-    expect(await linesOf()).toEqual([
+    expect(await oldestFirst()).toEqual([
       'Mara Lindqvist hat das Item angelegt. heute 01:00',
       'Mara Lindqvist hat den Titel von „Kontaktformular“ in „Formular sendet doppelt“ geändert. heute 01:10',
       'Mara Lindqvist hat die Priorität von High auf Urgent geändert. heute 01:20',
@@ -267,7 +270,7 @@ describe('phrases', () => {
       ),
     );
 
-    expect(await linesOf()).toEqual([
+    expect(await oldestFirst()).toEqual([
       'Mara Lindqvist hat budget von 1200 auf 1500 geändert und tags auf a, b gesetzt. heute 01:00',
       'Mara Lindqvist hat das Label ein gelöschtes Label entfernt und den Typ von einen früheren Typ auf Task geändert. heute 01:10',
       'Mara Lindqvist hat die Resolution eine frühere Resolution gesetzt und die Priorität von None auf mystery geändert. heute 01:20',
@@ -290,7 +293,7 @@ describe('phrases', () => {
       ]),
     );
 
-    expect(await linesOf()).toEqual([
+    expect(await oldestFirst()).toEqual([
       'Mara Lindqvist hat den Status von Review auf Doing gesetzt. heute 01:00',
       'Mara Lindqvist hat den Status von einen früheren Status auf Todo gesetzt. heute 01:30',
     ]);
@@ -306,7 +309,7 @@ describe('phrases', () => {
       ]),
     );
 
-    const lines = await linesOf();
+    const lines = await oldestFirst();
     expect(lines).toEqual([
       'Mara Lindqvist hat die Relation „blockiert“ zu WEB-12 hinzugefügt. heute 01:00',
       'Mara Lindqvist hat die Relation „wird blockiert von“ zu verborgenes Item hinzugefügt. heute 01:10',
@@ -335,7 +338,7 @@ describe('phrases', () => {
     const timeline = await screen.findByRole('list', { name: 'Verlauf' });
     await waitFor(() => expect(timeline.textContent).toContain('Automation Bot hat'));
     await waitFor(() => expect(timeline.textContent).toContain('ein gelöschtes Item'));
-    expect(within(timeline).getAllByRole('listitem').map(textOf)).toEqual([
+    expect(within(timeline).getAllByRole('listitem').map(textOf).reverse()).toEqual([
       'Automation Bot hat die Priorität von None auf High geändert, Ida Brenner als Assignee gesetzt und den Status von Todo auf In Progress gesetzt. heute 01:00 | Automatisierung: Assignee beim Start',
       'Mara Lindqvist hat den Status von Todo auf Backlog gesetzt. heute 01:10 | Workflow gewechselt',
       'Mara Lindqvist hat das Eltern-Item ein gelöschtes Item entfernt. heute 01:20 | Eltern-Item gelöscht',
@@ -354,7 +357,7 @@ describe('phrases', () => {
       ]),
     );
 
-    expect(await linesOf()).toEqual([
+    expect(await oldestFirst()).toEqual([
       'Automation Bot hat die Relation „relates to“ zu WEB-12 hinzugefügt. heute 01:00 | Automatisierung: Erwähnte Items verknüpfen',
       'Mara Lindqvist hat die Relation „relates to“ zu WEB-13 hinzugefügt. heute 01:10',
     ]);
@@ -376,7 +379,7 @@ describe('phrases', () => {
       ]),
     );
 
-    expect(await linesOf()).toEqual([
+    expect(await oldestFirst()).toEqual([
       'Automation Bot hat das Item angelegt. heute 01:00 | Aus Vorlage „Monatsbericht“',
       'Mara Lindqvist hat das Item angelegt. heute 01:10 | Aus Vorlage „Monatsbericht“',
       'Automation Bot hat den Status von In Progress auf Done gesetzt. heute 01:20 | Automatisierung: Eltern schließen',
@@ -409,7 +412,7 @@ describe('phrases', () => {
       ]),
     );
 
-    const lines = await linesOf();
+    const lines = await oldestFirst();
     expect(lines).toEqual([
       'Lene Vogt hat einen Kommentar bearbeitet. heute 01:00',
       'Lene Vogt hat einen Kommentar bearbeitet. heute 01:10',
@@ -440,7 +443,7 @@ describe('phrases', () => {
       ]),
     );
 
-    expect(await linesOf()).toEqual([
+    expect(await oldestFirst()).toEqual([
       'Mara Lindqvist hat die Datei „screenshot.png“ angehängt. heute 01:00',
       'Mara Lindqvist hat die Datei „screenshot.png“ entfernt. heute 01:10',
       'Mara Lindqvist hat die Beschreibung geändert und die Datei „angebot.pdf“ angehängt. heute 01:20',
@@ -472,7 +475,7 @@ describe('time', () => {
     // 01:30 in Berlin on 31 October is 20:30 the evening before in New York
     renderActivity(() => historyPage([event('ev_1', 0, { occurred_at: '2026-10-31T00:30:00.000Z' })]));
 
-    const [line] = await linesOf();
+    const [line] = await oldestFirst();
     expect(line).toMatch(/gestern 20:30$/);
     const time = screen.getByText('gestern 20:30');
     expect(time.getAttribute('datetime')).toBe('2026-10-31T00:30:00.000Z');
@@ -511,21 +514,41 @@ describe('Activity', () => {
     failSecond = false;
     await user.click(within(alert).getByRole('button', { name: 'Erneut versuchen' }));
 
-    // the newest lines first: the last of the second page is there, the oldest wait for "Mehr laden"
+    // the newest lines first: the last of the second page stands on top, the oldest wait for "Mehr laden" below
     const timeline = await screen.findByRole('list', { name: 'Verlauf' });
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(within(timeline).getAllByRole('listitem')).toHaveLength(SHOWN_LINES);
-    expect(timeline.textContent).toContain(`„T${SHOWN_LINES + 11}“ in „T${SHOWN_LINES + 12}“`);
+    const lines = () => within(timeline).getAllByRole('listitem');
+    expect(lines()).toHaveLength(SHOWN_LINES);
+    expect(lines()[0]!.textContent).toContain(`„T${SHOWN_LINES + 11}“ in „T${SHOWN_LINES + 12}“`);
+    expect(lines().at(-1)!.textContent).toContain('„T12“ in „T13“');
     expect(timeline.textContent).not.toContain('„T0“');
     screen.getByText('noch 12 frühere Zeilen');
 
+    // "Mehr laden" stands under the list
     const more = screen.getByRole('button', { name: 'Mehr laden' });
+    expect(timeline.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await user.click(more);
-    expect(within(timeline).getAllByRole('listitem')).toHaveLength(SHOWN_LINES + 12);
-    expect(within(timeline).getAllByRole('listitem')[0].textContent).toContain('„T0“ in „T1“');
-    // nothing earlier is left: the button goes and the focus moves on to the timeline
+    expect(lines()).toHaveLength(SHOWN_LINES + 12);
+    expect(lines().at(-1)!.textContent).toContain('„T0“ in „T1“');
+    // nothing earlier is left: the button goes, and reading goes on with the first of the lines it brought
     expect(screen.queryByRole('button', { name: 'Mehr laden' })).toBeNull();
-    await waitFor(() => expect(document.activeElement).toBe(timeline));
+    const first = lines()[SHOWN_LINES]!;
+    expect(first.textContent).toContain('„T11“ in „T12“');
+    await waitFor(() => expect(document.activeElement).toBe(first));
+  });
+
+  it('keeps the button while more is left and moves the focus to the first line it brought', async () => {
+    renderActivity(() => historyPage(Array.from({ length: SHOWN_LINES * 2 + 5 }, (_, index) => event(`ev_${String(index).padStart(3, '0')}`, index * 10, { changes: { title: { old: `T${index}`, new: `T${index + 1}` } } }))));
+    const user = userEvent.setup();
+    const timeline = await screen.findByRole('list', { name: 'Verlauf' });
+    await screen.findByText('noch 55 frühere Zeilen');
+
+    await user.click(screen.getByRole('button', { name: 'Mehr laden' }));
+    const lines = within(timeline).getAllByRole('listitem');
+    expect(lines).toHaveLength(SHOWN_LINES * 2);
+    await waitFor(() => expect(document.activeElement).toBe(lines[SHOWN_LINES]));
+    expect(lines[SHOWN_LINES]!.textContent).toContain('„T54“ in „T55“');
+    screen.getByText('noch 5 frühere Zeilen');
   });
 
   it('shows comments and changes in order and filters them', async () => {
@@ -554,22 +577,24 @@ describe('Activity', () => {
         });
     };
 
-    // a comment between two changes of one person ends their line
+    // newest first; a comment between two changes of one person ends their line
     await waitFor(async () =>
       expect(await shown()).toEqual([
-        'Mara Lindqvist hat den Titel von „A“ in „B“ geändert. heute 01:00',
-        'Kommentar von Ida Brenner: Sieht gut aus.',
-        'Mara Lindqvist hat die Priorität von None auf High geändert. heute 01:02',
         'Kommentar von Lene Vogt: Ist live.',
+        'Mara Lindqvist hat die Priorität von None auf High geändert. heute 01:02',
+        'Kommentar von Ida Brenner: Sieht gut aus.',
+        'Mara Lindqvist hat den Titel von „A“ in „B“ geändert. heute 01:00',
       ]),
     );
-    // the composer stands at the end of the activity
+    // the composer stands on top, between the heading and the list
     const section = screen.getByRole('region', { name: 'Aktivität' });
-    expect(within(section).getByRole('button', { name: /Kommentar schreiben/ })).toBeTruthy();
+    const composer = within(section).getByRole('button', { name: /Kommentar schreiben/ });
+    const timeline = within(section).getByRole('list', { name: 'Verlauf' });
+    expect(composer.compareDocumentPosition(timeline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     const filter = screen.getByRole('group', { name: 'Aktivität filtern' });
     await user.click(within(filter).getByRole('button', { name: 'Kommentare' }));
-    expect(await shown()).toEqual(['Kommentar von Ida Brenner: Sieht gut aus.', 'Kommentar von Lene Vogt: Ist live.']);
+    expect(await shown()).toEqual(['Kommentar von Lene Vogt: Ist live.', 'Kommentar von Ida Brenner: Sieht gut aus.']);
     await user.click(within(filter).getByRole('button', { name: 'Änderungen' }));
     expect(await shown()).toEqual(['Mara Lindqvist hat den Titel von „A“ in „B“ geändert und die Priorität von None auf High geändert. heute 01:00']);
   });

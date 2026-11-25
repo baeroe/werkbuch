@@ -10,7 +10,7 @@
  * - `ItemBody`: the title, the archived and blocked notes, what an agent does at the item (the chip "Kira arbeitet" and
  *   the notices that need a person, WEBU-28), the fields, the description, the properties placed below it (WEBU-6),
  *   the children, the relations, the pull requests (WEBU-28), the wiki pages that name the item (only when there are
- *   some), the files, the activity (comments, history and the runs of agents, with the comment composer at its end). In the preview one column, as in the
+ *   some), the files, the activity (comments, history and the runs of agents, with the comment composer on top, newest first). In the preview one column, as in the
  *   moodboard panel; on the page the fields stand in a column on the right from lg on (they stay in view while the
  *   main column scrolls), below lg they follow the title. The reading order is the same everywhere.
  */

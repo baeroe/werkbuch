@@ -319,7 +319,8 @@ export function CommentComposer({ item }: { item: WorkItem }) {
           <span className="min-w-0 flex-1 truncate">{t(empty ? 'items.comments.write' : 'items.comments.continue')}</span>
           <Kbd keys="m" aria-hidden="true" />
         </button>
-        <div className="mt-1 min-h-5">{status}</div>
+        {/* the status takes no room until it says something: the newest line follows the opener closely (WEBU-37) */}
+        <div className="mt-1">{status}</div>
       </div>
     );
   }

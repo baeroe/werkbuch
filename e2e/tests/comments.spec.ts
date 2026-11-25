@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, arrowTo, createE2ePage, createE2eProject, createItem, isPhone, pasteFile, PEOPLE, pngBytes, pressMod, removeE2eProject, runId, tabTo, tr, uploadViaApi, variant } from '../helpers';
+import { api, arrowTo, channelHeld, createE2ePage, createE2eProject, createItem, isPhone, pasteFile, PEOPLE, pngBytes, pressMod, removeE2eProject, runId, tabTo, tr, uploadViaApi, variant } from '../helpers';
 
 // Writing comments, signed in as the e2e person (Erik Ende, English). Each test works in a project of its own
 // (`E2E …`, removed in `finally`); its items come over the API.
@@ -57,6 +57,55 @@ test('writes a comment with m and mod+enter', async ({ page }) => {
     await expect(editor).toHaveText('');
     await expect(editor).toBeFocused();
     expect(await storedComments(page, item.id)).toEqual(['Reproducible on iOS 18.']);
+
+    // the composer stands on top, newest first: the next comment lands right under it, above the first (WEBU-37)
+    await page.keyboard.type('Only in Safari.');
+    await pressMod(page, 'Enter');
+    const timeline = page.getByRole('list', { name: tr('en', 'items.activity.list') });
+    const cards = timeline.getByRole('article', { name: tr('en', 'items.comments.card', { name: PEOPLE.e2e.name }) });
+    await expect(cards).toHaveCount(2);
+    await expect(cards.nth(0)).toContainText('Only in Safari.');
+    await expect(cards.nth(1)).toContainText('Reproducible on iOS 18.');
+    const composerBottom = await page.locator('[data-comment-composer]').evaluate((box) => box.getBoundingClientRect().bottom);
+    const timelineTop = await timeline.evaluate((list) => list.getBoundingClientRect().top);
+    expect(composerBottom).toBeLessThan(timelineTop);
+    await expect(editor).toBeFocused();
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
+test('keeps the comment being read in place when a comment comes in on top', async ({ page }) => {
+  test.setTimeout(90_000);
+  const { id, identifier } = await createE2eProject(page, name('live'), { types: ['Task'] });
+  try {
+    const item = await createItem(page, { project_id: id, title: 'E2E Neueste zuerst' });
+    for (let number = 1; number <= 12; number += 1) {
+      await addComment(page, item.id, `Note ${String(number).padStart(2, '0')}: the form sends twice, checked again in another browser.`);
+    }
+    const held = channelHeld(page, `private-work-item.${item.id}`);
+    await page.goto(`/items/${item.key}`);
+    await held;
+    const timeline = page.getByRole('list', { name: tr('en', 'items.activity.list') });
+    const cards = timeline.getByRole('article');
+    await expect(cards).toHaveCount(12);
+    // newest first, the composer above them
+    await expect(cards.nth(0)).toContainText('Note 12');
+
+    // reading further down: note 07 at the top of the window
+    const reading = cards.filter({ hasText: 'Note 07:' });
+    await reading.evaluate((card) => card.scrollIntoView({ block: 'start' }));
+    const top = async () => (await reading.boundingBox())!.y;
+    await expect.poll(top).toBeLessThan(200);
+    const before = await top();
+
+    // another tab writes (a request without the socket of this one): the comment comes in live, on top, out of sight
+    await addComment(page, item.id, 'Arrived live.');
+    await expect(cards).toHaveCount(13, { timeout: 20_000 });
+    await expect(cards.nth(0)).toContainText('Arrived live.');
+    // the comment being read has not moved
+    expect(Math.abs((await top()) - before)).toBeLessThan(2);
+    expect((await cards.nth(0).boundingBox())!.y).toBeLessThan(0);
   } finally {
     await removeE2eProject(page, identifier);
   }
