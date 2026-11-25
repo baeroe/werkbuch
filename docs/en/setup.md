@@ -12,6 +12,7 @@ werkbuch runs as a Docker Compose stack of nine services. Six of them come from 
   - PHP-FPM in the web service, with up to 20 processes of at most 512 MB each. A request usually takes 30 to 60 MB, but on a 2 GB host set `PHP_FPM_PM_MAX_CHILDREN=8` in the `environment` of `werkbuch`.
   - Four worker containers: three queues and the scheduler.
 - 10 GB of disk, plus what the attachments take.
+- Only for [agents](/en/concepts/agents): a machine of your own as [runner](/en/runner) and a [GitHub app](/en/github). Neither runs in the stack, and both are set up once werkbuch runs.
 
 Settings like these two belong in a `docker-compose.override.yml` next to `docker-compose.yml`; `docker compose` reads it on its own. In the standalone file, add them to the services there.
 

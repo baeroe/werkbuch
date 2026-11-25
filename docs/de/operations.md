@@ -8,7 +8,7 @@ Alle Arbeit im Hintergrund läuft über Queues in der Datenbank. Drei Worker-Die
 
 | Dienst | Queues, in dieser Reihenfolge | Tut |
 |---|---|---|
-| `queue` | `mail`, `default`, `live`, `notifications`, `bulk` | gibt jedes Event an seine Konsumenten, schickt die Live-Updates an Reverb, schreibt die Inbox und sendet Mails (zuerst die Anmelde-Mails: Einladungen und Passwort zurücksetzen auf der Queue `mail`, dann Benachrichtigungen), löscht Projekte, führt Vorlagen und die nächtlichen Automatisierungen aus |
+| `queue` | `mail`, `default`, `live`, `notifications`, `bulk` | gibt jedes Event an seine Konsumenten, schickt die Live-Updates an Reverb, schreibt die Inbox und sendet Mails (zuerst die Anmelde-Mails: Einladungen und Passwort zurücksetzen auf der Queue `mail`, dann Benachrichtigungen), löscht Projekte, führt Vorlagen und die nächtlichen Automatisierungen aus, arbeitet die Zustellungen von GitHub ab und bringt die [Agenten](/de/concepts/agents) weiter (Aufträge, Reviews, Merges) |
 | `queue-index` | `search`, `media` | hält den Suchindex mit jeder Änderung Schritt, erzeugt die Vorschauen hochgeladener Bilder |
 | `queue-webhooks` | `webhooks` | stellt Webhooks zu |
 
@@ -20,18 +20,19 @@ Genau ein `queue-index` laufen lassen, nie skalieren: Zwei Worker auf `search` k
 
 | Wann | Was |
 |---|---|
-| jede Minute | `app:redispatch-events` (Events, deren Übergabe verloren ging), `app:send-notification-mails` (Sammelmails, die ihren Job verloren), `app:run-templates` (Vorlagen, deren Zeitplan fällig ist) |
-| jede Stunde | die Erinnerungen an Fälliges (um 08:00 in der Zeitzone jeder Person), die nächtlichen Automatisierungen Auto-Archiv und Auto-Close (um 03:00 in der Zeitzone der Organisation), das Aufräumen gelesener Benachrichtigungen, nicht übernommener Uploads und des Webhook-Protokolls |
+| jede Minute | `app:redispatch-events` (Events, deren Übergabe verloren ging), `app:send-notification-mails` (Sammelmails, die ihren Job verloren), `app:run-templates` (Vorlagen, deren Zeitplan fällig ist), Aufträge von Agenten, die ihren Runner verloren oder ihr Zeitlimit gerissen haben, Stränge von Agenten, die auf GitHub warten (einen Pull Request, Checks) |
+| jede Stunde | die Erinnerungen an Fälliges (um 08:00 in der Zeitzone jeder Person), die nächtlichen Automatisierungen Auto-Archiv und Auto-Close (um 03:00 in der Zeitzone der Organisation), das Aufräumen gelesener Benachrichtigungen, nicht übernommener Uploads, des Webhook-Protokolls, der Protokolle der Aufträge und der Zustellungen von GitHub (beide nach 30 Tagen) |
 
 Ohne Scheduler gibt es keine Erinnerungen, keine geplanten Vorlagen, keine nächtlichen Automatisierungen und kein Aufräumen; Änderungen, Mails und Webhooks gehen weiter über die Worker raus. `docker compose ps` zeigt, ob jeder Dienst gesund ist.
 
 ## Ausgehende Verbindungen
 
-Nur drei Dinge verlassen den Stack:
+Nur vier Dinge verlassen den Stack:
 
 - **Zustellungen der Webhooks** aus `queue-webhooks`, an Adresse und Port jedes Webhooks. Der Test-Ping und **Erneut senden** laufen in der Anfrage der Person, die sie klickt, sie gehen also aus `werkbuch` raus.
 - **Mail** per SMTP an `MAIL_HOST` und `MAIL_PORT`: Benachrichtigungen, Einladungen und das Zurücksetzen von Passwörtern aus `queue`, die Testmail der [System-Seite](#system-seite) aus `werkbuch`.
-- **Namensauflösungen** der Empfänger und des Mailservers, über das DNS von Docker.
+- **GitHub:** Aufrufe an `api.github.com` (Port 443), sobald eine [GitHub-App](/de/github) verbunden ist: Tokens für Aufträge, Pull Requests, Checks, Reviews und Merges, aus `queue` und `werkbuch`.
+- **Namensauflösungen** der Empfänger, des Mailservers und von GitHub, über das DNS von Docker.
 
 werkbuch sendet nie über einen Proxy: `HTTP_PROXY` und `HTTPS_PROXY` der Umgebung gelten für Webhooks nicht, weil ein Proxy den Namen selbst auflöste und so die Prüfung der Adresse umginge ([Webhooks](/de/webhooks#private-netze)). Ein ausgehender Proxy wird in dieser Version nicht unterstützt. Meilisearch läuft mit `MEILI_NO_ANALYTICS`, und `mariadb`, `meilisearch` und `reverb` stehen im internen Netz `backend` ohne Weg nach draußen.
 
@@ -43,7 +44,7 @@ networks:
     enable_ipv6: true
 ```
 
-**Firewall:** Eingehend muss nur der veröffentlichte Port von `werkbuch` (`7740`) offen sein, und nur für den Reverse Proxy. Ausgehend brauchen die Container DNS, den Port des Mailservers und die Ports der Webhook-Empfänger (meist 443). Docker leitet den Verkehr der Container an den Regeln `INPUT` und `OUTPUT` des Hosts vorbei, ufw eingeschlossen; Regeln für Container gehören in die Kette `DOCKER-USER`.
+**Firewall:** Eingehend muss nur der veröffentlichte Port von `werkbuch` (`7740`) offen sein, und nur für den Reverse Proxy. Ausgehend brauchen die Container DNS, den Port des Mailservers, die Ports der Webhook-Empfänger (meist 443) und, mit GitHub, `api.github.com:443`. Ist GitHub verbunden, kommen dessen Webhooks ebenfalls über den Proxy am veröffentlichten Port an. Docker leitet den Verkehr der Container an den Regeln `INPUT` und `OUTPUT` des Hosts vorbei, ufw eingeschlossen; Regeln für Container gehören in die Kette `DOCKER-USER`.
 
 ## Private Ziele für Webhooks
 
@@ -95,6 +96,21 @@ Was trotzdem im Log stehen kann:
 - Das Fehlerlog von nginx (ebenfalls stderr) nennt die ganze Anfragezeile samt Query-String, wenn nginx selbst eine Anfrage ablehnt oder nicht zustellen kann: ein Body über seiner Größengrenze, PHP-FPM oder Reverb antworten nicht. Für einen Upload eines MCP-Agenten ist das eine signierte Adresse, die höchstens 15 Minuten gilt; für eine Einladung ist es der Link selbst, der offen bleibt, bis er angenommen wird oder nach 7 Tagen abläuft (eine neue Einladung an dieselbe Adresse schließt den alten Link). Die Logs vertraulich behandeln.
 
 `LOG_OUTPUT_LEVEL=debug` des Basis-Images wird im Image von werkbuch nicht unterstützt: Seine Debug-Dateien gehören root, damit ein Fehler der App nie die Konfiguration umschreiben kann, die PHP beim nächsten Start liest.
+
+## Runner und GitHub
+
+Das Image trägt den [Runner](/de/runner) seiner eigenen Version für macOS und Linux, `arm64` und `amd64`, und gibt ihn ohne Anmeldung heraus: Das Binary ist kein Geheimnis.
+
+| Pfad | Wer | Grenze |
+|---|---|---|
+| `GET /runner/install.sh`, `GET /runner/download/<os>/<arch>` und `….sha256` | das Installationsskript und das Selbst-Update der Runner | 30 Anfragen je Minute und Adresse |
+| `POST /api/runner/pair` | ein Runner mit Einmal-Code | 10 je Minute und Adresse |
+| `/api/runner/*` | Runner mit ihrem Token: Aufträge abholen, Heartbeat, Protokoll, Ergebnis | 3000 je Minute und Runner, ohne gültiges Token 60 je Minute und Adresse |
+| `POST /github/webhook` | GitHub, signiert mit dem Secret der App, Bodies bis 25 MB | 60 unsignierte Anfragen je Minute und Adresse |
+
+Runner rufen werkbuch auf, nie umgekehrt: Das Runner-Protokoll braucht keinen offenen Port am Runner. Hinter deinem Proxy brauchen diese Pfade nichts Eigenes, aber `/github/webhook` muss aus dem Internet erreichbar sein, auch wenn der Rest es nicht ist ([GitHub](/de/github#der-webhook-hinter-dem-proxy)).
+
+Private Key und Webhook-Secret der GitHub-App liegen mit `APP_KEY` verschlüsselt; ohne `storage/app/.app-key` aus der [Sicherung](/de/backup) muss die App neu verbunden werden. Das Protokoll jedes Auftrags bleibt 30 Tage in der Datenbank, höchstens 2000 Zeilen oder 1 MB je Auftrag, ohne Tokens; die Zustellungen von GitHub bleiben ebenfalls 30 Tage. Die Runner schreiben ihr eigenes Log auf ihrer Maschine.
 
 ## Konfiguration im laufenden Container
 

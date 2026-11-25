@@ -123,6 +123,10 @@ server {
 
 KI-Agenten erreichen den [MCP-Server](/de/mcp) unter `APP_URL/mcp` mit `POST`-Anfragen. Diese unverändert weiterreichen, mit `Authorization` und den Headern `MCP-Protocol-Version`, `Mcp-Method` und `Mcp-Name`. MCP-Clients schicken `Accept: application/json, text/event-stream`: `text/event-stream` darin nicht entfernen. Heute beantwortet werkbuch jede Anfrage mit einfachem JSON; das Protokoll erlaubt auch eine gestreamte Antwort (`text/event-stream`), die werkbuch mit `X-Accel-Buffering: no` kennzeichnen würde. Antworten von `/mcp` darum nicht puffern und diesen Header in Ruhe lassen. Die Beispiele oben brauchen dafür nichts Zusätzliches.
 
+## Runner und GitHub
+
+[Runner](/de/runner) erreichen werkbuch unter `APP_URL/runner/` (Installationsskript und Binaries) und `APP_URL/api/runner/` (ihr Protokoll), [GitHub](/de/github) schickt seine Webhooks an `APP_URL/github/webhook`. Die Beispiele oben reichen alle durch. Stellt dein Proxy eine Anmeldung oder eine Liste erlaubter Adressen vor werkbuch, lass `/github/webhook` ohne sie durch (werkbuch prüft die Signatur von GitHub selbst), lass die Runner die anderen beiden erreichen und erlaube Bodies von 32 MB: GitHub schickt bis zu 25 MB.
+
 ## Checkliste
 
 - `APP_URL` beginnt mit `https://` und hat genau den Host, den der Browser nutzt.

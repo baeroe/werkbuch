@@ -2,6 +2,13 @@
 
 Stand: 2026-11-08 · Status: freigegeben (die Änderungen vom 2026-10-31, vom 2026-11-02 (Phasen 5 und 6), vom 2026-11-03 (Phase 7), vom 2026-11-04 (Phasen 8 und 9), vom 2026-11-05 (Phase 10), vom 2026-11-06 (Phasen 11 und 12), vom 2026-11-07 (Phasen 13 und 14) und vom 2026-11-07 und 2026-11-08 (Phase 15) warten auf Rafaels Bestätigung, außer der bestätigten Status-Zuordnung aus Phase 4)
 
+> **Änderungen vom 2026-11-23 (Runner und GitHub-Integration, WEBU-17):** Von Rafael abgenommen am 2026-11-23. Eigene Spec: `docs/superpowers/specs/2026-11-23-runner-design.md` (samt ihren „Änderungen vom 2026-11-24“), Plan `docs/superpowers/plans/2026-11-23-runner.md`, Rulings ab A472. Sie erweitert diese Spec um:
+> - **Agenten (4.2):** Ein Bot mit eingeschalteter Agenten-Konfiguration (Runner-Pool, CLI, Modelle) arbeitet Items ab, die ihm zugewiesen sind, und beantwortet Erwähnungen in Kommentaren. Den Ablauf (Umsetzen → PR → CI → Review → Korrektur bzw. Konflikt → Merge) treibt werkbuch; der Agent setzt nie einen Status, weist nie zu und mergt nie (Run-Token mit harter Sperre).
+> - **Runner:** ein Go-Daemon auf eigenen Maschinen (macOS, Linux), der Aufträge per Polling unter `/api/runner/*` abholt; installiert per `curl …/runner/install.sh` mit Einmal-Code, Binaries im Image, Selbst-Update.
+> - **GitHub-App je Instanz:** Repo je Projekt (1:1), Installations-Tokens je Auftrag, Webhooks unter `/github/webhook`, Erkennung eines eigenmächtigen Merges.
+> - **PR-Verknüpfung (4.8):** Pull Requests verknüpfen sich über Keys in Titel, Beschreibung und Branch-Namen mit Items; die Agenten-Schritte am Workflow (4.5) legen fest, welche Status sie setzen.
+> - **Doku (10):** `docs/{en,de}/runner.md`, `github.md`, `concepts/agents.md`.
+
 > **Änderungen vom 2026-11-18 (nach v0.2.0, WEBU-8, WEBU-11):** Von Rafael entschieden (bestätigt):
 > - **Tabellen in jeder Stufe** (4.16): auch Kommentare und Beschreibungen haben Tabellen samt `/`-Menü und dem Menü der Tabelle (Reiter oben rechts, `alt+F10`). Überschriften und Checklisten bleiben ab der Beschreibung, Trennlinien im Wiki.
 
