@@ -421,6 +421,8 @@ export default function GitHub(_props: SectionProps) {
   const [leaving, setLeaving] = useState<GitHubApp | null>(null);
   const [asking, setAsking] = useState(false);
   const [adding, setAdding] = useState(false);
+  // every opening of the dialog starts empty: a new round mounts a fresh form
+  const [round, setRound] = useState(0);
   /** Where the focus goes when the question closes: back to „Trennen“, after the disconnect to the page title. */
   const afterDisconnect = useRef<HTMLElement | null>(null);
   const addButton = useRef<HTMLButtonElement | null>(null);
@@ -467,7 +469,15 @@ export default function GitHub(_props: SectionProps) {
               <Button variant="secondary" icon={RefreshCw} pending={sync.isPending} onClick={readAgain}>
                 {t('settings.github.sync.button')}
               </Button>
-              <Button ref={addButton} variant="secondary" icon={Plus} onClick={() => setAdding(true)}>
+              <Button
+                ref={addButton}
+                variant="secondary"
+                icon={Plus}
+                onClick={() => {
+                  setRound((current) => current + 1);
+                  setAdding(true);
+                }}
+              >
                 {t('settings.github.add.button')}
               </Button>
             </div>
@@ -500,7 +510,7 @@ export default function GitHub(_props: SectionProps) {
           );
         }}
       </Loaded>
-      <AddAppDialog open={adding} onOpenChange={setAdding} finalFocus={addButton} />
+      <AddAppDialog key={round} open={adding} onOpenChange={setAdding} finalFocus={addButton} />
       <AlertDialog
         open={asking}
         onOpenChange={setAsking}

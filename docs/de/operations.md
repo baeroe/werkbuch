@@ -106,7 +106,7 @@ Das Image trägt den [Runner](/de/runner) seiner eigenen Version für macOS und 
 | `GET /runner/install.sh`, `GET /runner/download/<os>/<arch>` und `….sha256` | das Installationsskript und das Selbst-Update der Runner | 30 Anfragen je Minute und Adresse |
 | `POST /api/runner/pair` | ein Runner mit Einmal-Code | 10 je Minute und Adresse |
 | `/api/runner/*` | Runner mit ihrem Token: Aufträge abholen, Heartbeat, Protokoll, Ergebnis | 3000 je Minute und Runner, ohne gültiges Token 60 je Minute und Adresse |
-| `POST /github/webhook` | GitHub, signiert mit dem Secret der App, Bodies bis 25 MB | 60 unsignierte Anfragen je Minute und Adresse |
+| `POST /github/webhook` | GitHub, signiert mit dem Secret der App, die sendet, Bodies bis 25 MB | 60 unsignierte Anfragen je Minute und Adresse |
 
 Runner rufen werkbuch auf, nie umgekehrt: Das Runner-Protokoll braucht keinen offenen Port am Runner. Hinter deinem Proxy brauchen diese Pfade nichts Eigenes, aber `/github/webhook` muss aus dem Internet erreichbar sein, auch wenn der Rest es nicht ist ([GitHub](/de/github#der-webhook-hinter-dem-proxy)).
 

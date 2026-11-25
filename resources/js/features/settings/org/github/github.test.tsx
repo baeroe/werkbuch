@@ -400,9 +400,13 @@ describe('GitHub, connected', () => {
 
     const add = await screen.findByRole('button', { name: 'Weitere App hinzufügen' });
     await user.click(add);
-    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Abbrechen' }));
+    await user.type(within(await screen.findByRole('dialog')).getByRole('textbox', { name: 'Login der Organisation' }), 'halb');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Abbrechen' }));
     await waitFor(() => expect(document.activeElement).toBe(add));
     expect(calls('POST', '/api/v1/github/manifest')).toHaveLength(0);
+    // opened again, the form starts empty
+    await user.click(add);
+    expect((within(await screen.findByRole('dialog')).getByRole('textbox', { name: 'Login der Organisation' }) as HTMLInputElement).value).toBe('');
   });
 
   it('disconnects one app after asking and gives the focus to the title', async () => {

@@ -432,7 +432,7 @@ Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins), die Aufträge 
 | `get-run` | Ein Auftrag. | `run` | `GET /runs/{run}` |
 | `run-events` | Das Protokoll eines Auftrags in seiner Reihenfolge. | `run` | `GET /runs/{run}/events` |
 | `get-config` | Die Agenten-Konfiguration eines Bots. | `bot` | `GET /bots/{user}/agent` |
-| `get-github` | Die GitHub-App der Instanz, ihre Installationen und Repos mit ihrem Projekt; nie ein Schlüssel. | – | `GET /github` |
+| `get-github` | Die GitHub-Apps (eine je Konto), ihre Installationen und Repos mit ihrem Projekt; nie ein Schlüssel. | – | `GET /github` |
 | `get-repository` | Das Repo eines Projekts mit Basis-Branch, Ruleset-Hinweis und dem Wächter gegen einen eigenmächtigen Merge; `data` null ohne Repo. | `project` | `GET /projects/{project}/repository` |
 | `list-rules` | Die Arbeitsregeln der Organisation je Auftragstyp, jeweils mit dem Vertrag des Typs. | – | `GET /agent-rules` |
 | `get-project-agents` | Die Agenten-Einstellungen eines Projekts: Review-Agent, Text für Agenten, Modelle, Bremsen, Schalter. | `project` | `GET /projects/{project}/agents` |
@@ -449,7 +449,7 @@ Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins), die Aufträge 
 | `retry-run` | Startet einen ohne Erfolg beendeten Auftrag erneut; antwortet den neuen Auftrag. | `run` | `POST /runs/{run}/retry` |
 | `resume-thread` | Setzt einen Strang fort, der seit dem Trennen von GitHub wartet; die Bremsen zählen weiter. Antwortet `{run, braked}`. | `item` | `POST /work-items/{item}/agent/resume` |
 | `save-config` | Setzt die Agenten-Konfiguration eines Bots ganz. | `bot`, `input` | `PUT /bots/{user}/agent` |
-| `sync-github` | Liest die Installationen der GitHub-App und ihre Repos neu von GitHub (Org-Admins). | – | `POST /github/sync` |
+| `sync-github` | Liest die Installationen der GitHub-Apps und ihre Repos neu von GitHub (Org-Admins). | – | `POST /github/sync` |
 | `set-repository` | Gibt einem Projekt sein Repo (eines, das die App erreicht, höchstens ein Projekt je Repo) und den Basis-Branch, oder keins; Admins des Projekts. | `project`, `input` | `PUT /projects/{project}/repository` |
 | `confirm-merge-guard` | Bestätigt einen eigenmächtigen Merge: der Wächter geht, die pausierten Stränge des Projekts sind wieder offen; Admins des Projekts. | `project` | `POST /projects/{project}/repository/confirm-guard` |
 | `save-rule` | Setzt die Arbeitsregeln eines Auftragstyps; `null` stellt den Standard wieder her (Org-Admins). | `kind`, `input` | `PUT /agent-rules/{kind}` |

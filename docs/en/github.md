@@ -1,22 +1,26 @@
 # GitHub
 
-[Agents](/en/concepts/agents) reach their repos through one GitHub app per instance. The app pushes and opens pull requests for the agents, never a person; werkbuch writes reviews and comments with it, reads the checks and merges once CI is green and the review has no findings. GitHub tells werkbuch about pushes, pull requests and checks through the webhook of the app.
+[Agents](/en/concepts/agents) reach their repos through GitHub apps, one private app per GitHub account: your own account, an organization, or several of them. The app pushes and opens pull requests for the agents, never a person; werkbuch writes reviews and comments with it, reads the checks and merges once CI is green and the review has no findings. GitHub tells werkbuch about pushes, pull requests and checks through the webhook of the app.
 
-Every instance creates its own app: werkbuch is self-hosted, so there is no shared app. GitHub.com only; GitHub Enterprise Server, GitLab, Gitea, Forgejo and Bitbucket are not supported.
+Every instance creates its own apps: werkbuch is self-hosted, so there is no shared app. GitHub.com only; GitHub Enterprise Server, GitLab, Gitea, Forgejo and Bitbucket are not supported.
 
 ## Before you connect
 
 - `APP_URL` has to be reachable from the internet over HTTPS for `POST /github/webhook`: GitHub delivers its webhooks there (see [the webhook behind the proxy](#the-webhook-behind-the-proxy)). Everything else of the flow runs in your browser.
-- You are an owner of the GitHub organization the app shall belong to, or it belongs to your own account.
-- Back up `storage/app/.app-key` (see [Backup](/en/backup)): it encrypts the private key and the webhook secret of the app.
+- You are an owner of the GitHub organization the app shall belong to, or it belongs to your own account and you are signed in to GitHub with it.
+- Back up `storage/app/.app-key` (see [Backup](/en/backup)): it encrypts the private keys and the webhook secrets of the apps.
+
+## One app per account
+
+A private GitHub app can only be installed on the account it belongs to. So werkbuch keeps one app per GitHub account: repos of your own account need the app of your account, repos of an organization the app of that organization. Each app has its own installations, tokens, webhook secret and bot account (`<slug>[bot]`); a repo uses the app whose installation reaches it. An account has at most one app in an instance.
 
 ## Connect
 
-1. **Settings → GitHub → Connect to GitHub** (org admins). Enter the login of the GitHub organization, or leave it empty for your own account. werkbuch proposes the name of your werkbuch organization followed by ` werkbuch` (names are unique on GitHub; you can change it there).
+1. **Settings → GitHub → Connect to GitHub** (org admins), or **Add another app** once the first one is there. Choose **My GitHub account** or **A GitHub organization** and enter its login. werkbuch proposes the login followed by ` werkbuch` as the name (names are unique on GitHub; you can change it there). An account that has its app already is refused.
 2. GitHub shows the app with its permissions, webhook address and the way back filled in. Create it. GitHub returns to werkbuch, which keeps the app (ID, private key and webhook secret, encrypted).
 3. GitHub asks where to install the app: choose the repos the agents shall work on. It returns to werkbuch again.
 
-The page then shows the app, its installations and the shared repos, each with its project and whether a ruleset protects its base branch. **Change repos on GitHub** adds or removes repos at GitHub; werkbuch hears it through the webhook, and **Read again** fetches the list by hand.
+The page then shows every app with its installations and its shared repos, each with its project and whether a ruleset protects its base branch. **Change repos on GitHub** of an app adds or removes its repos at GitHub; werkbuch hears it through the webhook, and **Read again** fetches the lists of all apps by hand.
 
 ## Permissions
 
@@ -44,7 +48,7 @@ Reviews and answers get no token in the run at all: the runner clones with it an
 
 ## A repo for a project
 
-Each project has at most one repo, and a repo belongs to one project at most. Project admins choose it under **Project settings → Agents**, among the repos the app is installed on:
+Each project has at most one repo, and a repo belongs to one project at most. Project admins choose it under **Project settings → Agents**, among the repos the apps are installed on (grouped by app):
 
 - **Base branch:** where pull requests go and what werkbuch merges into; empty is the default branch of the repo.
 - **Merge method:** squash (default: one commit per pull request), merge commit or rebase.
@@ -76,7 +80,7 @@ What a link moves is set in the workflow: [steps of the agents](/en/concepts/wor
 
 ## Unauthorized merge
 
-werkbuch knows its own merges. When the app pushes to the base branch of a project and no merge of werkbuch explains it (a direct push, or a merge through the API with the token of a run), werkbuch
+werkbuch knows its own merges. When the app of the repo pushes to the base branch of a project and no merge of werkbuch explains it (a direct push, or a merge through the API with the token of a run), werkbuch
 
 - pauses every strand of the project and cancels its running runs,
 - comments at the items whose runs pushed, where it can tell,
@@ -86,13 +90,13 @@ A project admin checks the commit at GitHub, reverts it if needed and chooses **
 
 ## Disconnect
 
-**Disconnect GitHub** makes werkbuch forget the app: projects lose their repo, open strands pause, running and waiting runs are canceled; pull requests and branches stay on GitHub, and so does the app until you delete it there (**Settings → Developer settings → GitHub Apps** of the account or organization). To connect again you create a new app. Once a project has its repo again, **Resume** at an item continues its strand with a correction.
+**Disconnect** at an app makes werkbuch forget that app: the projects with one of its repos lose it, their open strands pause, their running and waiting runs are canceled; the other apps and their projects stay as they are. Pull requests and branches stay on GitHub, and so does the app until you delete it there (**Settings → Developer settings → GitHub Apps** of the account or organization). To connect the account again you create a new app. Once a project has its repo again, **Resume** at an item continues its strand with a correction.
 
 ## The webhook behind the proxy
 
 GitHub sends every event as `POST APP_URL/github/webhook`:
 
-- It has to be reachable from the internet, also when the rest of werkbuch is only reachable through a VPN or behind a login of the proxy. Pass this one path without extra authentication; werkbuch checks the signature (`X-Hub-Signature-256`) with the secret of the app and answers `401` to anything unsigned.
+- It has to be reachable from the internet, also when the rest of werkbuch is only reachable through a VPN or behind a login of the proxy. Pass this one path without extra authentication. It is one address for all apps: werkbuch finds the app by `X-GitHub-Hook-Installation-Target-ID`, checks the signature (`X-Hub-Signature-256`) with the secret of that app and answers `401` to anything unsigned or of an app it does not know.
 - Bodies reach up to 25 MB. nginx in the image takes 32 MB; allow at least as much at your proxy (`client_max_body_size 32m` for nginx).
 - An address that sends 60 unsigned requests in a minute gets `429` before werkbuch reads the body. GitHub itself is never counted.
 - werkbuch answers at once with `202` and works the delivery off in the queue; a delivery that GitHub sends again counts once.

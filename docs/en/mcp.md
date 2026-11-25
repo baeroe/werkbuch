@@ -432,7 +432,7 @@ Reads runners and the agent configuration of bots (org admins), the runs of agen
 | `get-run` | One run. | `run` | `GET /runs/{run}` |
 | `run-events` | The log of a run in the order it came. | `run` | `GET /runs/{run}/events` |
 | `get-config` | The agent configuration of a bot. | `bot` | `GET /bots/{user}/agent` |
-| `get-github` | The GitHub app of the instance, its installations and repos with their project; never a key. | – | `GET /github` |
+| `get-github` | The GitHub apps (one per account), installations and repos with their project; never a key. | – | `GET /github` |
 | `get-repository` | The repo of a project with its base branch, the ruleset hint and the guard against an unauthorized merge; `data` null without one. | `project` | `GET /projects/{project}/repository` |
 | `list-rules` | The working rules of the organization per kind of run, each with the contract of the kind. | – | `GET /agent-rules` |
 | `get-project-agents` | The agent settings of a project: review agent, text for agents, models, brakes, switches. | `project` | `GET /projects/{project}/agents` |
@@ -449,7 +449,7 @@ Changes runners and the agent configuration of bots (org admins), steers runs an
 | `retry-run` | Starts a run that ended without success again; answers the new run. | `run` | `POST /runs/{run}/retry` |
 | `resume-thread` | Resumes a strand paused by a GitHub disconnect; the brakes keep counting. Answers `{run, braked}`. | `item` | `POST /work-items/{item}/agent/resume` |
 | `save-config` | Sets the agent configuration of a bot as a whole. | `bot`, `input` | `PUT /bots/{user}/agent` |
-| `sync-github` | Reads the installations of the GitHub app and their repos from GitHub again (org admins). | – | `POST /github/sync` |
+| `sync-github` | Reads the installations of the GitHub apps and their repos from GitHub again (org admins). | – | `POST /github/sync` |
 | `set-repository` | Gives a project its repo (one the app reaches, at most one project per repo) and base branch, or none; admins of the project. | `project`, `input` | `PUT /projects/{project}/repository` |
 | `confirm-merge-guard` | Confirms an unauthorized merge: the guard goes and the paused strands of the project are open again; admins of the project. | `project` | `POST /projects/{project}/repository/confirm-guard` |
 | `save-rule` | Sets the working rules of a kind of run; `null` restores the standard (org admins). | `kind`, `input` | `PUT /agent-rules/{kind}` |
