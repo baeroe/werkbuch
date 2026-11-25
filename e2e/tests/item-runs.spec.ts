@@ -172,8 +172,7 @@ test('gives an item back to its agent with the keyboard after a run failed and a
 test('goes on with the strand of an agent with the keyboard once GitHub is back', async ({ page }) => {
   test.setTimeout(240_000);
   const { bot, runner, item, cleanup } = await agentWorld(page, 'resume');
-  let installation: string | null = null;
-  let app = false;
+  let app: string | null = null;
   try {
     // the task ran; then GitHub was disconnected (the strand paused) and is connected again with the repo of the project
     // (werkbuch holds the rows, `ResumeThread` asks GitHub nothing)
@@ -191,18 +190,17 @@ test('goes on with the strand of an agent with the keyboard once GitHub is back'
       artisanEval(
         [
           `$erik = App\\Models\\User::query()->where('email', '${PEOPLE.e2e.email}')->firstOrFail();`,
-          '$app = App\\Models\\GitHubApp::current() === null;',
-          "if ($app) { App\\Models\\GitHubApp::factory()->create(['slug' => 'e2e-werkbuch', 'name' => 'E2E werkbuch', 'owner_login' => 'e2e', 'created_by' => $erik->id]); }",
-          `$installation = App\\Models\\GitHubInstallation::factory()->create(['account_login' => 'e2e-runs-${variant()}']);`,
+          // the app of an account of this variant (A680: one per account), with its installation and repos
+          `$app = App\\Models\\GitHubApp::factory()->account('e2e-runs-${variant()}-${runId()}')->create(['created_by' => $erik->id]);`,
+          `$installation = App\\Models\\GitHubInstallation::factory()->create(['github_app_id' => $app->id, 'account_login' => 'e2e-runs-${variant()}-${runId()}']);`,
           `$repo = App\\Models\\GitHubRepository::factory()->create(['installation_id' => $installation->id, 'full_name' => 'e2e/${variant()}-${runId()}-runs']);`,
           `$item = App\\Models\\WorkItem::query()->findOrFail('${item.id}');`,
           "App\\Models\\ProjectRepository::query()->create(['project_id' => $item->project_id, 'repository_id' => $repo->id, 'base_branch' => 'main', 'protected' => false]);",
           "App\\Models\\AgentThread::query()->where('work_item_id', $item->id)->update(['status' => 'paused', 'pause_reason' => 'github', 'repository_github_id' => $repo->github_id]);",
-          "echo json_encode(['app' => $app, 'installation' => $installation->id]), PHP_EOL;",
+          "echo json_encode(['app' => $app->id]), PHP_EOL;",
         ].join('\n'),
       ),
-    ) as { app: boolean; installation: string };
-    installation = made.installation;
+    ) as { app: string };
     app = made.app;
 
     await page.goto(`/items/${item.key}`);
@@ -215,14 +213,7 @@ test('goes on with the strand of an agent with the keyboard once GitHub is back'
     await expect(correction).toBeFocused({ timeout: 30_000 });
   } finally {
     await cleanup();
-    if (installation !== null) {
-      artisanEval(
-        [
-          `App\\Models\\GitHubInstallation::query()->whereKey('${installation}')->delete();`,
-          app ? "App\\Models\\GitHubApp::query()->where('slug', 'e2e-werkbuch')->delete();" : '',
-          "echo 'ok', PHP_EOL;",
-        ].join('\n'),
-      );
-    }
+    // the app takes its installation, repo and the link of the project with it
+    if (app !== null) artisanEval([`App\\Models\\GitHubApp::query()->whereKey('${app}')->delete();`, "echo 'ok', PHP_EOL;"].join('\n'));
   }
 });
