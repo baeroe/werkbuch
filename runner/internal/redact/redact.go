@@ -18,8 +18,12 @@ var patterns = []*regexp.Regexp{
 	regexp.MustCompile(`\b[0-9A-Za-z]{26}\|wb_[A-Za-z0-9]{20,}`),
 	regexp.MustCompile(`\bwb_[A-Za-z0-9]{20,}`),
 	regexp.MustCompile(`\bwbr_[A-Za-z0-9]{20,}`),
-	regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{20,}`),
-	regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{20,}`),
+	// GitHub tokens whole, also the installation tokens of 2026 (`ghs_<app>_<JWT>`, A730): the segments of the JWT go
+	// with their dots, a dot that ends a sentence stays. Every word that looks like a token goes, also a name such as
+	// `ghs_installation_token_cache_key` (on purpose). RE2 is linear, a long chain of dots needs no limit. After a percent
+	// escape (`x-access-token%3Aghs_…`) `\b` does not hold: there the token the runner holds goes through Hold.
+	regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]+)*`),
+	regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]+)*`),
 	regexp.MustCompile(`(?i)(authorization:\s*bearer\s+)\S+`),
 }
 

@@ -69,7 +69,14 @@ func (f *TokenFile) Env() []string {
 }
 
 // tokenRe is what a token of GitHub is made of; anything else never reaches a file (it goes into YAML and a helper).
-var tokenRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+// Installation tokens are `ghs_<app>_<JWT>` since 2026 (A730): letters, digits, `_`, `-` and the two dots of the JWT,
+// about 520 characters and more as GitHub puts more into it. It starts with a letter or digit (never an option or a
+// YAML sign) and none of these characters means anything to the shell of the helper or inside a quoted YAML string.
+var tokenRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
+// TokenMax is the longest token the runner writes: GitHub names no limit (about 520 now), a line of the credential
+// protocol takes far more.
+const TokenMax = 8192
 
 // ClosedEnv is the environment of the CLI of a light run (A531): it pushes nothing and needs no token, so git and gh
 // fail closed instead of reaching for the logins of the machine: every credential helper off, gh with an empty config
@@ -89,7 +96,7 @@ func ClosedEnv(emptyDir string) []string {
 func (f *TokenFile) Write(token string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if !tokenRe.MatchString(token) {
+	if len(token) > TokenMax || !tokenRe.MatchString(token) {
 		return errors.New("a git token with a character no token has")
 	}
 	if err := replace(f.dir, f.Path, token); err != nil {
@@ -107,7 +114,8 @@ func (f *TokenFile) Write(token string) error {
 		return err
 	}
 	host := strings.Split(f.host, ":")[0]
-	hosts := host + ":\n    users:\n        x-access-token:\n            oauth_token: " + token + "\n    git_protocol: https\n    oauth_token: " + token + "\n    user: x-access-token\n"
+	// quoted: a plain YAML scalar of these characters could still read as a number, a bool or null (`1e5`, `true`)
+	hosts := host + ":\n    users:\n        x-access-token:\n            oauth_token: \"" + token + "\"\n    git_protocol: https\n    oauth_token: \"" + token + "\"\n    user: x-access-token\n"
 	return replace(gh, filepath.Join(gh, "hosts.yml"), hosts)
 }
 

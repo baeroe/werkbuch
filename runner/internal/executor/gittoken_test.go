@@ -15,9 +15,15 @@ import (
 	"github.com/baeroe/werkbuch/runner/internal/protocol"
 )
 
-const firstToken = "ghs_firstfirstfirstfirstfirst0001"
+// firstToken and renewed are made-up installation tokens in the form GitHub gives since 2026 (A730): `ghs_<app>_<JWT>`,
+// about 520 characters with two dots.
+var firstToken = jwtToken("first0001")
 
-func renewed(n int) string { return fmt.Sprintf("ghs_renewedrenewedrenewed%08d", n) }
+func jwtToken(seed string) string {
+	return "ghs_123456_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9." + strings.Repeat("eyJpc3MiOiIxMjM0NTYi"+seed, 12) + "." + strings.Repeat("sig-_"+seed, 15)
+}
+
+func renewed(n int) string { return jwtToken(fmt.Sprintf("renewed%08d", n)) }
 
 // gitWorld is a world whose project has a repository on a fake GitHub remote that takes a token until it expires.
 type gitWorld struct {
@@ -252,7 +258,7 @@ func TestGhCalledByItsPathGetsTheTokenOfTheRun(t *testing.T) {
 	dir := t.TempDir()
 	gh, seen := filepath.Join(dir, "gh"), filepath.Join(dir, "seen")
 	// a fake gh as gh reads its token: GH_TOKEN, GITHUB_TOKEN, else hosts.yml of GH_CONFIG_DIR
-	os.WriteFile(gh, []byte("#!/bin/sh\ntok=${GH_TOKEN:-$GITHUB_TOKEN}\n[ -z \"$tok\" ] && tok=$(sed -n 's/^    oauth_token: //p' \"$GH_CONFIG_DIR/hosts.yml\")\nprintf '%s' \"$tok\" > "+seen+"\n"), 0o700)
+	os.WriteFile(gh, []byte("#!/bin/sh\ntok=${GH_TOKEN:-$GITHUB_TOKEN}\n[ -z \"$tok\" ] && tok=$(sed -n 's/^    oauth_token: \"\\(.*\\)\"$/\\1/p' \"$GH_CONFIG_DIR/hosts.yml\")\nprintf '%s' \"$tok\" > "+seen+"\n"), 0o700)
 	t.Setenv("FAKE_GH", gh)
 	// gh of the machine is logged in as someone else
 	t.Setenv("GH_TOKEN", "gho_machinetokenmachinetoken0001")
