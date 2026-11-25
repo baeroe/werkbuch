@@ -26,6 +26,7 @@ use Illuminate\Support\Carbon;
  * @property array<string, mixed> $body
  * @property string $body_text
  * @property Carbon|null $edited_at
+ * @property Carbon|null $refusal_noted_at when the default bot said why werkbuch refused a mention of the comment (A711)
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read WorkItem $workItem
@@ -107,6 +108,6 @@ final class Comment extends Model
      */
     protected function casts(): array
     {
-        return ['body' => 'array', 'edited_at' => 'datetime'];
+        return ['body' => 'array', 'edited_at' => 'datetime', 'refusal_noted_at' => 'datetime'];
     }
 }

@@ -65,7 +65,8 @@ it('says once at the item why an agent that is switched off does not answer', fu
 
     $note = $notes($this->item)->sole();
     expect(AgentRun::query()->count())->toBe(0)
-        ->and($note->refused_comment_id)->toBe($question->id)
+        ->and($question->fresh()->refusal_noted_at)->not->toBeNull()
+        ->and($question->fresh()->updated_at->eq($question->updated_at))->toBeTrue()
         ->and($note->body_text)->toBe('Bob does not answer this mention. Bob is not switched on as an agent. An org admin can change that: Set up Bob as an agent')
         ->and($note->body['content'][0]['content'][1]['marks'][0]['attrs']['href'])->toBe(config('app.url')."/settings/bots?agent={$bob->id}");
 
@@ -77,6 +78,8 @@ it('says once at the item why an agent that is switched off does not answer', fu
     // the same mention a second time (a delivery again): still one note
     $mentioned = eventsOf(EventType::BotMentioned)->sole();
     expect(FollowEvent::run(Actor::system(User::defaultBot(), 'agents'), $mentioned))->toBe('ignored')
+        ->and($notes($this->item))->toHaveCount(1)
+        ->and(StartComment::run(Actor::system(User::defaultBot(), 'agents'), $this->item, $bob, $question))->toBeNull()
         ->and($notes($this->item))->toHaveCount(1);
 
     // an edit of the question explains nothing again, a new question does

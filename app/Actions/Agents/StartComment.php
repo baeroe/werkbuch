@@ -60,9 +60,10 @@ final class StartComment
      * The note of the default bot at the item for a comment whose mentions werkbuch refused (A711): one paragraph for
      * each bot of the comment that is set up as an agent of the runner but works here as none, with the reason and who
      * changes it with a link to the settings; in the language of the organization. A bot without an agent config gets
-     * no note: it may wake by a webhook (A364). Under the lock of the item the reasons are read again, the comment row
-     * is locked and a note for it is looked up with a locking read (`refused_comment_id`, unique): once for each
-     * comment, also when two deliveries meet. The note is an ordinary `comment.created` of the default bot (watchers
+     * no note: it may wake by a webhook (A364). Under the lock of the item the comment row is locked and its mark
+     * `refusal_noted_at` read, the reasons are read again, and after the note the mark is set: once for each comment,
+     * also when two deliveries meet (no locking read of a key that does not exist, so no gap lock that notes at other
+     * items would share). The note is an ordinary `comment.created` of the default bot (watchers
      * hear it); it sets off nothing (FollowEvent leaves bots alone). An archived item or project gets no note.
      */
     private static function explain(WorkItem $item, Comment $comment, User $bot): void
@@ -74,8 +75,8 @@ final class StartComment
         }
 
         $project = $locked->project;
-        if ($locked->archived_at !== null || $project->archived_at !== null || Comment::query()->lockForUpdate()->find($comment->id) === null
-            || Comment::query()->where('refused_comment_id', $comment->id)->lockForUpdate()->first() !== null) {
+        $asked = Comment::query()->lockForUpdate()->find($comment->id);
+        if ($locked->archived_at !== null || $project->archived_at !== null || $asked === null || $asked->refusal_noted_at !== null) {
             return;
         }
 
@@ -98,8 +99,8 @@ final class StartComment
 
         $note = AddComment::run(Actor::agent(User::defaultBot()), $locked, ['body_json' => ['type' => 'doc', 'content' => $paragraphs]]);
 
-        // the marker only (the note keeps its own stamps)
-        Comment::query()->whereKey($note->id)->toBase()->update(['refused_comment_id' => $comment->id]);
+        // the mark only (the asking comment keeps its own stamps)
+        Comment::query()->whereKey($asked->id)->toBase()->update(['refusal_noted_at' => now()]);
     }
 
     /**
