@@ -1,13 +1,19 @@
 import { useSyncExternalStore } from 'react';
 
 export type ToastTone = 'neutral' | 'success' | 'error';
-export type ToastAction = { label: string; onClick: () => void };
+/**
+ * What a toast offers: a button, or with `href` a link to a page outside the app that opens in a new tab (A721);
+ * `onClick` runs when it is pressed or followed.
+ */
+export type ToastAction = { label: string; onClick: () => void; href?: string };
 type ToastBase = {
   title: string;
   description?: string;
   /** What the toast is about (`reaction:<comment>:<emoji>`): only an error with the same subject refreshes this one. */
   subject?: string;
   action?: ToastAction;
+  /** The action stands below the text instead of beside it: a long message keeps the width of the toast (A721). */
+  stack?: boolean;
   /** Milliseconds until the toast closes on its own. */
   duration?: number;
 };

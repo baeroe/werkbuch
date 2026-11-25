@@ -12,7 +12,7 @@ use Psr\Http\Message\RequestInterface;
 
 /**
  * The calls werkbuch makes to the REST API of GitHub (spec 11.3), over Laravel's HTTP client: no state, no database.
- * Every call has the timeout of `werkbuch.github.timeout`; a refusal or no answer is GitHubUnavailable (`github`) with
+ * Every call has the timeout of `werkbuch.github.timeout` (the conversion of a manifest its own, A720); a refusal or no answer is GitHubUnavailable (`github`) with
  * path and status, never a body. Lists are read in pages of 100 to their end; one that does not end within
  * `MAX_PAGES` or holds fewer rows than its `total_count` is GitHubUnavailable as well: a sync never takes part of a
  * list for all of it (a repo would look gone).
@@ -25,13 +25,16 @@ final class GitHubApi
 
     /**
      * Exchanges the temporary code of the manifest flow for the app (spec 10.2): `id`, `slug`, `name`, `owner`,
-     * `html_url`, `client_id`, `pem`, `webhook_secret`, `permissions`, `events` (and a client secret werkbuch drops).
+     * `html_url`, `client_id`, `pem`, `webhook_secret`, `permissions`, `events` (and a client secret werkbuch drops). It
+     * waits `werkbuch.github.manifest_timeout` (A720): GitHub creates the app meanwhile and ends a request itself after
+     * 10 s, so werkbuch hears GitHub's own answer instead of giving up at the same moment.
      *
      * @return array<string, mixed>
      */
     public static function convertManifest(string $code): array
     {
-        return self::json(self::send(fn (PendingRequest $http) => $http->post('/app-manifests/'.rawurlencode($code).'/conversions'), 'conversions'));
+        return self::json(self::send(fn (PendingRequest $http) => $http->post('/app-manifests/'.rawurlencode($code).'/conversions'), 'conversions',
+            (int) config('werkbuch.github.manifest_timeout')));
     }
 
     /**
@@ -252,11 +255,12 @@ final class GitHubApi
 
     /**
      * @param  callable(PendingRequest): Response  $call
+     * @param  int|null  $timeout  seconds; by default `werkbuch.github.timeout`
      */
-    private static function send(callable $call, string $what): Response
+    private static function send(callable $call, string $what, ?int $timeout = null): Response
     {
         $http = Http::baseUrl((string) config('werkbuch.github.api_url'))
-            ->timeout((int) config('werkbuch.github.timeout'))
+            ->timeout($timeout ?? (int) config('werkbuch.github.timeout'))
             ->connectTimeout(5)
             ->withHeaders(['Accept' => 'application/vnd.github+json', 'X-GitHub-Api-Version' => self::API_VERSION, 'User-Agent' => 'werkbuch/'.config('werkbuch.version')])
             ->withRequestMiddleware(self::noEmptyArray(...));

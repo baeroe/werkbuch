@@ -29,10 +29,9 @@ final class Manifest
     public static function for(string $owner, string $appUrl): array
     {
         $base = rtrim($appUrl, '/');
-        $name = trim(mb_substr($owner, 0, self::NAME_MAX - mb_strlen(self::SUFFIX))).self::SUFFIX;
 
         return [
-            'name' => $name,
+            'name' => self::name($owner),
             'url' => $base,
             'description' => 'werkbuch at '.$base.': runners push for agents, werkbuch merges and reads checks.',
             'hook_attributes' => ['url' => $base.'/github/webhook', 'active' => true],
@@ -43,6 +42,20 @@ final class Manifest
             'default_permissions' => self::PERMISSIONS,
             'default_events' => self::EVENTS,
         ];
+    }
+
+    /** The name werkbuch gives the app of an account (the person may change it at GitHub before registering). */
+    public static function name(string $owner): string
+    {
+        return trim(mb_substr($owner, 0, self::NAME_MAX - mb_strlen(self::SUFFIX))).self::SUFFIX;
+    }
+
+    /** The list of the apps an account registered at GitHub: the person's own (`User`) or an organization's. */
+    public static function appsUrl(string $owner, string $type): string
+    {
+        $web = rtrim((string) config('werkbuch.github.web_url'), '/');
+
+        return $type === 'Organization' ? $web.'/organizations/'.rawurlencode($owner).'/settings/apps' : $web.'/settings/apps';
     }
 
     /** Where the browser posts the manifest: the person's own account, or a GitHub organization. */

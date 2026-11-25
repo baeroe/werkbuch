@@ -63,6 +63,8 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'status' => $request->session()->get('status'),
                 'error' => $request->session()->get('error'),
+                // a way on from the error, `{label, url}` of a page outside werkbuch (A721: the apps of a GitHub account)
+                'error_link' => $request->session()->get('error_link'),
             ],
         ];
     }

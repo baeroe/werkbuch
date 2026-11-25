@@ -17,7 +17,7 @@ it('shares the page context with guests', function () {
         ->where('auth.user', null)->where('auth.permissions', [])
         ->where('organization', ['id' => Organization::current()->id, 'name' => 'werkbuch', 'locale' => 'en', 'timezone' => 'UTC', 'week_start' => 1, 'logo_url' => null])
         ->where('features', ['mail' => false, 'pdf' => true, 'live' => null, 'attachments_max_mb' => 25, 'notification_mail_delay' => 5])
-        ->where('flash', ['status' => null, 'error' => null]));
+        ->where('flash', ['status' => null, 'error' => null, 'error_link' => null]));
 });
 
 it('shares the live settings when Reverb is the broadcaster', function () {
@@ -89,8 +89,9 @@ it('shares the props on a 404 from a route binding', function () {
 });
 
 it('shares the flash messages of the session once', function () {
-    $this->withSession(['status' => 'Saved.', 'error' => 'Nope.'])->get(inertiaProbe())
-        ->assertInertia(fn (Assert $page) => $page->where('flash', ['status' => 'Saved.', 'error' => 'Nope.']));
+    $link = ['label' => 'Open the apps at GitHub', 'url' => 'https://github.com/settings/apps'];
+    $this->withSession(['status' => 'Saved.', 'error' => 'Nope.', 'error_link' => $link])->get(inertiaProbe())
+        ->assertInertia(fn (Assert $page) => $page->where('flash', ['status' => 'Saved.', 'error' => 'Nope.', 'error_link' => $link]));
 });
 
 it('reports mail as configured unless the mailer only logs', function (string $mailer, bool $configured) {

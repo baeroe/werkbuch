@@ -25,6 +25,7 @@ import { notifyError } from '@/lib/errors';
 import { focusWhenLost } from '@/lib/focusOrigin';
 import { t, tn } from '@/lib/i18n';
 import { instanceOrigin } from '@/lib/links';
+import { useSharedProps } from '@/lib/page';
 import type { GitHubApp, GitHubInstallation, GitHubOwnerType, GitHubRepository, GitHubStatus } from '@/types';
 import { fieldMessage } from '../../frame/form';
 import { formatDate, useOrgZone } from '../../frame/format';
@@ -409,6 +410,32 @@ export function reposByApp(github: GitHubStatus): Map<string, GitHubRepository[]
 }
 
 /**
+ * A way back from GitHub that failed with a way on (A721: GitHub did not answer while creating the app): the sentence
+ * and the list of the apps of the account stay on the page for this visit, beside the toast that goes after a while.
+ */
+function FailedConnect() {
+  // a page without a flash (a test, an older page) has none
+  const { flash } = useSharedProps();
+  const link = flash?.error_link;
+  if (!flash?.error || !link) return null;
+  const { label, url } = link;
+  return (
+    <Banner
+      tone="danger"
+      title={t('settings.github.connect.failed')}
+      action={
+        <a href={url} target="_blank" rel="noopener noreferrer" className={externalLink}>
+          {label}
+          <ExternalLink className="size-3.5" aria-hidden="true" /> <span className="sr-only">{t('ui.toaster.new_tab')}</span>
+        </a>
+      }
+    >
+      {flash.error}
+    </Banner>
+  );
+}
+
+/**
  * Settings → GitHub. Disconnecting lives here and not in a panel of an app: the panel goes as soon as the status is
  * read anew, before the answer of the call comes back, and what the call says must still reach the person.
  */
@@ -482,6 +509,7 @@ export default function GitHub(_props: SectionProps) {
           ) : undefined
         }
       />
+      <FailedConnect />
       <Loaded queries={[github]} keepData failure={t('settings.github.load_failed')} skeleton={<FormSkeleton label={t('settings.github.loading')} />}>
         {() => {
           if (!connected) return <Connect />;

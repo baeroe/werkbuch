@@ -218,4 +218,22 @@ describe('ToastCard', () => {
     // the card is not in the store: its action does nothing, and nothing breaks
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  it('puts the action of a long message below its text, as a link to a new tab (A721)', () => {
+    render(<ToastCard item={{ id: 98, title: 'GitHub hat nicht geantwortet.', tone: 'error', duration: 20000, stack: true, action: { label: 'Apps bei GitHub öffnen', href: 'https://github.com/settings/apps', onClick: vi.fn() } }} />);
+
+    const link = screen.getByRole('link', { name: /Apps bei GitHub öffnen/ });
+    expect([link.getAttribute('href'), link.getAttribute('target'), link.getAttribute('rel'), link.textContent])
+      .toEqual(['https://github.com/settings/apps', '_blank', 'noopener noreferrer', 'Apps bei GitHub öffnen (öffnet in neuem Tab)']);
+    // below the title, in the column of the text
+    expect(link.parentElement).toBe(screen.getByText('GitHub hat nicht geantwortet.').parentElement);
+  });
+
+  it('closes a toast whose link is followed', () => {
+    const onClick = vi.fn();
+    toast({ title: 'GitHub hat nicht geantwortet.', tone: 'error', action: { label: 'Apps bei GitHub öffnen', href: 'https://github.com/settings/apps', onClick } });
+    render(<Toaster />);
+    fireEvent.click(screen.getByRole('link', { name: /Apps bei GitHub öffnen/ }));
+    expect([currentToasts(), onClick.mock.calls.length]).toEqual([[], 1]);
+  });
 });

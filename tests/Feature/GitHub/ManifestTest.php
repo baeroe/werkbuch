@@ -4,6 +4,7 @@ use App\Actions\GitHub\CompleteManifest;
 use App\Actions\GitHub\StartManifest;
 use App\Events\EventType;
 use App\Exceptions\Problem;
+use App\GitHub\GitHubApi;
 use App\GitHub\Manifest;
 use App\Models\GitHubApp;
 use App\Models\User;
@@ -146,10 +147,54 @@ it('answers 503 and keeps nothing when GitHub refuses or answers without a key',
     expect(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $start($admin)['state']]))
         ->toThrow(fn (Problem $e) => expect([$e->getStatusCode(), $e->reason])->toBe([503, 'github_unavailable']));
 
+    // an answer without the key: GitHub created the app, werkbuch names it and the list where it is deleted (A721)
     $fake->refuse = [];
     $fake->conversionChanges = ['pem' => null];
     expect(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $start($admin)['state']]))
-        ->toThrow(fn (Problem $e) => expect($e->reason)->toBe('github_unavailable'))
+        ->toThrow(fn (Problem $e) => expect([$e->getStatusCode(), $e->reason, $e->detail, $e->extensions])->toBe([503, 'github_unavailable',
+            __('problem.detail.github_conversion_incomplete_app', ['name' => 'feldwerk werkbuch']), ['apps_url' => 'https://github.com/organizations/feldwerk/settings/apps']]))
+        ->and(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => StartManifest::issueState($admin->id)]))
+        ->toThrow(fn (Problem $e) => expect([$e->detail, $e->extensions])->toBe([__('problem.detail.github_conversion_incomplete'), []]))
+        ->and(GitHubApp::query()->exists())->toBeFalse();
+});
+
+it('gives the conversion its own longer timeout and every other call the short one (A720)', function () use ($start) {
+    $fake = FakeGitHub::connected();
+    $fake->conversionChanges = ['id' => 4_200_456, 'slug' => 'feldwerk-labs-werkbuch', 'owner' => ['login' => 'feldwerk-labs', 'id' => 9_002, 'type' => 'Organization']];
+    $admin = User::factory()->admin()->create();
+
+    CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $start($admin, ['owner' => 'feldwerk-labs', 'owner_type' => 'Organization'])['state']]);
+    GitHubApi::installations(GitHubApp::query()->where('owner_login', 'feldwerk')->sole());
+
+    expect($fake->timeouts['/app-manifests/abc/conversions'])->toBe(30)
+        ->and($fake->timeouts['/app/installations'])->toBe(10)
+        ->and(config('werkbuch.github.manifest_timeout'))->toBeGreaterThan(10)->toBeLessThan(60);
+});
+
+it('names the app GitHub may have created and the apps of the account when GitHub does not answer the conversion (A721)', function () use ($start) {
+    $fake = (new FakeGitHub)->fake();
+    $admin = User::factory()->admin()->create();
+    $fake->silent = ['/app-manifests/*'];
+
+    // an organization: its list of apps
+    expect(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $start($admin, ['owner' => 'Baeroe-Labs', 'owner_type' => 'Organization'])['state']]))
+        ->toThrow(fn (Problem $e) => expect([$e->getStatusCode(), $e->reason, $e->detail, $e->extensions])->toBe([503, 'github_unavailable',
+            __('problem.detail.github_conversion_failed_app', ['name' => 'Baeroe-Labs werkbuch']), ['apps_url' => 'https://github.com/organizations/Baeroe-Labs/settings/apps']]));
+
+    // a 5xx of GitHub alike; the person's own account: the person's list of apps
+    $fake->silent = [];
+    $fake->refuse = ['/app-manifests/*' => 500];
+    expect(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $start($admin, ['owner' => 'baeroe', 'owner_type' => 'User'])['state']]))
+        ->toThrow(fn (Problem $e) => expect([$e->detail, $e->extensions])->toBe([__('problem.detail.github_conversion_failed_app', ['name' => 'baeroe werkbuch']), ['apps_url' => 'https://github.com/settings/apps']]));
+
+    // a state from before WEBU-40 names no account: the sentence without a name and without a link
+    expect(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => StartManifest::issueState($admin->id)]))
+        ->toThrow(fn (Problem $e) => expect([$e->detail, $e->extensions])->toBe([__('problem.detail.github_conversion_failed'), []]));
+
+    // a refusal is no lost answer: the plain sentence
+    $fake->refuse = ['/app-manifests/*' => 404];
+    expect(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $start($admin)['state']]))
+        ->toThrow(fn (Problem $e) => expect([$e->detail, $e->extensions])->toBe([null, []]))
         ->and(GitHubApp::query()->exists())->toBeFalse();
 });
 

@@ -3,7 +3,7 @@ import type { ComponentProps, CSSProperties } from 'react';
 import { t } from '@/lib/i18n';
 import { cx } from './cx';
 import { IconButton } from './IconButton';
-import { dismissToast, runToastAction, setToastFocused, setToastHovered, useToasts, useToastsPaused, type Toast } from './toast';
+import { dismissToast, runToastAction, setToastFocused, setToastHovered, useToasts, useToastsPaused, type Toast, type ToastAction } from './toast';
 
 /**
  * Toasts on tracing paper at the bottom, errors below the others. Every toast is announced politely, errors too: they
@@ -50,26 +50,21 @@ export function ToastCard({ item, className, ...rest }: { item: Omit<Toast, 'kee
   return (
     <div
       className={cx(
-        'tracing-strong pointer-events-auto relative flex w-full max-w-sm animate-toast-in items-center gap-2.5 overflow-hidden rounded-card py-1.5 pr-1.5 pl-3 text-ui [--glass-shadow:var(--elev-2)]',
+        'tracing-strong pointer-events-auto relative flex w-full max-w-sm animate-toast-in gap-2.5 overflow-hidden rounded-card py-1.5 pr-1.5 pl-3 text-ui [--glass-shadow:var(--elev-2)]',
+        item.stack ? 'items-start' : 'items-center',
         className,
       )}
       {...rest}
     >
-      {item.tone === 'success' && <CircleCheck className="size-4 shrink-0 text-st-completed" aria-hidden="true" />}
-      {item.tone === 'error' && <CircleAlert className="size-4 shrink-0 text-danger" aria-hidden="true" />}
+      {item.tone === 'success' && <CircleCheck className={cx('size-4 shrink-0 text-st-completed', item.stack && 'mt-2')} aria-hidden="true" />}
+      {item.tone === 'error' && <CircleAlert className={cx('size-4 shrink-0 text-danger', item.stack && 'mt-2')} aria-hidden="true" />}
       <div className="min-w-0 flex-1 py-1">
         <p className={cx('font-medium break-words text-pretty', item.tone === 'error' ? 'text-danger' : 'text-ink')}>{item.title}</p>
         {item.description && <p className="mt-0.5 text-sm break-words text-pretty text-muted">{item.description}</p>}
+        {/* a long message keeps its width: the action stands below it */}
+        {item.stack && item.action && <ToastActionButton id={item.id} action={item.action} className="mt-1 -ml-2" />}
       </div>
-      {item.action && (
-        <button
-          type="button"
-          onClick={() => runToastAction(item.id)}
-          className="inline-flex h-11 shrink-0 cursor-pointer items-center rounded-ctl px-2 text-ui font-semibold text-accent-text transition-colors duration-120 hover:bg-hover md:h-7"
-        >
-          {item.action.label}
-        </button>
-      )}
+      {!item.stack && item.action && <ToastActionButton id={item.id} action={item.action} />}
       <IconButton icon={X} label={t('ui.toaster.close')} tooltip={false} onClick={() => dismissToast(item.id)} />
       {/* a new round (the same error again) draws the time line anew */}
       <span
@@ -79,5 +74,26 @@ export function ToastCard({ item, className, ...rest }: { item: Omit<Toast, 'kee
         className="absolute inset-x-0 bottom-0 h-0.5 origin-left animate-drain bg-line-strong group-data-paused:[animation-play-state:paused]"
       />
     </div>
+  );
+}
+
+/** The action of a toast: a button, or a link that opens a page outside the app in a new tab and says so. */
+function ToastActionButton({ id, action, className }: { id: number; action: ToastAction; className?: string }) {
+  const look = cx(
+    'inline-flex h-11 shrink-0 cursor-pointer items-center rounded-ctl px-2 text-ui font-semibold text-accent-text transition-colors duration-120 hover:bg-hover md:h-7',
+    className,
+  );
+  if (action.href) {
+    return (
+      <a href={action.href} target="_blank" rel="noopener noreferrer" onClick={() => runToastAction(id)} className={look}>
+        {action.label}
+        <span className="sr-only"> {t('ui.toaster.new_tab')}</span>
+      </a>
+    );
+  }
+  return (
+    <button type="button" onClick={() => runToastAction(id)} className={look}>
+      {action.label}
+    </button>
   );
 }

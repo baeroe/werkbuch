@@ -60,7 +60,8 @@ final class StartManifest
         /** @var string $owner */
         /** @var string $type */
         self::refuseTaken($owner);
-        $state = self::issueState($actor->user->id);
+        // the state keeps the account: a conversion that fails names its app and where to find it (A721)
+        $state = self::issueState($actor->user->id, 'manifest', $type.':'.$owner);
 
         return [
             'url' => Manifest::registerUrl($type === 'Organization' ? $owner : null, $state),
@@ -79,12 +80,13 @@ final class StartManifest
 
     /**
      * A state for a way back from GitHub (registering, installing; `purpose`), good for an hour and once, bound to the
-     * person and, for the way back from installing, to the app it installs (A686).
+     * person and to what it is for (`subject`): for the way back from registering the account, `<type>:<login>`
+     * (A721), for the way back from installing the ULID of the app it installs (A686).
      */
-    public static function issueState(string $userId, string $purpose = 'manifest', ?string $appId = null): string
+    public static function issueState(string $userId, string $purpose = 'manifest', ?string $subject = null): string
     {
         $state = Str::random(40);
-        Cache::put(self::stateKey($state, $purpose), $appId === null ? $userId : $userId.'|'.$appId, now()->addMinutes(self::STATE_MINUTES));
+        Cache::put(self::stateKey($state, $purpose), $subject === null ? $userId : $userId.'|'.$subject, now()->addMinutes(self::STATE_MINUTES));
 
         return $state;
     }
@@ -96,8 +98,8 @@ final class StartManifest
     }
 
     /**
-     * Takes the state: `false` when it is not the person's for this purpose, else the ULID of the app it was given for
-     * (null for none).
+     * Takes the state: `false` when it is not the person's for this purpose, else the subject it was given for (null for
+     * none): the ULID of the app, or the account `<type>:<login>`.
      */
     public static function takeStateOf(mixed $state, string $userId, string $purpose = 'manifest'): string|false|null
     {

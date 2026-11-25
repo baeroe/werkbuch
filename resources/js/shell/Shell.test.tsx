@@ -14,12 +14,12 @@ import { mockApi, type MockApi, type MockRoute } from '@/test/api';
 import { list, makeView, project } from '@/test/fixtures';
 import { pauseLive } from '@/api/live';
 import { ProfileMenu } from './ProfileMenu';
-import { Shell } from './Shell';
+import { FLASH_LINK_MS, Shell } from './Shell';
 
 // What the server flashed shows as a toast once per visit: a status as a success, an error as an error. The browser suite cannot provoke a flashed
 // error inside the shell (a refused request needs a stale CSRF token, which a same-origin browser never sends).
 
-type Flash = { status: string | null; error: string | null };
+type Flash = { status: string | null; error: string | null; error_link?: { label: string; url: string } | null };
 let flash: Flash = { status: null, error: null };
 let url = '/my-items';
 
@@ -94,6 +94,22 @@ describe('Shell', () => {
     flash = { status: null, error: 'Die Seite ist abgelaufen.' };
     rerender(<Shell>Inhalt</Shell>);
     expect(errors()).toEqual([['Die Seite ist abgelaufen.', 1]]);
+  });
+
+  it('offers the way on of a flashed error as a link and keeps it longer (A721)', () => {
+    flash = { status: null, error: 'GitHub hat nicht geantwortet.', error_link: { label: 'Apps bei GitHub öffnen', url: 'https://github.com/settings/apps' } };
+    render(<Shell>Inhalt</Shell>);
+
+    const [shown] = currentToasts();
+    expect([shown.title, shown.tone, shown.duration, shown.stack, shown.action]).toEqual([
+      'GitHub hat nicht geantwortet.',
+      'error',
+      FLASH_LINK_MS,
+      true,
+      { label: 'Apps bei GitHub öffnen', href: 'https://github.com/settings/apps', onClick: expect.any(Function) },
+    ]);
+    // following the link is all it does
+    expect(shown.action?.onClick()).toBeUndefined();
   });
 
   it('shows a flashed status as a success toast once per visit', () => {
