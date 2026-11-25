@@ -36,7 +36,9 @@ Führ ihn in einem Terminal des Runner-Benutzers aus, nie als root und nie mit `
 2. verbindet ihn mit dem Code (`werkbuch-runner login`); der Runner schickt Name, System, Architektur und Version und bekommt ein eigenes Token, das er im Schlüsselbund ablegt,
 3. richtet ihn als Dienst des Benutzers ein und startet ihn.
 
-Der Dialog in werkbuch sagt, sobald der Runner verbunden ist. Optionen des Skripts: `--name <name>` benennt den Runner (Standard: der Hostname; umbenennen geht später in werkbuch), `--prefix <ordner>` installiert woanders als in `~/.local`, `--no-service` schreibt den Dienst, ohne ihn zu laden. Ein zweiter Aufruf mit neuem Code verbindet den Runner neu und ersetzt den Dienst, ohne zweiten Dienst. Ein abgelaufener oder benutzter Code endet mit einer Meldung im Terminal; erzeug im Dialog einen neuen.
+Der Dialog in werkbuch sagt, sobald der Runner verbunden ist. Optionen des Skripts: `--name <name>` benennt den Runner (Standard: der Hostname; umbenennen geht später in werkbuch), `--prefix <ordner>` installiert woanders als in `~/.local`, `--no-service` schreibt den Dienst, ohne ihn zu laden. Ein abgelaufener oder benutzter Code endet mit einer Meldung im Terminal; erzeug im Dialog einen neuen.
+
+Ein zweiter Aufruf mit neuem Code ersetzt den Dienst auf der Maschine, ohne zweiten Dienst, aber werkbuch sieht einen **neuen** Runner: eine neue Karte mit neuem Token, den Standard-Plätzen und womöglich einem anderen Namen. Die alte Karte bleibt und ist nicht widerrufen, Runner-Pools, die den alten Runner nennen, nehmen den neuen nicht, und Stränge des alten ziehen erst nach 30 Minuten offline um. Widerruf danach die alte Karte, stell die Plätze des neuen ein und hak ihn in den Runner-Pools der Bots an, die den alten nutzten.
 
 | Wo | Was |
 |---|---|
@@ -77,7 +79,7 @@ werkbuch-runner daemon    # was der Dienst ausführt
 - **Runs** (`2`): die Aufträge und das Protokoll des gewählten, live, solange der Agent arbeitet. `enter` zeigt das Protokoll ganz, `f` folgt ihm, `c` bricht den Auftrag nach einer Rückfrage ab.
 - **Doctor** (`3`): die Prüfungen von `werkbuch-runner doctor`, gemacht vom Daemon in seiner eigenen Umgebung.
 
-`tab` oder `1` bis `3` wechseln den Reiter, `?` zeigt die Tasten, `l` meldet ab, `q` beendet.
+`tab` oder `1` bis `3` wechseln den Reiter, `?` zeigt die Tasten, `l` meldet ab (nur im Reiter **Status**), `q` beendet.
 
 ## Doctor
 
@@ -108,7 +110,7 @@ Jeder Runner ist eine Karte unter **Einstellungen → Runner**: online (ein Kont
 | je Repo | 1 | davon je Repo (zwei Aufträge eines Repos teilen sich die Test-Datenbank von DDEV) |
 | leicht | 2 | Reviews und Antworten, in einem eigenen Topf |
 
-Der Runner bekommt die Plätze mit jeder Antwort; eine Änderung gilt ohne Neustart. Welchen Runner ein Bot nimmt, ist sein **Runner-Pool** (**Einstellungen → Bots → Agent einrichten**; keiner angehakt: alle Runner). Setup- und Teardown-Befehl der Worktrees gehören zum Projekt (**Projekteinstellungen → Agenten**): Der Runner führt sie im neuen Worktree vor dem ersten Auftrag und vor dem Entfernen des Worktrees aus, für werkbuch etwa `ddev config --project-name "werkbuch-$(basename "$PWD")" && ddev start` und `ddev delete -Oy`.
+Der Runner bekommt die Plätze mit jeder Antwort; eine Änderung gilt ohne Neustart. Welchen Runner ein Bot nimmt, ist sein **Runner-Pool** (**Einstellungen → Bots → Agent einrichten**; keiner angehakt: alle Runner). Setup- und Teardown-Befehl der Worktrees gehören zum Projekt (**Projekteinstellungen → Agenten**): Der Runner führt sie im Worktree aus, nachdem er ihn angelegt hat und bevor er ihn entfernt. Für werkbuch braucht jeder Worktree einen eigenen DDEV-Projektnamen, gesetzt in der von git ignorierten `.ddev/config.local.yaml` (nie mit `ddev config --project-name`, das die versionierte `.ddev/config.yaml` ändert): etwa `printf 'name: werkbuch-%s\n' "$(basename "$PWD")" > .ddev/config.local.yaml && ddev start` und `ddev delete -Oy`.
 
 ## Ein Auftrag auf der Maschine
 
@@ -155,6 +157,6 @@ Der Runner trägt die Version von werkbuch und wird mit jedem Release ins Image 
 
 - **Offline in werkbuch:** `werkbuch-runner status` und das Log des Dienstes. Nach einem Neustart des Macs muss der Benutzer angemeldet sein (automatische Anmeldung); unter Linux `loginctl enable-linger` prüfen.
 - **Ein Auftrag wartet auf einen Runner mit seinem CLI:** Kein Runner im Pool des Bots hat das CLI installiert und angemeldet. `werkbuch-runner doctor` unter dem Runner-Benutzer sagt, welches; melde es an, und der Auftrag startet von selbst.
-- **Token abgelehnt:** Der Runner wurde widerrufen. Erzeug einen neuen Code und führ den Befehl erneut aus.
-- **Der Dienst findet das CLI nicht**, deine Shell schon: Der Dienst hat den `PATH` der Installation. Installiere das CLI dort, wo dieser `PATH` hinreicht (etwa `~/.local/bin`), und führ das Skript erneut aus.
+- **Token abgelehnt:** Der Runner wurde widerrufen. Erzeug einen neuen Code und führ den Befehl erneut aus; werkbuch sieht dann einen neuen Runner (siehe [Installieren](#installieren)): Plätze einstellen und in den Runner-Pools anhaken.
+- **Der Dienst findet das CLI nicht**, deine Shell schon: Der Dienst übernimmt den `PATH` der Shell, aus der er eingerichtet wurde. Führ `werkbuch-runner service install` aus einer Shell aus, deren `PATH` das CLI findet; ein neuer Code ist nicht nötig.
 - **Einen Runner entfernen:** In werkbuch widerrufen, dann auf der Maschine `werkbuch-runner service uninstall`, `werkbuch-runner logout` und `~/.local/bin/werkbuch-runner`, `~/.config/werkbuch-runner`, `~/.local/state/werkbuch-runner` und `~/.local/share/werkbuch-runner` löschen.

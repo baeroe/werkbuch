@@ -68,12 +68,12 @@ Damit kein Strang endlos Tokens verbrennt, hat jeder Strang zwei Bremsen (**Proj
 
 ## Wenn ein Auftrag scheitert
 
-Ein Auftrag, der scheitert, sein Zeitlimit reißt oder zweimal verloren geht, hinterlässt einen Kommentar mit dem Grund, das Item geht auf **Korrektur**, und nichts startet von selbst neu. **Erneut starten** am Auftrag startet denselben Typ im selben Strang; die Bremsen zählen weiter.
+Ein Auftrag, der scheitert, sein Zeitlimit reißt oder zweimal verloren geht, hinterlässt einen Kommentar mit dem Grund, und nichts startet von selbst neu. Nach einem Auftrag, der Code ändert, oder einem Review des Pull Requests eines Agenten geht das Item auf **Korrektur**; eine gescheiterte Antwort lässt das Item, wo es ist. **Erneut starten** am Auftrag startet denselben Typ im selben Strang; die Bremsen zählen weiter.
 
 ## Personen greifen ein
 
 - **Das Item einer Person zuweisen:** Ein laufender Auftrag wird abgebrochen, der Strang pausiert; der Pull Request bleibt.
-- **Es wieder dem Bot zuweisen:** Mit offenem oder pausiertem Strang eine Korrektur mit den Kommentaren seit dem letzten Auftrag als Befund, und die Bremsen beginnen von vorn; ohne Strang ein neuer Auftrag Umsetzen.
+- **Es wieder dem Bot zuweisen:** Mit offenem oder pausiertem Strang eine Korrektur mit den Kommentaren seit dem letzten Auftrag als Befund, und die Bremsen beginnen von vorn; ohne Strang ein neuer Auftrag Umsetzen. Ein Strang, den ein [eigenmächtiger Merge](/de/github#eigenmachtiger-merge) pausiert hat, geht nur mit **Bestätigen und fortsetzen** weiter, einer, den **GitHub trennen** pausiert hat, nur mit **Weitermachen**; Wiederzuweisen weckt ihn nicht.
 - **Auf Backlog oder Unstarted zurückstellen**, solange der Pull Request des Bots offen ist: ebenfalls eine Korrektur.
 - **Den Pull Request selbst auf GitHub mergen:** werkbuch behandelt das wie den eigenen Merge; das Item geht auf **Gemergt**. Schließt du ihn ohne Merge, endet der Strang, und das Item geht mit einem Kommentar auf **Korrektur**.
 - **Abbrechen** eines Auftrags am Item; das darf, wer das Item bearbeiten darf.
@@ -129,7 +129,7 @@ Die Modelle kommen aus einer festen Liste je CLI: Claude Code `haiku`, `sonnet` 
 
 ## Plätze und Reihenfolge
 
-Ein Runner nimmt so viele Aufträge, wie seine Plätze erlauben (**Einstellungen → Runner**: 2 gesamt, 1 je Repo, 2 leicht). Reviews und Antworten zählen nur in ihrem eigenen Topf. Konflikte, Korrekturen und Reviews gehen vor Aufträgen Umsetzen und Antworten, dann nach Priorität des Items, dann nach Alter. Ein Strang bleibt auf seinem Runner; ein Auftrag des Strangs wartet, solange der Runner belegt ist, und zieht nach 30 Minuten offline auf einen anderen Runner des Pools um. Ein Epic läuft immer ein Kind nach dem anderen.
+Ein Runner nimmt so viele Aufträge, wie seine Plätze erlauben (**Einstellungen → Runner**: 2 gesamt, 1 je Repo, 2 leicht). Reviews und Antworten zählen nur in ihrem eigenen Topf. Konflikte, Korrekturen und Reviews kommen vor Umsetzen und Antworten; danach zählt die Priorität des Items, dann das Alter des Auftrags. Ein Strang bleibt auf seinem Runner; ein Auftrag des Strangs wartet, solange der Runner belegt ist, und zieht nach 30 Minuten offline auf einen anderen Runner des Pools um. Ein Epic läuft immer ein Kind nach dem anderen.
 
 ## Am Item
 

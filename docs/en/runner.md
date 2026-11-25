@@ -36,7 +36,9 @@ Run it in a terminal of the runner's user, never as root and never with `sudo`. 
 2. pairs it with the code (`werkbuch-runner login`); the runner sends its name, system, architecture and version and gets a token of its own, which it keeps in the keychain,
 3. sets it up as a service of the user and starts it.
 
-The dialog in werkbuch says as soon as the runner has connected. Options of the script: `--name <name>` names the runner (default: the host name; you can rename it in werkbuch later), `--prefix <dir>` installs elsewhere than `~/.local`, `--no-service` writes the service without loading it. Running the script again with a new code pairs the runner anew and replaces the service, without a second one. An expired or used code ends with a message in the terminal; make a new one in the dialog.
+The dialog in werkbuch says as soon as the runner has connected. Options of the script: `--name <name>` names the runner (default: the host name; you can rename it in werkbuch later), `--prefix <dir>` installs elsewhere than `~/.local`, `--no-service` writes the service without loading it. An expired or used code ends with a message in the terminal; make a new one in the dialog.
+
+Running the script again with a new code replaces the service on the machine, without a second one, but werkbuch sees a **new** runner: a new card with a new token, the default places and perhaps another name. The old card stays and is not revoked, runner pools that name the old runner do not take the new one, and strands of the old one move only after 30 minutes offline. Afterwards revoke the old card, set the places of the new one and tick it in the runner pools of the bots that used the old one.
 
 | Where | What |
 |---|---|
@@ -77,7 +79,7 @@ werkbuch-runner daemon    # what the service runs
 - **Runs** (`2`): the runs and the log of the chosen one, live while the agent works. `enter` shows the log in full, `f` follows it, `c` cancels the run after a question.
 - **Doctor** (`3`): the checks of `werkbuch-runner doctor`, made by the daemon with its own environment.
 
-`tab` or `1` to `3` switch tabs, `?` shows the keys, `l` logs out, `q` quits.
+`tab` or `1` to `3` switch tabs, `?` shows the keys, `l` logs out (in the tab **Status** only), `q` quits.
 
 ## Doctor
 
@@ -108,7 +110,7 @@ Each runner is a card under **Settings → Runners**: online (a contact within t
 | per repo | 1 | of those per repo (two runs of one repo share the test database of DDEV) |
 | light | 2 | reviews and answers, in a pot of their own |
 
-The runner gets the places with every answer; a change holds without a restart. Which runner a bot uses is its **runner pool** (**Settings → Bots → Set up agent**; none ticked: every runner). The setup and teardown commands of the worktrees belong to the project (**Project settings → Agents**): the runner runs them in the new worktree before the first run and before it removes the worktree, for werkbuch for example `ddev config --project-name "werkbuch-$(basename "$PWD")" && ddev start` and `ddev delete -Oy`.
+The runner gets the places with every answer; a change holds without a restart. Which runner a bot uses is its **runner pool** (**Settings → Bots → Set up agent**; none ticked: every runner). The setup and teardown commands of the worktrees belong to the project (**Project settings → Agents**): the runner runs them in the worktree, after it made it and before it removes it. For werkbuch, each worktree needs a DDEV project name of its own, set in the git-ignored `.ddev/config.local.yaml` (never with `ddev config --project-name`, which changes the tracked `.ddev/config.yaml`): for example `printf 'name: werkbuch-%s\n' "$(basename "$PWD")" > .ddev/config.local.yaml && ddev start` and `ddev delete -Oy`.
 
 ## A run on the machine
 
@@ -155,6 +157,6 @@ The runner carries the version of werkbuch and is built with each release into t
 
 - **Offline in werkbuch:** `werkbuch-runner status` and the log of the service. After a restart of the Mac the user has to sign in (automatic login); on Linux check `loginctl enable-linger`.
 - **A run waits for a runner with its CLI:** no runner of the bot's pool has the CLI installed and signed in. `werkbuch-runner doctor` under the runner's user says which; sign in and the run starts by itself.
-- **Token refused:** the runner was revoked. Make a new code and run the command again.
-- **The CLI is not found by the service** but in your shell: the service has the `PATH` of the installation. Install the CLI where that `PATH` reaches (for example `~/.local/bin`) and run the script again.
+- **Token refused:** the runner was revoked. Make a new code and run the command again; werkbuch then sees a new runner (see [install](#install)): set its places and tick it in the runner pools.
+- **The CLI is not found by the service** but in your shell: the service takes the `PATH` of the shell it was set up from. Run `werkbuch-runner service install` from a shell whose `PATH` finds the CLI; no new code is needed.
 - **Remove a runner:** revoke it in werkbuch, then on the machine `werkbuch-runner service uninstall`, `werkbuch-runner logout` and delete `~/.local/bin/werkbuch-runner`, `~/.config/werkbuch-runner`, `~/.local/state/werkbuch-runner` and `~/.local/share/werkbuch-runner`.

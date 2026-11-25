@@ -68,12 +68,12 @@ So no strand burns tokens without end, each strand has two brakes (**Project set
 
 ## When a run fails
 
-A run that fails, times out or is lost twice leaves a comment with the reason, the item goes to **Correction**, and nothing starts again by itself. **Start again** at the run starts the same kind on the same strand; the brakes keep counting.
+A run that fails, times out or is lost twice leaves a comment with the reason, and nothing starts again by itself. After a run that changes code or a review of an agent's pull request the item goes to **Correction**; a failed answer leaves the item where it is. **Start again** at the run starts the same kind on the same strand; the brakes keep counting.
 
 ## People step in
 
 - **Assign the item to a person:** a running run is canceled, the strand pauses; the pull request stays.
-- **Assign it to the bot again:** with an open or paused strand a correction with the comments since the last run as findings, and the brakes start from zero; without a strand a new implement run.
+- **Assign it to the bot again:** with an open or paused strand a correction with the comments since the last run as findings, and the brakes start from zero; without a strand a new implement run. A strand paused by an [unauthorized merge](/en/github#unauthorized-merge) goes on only with **Confirm and continue**, one paused by **Disconnect GitHub** only with **Resume**; assigning again does not wake it.
 - **Move it back to Backlog or Unstarted** while the pull request of the bot is open: a correction as well.
 - **Merge the pull request on GitHub yourself:** werkbuch treats it like its own merge; the item goes to **Merged**. Close it without a merge, and the strand ends and the item goes to **Correction** with a comment.
 - **Cancel** a run at the item; whoever may edit the item may.

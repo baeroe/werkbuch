@@ -12,7 +12,7 @@ Every instance creates its own app: werkbuch is self-hosted, so there is no shar
 
 ## Connect
 
-1. **Settings → GitHub → Connect to GitHub** (org admins). Enter the login of the GitHub organization, or leave it empty for your own account. werkbuch proposes the name `<organization> werkbuch` (names are unique on GitHub; you can change it there).
+1. **Settings → GitHub → Connect to GitHub** (org admins). Enter the login of the GitHub organization, or leave it empty for your own account. werkbuch proposes the name of your werkbuch organization followed by ` werkbuch` (names are unique on GitHub; you can change it there).
 2. GitHub shows the app with its permissions, webhook address and the way back filled in. Create it. GitHub returns to werkbuch, which keeps the app (ID, private key and webhook secret, encrypted).
 3. GitHub asks where to install the app: choose the repos the agents shall work on. It returns to werkbuch again.
 
@@ -29,7 +29,7 @@ The page then shows the app, its installations and the shared repos, each with i
 | Commit statuses | read | statuses that CI sets without check runs |
 | Metadata | read | always required by GitHub |
 
-The app listens to `pull_request`, `push`, `check_suite` and `check_run`, and GitHub always sends it the events of its installations. When a new version of werkbuch asks for a permission an older app lacks, GitHub asks the owner to accept it: open the app's installation on GitHub (**Settings → Applications → Installed GitHub Apps → Configure**) and accept. Until then werkbuch cannot read what the permission covers; without **Commit statuses** it sees no CI that only sets statuses, so such a pull request waits for its review and merge.
+The app listens to `pull_request`, `push`, `check_suite` and `check_run`, and GitHub always sends it the events of its installations. When a new version of werkbuch needs a permission an existing app lacks, add it yourself: at GitHub under **Developer settings → GitHub Apps → \<app\> → Permissions & events**, then accept the new permission on every installation of the app (GitHub asks the owner of each one). Until both are done, GitHub refuses werkbuch every token that asks for the missing permission: reading the CI and merging fail.
 
 ## Tokens per run
 
@@ -86,7 +86,7 @@ A project admin checks the commit at GitHub, reverts it if needed and chooses **
 
 ## Disconnect
 
-**Disconnect GitHub** makes werkbuch forget the app: projects lose their repo, open strands pause, running runs are canceled; pull requests and branches stay on GitHub, and so does the app until you delete it there (**Settings → Developer settings → GitHub Apps** of the account or organization). To connect again you create a new app. Once a project has its repo again, **Resume** at an item continues its strand with a correction.
+**Disconnect GitHub** makes werkbuch forget the app: projects lose their repo, open strands pause, running and waiting runs are canceled; pull requests and branches stay on GitHub, and so does the app until you delete it there (**Settings → Developer settings → GitHub Apps** of the account or organization). To connect again you create a new app. Once a project has its repo again, **Resume** at an item continues its strand with a correction.
 
 ## The webhook behind the proxy
 

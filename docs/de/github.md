@@ -12,7 +12,7 @@ Jede Instanz legt ihre eigene App an: werkbuch ist selbst gehostet, eine gemeins
 
 ## Verbinden
 
-1. **Einstellungen → GitHub → Mit GitHub verbinden** (Org-Admins). Gib den Login der GitHub-Organisation ein oder lass das Feld leer für dein eigenes Konto. werkbuch schlägt den Namen `<Organisation> werkbuch` vor (Namen sind bei GitHub eindeutig; ändern kannst du ihn dort).
+1. **Einstellungen → GitHub → Mit GitHub verbinden** (Org-Admins). Gib den Login der GitHub-Organisation ein oder lass das Feld leer für dein eigenes Konto. werkbuch schlägt den Namen deiner Organisation in werkbuch mit ` werkbuch` dahinter vor (Namen sind bei GitHub eindeutig; ändern kannst du ihn dort).
 2. GitHub zeigt die App mit Berechtigungen, Webhook-Adresse und Rückweg vorbelegt. Leg sie an. GitHub führt zurück zu werkbuch, das die App speichert (ID, Private Key und Webhook-Secret, verschlüsselt).
 3. GitHub fragt, wo die App installiert wird: Wähl die Repos, an denen die Agenten arbeiten sollen. Es führt wieder zurück zu werkbuch.
 
@@ -29,7 +29,7 @@ Die Seite zeigt danach die App, ihre Installationen und die freigegebenen Repos,
 | Commit statuses | read | Status, die eine CI ohne Check-Runs setzt |
 | Metadata | read | verlangt GitHub immer |
 
-Die App hört `pull_request`, `push`, `check_suite` und `check_run`, und GitHub schickt ihr immer die Ereignisse ihrer Installationen. Verlangt eine neue Version von werkbuch eine Berechtigung, die eine ältere App nicht hat, fragt GitHub den Owner, sie anzunehmen: Öffne die Installation der App bei GitHub (**Settings → Applications → Installed GitHub Apps → Configure**) und nimm an. Bis dahin liest werkbuch nicht, was die Berechtigung abdeckt; ohne **Commit statuses** sieht es keine CI, die nur Status setzt, und so ein Pull Request wartet auf Review und Merge.
+Die App hört `pull_request`, `push`, `check_suite` und `check_run`, und GitHub schickt ihr immer die Ereignisse ihrer Installationen. Braucht eine neue Version von werkbuch eine Berechtigung, die eine bestehende App nicht hat, fügst du sie selbst hinzu: bei GitHub unter **Developer settings → GitHub Apps → \<App\> → Permissions & events**, dann nimmst du die neue Berechtigung auf jeder Installation der App an (GitHub fragt den Owner jeder Installation). Bis beides erledigt ist, lehnt GitHub jedes Token ab, das werkbuch mit der fehlenden Berechtigung anfragt: Lesen der CI und Merge scheitern.
 
 ## Tokens je Auftrag
 
@@ -86,7 +86,7 @@ Ein Projekt-Admin prüft den Commit bei GitHub, nimmt ihn bei Bedarf zurück und
 
 ## Trennen
 
-**GitHub trennen** lässt werkbuch die App vergessen: Projekte verlieren ihr Repo, offene Stränge pausieren, laufende Aufträge werden abgebrochen; Pull Requests und Branches bleiben bei GitHub, die App ebenso, bis du sie dort löschst (**Settings → Developer settings → GitHub Apps** des Kontos oder der Organisation). Um wieder zu verbinden, legst du eine neue App an. Hat ein Projekt sein Repo wieder, setzt **Weitermachen** an einem Item seinen Strang mit einer Korrektur fort.
+**GitHub trennen** lässt werkbuch die App vergessen: Projekte verlieren ihr Repo, offene Stränge pausieren, laufende und wartende Aufträge werden abgebrochen; Pull Requests und Branches bleiben bei GitHub, die App ebenso, bis du sie dort löschst (**Settings → Developer settings → GitHub Apps** des Kontos oder der Organisation). Um wieder zu verbinden, legst du eine neue App an. Hat ein Projekt sein Repo wieder, setzt **Weitermachen** an einem Item seinen Strang mit einer Korrektur fort.
 
 ## Der Webhook hinter dem Proxy
 
