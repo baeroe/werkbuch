@@ -23,14 +23,14 @@
 
 ## Tasks
 
-- [ ] **1 Datenmodell:** Migration (Singleton weg, `owner_login`/`app_id` eindeutig, `github_installations.github_app_id` Pflicht mit Kaskade, `github_deliveries.github_app_id` mit `nullOnDelete`, Bestehendes an die eine App; Rückweg nur mit höchstens einer App), Beziehungen, Factories; Test der Migration.
-- [ ] **2 FakeGitHub für mehrere Apps:** `connected()` und `secondApp()`, `/app/installations` und `access_tokens` je App über das JWT (Signatur gegen den Schlüssel der App geprüft, eine fremde Installation 404), `deliver(…, $app)` mit `X-GitHub-Hook-Installation-Target-ID`.
-- [ ] **3 Verbinden:** `StartManifest` mit `owner`/`owner_type` (Konto mit App 409 `github_connected` mit Satz), Manifest-Name `<login> werkbuch`, `CompleteManifest` eindeutig je Konto unter der Sperre.
-- [ ] **4 Tokens und Abgleich:** `InstallationTokens` und `LinkRepository` über die App der Installation, `SyncGitHub` je App (alle beim Abgleich von Hand und nach der Installation), `/github/install?app=`.
-- [ ] **5 Webhook:** App aus dem Header, Signatur mit deren Geheimnis, unbekannt 401 (zählt in der Drossel), Zustellung mit App; `HandleGitHubDelivery` liest mit der App der Zustellung.
-- [ ] **6 Bot der App des Repos:** `DetectUnauthorizedPush`, `AgentPullRequests::isAgent` (mit dem Repo), Aufrufer.
-- [ ] **7 Trennen je App:** `DisconnectGitHub($actor, $app)`, nur Projekte mit Repos dieser App; Route, Bindung, Matrix, OpenAPI.
-- [ ] **8 Lesen:** `GetGitHub`/`GitHubResource` mit `apps[].installations`, Schemas, MCP-Summaries (Budget messen).
-- [ ] **9 Browser:** Typen, API, Hooks, Einstellungsseite mit Liste der Apps, Dialog „Weitere App hinzufügen“, Trennen je App; Projekt → Agenten mit Repos aller Apps (Gruppe je Konto).
-- [ ] **10 e2e, axe, Tastatur:** `github.spec.ts` mit Apps je Variante, a11y mit zwei Apps und dem Dialog, Abläufe.
-- [ ] **11 Doku, Spec, Rulings, CLAUDE.md, Proof.**
+- [x] **1 Datenmodell:** Migration (Singleton weg, `owner_login`/`app_id` eindeutig, `github_installations.github_app_id` Pflicht mit Kaskade, `github_deliveries.github_app_id` mit `nullOnDelete`, Bestehendes an die eine App; Rückweg nur mit höchstens einer App), Beziehungen, Factories; Test der Migration.
+- [x] **2 FakeGitHub für mehrere Apps:** `connected()` und `secondApp()`, `/app/installations` und `access_tokens` je App über das JWT (Signatur gegen den Schlüssel der App geprüft, eine fremde Installation 404), `deliver(…, $app)` mit `X-GitHub-Hook-Installation-Target-ID`.
+- [x] **3 Verbinden:** `StartManifest` mit `owner`/`owner_type` (Konto mit App 409 `github_connected` mit Satz), Manifest-Name `<login> werkbuch`, `CompleteManifest` eindeutig je Konto unter der Sperre.
+- [x] **4 Tokens und Abgleich:** `InstallationTokens` und `LinkRepository` über die App der Installation, `SyncGitHub` je App (alle beim Abgleich von Hand und nach der Installation), `/github/install?app=`.
+- [x] **5 Webhook:** App aus dem Header, Signatur mit deren Geheimnis, unbekannt 401 (zählt in der Drossel), Zustellung mit App; `HandleGitHubDelivery` liest mit der App der Zustellung.
+- [x] **6 Bot der App des Repos:** `DetectUnauthorizedPush`, `AgentPullRequests::isAgent` (mit dem Repo), Aufrufer.
+- [x] **7 Trennen je App:** `DisconnectGitHub($actor, $app)`, nur Projekte mit Repos dieser App; Route, Bindung, Matrix, OpenAPI.
+- [x] **8 Lesen:** `GetGitHub`/`GitHubResource` mit `apps[].installations`, Schemas, MCP-Summaries (Budget messen).
+- [x] **9 Browser:** Typen, API, Hooks, Einstellungsseite mit Liste der Apps, Dialog „Weitere App hinzufügen“, Trennen je App; Projekt → Agenten mit Repos aller Apps (Gruppe je Konto).
+- [x] **10 e2e, axe, Tastatur:** `github.spec.ts` mit Apps je Variante, a11y mit zwei Apps und dem Dialog, Abläufe.
+- [x] **11 Doku, Spec, Rulings, CLAUDE.md, Proof.**

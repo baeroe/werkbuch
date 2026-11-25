@@ -98,8 +98,8 @@ function useConnect() {
     setErrors({});
   }
 
+  // a second send while it runs never comes: the busy button of the panel takes no press, the dialog sends once
   function connect(prefix: string) {
-    if (start.isPending || leaving) return;
     const owner = account.owner.trim();
     if (owner === '') {
       setErrors({ owner: t('field.owner.required') });
@@ -437,9 +437,7 @@ export default function GitHub(_props: SectionProps) {
     });
   }
 
-  function run() {
-    const app = leaving;
-    if (!app) return;
+  function run(app: GitHubApp) {
     settle(disconnect.mutateAsync(app.id), {
       onSuccess: ({ canceled }) => {
         afterDisconnect.current = document.getElementById(GITHUB_TITLE);
@@ -453,7 +451,7 @@ export default function GitHub(_props: SectionProps) {
         // the panel of the app goes: the title keeps the focus when the dialog gave it somewhere that went
         focusWhenLost(() => document.getElementById(GITHUB_TITLE), 2000);
       },
-      onError: (error) => notifyError(t('settings.github.disconnect.failed'), error, run),
+      onError: (error) => notifyError(t('settings.github.disconnect.failed'), error, () => run(app)),
     });
   }
 
@@ -519,7 +517,8 @@ export default function GitHub(_props: SectionProps) {
         confirmLabel={t('settings.github.disconnect.confirm')}
         pending={disconnect.isPending}
         finalFocus={afterDisconnect}
-        onConfirm={run}
+        // the question opens only with an app to leave
+        onConfirm={() => run(leaving!)}
       />
     </div>
   );
