@@ -16,7 +16,7 @@ Ein Item, an dem ein Agent arbeitet, sieht aus wie jedes andere: dieselbe Histor
 1. **Ein Runner:** unter **Einstellungen → Runner** verbinden ([Runner](/de/runner)).
 2. **GitHub**, für Projekte mit Code: die App unter **Einstellungen → GitHub** verbinden und das Repo des Projekts unter **Projekteinstellungen → Agenten** wählen ([GitHub](/de/github)). Ein Projekt ohne Repo geht auch, siehe [ohne Repo](#ohne-repo).
 3. **Ein Bot als Agent:** **Einstellungen → Bots → Agent einrichten**: an, der Runner-Pool (keiner angehakt: alle Runner), das CLI, das Standard-Modell und ein Modell je Auftragstyp. Der Bot braucht eine verantwortliche Person, muss aktiv und Mitglied des Projekts mit dem Recht sein, Items zu bearbeiten. Der Standard-Bot kann kein Agent sein.
-4. **Die Schritte des Workflows:** Der Workflow des Projekts nennt für jeden der vier [Schritte der Agenten](/de/concepts/workflows#schritte-der-agenten) einen Status: In Arbeit, In Review, Korrektur, Gemergt. Ohne alle vier sind die Agenten in seinen Projekten aus, und die Zuweisung an einen Bot bleibt eine normale Zuweisung.
+4. **Die Schritte des Workflows:** Der Workflow des Projekts nennt für jeden der vier [Schritte der Agenten](/de/concepts/workflows#schritte-der-agenten) einen Status: In Arbeit, In Review, Korrektur, Gemergt. Ohne alle vier arbeiten die Agenten in seinen Projekten an keinem Item, und die Zuweisung an einen Bot bleibt eine normale Zuweisung; Erwähnungen beantworten sie trotzdem (eine Antwort bewegt kein Item).
 
 Wo etwas fehlt, sagt das Item unter seinem Titel warum, und **Projekteinstellungen → Agenten** sagt es für das Projekt.
 
@@ -93,7 +93,9 @@ Ein Task, der dem Bot einzeln zugewiesen ist, ist ein normaler Task mit eigenem 
 
 ## Erwähnungen
 
-Erwähnst du den Bot mit `@handle` in einem neuen Kommentar, antwortet er in einem eigenen Kommentar, aus Wiki, Items und Code des Projekts, mit Quellen. Es zählen nur Erwähnungen von Konten, die das Item bearbeiten dürfen, und nur in neuen Kommentaren; Erwähnungen in Beschreibung oder Feldern und bearbeitete Kommentare starten nichts. An einem Item mit offenem Strang setzt die Antwort dessen Session fort, sonst beginnt sie frisch.
+Erwähnst du den Bot mit `@handle` in einem neuen Kommentar, antwortet er in einem eigenen Kommentar, aus Wiki, Items und Code des Projekts, mit Quellen. Es zählen nur Erwähnungen von Konten, die das Item bearbeiten dürfen, und nur in neuen Kommentaren; Erwähnungen in Beschreibung oder Feldern und bearbeitete Kommentare starten nichts. An einem Item mit offenem Strang setzt die Antwort dessen Session fort, sonst beginnt sie frisch. Eine Antwort braucht keinen der vier Schritte des Workflows: Sie bewegt kein Item.
+
+Kann ein als Agent eingerichteter Bot hier nicht antworten (sein Agent ist ausgeschaltet, er hat keine verantwortliche Person, ist deaktiviert oder darf Items des Projekts nicht ändern), sagt es der Standard-Bot in einem Kommentar am Item, einmal je Kommentar: warum, und wer es mit einem Link an die richtige Stelle ändert (ein Org-Admin für Agent und Bot, ein Projekt-Admin für die Mitglieder). Ein Bot, der nie als Agent eingerichtet war, bekommt keinen Hinweis (er wacht womöglich über einen Webhook auf `bot.mentioned` auf, siehe [Einen Agenten wecken](/de/bots#einen-agenten-wecken)), der Standard-Bot auch nicht. Eine Erwähnung durch einen Bot, durch ein Konto, das das Item nicht bearbeiten darf, oder in einem bearbeiteten Kommentar bekommt ebenfalls keinen Hinweis, und der Hinweis selbst löst nichts aus; die Beobachter des Items hören davon wie von jedem Kommentar.
 
 ## Pull Requests von Personen
 

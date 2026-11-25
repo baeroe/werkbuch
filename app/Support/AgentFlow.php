@@ -45,12 +45,13 @@ final class AgentFlow
      * Why a bot cannot work on items of a project as an agent (spec 7.2, 7.4), null when it can: an agent switched on,
      * a bot with a responsible person (not the default bot), active, that may edit items of the project, and a workflow
      * that names every step of the agents; the project neither archived nor being deleted. The default bot, a deactivated
-     * bot and one without a responsible person each have their own code (A647).
+     * bot and one without a responsible person each have their own code (A647). An answer to a mention (`$steps` false)
+     * moves no item and needs no step of the workflow (A710).
      */
-    public static function refusal(User $bot, Project $project): ?string
+    public static function refusal(User $bot, Project $project, bool $steps = true): ?string
     {
         $config = AgentConfig::query()->where('bot_id', $bot->id)->first();
-        $workflow = Workflow::query()->find($project->workflow_id);
+        $workflow = $steps ? Workflow::query()->find($project->workflow_id) : null;
 
         return match (true) {
             // the default bot and a deactivated one say so before their agent: neither is set up as one
@@ -60,7 +61,7 @@ final class AgentFlow
             $config === null || ! $config->enabled => 'agent_off',
             $bot->owner_id === null => 'no_owner',
             $project->archived_at !== null || $project->deleting_at !== null => 'archived',
-            $workflow === null || ! $workflow->agentStepsComplete() => 'no_steps',
+            $steps && ($workflow === null || ! $workflow->agentStepsComplete()) => 'no_steps',
             ! Visibility::can($bot, Permission::ItemEdit, $project) => 'not_member',
             default => null,
         };
