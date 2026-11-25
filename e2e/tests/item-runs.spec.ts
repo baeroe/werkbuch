@@ -148,31 +148,44 @@ test('follows a run of an agent at an item with the keyboard: its log live, canc
 
 test('keeps the comment being read in place while a run on top starts and unfolds its log (WEBU-37)', async ({ page }) => {
   test.setTimeout(240_000);
-  const { bot, runner, item, cleanup } = await agentWorld(page, 'reading', {
+  // a name per repetition (`--repeat-each`): the workflow of the world is named after it
+  const { bot, runner, item, cleanup } = await agentWorld(page, `reading ${test.info().repeatEachIndex}`, {
     // older than the run: they stand under it, newest first
     beforeAssign: async (created) => {
       for (let number = 1; number <= 14; number += 1) {
         const comment = await api(page, 'POST', `/api/v1/work-items/${created.id}/comments`, { body: `Note ${String(number).padStart(2, '0')}: checked the banner again in another browser.` });
         expect(comment.status(), await comment.text()).toBe(201);
       }
+      // a run keeps whole seconds (`agent_runs.created_at`), comments microseconds: in the same second the run would
+      // sort as the older one (in the CI it stood between the notes). The run comes a second later than every note.
+      await page.waitForTimeout(1_100);
     },
   });
   try {
     // werkbuch queues the task a moment after the assignment (the consumer of the agents)
+    let runId = '';
     await expect
-      .poll(async () => ((await (await api(page, 'GET', `/api/v1/runs?filter[work_item_id]=${item.id}`)).json()) as { data: unknown[] }).data.length, { timeout: 60_000 })
+      .poll(
+        async () => {
+          const runs = ((await (await api(page, 'GET', `/api/v1/runs?filter[work_item_id]=${item.id}`)).json()) as { data: { id: string }[] }).data;
+          runId = runs[0]?.id ?? '';
+          return runs.length;
+        },
+        { timeout: 60_000 },
+      )
       .toBe(1);
     await page.goto(`/items/${item.key}`);
     const timeline = page.getByRole('list', { name: label('items.activity.list') });
-    const card = timeline.getByRole('article', { name: label('items.agents.run.label', { run: implement(), bot: bot.name }) });
+    const card = timeline.locator(`#run-${runId}`);
+    await expect(card).toHaveAccessibleName(label('items.agents.run.label', { run: implement(), bot: bot.name }));
     const log = card.getByRole('log', { name: label('items.agents.log.label', { run: implement() }) });
-    // the waiting run stands on top, its log still closed
-    await expect(card).toBeVisible();
-    await expect(timeline.getByRole('listitem').first().getByRole('article')).toHaveAttribute('id', /^run-/);
+    // the waiting run stands above the notes (newest first), its log still closed
+    const reading = timeline.getByRole('article').filter({ hasText: 'Note 10:' });
+    await expect(reading).toBeVisible();
+    expect(await card.evaluate((run, note) => Boolean(run.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING), await reading.elementHandle())).toBe(true);
     await expect(log).toBeHidden();
 
     // reading further down: note 10 at the top of the window
-    const reading = timeline.getByRole('article').filter({ hasText: 'Note 10:' });
     await reading.evaluate((comment) => comment.scrollIntoView({ block: 'start' }));
     const top = async () => (await reading.boundingBox())!.y;
     await expect.poll(top).toBeLessThan(200);
