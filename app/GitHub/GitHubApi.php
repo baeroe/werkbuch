@@ -3,10 +3,12 @@
 namespace App\GitHub;
 
 use App\Models\GitHubApp;
+use GuzzleHttp\Psr7\Utils;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Psr\Http\Message\RequestInterface;
 
 /**
  * The calls werkbuch makes to the REST API of GitHub (spec 11.3), over Laravel's HTTP client: no state, no database.
@@ -256,7 +258,8 @@ final class GitHubApi
         $http = Http::baseUrl((string) config('werkbuch.github.api_url'))
             ->timeout((int) config('werkbuch.github.timeout'))
             ->connectTimeout(5)
-            ->withHeaders(['Accept' => 'application/vnd.github+json', 'X-GitHub-Api-Version' => self::API_VERSION, 'User-Agent' => 'werkbuch/'.config('werkbuch.version')]);
+            ->withHeaders(['Accept' => 'application/vnd.github+json', 'X-GitHub-Api-Version' => self::API_VERSION, 'User-Agent' => 'werkbuch/'.config('werkbuch.version')])
+            ->withRequestMiddleware(self::noEmptyArray(...));
 
         try {
             $response = $call($http);
@@ -269,6 +272,16 @@ final class GitHubApi
         }
 
         return $response;
+    }
+
+    /**
+     * A write without data goes as `{}` (WEBU-34): Laravel encodes the empty data of `post($url)` as the JSON `[]`, and
+     * GitHub refuses an array where it reads an object with 422 ("[] is not a null or object"). Every call to GitHub
+     * passes here, so none sends `[]`.
+     */
+    private static function noEmptyArray(RequestInterface $request): RequestInterface
+    {
+        return (string) $request->getBody() === '[]' ? $request->withBody(Utils::streamFor('{}')) : $request;
     }
 
     /**
