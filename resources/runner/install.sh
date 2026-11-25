@@ -43,7 +43,7 @@ Installs the werkbuch runner from this instance and pairs it.
 
   curl -fsSL <instance>/runner/install.sh | sh -s -- --code <CODE> [--name <name>] [--prefix <dir>] [--no-service]
 
-  --code <CODE>    the one-time code from Settings → Runners → Connect runner
+  --code <CODE>    the one-time code from Settings → Runners → Connect a runner
   --name <name>    the name of the runner in werkbuch (default: the host name)
   --prefix <dir>   install into <dir>/bin (default: ~/.local)
   --no-service     write the launchd plist or the systemd unit, but neither load nor start it
@@ -137,7 +137,7 @@ main() {
     setup_colors
     printf '\n%swerkbuch-runner%s installer\n\n' "$app" "$reset"
     if [ -z "$code" ]; then
-        die code "--code is missing: copy the command from werkbuch, Settings → Runners → Connect runner"
+        die code "--code is missing: copy the command from werkbuch, Settings → Runners → Connect a runner"
     fi
     if [ "$(id -u)" = 0 ]; then
         die user "do not run the installer as root or with sudo: the agents run with the rights of the user who installs the runner"
@@ -187,7 +187,7 @@ main() {
         ok paired "$(printf '%s\n' "$out" | sed -n '1{s/^Paired //;s/"//g;s/\.$//;p;}')"
     else
         fail paired "$(printf '%s\n' "$out" | tail -n 1 | sed 's/^werkbuch-runner: //')"
-        printf '\nCreate a new code in werkbuch: %sSettings → Runners → Connect runner%s, then run the command again.\n' "$bold" "$reset"
+        printf '\nCreate a new code in werkbuch: %sSettings → Runners → Connect a runner%s, then run the command again.\n' "$bold" "$reset"
         printf 'The runner is in %s; no service was set up.\n\n' "$(shown "$runner")"
         exit 1
     fi

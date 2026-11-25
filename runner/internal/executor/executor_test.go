@@ -504,3 +504,24 @@ func TestANaturalEndKeepsItsStatusAndEndsTheGroup(t *testing.T) {
 		t.Fatal("the background process of the CLI outlived it")
 	}
 }
+
+func TestSetupAndTeardownSeeTheWorktree(t *testing.T) {
+	// a setup command names its own project after the strand (A670), the teardown removes the same one
+	w := newWorld(t)
+	torn := filepath.Join(t.TempDir(), "teardown")
+	run := w.run("01vars", protocol.Review, "review", func(r *protocol.Run) {
+		r.HeadSHA = str(gitIn(t, w.origin, "rev-parse", "HEAD"))
+		r.SetupCommand = str(`echo "project werkbuch-$WERKBUCH_STRAND in $WERKBUCH_WORKTREE"`)
+		r.TeardownCommand = str(`printf '%s|%s' "$WERKBUCH_WORKTREE" "$WERKBUCH_STRAND" > ` + torn)
+	})
+	e, _ := w.execute(run)
+	dir := e.Summary().Dir
+	if !strings.Contains(w.texts(run.ID), "setup: project werkbuch-run-01vars in "+dir) {
+		t.Fatalf("%s\n%s", dir, w.texts(run.ID))
+	}
+	data, _ := os.ReadFile(torn)
+	if string(data) != dir+"|run-01vars" {
+		t.Fatalf("teardown saw %q (%s)", data, dir)
+	}
+	t.Logf("setup said: project werkbuch-run-01vars in %s; teardown saw: %s", dir, data)
+}

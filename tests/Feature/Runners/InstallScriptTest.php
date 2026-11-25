@@ -149,7 +149,7 @@ it('sets up no service when the code is refused', function () use ($serve, $inst
 
     expect($code)->toBe(1)
         ->and($errors)->toContain('✗ paired       the code was refused: The code has expired (valid for 10 minutes, once).')
-        ->and($out)->toContain('Create a new code in werkbuch: Settings → Runners → Connect runner, then run the command again.')
+        ->and($out)->toContain('Create a new code in werkbuch: Settings → Runners → Connect a runner, then run the command again.')
         ->and($out)->toContain('no service was set up')
         ->and($log)->not->toContain('runner service install');
 });
