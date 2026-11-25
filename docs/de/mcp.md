@@ -439,7 +439,7 @@ Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins), die Aufträge 
 
 ### `manage-agents`
 
-Ändert Runner und die Agenten-Konfiguration von Bots (Org-Admins), steuert Aufträge (wer das Item ändern darf), liest die GitHub-App neu, setzt das Repo und die Agenten-Einstellungen eines Projekts und ändert die Arbeitsregeln der Agenten (Org-Admins). Einen Runner verbinden und GitHub verbinden oder trennen geht nur in der Oberfläche. Ein Agent steuert Aufträge nie mit dem Token seines eigenen Auftrags (403 `agent_forbidden`). (Braucht `write`.)
+Ändert Runner und die Agenten-Konfiguration von Bots (Org-Admins), steuert Aufträge und setzt den Strang eines Items nach dem Trennen von GitHub fort (wer das Item ändern darf), liest die GitHub-App neu, setzt das Repo und die Agenten-Einstellungen eines Projekts und ändert die Arbeitsregeln der Agenten (Org-Admins). Einen Runner verbinden und GitHub verbinden oder trennen geht nur in der Oberfläche. Ein Agent steuert Aufträge nie mit dem Token seines eigenen Auftrags (403 `agent_forbidden`). (Braucht `write`.)
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
@@ -447,6 +447,7 @@ Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins), die Aufträge 
 | `revoke-runner` | Widerruft einen Runner; was darauf läuft, endet abgebrochen. Antwortet `{canceled}`. | `runner` | `DELETE /runners/{runner}` |
 | `cancel-run` | Bricht einen Auftrag ab; einer auf einem Runner endet, sobald der Runner ihn gestoppt hat. | `run` | `POST /runs/{run}/cancel` |
 | `retry-run` | Startet einen ohne Erfolg beendeten Auftrag erneut; antwortet den neuen Auftrag. | `run` | `POST /runs/{run}/retry` |
+| `resume-thread` | Setzt einen Strang fort, der seit dem Trennen von GitHub wartet; die Bremsen zählen weiter. Antwortet `{run, braked}`. | `item` | `POST /work-items/{item}/agent/resume` |
 | `save-config` | Setzt die Agenten-Konfiguration eines Bots ganz. | `bot`, `input` | `PUT /bots/{user}/agent` |
 | `sync-github` | Liest die Installationen der GitHub-App und ihre Repos neu von GitHub (Org-Admins). | – | `POST /github/sync` |
 | `set-repository` | Gibt einem Projekt sein Repo (eines, das die App erreicht, höchstens ein Projekt je Repo) und den Basis-Branch, oder keins; Admins des Projekts. | `project`, `input` | `PUT /projects/{project}/repository` |

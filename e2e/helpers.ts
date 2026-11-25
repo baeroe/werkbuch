@@ -885,12 +885,61 @@ export async function uploadViaApi(page: Page, projectId: string, file: TestFile
  * active runner has it). The name is `E2E <variant> <run> <name>`; the E2eSeeder revokes what an aborted run left.
  */
 export async function redeemRunnerCode(page: Page, code: string, name: string): Promise<{ id: string; name: string }> {
+  return (await pairRunner(page, code, name)).runner;
+}
+
+/** Redeems a code like `redeemRunnerCode` and keeps the token of the runner, for a false runner of a spec. */
+async function pairRunner(page: Page, code: string, name: string): Promise<{ runner: { id: string; name: string }; token: string }> {
   const response = await page.request.post(new URL('/api/runner/pair', test.info().project.use.baseURL!).toString(), {
     data: { code, name: `E2E ${variant()} ${runId()} ${name}`.slice(0, 60), os: 'linux', arch: 'arm64', version: '0.4.0' },
     headers: { Accept: 'application/json', 'X-Werkbuch-Runner-Version': '0.4.0', 'X-Werkbuch-Protocol': '1' },
   });
   expect(response.status(), await response.text()).toBe(201);
-  return ((await response.json()) as { runner: { id: string; name: string } }).runner;
+  return (await response.json()) as { runner: { id: string; name: string }; token: string };
+}
+
+/** A run as the runner protocol hands it out: what a false runner needs of it. */
+export type ClaimedRun = { id: string; attempt: number; type: string; item: { id: string; key: string } | null };
+
+/**
+ * A false runner of a spec (WEBU-28): paired like a machine, it speaks the runner protocol (`/api/runner/*`, spec 6.4)
+ * with its token and reports Claude Code installed and signed in. `claim` asks until it gets a run of the item (or
+ * fails after `timeout`); `events` sends lines of the log, `heartbeat` answers whether werkbuch wants the run canceled,
+ * `result` ends it. Revoke it in `finally` (`removeE2eRunner`).
+ */
+export async function createE2eFakeRunner(page: Page, name: string) {
+  await ensureCsrfCookie(page);
+  const pairing = await api(page, 'POST', '/api/v1/runner-pairings');
+  expect(pairing.status(), await pairing.text()).toBe(201);
+  const { data } = (await pairing.json()) as { data: { code: string } };
+  const { runner, token } = await pairRunner(page, data.code, name);
+  const base = test.info().project.use.baseURL!;
+  const headers = { Accept: 'application/json', Authorization: `Bearer ${token}`, 'X-Werkbuch-Runner-Version': '0.4.0', 'X-Werkbuch-Protocol': '1' };
+  const call = async (path: string, body: unknown) => {
+    const response = await page.request.post(new URL(`/api/runner/${path}`, base).toString(), { data: body, headers });
+    expect(response.status(), await response.text()).toBe(200);
+    return response.json();
+  };
+  const clis = [{ cli: 'claude', installed: true, version: '2.4.1', logged_in: true, path: '/usr/local/bin/claude' }];
+  return {
+    ...runner,
+    async claim(itemId: string, timeout = 60_000): Promise<ClaimedRun> {
+      let run: ClaimedRun | null = null;
+      await expect
+        .poll(
+          async () => {
+            run = ((await call('claim', { clis })) as { run: ClaimedRun | null }).run;
+            return run?.item?.id ?? null;
+          },
+          { timeout, intervals: [500] },
+        )
+        .toBe(itemId);
+      return run!;
+    },
+    events: (run: ClaimedRun, lines: { kind: 'system' | 'text' | 'tool' | 'result' | 'error'; text: string }[]) => call(`runs/${run.id}/events`, { attempt: run.attempt, events: lines }),
+    heartbeat: async (run: ClaimedRun) => ((await call(`runs/${run.id}/heartbeat`, { attempt: run.attempt, clis })) as { cancel: boolean }).cancel,
+    result: (run: ClaimedRun, status: 'succeeded' | 'failed' | 'canceled', summary: string | null = null) => call(`runs/${run.id}/result`, { attempt: run.attempt, status, summary }),
+  };
 }
 
 /** A runner for a spec, connected before its first key: a code in the session, redeemed like the machine does. */

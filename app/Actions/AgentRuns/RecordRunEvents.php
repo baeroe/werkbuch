@@ -4,6 +4,7 @@ namespace App\Actions\AgentRuns;
 
 use App\Domain\Agents\Protocol;
 use App\Exceptions\Problem;
+use App\Live\RunLog;
 use App\Models\AgentRun;
 use App\Models\AgentRunEvent;
 use App\Models\Runner;
@@ -21,7 +22,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * The log of a running run (spec 6.4, 7.5, A481): a batch of up to 100 lines the runner cut to the readable part of the
  * CLI's output. Each line keeps at most 4 000 characters, tokens in it are blanked (spec 2: no secret in a log); past
- * 2 000 lines or 1 MB per run the oldest go and the run counts them (`events_dropped`). Not through the outbox.
+ * 2 000 lines or 1 MB per run the oldest go and the run counts them (`events_dropped`). Not through the outbox: the item
+ * of the run hears of new lines through RunLog (`agent_run.log`, at most once a second, A641).
  */
 final class RecordRunEvents
 {
@@ -58,6 +60,7 @@ final class RecordRunEvents
             }
 
             $dropped = self::compact($run);
+            RunLog::grew($run);
 
             return ['stored' => count($valid['events']), 'dropped' => $dropped];
         }, 3);

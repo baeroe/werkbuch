@@ -21,7 +21,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * through `include` (`WorkItem::$includes`) comes after the fields: `children` (items in manual order), `type`
  * (WorkItemTypeResource), `workflow` (the workflow of the project, WorkflowResource) and `relations` (RelationEntryResource,
  * as the reader sees them: a hidden end without id, key or title) and `attachments` (AttachmentResource, the files of
- * the file list); without it the keys are absent.
+ * the file list), `links` (the linked PRs) and `agent` (what the agents do at the item, ItemAgentState); without it the
+ * keys are absent.
  *
  * @mixin WorkItem
  */
@@ -81,6 +82,7 @@ final class WorkItemResource extends JsonResource
                 ->map(fn (Attachment $attachment) => (new AttachmentResource($attachment))->resolve($request))->values()->all()),
             'links' => $this->when(in_array('links', $item->includes, true), fn () => $item->links
                 ->map(fn (WorkItemLink $link) => (new WorkItemLinkResource($link))->resolve($request))->values()->all()),
+            'agent' => $this->when(in_array('agent', $item->includes, true), fn () => $item->agent_state),
         ];
     }
 }

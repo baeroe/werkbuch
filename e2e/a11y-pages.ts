@@ -110,6 +110,76 @@ async function removeA11yRunners(page: Page): Promise<void> {
   for (const project of projects.data.filter((entry) => entry.name === e2eName())) await removeE2eProject(page, project.identifier);
 }
 
+/**
+ * Three items of a project of the state with what agents do at them (WEBU-28), written into the database: one with a
+ * running run (its log open), a review with findings and a pull request with red CI; one the brake took from the agent
+ * (a failed run, given back from its line) with a merged pull request; one assigned to a bot that is no agent here, with
+ * a run that waits for its offline runner. The runner is `E2E … a11y agents`; `removeA11yRunners` takes everything away.
+ */
+async function a11yAgentItems(page: Page): Promise<{ running: string; braked: string; refused: string }> {
+  const project = await createE2eProject(page, e2eName());
+  const running = await createItem(page, { project_id: project.id, title: 'E2E a11y running' });
+  const braked = await createItem(page, { project_id: project.id, title: 'E2E a11y braked' });
+  const refused = await createItem(page, { project_id: project.id, title: 'E2E a11y refused' });
+  const runner = createE2eRunnerRow('a11y agents');
+  const ids = JSON.stringify({ running: running.id, braked: braked.id, refused: refused.id, runner: runner.id, email: PEOPLE.e2e.email });
+  artisanEval(
+    [
+      `$p = json_decode('${ids}', true);`,
+      "$kira = App\\Models\\User::query()->where('handle', 'kira')->firstOrFail();",
+      "$erik = App\\Models\\User::query()->where('email', $p['email'])->value('id');",
+      "$item = fn ($id) => App\\Models\\WorkItem::query()->findOrFail($id);",
+      "$thread = fn ($item, $more = []) => App\\Models\\AgentThread::query()->create(['bot_id' => $kira->id, 'project_id' => $item->project_id, 'work_item_id' => $item->id, 'runner_id' => $p['runner'], 'branch' => 'agent/a11y', 'base_branch' => 'main', 'status' => 'open', 'corrections' => 0, 'conflicts' => 0, ...$more]);",
+      "$run = fn ($item, $thread, $more) => App\\Models\\AgentRun::query()->create(['type' => 'task', 'status' => 'succeeded', 'bot_id' => $kira->id, 'cli' => 'claude', 'model' => 'sonnet', 'model_source' => 'bot', 'runner_id' => $p['runner'], 'project_id' => $item->project_id, 'work_item_id' => $item->id, 'thread_id' => $thread?->id, 'context' => [], 'attempt' => 1, 'started_at' => now()->subMinutes(20), 'finished_at' => now()->subMinutes(5), ...$more]);",
+      "$link = fn ($item, $more) => App\\Models\\WorkItemLink::query()->create(['work_item_id' => $item->id, 'kind' => 'pull_request', 'repository_github_id' => 1, 'repository' => 'example/site', 'number' => 7, 'title' => 'E2E a11y pull request', 'url' => 'https://github.com/example/site/pull/7', 'state' => 'open', 'draft' => false, 'head_branch' => 'agent/a11y', 'base_branch' => 'main', 'head_sha' => str_repeat('a', 40), 'closes' => true, 'author' => 'jonas', 'thread_id' => null, 'review' => null, ...$more]);",
+      // running, with a log, a review with findings and a PR with red CI
+      "$a = $item($p['running']); App\\Models\\WorkItem::query()->whereKey($a->id)->update(['assignee_id' => $kira->id]); $ta = $thread($a);",
+      "$review = $run($a, $ta, ['type' => 'review', 'result' => ['verdict' => 'changes', 'summary' => 'Two findings.'], 'created_at' => now()->subMinutes(30)]);",
+      "$live = $run($a, $ta, ['status' => 'running', 'finished_at' => null, 'lease_expires_at' => now()->addHours(2), 'started_at' => now()->subMinutes(3), 'created_at' => now()->subMinutes(4)]);",
+      "foreach (['Worktree ready', 'Read resources/js/banner.ts', '12 passed'] as $n => $text) App\\Models\\AgentRunEvent::query()->create(['run_id' => $live->id, 'attempt' => 1, 'kind' => ['system', 'tool', 'result'][$n], 'text' => $text, 'bytes' => strlen($text), 'at' => now()->subMinutes(3 - $n)]);",
+      "$red = $link($a, ['review' => 'changes']);",
+      "DB::table('work_item_link_checks')->insert(['id' => strtolower((string) Str::ulid()), 'work_item_link_id' => $red->id, 'kind' => 'check', 'check_run_id' => 1, 'name' => 'tests', 'app' => 'github-actions', 'status' => 'completed', 'conclusion' => 'failure', 'url' => null, 'head_sha' => str_repeat('a', 40), 'created_at' => now(), 'updated_at' => now()]);",
+      // the brake: with Erik now, a failed run, a merged PR
+      "$b = $item($p['braked']); App\\Models\\WorkItem::query()->whereKey($b->id)->update(['assignee_id' => $erik]); $tb = $thread($b, ['status' => 'paused', 'pause_reason' => 'brake', 'corrections' => 3, 'pr_number' => 8]);",
+      "$run($b, $tb, ['status' => 'failed', 'error' => 'The setup command failed.']);",
+      "$link($b, ['number' => 8, 'state' => 'merged', 'review' => 'approve', 'merged_at' => now()]);",
+      // a bot that is no agent here, a run waiting for its offline runner
+      "$c = $item($p['refused']); App\\Models\\WorkItem::query()->whereKey($c->id)->update(['assignee_id' => $kira->id]);",
+      "$run($c, null, ['type' => 'correction', 'status' => 'waiting', 'waiting_reason' => 'runner_offline', 'started_at' => null, 'finished_at' => null]);",
+      "echo json_encode([$a->key, $b->key, $c->key]), PHP_EOL;",
+    ].join('\n'),
+  );
+  return { running: running.key, braked: braked.key, refused: refused.key };
+}
+
+/**
+ * Two items whose strands GitHub stopped (WEBU-28): one in a project without a repo since GitHub was disconnected
+ * (`Resume` waits for the repo), one in the project of `connectGitHub` whose guard names its run. Answers both keys;
+ * `disconnectGitHub` and `removeA11yRunners` take everything away.
+ */
+async function a11yAgentGitHub(page: Page): Promise<{ github: string; guard: string }> {
+  const guarded = await connectGitHub(page);
+  const project = await createE2eProject(page, e2eName());
+  const github = await createItem(page, { project_id: project.id, title: 'E2E a11y GitHub disconnected' });
+  const guard = await createItem(page, { project_id: guarded, title: 'E2E a11y guard' });
+  const ids = JSON.stringify({ github: github.id, guard: guard.id });
+  artisanEval(
+    [
+      `$p = json_decode('${ids}', true);`,
+      "$kira = App\\Models\\User::query()->where('handle', 'kira')->firstOrFail();",
+      "foreach (['github', 'guard'] as $what) {",
+      "  $item = App\\Models\\WorkItem::query()->findOrFail($p[$what]);",
+      "  App\\Models\\WorkItem::query()->whereKey($item->id)->update(['assignee_id' => $kira->id]);",
+      "  $thread = App\\Models\\AgentThread::query()->create(['bot_id' => $kira->id, 'project_id' => $item->project_id, 'work_item_id' => $item->id, 'branch' => 'agent/a11y-'.$what, 'base_branch' => 'main', 'status' => 'paused', 'pause_reason' => $what, 'pr_number' => 9, 'corrections' => 1, 'conflicts' => 0]);",
+      "  $run = App\\Models\\AgentRun::query()->create(['type' => 'task', 'status' => 'succeeded', 'bot_id' => $kira->id, 'cli' => 'claude', 'model' => 'sonnet', 'model_source' => 'bot', 'project_id' => $item->project_id, 'work_item_id' => $item->id, 'thread_id' => $thread->id, 'context' => [], 'attempt' => 1, 'started_at' => now()->subMinutes(20), 'finished_at' => now()->subMinutes(5)]);",
+      "  if ($what === 'guard') App\\Models\\ProjectRepository::query()->where('project_id', $item->project_id)->update(['guard_runs' => json_encode([['run_id' => $run->id, 'item_id' => $item->id, 'bot_id' => $kira->id]])]);",
+      '}',
+      "echo 'ok', PHP_EOL;",
+    ].join('\n'),
+  );
+  return { github: github.key, guard: guard.key };
+}
+
 export const A11Y_PAGES: readonly A11yEntry[] = [
   // without a session
   { name: 'sign-in', page: 'Auth/Login', guest: true, path: () => '/login' },
@@ -192,6 +262,65 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
       const dialog = page.getByRole('dialog', { name: en('items.create.title') });
       await expect(dialog.getByRole('textbox', { name: new RegExp(`^${en('items.create.title_label')}`) })).toBeFocused();
     },
+  }),
+  state({
+    name: 'item with agent runs',
+    page: 'Items/Show',
+    path: () => '/items/WEB-47',
+    // a running run with its log, a review with findings, a pull request with red CI and its checks (WEBU-28)
+    state: async (page) => {
+      const { running } = await a11yAgentItems(page);
+      await page.goto(`/items/${running}`);
+      await expect(page.getByRole('log', { name: en('items.agents.log.label', { run: en('settings.runners.run.type.task') }) })).toContainText('12 passed');
+      await expect(page.getByRole('list', { name: en('items.prs.list', { key: running }) })).toBeVisible();
+    },
+    cleanup: (page) => removeA11yRunners(page),
+  }),
+  state({
+    name: 'item with agent notices',
+    page: 'Items/Show',
+    path: () => '/items/WEB-47',
+    // the brake with a failed run given back from its line and a merged pull request; a bot that is no agent here with a
+    // run that waits for its offline runner (WEBU-28)
+    state: async (page) => {
+      const { braked, refused } = await a11yAgentItems(page);
+      await page.goto(`/items/${braked}`);
+      await expect(page.getByText(en('items.agents.paused.brake_title', { bot: 'Kira', after: en('items.agents.paused.after_corrections.other', { count: 3 }) }))).toBeVisible();
+      await page.goto(`/items/${refused}`);
+      await expect(page.getByText(en('items.agents.refusal.title', { bot: 'Kira' }))).toBeVisible();
+    },
+    cleanup: (page) => removeA11yRunners(page),
+  }),
+  state({
+    name: 'item with agent stopped by GitHub',
+    page: 'Items/Show',
+    path: () => '/items/WEB-47',
+    // a strand GitHub stopped: disconnected (`Resume` waits for the repo of the project), and a guard that names the run
+    // of the item (WEBU-28)
+    state: async (page) => {
+      const { github, guard } = await a11yAgentGitHub(page);
+      await page.goto(`/items/${github}`);
+      await expect(page.getByText(en('items.agents.paused.github_title', { bot: 'Kira' }))).toBeVisible();
+      await page.goto(`/items/${guard}`);
+      await expect(page.getByText(en('items.agents.paused.guard_here_title', { bot: 'Kira', branch: 'main' }))).toBeVisible();
+    },
+    cleanup: async (page) => {
+      await disconnectGitHub(page);
+      await removeA11yRunners(page);
+    },
+  }),
+  state({
+    name: 'cancel run dialog',
+    page: 'Items/Show',
+    path: () => '/items/WEB-47',
+    state: async (page) => {
+      const { running } = await a11yAgentItems(page);
+      await page.goto(`/items/${running}`);
+      const card = page.getByRole('article', { name: en('items.agents.run.label', { run: en('settings.runners.run.type.task'), bot: 'Kira' }) }).last();
+      await press(page, card.getByRole('button', { name: en('settings.runners.runs.cancel') }));
+      await expect(page.getByRole('alertdialog', { name: en('items.agents.cancel.title', { run: en('settings.runners.run.type.task') }) })).toBeVisible();
+    },
+    cleanup: (page) => removeA11yRunners(page),
   }),
   state({
     name: 'item menu',

@@ -75,6 +75,19 @@ final class AgentSchemas
     }
 
     /**
+     * The answer of resuming the strand of an item (`POST /work-items/{item}/agent/resume`, WEBU-28).
+     *
+     * @return array<string, mixed>
+     */
+    public static function resumed(): array
+    {
+        return self::object('The strand goes on.', ['data' => self::object('', [
+            'run' => ['anyOf' => [['$ref' => '#/components/schemas/AgentRunResource'], ['type' => 'null']], 'description' => 'The correction it queued; `null` when the strand stopped at its brake.'],
+            'braked' => ['type' => 'boolean', 'description' => 'The brakes keep counting: the strand reached its brake and paused again.'],
+        ], ['run', 'braked'], false)], ['data'], false);
+    }
+
+    /**
      * The answer of revoking a runner.
      *
      * @return array<string, mixed>
@@ -229,6 +242,7 @@ final class AgentSchemas
                 'waiting_reason' => ['type' => ['string', 'null'], 'enum' => [...AgentRun::WAITING_REASONS, null], 'description' => '`agent_off`: the agent is switched off; `no_cli`: no runner of the pool has the CLI; `runner_offline`: the runner of its strand is offline (30 minutes, then another takes over).'],
                 'cli' => ['type' => 'string', 'enum' => AgentCli::VALUES],
                 'model_source' => ['type' => 'string', 'enum' => AgentRun::MODEL_SOURCES],
+                'runner_last_seen_at' => [...$nullTime, 'description' => 'The last contact of the runner: how long a run waits for a runner that is offline.'],
                 'lease_expires_at' => $nullTime, 'started_at' => $nullTime, 'deadline_at' => $nullTime, 'finished_at' => $nullTime,
                 'result' => ['anyOf' => [self::object('What came of it, as the runner reported it.', [
                     'verdict' => ['type' => 'string', 'enum' => ['approve', 'changes']],

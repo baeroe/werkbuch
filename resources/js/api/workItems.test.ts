@@ -112,8 +112,25 @@ describe('reading work items', () => {
       relations: web47Relations,
       attachments: [file],
       subscribed: true,
+      links: [],
+      agent: null,
     });
-    expect(sent()).toBe('GET /api/v1/work-items/WEB-47?include=children,relations,type,workflow,attachments');
+    expect(sent()).toBe('GET /api/v1/work-items/WEB-47?include=children,relations,type,workflow,attachments,links,agent');
+  });
+
+  it('takes the linked pull requests and the state of the agent from the answer (WEBU-28)', async () => {
+    const agent = { thread: null, refusal: 'agent_off' as const, brakes: { max_corrections: 3, max_conflicts: 2 }, repository: true, guard: null };
+    const link = { id: 'lk_1', number: 211 };
+    api = mockApi({
+      'GET /api/v1/work-items/WEB-47': () => ({ body: { data: { ...web47, children: [], relations: [], type: types[1], workflow: standard, attachments: [], links: [link], agent } } }),
+    });
+
+    const detail = await getWorkItem('WEB-47');
+
+    expect(detail.links).toEqual([link]);
+    expect(detail.agent).toEqual(agent);
+    expect(Object.keys(detail.item)).not.toContain('links');
+    expect(Object.keys(detail.item)).not.toContain('agent');
   });
 
   it('keeps the children of an epic in their order and escapes a reference from an address', async () => {

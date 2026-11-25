@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property string $id
  * @property string $work_item_id
  * @property string $author_id
+ * @property string|null $run_id the run of an agent the comment answers (A643), a comment of its bot
  * @property array<string, mixed> $body
  * @property string $body_text
  * @property Carbon|null $edited_at
@@ -31,7 +32,7 @@ use Illuminate\Support\Carbon;
  * @property-read User $author
  * @property-read EloquentCollection<int, CommentReaction> $reactions
  */
-#[Fillable(['work_item_id', 'author_id', 'body', 'body_text', 'edited_at'])]
+#[Fillable(['work_item_id', 'author_id', 'run_id', 'body', 'body_text', 'edited_at'])]
 final class Comment extends Model
 {
     /** @use HasFactory<CommentFactory> */

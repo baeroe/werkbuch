@@ -6,6 +6,7 @@ use App\Domain\GitHub\CiState;
 use App\GitHub\GitHubApi;
 use App\GitHub\GitHubUnavailable;
 use App\GitHub\InstallationTokens;
+use App\Live\ChecksChanged;
 use App\Models\ProjectRepository;
 use App\Models\WorkItemLink;
 use App\Models\WorkItemLinkCheck;
@@ -22,7 +23,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * `status`: a waiting run is pending, a failed one or a status `failure`/`error` red). Then the links note that werkbuch
  * asked (`checks_loaded_sha`, `_at`): a head without any of the three counts green only once GitHub said so after the
  * commit settled (AgentFlow::ci). With a token of its own, or with the one of the caller (MergeThread). No HTTP under a
- * lock. Answers the CI state GitHub gave, `ignored` for a repo no project has.
+ * lock. Answers the CI state GitHub gave, `ignored` for a repo no project has. Each item whose checks changed hears it
+ * once per load, after the commits (ChecksChanged, A648).
  */
 final class LoadChecks
 {
@@ -49,20 +51,30 @@ final class LoadChecks
         $workflows = array_values(array_filter(array_map(fn (array $run) => self::row('workflow', $run, $sha), GitHubApi::workflowRuns($token, $name, $sha))));
         $statuses = array_values(array_filter(array_map(fn (array $status) => self::row('status', $status, $sha), GitHubApi::statuses($token, $name, $sha))));
 
+        $changed = [];
         foreach ($runs as $run) {
-            SyncChecks::run($actor, ['check_run' => ['head_sha' => $sha, ...$run], 'repository' => ['id' => $repositoryGithubId]]);
+            $changed = [...$changed, ...(SyncChecks::store(['check_run' => ['head_sha' => $sha, ...$run], 'repository' => ['id' => $repositoryGithubId]]) ?? [])];
         }
 
-        DB::transaction(function () use ($repositoryGithubId, $sha, $workflows, $statuses): void {
+        $rows = [...$workflows, ...$statuses];
+        $changed = [...$changed, ...DB::transaction(function () use ($repositoryGithubId, $sha, $rows): array {
             $links = WorkItemLink::query()->where('repository_github_id', $repositoryGithubId)->where('head_sha', $sha)->orderBy('id')->lockForUpdate()->get();
+            $changed = [];
             foreach ($links as $of) {
-                WorkItemLinkCheck::query()->where('work_item_link_id', $of->id)->whereIn('kind', ['workflow', 'status'])->delete();
-                foreach ([...$workflows, ...$statuses] as $row) {
-                    WorkItemLinkCheck::query()->create(['work_item_link_id' => $of->id, ...$row]);
+                $kept = WorkItemLinkCheck::query()->where('work_item_link_id', $of->id)->whereIn('kind', ['workflow', 'status'])->orderBy('id')->get();
+                if (self::rowsOf($kept->all()) !== self::rowsOf($rows)) {
+                    WorkItemLinkCheck::query()->whereKey($kept->modelKeys())->delete();
+                    foreach ($rows as $row) {
+                        WorkItemLinkCheck::query()->create(['work_item_link_id' => $of->id, ...$row]);
+                    }
+                    $changed[] = $of;
                 }
                 $of->forceFill(['checks_loaded_sha' => $sha, 'checks_loaded_at' => now()])->save();
             }
-        }, 3);
+
+            return $changed;
+        }, 3)];
+        ChecksChanged::tell($changed);
 
         return CiState::of([
             ...array_map(fn (array $run) => [
@@ -71,6 +83,24 @@ final class LoadChecks
             ], $runs),
             ...array_map(fn (array $row) => ['status' => $row['status'], 'conclusion' => $row['conclusion']], [...$workflows, ...$statuses]),
         ]);
+    }
+
+    /**
+     * Rows of workflow runs and statuses to compare what a link kept with what GitHub answers: their fields in a fixed
+     * order, sorted.
+     *
+     * @param  array<int, WorkItemLinkCheck|array<string, mixed>>  $rows
+     * @return list<string>
+     */
+    private static function rowsOf(array $rows): array
+    {
+        $keys = ['kind', 'check_run_id', 'name', 'app', 'status', 'conclusion', 'url', 'head_sha'];
+        $lines = array_map(fn (WorkItemLinkCheck|array $row) => (string) json_encode(array_map(
+            fn (string $key) => $row instanceof WorkItemLinkCheck ? $row->getAttribute($key) : $row[$key], $keys,
+        )), $rows);
+        sort($lines);
+
+        return $lines;
     }
 
     /**

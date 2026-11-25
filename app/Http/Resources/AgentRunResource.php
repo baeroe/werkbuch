@@ -8,7 +8,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * A run of an agent (spec 7.5, 10.6) as `AgentRun` of the clickdummy: kind, status and why it waits, the agent with
- * CLI, model and where the model came from, the runner (its name and whether it is online, the runner is loaded with
+ * CLI, model and where the model came from, the runner (its name, whether it is online and when it was last seen, the runner is loaded with
  * it), project, item, strand, attempt, the times and what came of it. Never its token or session.
  *
  * @mixin AgentRun
@@ -36,6 +36,7 @@ final class AgentRunResource extends JsonResource
             'runner_id' => $run->runner_id,
             'runner_name' => $run->runner?->name,
             'runner_online' => $run->runner?->isOnline() ?? false,
+            'runner_last_seen_at' => $run->runner?->last_seen_at?->toJSON(),
             'project_id' => $run->project_id,
             'work_item_id' => $run->work_item_id,
             'thread_id' => $run->thread_id,

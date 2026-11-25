@@ -4,8 +4,10 @@ namespace Tests\Feature\Access;
 
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
+use App\Actions\GitHub\DisconnectGitHub;
 use App\Models\AgentConfig;
 use App\Models\AgentRun;
+use App\Models\AgentThread;
 use App\Models\GitHubApp;
 use App\Models\Organization;
 use App\Models\Page;
@@ -17,6 +19,7 @@ use App\Models\Template;
 use App\Models\User;
 use App\Models\View;
 use App\Models\Webhook;
+use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\RunTokens;
@@ -164,6 +167,29 @@ final class MatrixWorld
     public function run(string $column, array $attributes = []): AgentRun
     {
         return AgentRun::factory()->create(['bot_id' => $this->account('run_token')->id, 'work_item_id' => $this->item($column)->id, ...$attributes]);
+    }
+
+    /**
+     * A fresh item of the project of the column, assigned to the agent of the column `run_token`, whose strand waits
+     * since GitHub was disconnected; the project has its repo again (WEBU-28). Through the factories: no events.
+     */
+    public function resumable(string $column): WorkItem
+    {
+        $this->github($column);
+        $item = $this->item($column);
+        // the bot works here as an agent only with every step of the agents at the workflow (AgentFlow::refusal, A647)
+        $workflow = Workflow::query()->findOrFail($this->project($column)->workflow_id);
+        $states = $workflow->states->pluck('id', 'name');
+        $workflow->forceFill(['agent_states' => [
+            'working' => $states['In Progress'], 'review' => $states['Pending'], 'correction' => $states['Todo'], 'merged' => $states['Done'],
+        ]])->save();
+        $item->forceFill(['assignee_id' => $this->account('run_token')->id])->save();
+        AgentThread::factory()->create([
+            'bot_id' => $this->account('run_token')->id, 'work_item_id' => $item->id,
+            'status' => AgentThread::PAUSED, 'pause_reason' => DisconnectGitHub::REASON,
+        ]);
+
+        return $item;
     }
 
     /** A fresh runner with Claude Code signed in, of the org admin; through the factory: no events. */

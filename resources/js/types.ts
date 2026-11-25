@@ -296,6 +296,8 @@ export interface Comment {
   created_at: string;
   edited_at: string | null;
   reactions: { emoji: string; user_ids: string[] }[];
+  /** The run of an agent whose result the comment is (a review, an answer); `null` for any other. */
+  run_id?: string | null;
 }
 
 export interface Attachment {
@@ -831,6 +833,10 @@ export interface WorkItemDetail {
   attachments: Attachment[];
   /** Whether the signed-in account watches the item: `item.subscribed`. */
   subscribed: boolean;
+  /** The pull requests linked to it (spec 12). */
+  links?: WorkItemLink[];
+  /** What an agent does at it; `null` when the server did not say. */
+  agent?: ItemAgentState | null;
 }
 
 /** How many items stand in a state (`/state-usage`), for the mapping of states; states without items are left out. */
@@ -1027,23 +1033,118 @@ export interface ProjectAgents {
   updated_at: string | null;
 }
 
-/** A run of an agent, as the runner list needs it (spec 10.6). */
+/** Why a run waits (spec 7.5): its agent is off, the guard holds its project, GitHub gave no token, no CLI, runner offline. */
+export type RunWaitingReason = 'agent_off' | 'merge_guard' | 'github_unavailable' | 'no_cli' | 'runner_offline';
+
+/** Where the model of a run came from (spec 7.7). */
+export type ModelSource = 'label' | 'project' | 'bot' | 'default';
+
+/** A run of an agent (spec 7.5, 10.6). */
 export interface AgentRun {
   id: string;
   type: RunType;
   status: RunStatus;
-  waiting_reason: string | null;
+  waiting_reason: RunWaitingReason | null;
   bot_id: string;
   cli: AgentCli;
   model: string;
+  model_source?: ModelSource | null;
+  model_label_id?: string | null;
   runner_id: string | null;
   runner_name: string | null;
   runner_online: boolean;
+  /** The last contact of its runner; `null` without a runner or before its first. */
+  runner_last_seen_at?: string | null;
   project_id: string;
   work_item_id: string | null;
+  thread_id?: string | null;
+  head_sha?: string | null;
+  attempt?: number;
   started_at: string | null;
+  deadline_at?: string | null;
   finished_at: string | null;
+  /** What came of it: `summary`, `commit`, `verdict` (`approve`, `changes`), as the runner reported it. */
+  result?: { summary?: string | null; commit?: string | null; verdict?: 'approve' | 'changes' | null; [key: string]: unknown } | null;
+  /** Tokens, when the runner reported them. */
+  usage?: { input?: number; output?: number; [key: string]: unknown } | null;
+  error?: string | null;
+  canceled_by?: string | null;
+  /** Lines of its log that went past the limits (2 000 lines, 1 MB), oldest first. */
+  events_dropped?: number;
   created_at: string | null;
+  updated_at?: string | null;
+}
+
+/** A line of the log of a run (spec 6.4): what the runner read from the CLI. */
+export interface RunEvent {
+  id: string;
+  attempt: number;
+  kind: 'system' | 'text' | 'tool' | 'result' | 'error';
+  text: string;
+  at: string;
+}
+
+/** A check of the head commit of a linked pull request. */
+export interface LinkCheck {
+  name: string;
+  app: string | null;
+  status: string;
+  conclusion: string | null;
+  url: string | null;
+}
+
+/** A pull request linked to an item (spec 12), as GitHub told it last. */
+export interface WorkItemLink {
+  id: string;
+  work_item_id: string;
+  kind: 'pull_request';
+  repository: string;
+  number: number;
+  title: string;
+  url: string;
+  state: 'open' | 'merged' | 'closed';
+  draft: boolean;
+  head_branch: string;
+  base_branch: string;
+  head_sha: string;
+  closes: boolean;
+  /** The GitHub login that opened it. */
+  author: string;
+  /** The strand of an agent that opened it. */
+  thread_id: string | null;
+  review: 'approve' | 'changes' | null;
+  ci: 'none' | 'pending' | 'success' | 'failure';
+  checks: LinkCheck[];
+  merged_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** Why a bot cannot work on items of a project as an agent (`AgentFlow::refusal`). */
+export type AgentRefusal = 'agent_off' | 'default_bot' | 'disabled' | 'no_owner' | 'archived' | 'no_steps' | 'not_member';
+
+/** Why a strand pauses (spec 7.2, 11.3). */
+export type PauseReason = 'brake' | 'no_change' | 'reassigned' | 'canceled' | 'guard' | 'github';
+
+/** What an agent does at an item (`include=agent`): its strand, why the assigned bot is no agent here, brakes, repo, guard. */
+export interface ItemAgentState {
+  thread: {
+    id: string;
+    bot_id: string;
+    status: 'open' | 'paused';
+    pause_reason: PauseReason | null;
+    corrections: number;
+    conflicts: number;
+    pr_number: number | null;
+    branch: string | null;
+    runner_id: string | null;
+  } | null;
+  refusal: AgentRefusal | null;
+  brakes: { max_corrections: number; max_conflicts: number };
+  repository: boolean;
+  guard: { branch: string | null; sha: string | null; here: boolean } | null;
+  /** How many runs the item has: only then does the browser ask for them. */
+  runs?: number;
 }
 
 /* ----------------------------------------------------------------------------- GitHub */

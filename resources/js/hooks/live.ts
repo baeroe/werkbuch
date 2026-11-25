@@ -29,6 +29,15 @@ const WIKI: readonly QueryKey[] = [qk.pages.all, qk.pageVersions.all];
 /** The wiki pages that name an item (`qk.pages.item(id)`), all of them. */
 const ITEM_PAGES: QueryKey = [...qk.pages.all, 'item'];
 
+/**
+ * The details of items (`qk.workItems.detail(ref)`, by key or id): a run that starts or ends at an item changes what
+ * its `include=agent` and `include=links` say (strand, counters, brake, verdict), without a `work_item.*` of its own.
+ */
+const ITEM_DETAILS: QueryKey = [...qk.workItems.all, 'detail'];
+
+/** Messages about an item that do not light its row up: what they change is not what a row shows. */
+const QUIET = new Set(['work_item.checks_changed', 'agent_run.log']);
+
 /** The templates with their runs and the automations of a project (the preview of a schedule is no live data). */
 const AUTOMATION: readonly QueryKey[] = [qk.templates.all, qk.templateRuns.all, qk.automations.all];
 
@@ -82,6 +91,8 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (event.type === 'work_item.created' && event.template_id !== null) return [qk.workItems.all, qk.activity.all, qk.templates.all, qk.templateRuns.all];
   // a renamed or deleted item: the references that show it (a closed parent chip, `#` in a text) read it again (14b2-M1a)
   if ((event.type === 'work_item.updated' || event.type === 'work_item.deleted') && event.item_id !== null) return [qk.workItems.all, qk.activity.all, qk.references.item(event.item_id)];
+  // the checks of a linked pull request changed (A648): only the details of items show them, no list, group or count
+  if (event.type === 'work_item.checks_changed') return [ITEM_DETAILS];
   if (group === 'work_item') return [qk.workItems.all, qk.activity.all];
   if (event.type === 'template.deleted') return [qk.templates.all, qk.templateRuns.all, qk.workItems.all];
   if (group === 'template') return [qk.templates.all, qk.templateRuns.all];
@@ -95,13 +106,20 @@ function keysOf(event: LiveEvent): readonly QueryKey[] {
   if (event.type === 'project.deleted') return [qk.projects.all, qk.members.all, ITEM_PAGES];
   // the repo of a project and the guard against an unauthorized merge (WEBU-24): the agent settings and the GitHub page read them
   if (event.type === 'project.repository_changed' || event.type === 'project.merge_guard_detected' || event.type === 'project.merge_guard_confirmed') {
-    return [qk.projects.all, qk.members.all, qk.repository.all, qk.github.all];
+    return [qk.projects.all, qk.members.all, qk.repository.all, qk.github.all, qk.workItems.all];
   }
   // the agent settings of a project (WEBU-32): Projekt → Agenten reads them
   if (event.type === 'project.agent_settings_updated') return [qk.projectAgents.all];
   // a member came or went: the bots of the agent settings follow (A621)
   if (group === 'project') return [qk.projects.all, qk.members.all, qk.projectAgents.all];
-  // a run of an agent (A478): what runs where on the runner cards and their places
+  // the log of a run grew (on the channel of its item, throttled): only that log reads its new lines (WEBU-28)
+  if (event.type === 'agent_run.log') return event.run_id ? [qk.runs.log(event.run_id)] : [];
+  // a run of an agent (A478): what runs where on the runner cards and their places, and the runs of its item; a run
+  // that is queued, starts or ends changes what the item's detail says of its agent (`include=agent`: runs, strand,
+  // counters, brake, WEBU-28)
+  if (event.type === 'agent_run.queued' || event.type === 'agent_run.started' || event.type === 'agent_run.finished' || event.type === 'agent_run.canceled') {
+    return event.item_id ? [qk.runs.all, qk.runners.all, ITEM_DETAILS] : [qk.runs.all, qk.runners.all];
+  }
   if (group === 'agent_run') return [qk.runs.all, qk.runners.all];
   if (event.type === 'page.updated' || event.type === 'page.moved' || event.type === 'page.deleted') return [...WIKI, qk.references.all];
   if (group === 'page') return WIKI;
@@ -368,7 +386,8 @@ export function useLiveSync(): void {
       if (event.type === 'user.role_changed') roleChanged = true;
       for (const queryKey of keysOf(event)) burst.set(JSON.stringify(queryKey), queryKey);
       // only a change lights up, never what the browser says about a channel (`live.*`)
-      if (event.item_id && !event.type.startsWith('live.')) flashes.add(event.item_id);
+      // a line of a log or a check of a pull request is no change of the item a list would light up
+      if (event.item_id && !event.type.startsWith('live.') && !QUIET.has(event.type)) flashes.add(event.item_id);
       if (quiet !== null) clearTimeout(quiet);
       quiet = setTimeout(flush, LIVE_BURST_MS);
       longest ??= setTimeout(flush, LIVE_MAX_WAIT_MS);

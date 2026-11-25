@@ -142,6 +142,19 @@ final class AgentsTool extends ReadTool
         return McpResult::body(['data' => $link === null ? null : (new ProjectRepositoryResource($link))->resolve(request())]);
     }
 
+    /**
+     * The answer of resuming a strand as REST gives it: `{data: {run, braked}}`.
+     *
+     * @param  array{run: AgentRun|null, braked: bool}  $resumed
+     */
+    public static function resumed(array $resumed): McpResult
+    {
+        return McpResult::body(['data' => [
+            'run' => $resumed['run'] === null ? null : (new AgentRunResource($resumed['run']->load('runner')))->resolve(request()),
+            'braked' => $resumed['braked'],
+        ]]);
+    }
+
     public static function runner(McpArguments $args): Runner
     {
         return References::ulid(Runner::class, $args->reference('runner'));

@@ -7,14 +7,16 @@
  *   and `m` always act; in the preview only while the focus is in its panel or nowhere in particular
  *   (`previewKeysAct`), so the screen beside it keeps the key otherwise. `r` always acts, as in the clickdummy: no
  *   screen beside a preview binds it.
- * - `ItemBody`: the title, the archived and blocked notes, the fields, the description, the properties placed below it
- *   (WEBU-6), the children, the relations,
- *   the wiki pages that name the item (only when there are some), the files, the activity (comments and history, with the comment composer at its end). In the preview one column, as in the
+ * - `ItemBody`: the title, the archived and blocked notes, what an agent does at the item (the chip "Kira arbeitet" and
+ *   the notices that need a person, WEBU-28), the fields, the description, the properties placed below it (WEBU-6),
+ *   the children, the relations, the pull requests (WEBU-28), the wiki pages that name the item (only when there are
+ *   some), the files, the activity (comments, history and the runs of agents, with the comment composer at its end). In the preview one column, as in the
  *   moodboard panel; on the page the fields stand in a column on the right from lg on (they stay in view while the
  *   main column scrolls), below lg they follow the title. The reading order is the same everywhere.
  */
 
 import { useMemo, useRef, type ReactNode, type RefObject } from 'react';
+import { useItemRuns } from '@/hooks/runs';
 import { BlockedHint } from '@/components/items/BlockedHint';
 import { Banner } from '@/components/ui/Banner';
 import { previewKeysAct } from '@/components/fields/commands/context';
@@ -25,6 +27,8 @@ import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
 import type { WorkItemDetail } from '@/types';
 import { Activity } from './activity/Activity';
+import { AgentNotice } from './agents/AgentNotice';
+import { PullRequests } from './agents/PullRequests';
 import { Attachments } from './Attachments';
 import { Children } from './Children';
 import { Description } from './Description';
@@ -68,12 +72,18 @@ function DeletedNote({ itemId, projectId }: { itemId: string; projectId: string 
 
 export function ItemBody({ detail, surface }: { detail: WorkItemDetail; surface: DetailSurface }) {
   const { item } = detail;
+  // only an item with runs asks for them; a run queued later reloads the detail first (`agent_run.*`, hooks/live.ts)
+  const gone = useLiveGone(item.id, item.project_id);
+  const runsQuery = useItemRuns(item.id, { enabled: (detail.agent?.runs ?? 0) > 0 && !gone });
+  // the server lists the newest first; the activity and the notices read them oldest first
+  const runs = useMemo(() => [...(runsQuery.data?.items ?? [])].reverse(), [runsQuery.data]);
   const head: ReactNode = (
     <>
       <ItemTitle item={item} />
       <DeletedNote itemId={item.id} projectId={item.project_id} />
       <ArchivedNote item={item} />
       <BlockedHint item={item} variant="banner" onOpen={surface === 'peek' ? (id) => useUiStore.getState().openPeek(id) : undefined} className="mt-3" />
+      <AgentNotice item={item} runs={runs} agent={detail.agent} />
     </>
   );
   const main: ReactNode = (
@@ -82,9 +92,10 @@ export function ItemBody({ detail, surface }: { detail: WorkItemDetail; surface:
       <Properties detail={detail} placement="body" />
       <Children detail={detail} />
       <Relations detail={detail} />
+      <PullRequests item={item} links={detail.links ?? []} repository={detail.agent?.repository ?? false} runs={runs} />
       <WikiPages detail={detail} />
       <Attachments detail={detail} />
-      <Activity detail={detail} />
+      <Activity detail={detail} runs={runs} />
     </>
   );
 

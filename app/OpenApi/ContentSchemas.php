@@ -152,6 +152,7 @@ final class ContentSchemas
             'CommentResource' => [
                 'body' => ['type' => 'string', 'description' => 'The text as Markdown for the reader: current handles, keys of the items they see, `[hidden](item:<ulid>)` for any other.'],
                 'body_json' => [...self::ref('RichTextDocument'), 'description' => 'The text as stored; references only by ID.'],
+                'run_id' => ['type' => ['string', 'null'], 'description' => 'The run of an agent this comment of its bot answers (`GET /runs/{run}`); `null` for any other comment, and once the run is gone.'],
                 'created_at' => $time,
                 'edited_at' => ['type' => ['string', 'null'], 'format' => 'date-time', 'description' => 'When it was last edited; `null` if never.'],
                 'reactions' => [

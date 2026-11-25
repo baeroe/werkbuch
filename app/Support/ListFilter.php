@@ -43,6 +43,7 @@ final readonly class ListFilter
         public ?array $values,
         public string $type,
         public ?Closure $apply,
+        public ?string $description = null,
     ) {}
 
     /**
@@ -79,9 +80,10 @@ final readonly class ListFilter
     /**
      * @param  'string'|'boolean'|'list<string>'  $type
      * @param  Closure(Builder<*>, mixed): mixed  $apply  narrows the query by the value
+     * @param  string|null  $description  what the value does, for the document (else the sentence of its type)
      */
-    public static function scope(string $name, string $type, Closure $apply): self
+    public static function scope(string $name, string $type, Closure $apply, ?string $description = null): self
     {
-        return new self($name, self::SCOPE, $name, null, $type, $apply);
+        return new self($name, self::SCOPE, $name, null, $type, $apply, $description);
     }
 }

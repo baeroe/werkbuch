@@ -89,6 +89,10 @@ final class ListParameters extends OperationExtension
     /** What the value of a filter does. */
     public static function filterDescription(ListFilter $filter): string
     {
+        if ($filter->description !== null) {
+            return $filter->description;
+        }
+
         return match ($filter->type) {
             'boolean' => 'Only rows where it is true (`1`) or false (`0`).',
             'string' => $filter->kind === ListFilter::PARTIAL

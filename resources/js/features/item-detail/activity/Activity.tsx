@@ -1,7 +1,9 @@
 /*
  * The activity of an item (spec 4.10): its comments and its history in one timeline, oldest first, filtered to
  * everything ("Alles"), the comments ("Kommentare") or the changes ("Änderungen"); the comment composer stands at its
- * end.
+ * end. The runs of agents (WEBU-28, spec 10.6) stand between them at the time they were queued (`RunLine`), and the
+ * filter "Aufträge" shows only them; it is offered only where there are runs. A run that is asked for (the chip under
+ * the title) brings a filter that hides runs back to "Alles".
  * - The whole history and every comment load (every page, `useActivity`): the server pages from the oldest entry on,
  *   and the newest must never be missing. The timeline shows the newest `SHOWN_LINES` lines (a comment is a line);
  *   "Mehr laden" above them shows the earlier ones, `SHOWN_LINES` at a time.
@@ -17,7 +19,7 @@
 
 import { router, usePage } from '@inertiajs/react';
 import { RotateCw } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useUserMap } from '@/components/fields/itemData';
 import { Button } from '@/components/ui/Button';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
@@ -28,19 +30,21 @@ import { useProperties } from '@/hooks/properties';
 import { useActivity } from '@/hooks/workItems';
 import { useWorkItemTypes } from '@/hooks/workItemTypes';
 import { t, tn } from '@/lib/i18n';
-import type { WorkItemDetail } from '@/types';
+import type { AgentRun, WorkItemDetail } from '@/types';
+import { RunLine } from '../agents/RunLine';
+import { SHOW_RUNS_EVENT } from '../agents/runFocus';
 import { CommentCard, useHiddenComments } from '../comments/CommentCard';
 import { CommentComposer } from '../comments/CommentComposer';
 import { focusWhenLost } from '@/lib/focusOrigin';
 import { Section, useDetail } from '../shared';
 import { EventLine } from './EventLine';
 import type { PhraseContext } from './phrases';
-import { buildTimeline, type ActivityFilter } from './timeline';
+import { buildTimeline, type ActivityFilter, type TimelineEntry } from './timeline';
 
 /** Lines the timeline shows at first and adds with every "Mehr laden". */
 export const SHOWN_LINES = 50;
 
-const FILTERS: ActivityFilter[] = ['all', 'comments', 'changes'];
+const FILTERS: ActivityFilter[] = ['all', 'comments', 'changes', 'runs'];
 
 const filterOf = (value: string | null): ActivityFilter => (FILTERS.includes(value as ActivityFilter) ? (value as ActivityFilter) : 'all');
 
@@ -62,7 +66,21 @@ function useFilter(): [ActivityFilter, (next: ActivityFilter) => void] {
   return [linked, (next) => router.replace({ url: addressWith(url, next), preserveState: true, preserveScroll: true })];
 }
 
-export function Activity({ detail }: { detail: WorkItemDetail }) {
+/** A line of the timeline, or a run of an agent placed at the time it was queued. */
+type Line = TimelineEntry | { kind: 'run'; key: string; at: string; run: AgentRun };
+
+/** Puts the runs between the lines by time; "Kommentare" and "Änderungen" leave them out, "Aufträge" shows only them. */
+export function withRuns(lines: readonly TimelineEntry[], runs: readonly AgentRun[], filter: ActivityFilter): Line[] {
+  const runLines: Line[] = filter === 'all' || filter === 'runs' ? runs.map((run) => ({ kind: 'run', key: run.id, at: run.created_at ?? '', run })) : [];
+  if (filter === 'runs') return runLines;
+  return [...lines, ...runLines]
+    .map((line, index) => ({ line, index }))
+    .sort((a, b) => (a.line.at < b.line.at ? -1 : a.line.at > b.line.at ? 1 : a.index - b.index))
+    .map(({ line }) => line);
+}
+
+/** `runs`: the runs of agents at the item, oldest first. */
+export function Activity({ detail, runs = [] }: { detail: WorkItemDetail; runs?: readonly AgentRun[] }) {
   const { item } = detail;
   const activity = useActivity(item.id);
   const users = useUserMap();
@@ -74,7 +92,20 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
   const properties = propertiesQuery.data?.items;
   // the names come from the catalogs: until they answer, a line would call a label deleted (a failed one reads so)
   const named = catalogs.every((query) => !query.isPending);
-  const [filter, setFilter] = useFilter();
+  const [chosen, setFilter] = useFilter();
+  // the filter "Aufträge" only where there are runs
+  const filters = runs.length > 0 ? FILTERS : FILTERS.filter((value) => value !== 'runs');
+  const filter: ActivityFilter = filters.includes(chosen) ? chosen : 'all';
+  // a run is asked for (the chip under the title): a filter that hides runs goes back to "Alles"
+  const hidesRuns = filter === 'comments' || filter === 'changes';
+  const showAll = useRef(() => setFilter('all'));
+  showAll.current = () => setFilter('all');
+  useEffect(() => {
+    if (!hidesRuns) return;
+    const show = () => showAll.current();
+    window.addEventListener(SHOW_RUNS_EVENT, show);
+    return () => window.removeEventListener(SHOW_RUNS_EVENT, show);
+  }, [hidesRuns]);
   const [shown, setShown] = useState(SHOWN_LINES);
   const list = useRef<HTMLOListElement>(null);
 
@@ -89,7 +120,9 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
 
   const hidden = useHiddenComments();
   const entries = (activity.data ?? []).filter((entry) => !(entry.kind === 'comment' && hidden.has(entry.id)));
-  const lines = buildTimeline(entries, filter);
+  const lines = withRuns(buildTimeline(entries, filter === 'runs' ? 'all' : filter), runs, filter);
+  // a comment links its run only when the run is one of the item's (its line is there to jump to)
+  const runIds = new Set(runs.map((run) => run.id));
   const earlier = Math.max(0, lines.length - shown);
   const showMore = () => {
     setShown((count) => count + SHOWN_LINES);
@@ -106,7 +139,7 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
           size="sm"
           value={filter}
           onValueChange={setFilter}
-          options={FILTERS.map((value) => ({ value, label: t(`items.activity.filter.${value}`) }))}
+          options={filters.map((value) => ({ value, label: t(`items.activity.filter.${value}`) }))}
         />
       }
     >
@@ -146,7 +179,15 @@ export function Activity({ detail }: { detail: WorkItemDetail }) {
           >
             {lines
               .slice(earlier)
-              .map((line) => (line.kind === 'comment' ? <CommentCard key={line.key} comment={line.comment} item={item} /> : <EventLine key={line.key} line={line} ctx={ctx} hidden={hidden} />))}
+              .map((line) =>
+                line.kind === 'comment' ? (
+                  <CommentCard key={line.key} comment={line.comment} item={item} runIds={runIds} />
+                ) : line.kind === 'run' ? (
+                  <RunLine key={line.key} run={line.run} runs={runs} item={item} thread={detail.agent?.thread} />
+                ) : (
+                  <EventLine key={line.key} line={line} ctx={ctx} hidden={hidden} />
+                ),
+              )}
           </ol>
         </>
       )}

@@ -45,7 +45,7 @@ final class RunsController extends Controller
     /**
      * List the log of a run.
      *
-     * The lines in the order they came; at most 2000 or 1 MB per run (`events_dropped` of the run counts the older ones that went).
+     * The lines in the order they came, with `filter[after]` only those after a line; at most 2000 or 1 MB per run (`events_dropped` of the run counts the older ones that went).
      */
     #[ListOf(ListRunEvents::class)]
     public function events(Request $request, AgentRun $run): JsonResponse

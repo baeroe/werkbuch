@@ -107,6 +107,7 @@ it('shows a comment with its reactions in the order of their first, people by ti
         'id' => $comment->id,
         'work_item_id' => $w['item']->id,
         'author_id' => $w['lene']->id,
+        'run_id' => null,
         'body' => 'Danke, @mara!',
         'body_json' => F::doc(F::p('Danke, ', F::mention($w['mara']->id, 'mara'), '!')),
         'created_at' => $comment->created_at?->toJSON(),

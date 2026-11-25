@@ -4,6 +4,7 @@ namespace App\Mcp\Tools;
 
 use App\Actions\AgentRuns\CancelRun;
 use App\Actions\AgentRuns\RetryRun;
+use App\Actions\Agents\ResumeThread;
 use App\Actions\Agents\SaveAgentConfig;
 use App\Actions\Agents\SaveAgentRule;
 use App\Actions\Agents\SaveProjectAgents;
@@ -33,7 +34,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 /**
  * `manage-agents` (WEBU-20, A482), the pair of `agents`: renames a runner or sets its places, revokes it, cancels a run
- * or starts it again, sets the agent configuration of a bot, syncs the GitHub app, gives a project its repo and confirms
+ * or starts it again, resumes the strand of an item after GitHub was disconnected (WEBU-28), sets the agent configuration of a bot, syncs the GitHub app, gives a project its repo and confirms
  * an unauthorized merge (WEBU-24). Pairing a runner and connecting or disconnecting GitHub are not here: only from the
  * session (A397). An agent never steers runs through the token of its own run (403 `agent_forbidden`).
  */
@@ -86,6 +87,14 @@ final class ManageAgentsTool extends WriteTool
                 parameters: $run,
                 required: ['run'],
                 twin: 'POST runs/{run}/retry',
+            ),
+            new McpAction(
+                name: 'resume-thread',
+                summary: 'Resumes a strand paused by a GitHub disconnect. Answers {run, braked}.',
+                run: fn (Actor $actor, McpArguments $args): McpResult => AgentsTool::resumed(ResumeThread::run($actor, References::item($args->reference('item')))),
+                parameters: ['item' => ToolSchema::reference('item')],
+                required: ['item'],
+                twin: 'POST work-items/{item}/agent/resume',
             ),
             new McpAction(
                 name: 'save-config',

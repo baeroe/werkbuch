@@ -303,6 +303,12 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
   { flow: 'give a label a model for agents', file: 'agent-settings.spec.ts', test: 'gives a type guidance for agents and a label a model for agents, keyboard only' },
   { flow: 'set the agents of a project', file: 'agent-settings.spec.ts', test: 'sets the agents of a project: merge method, brakes, a model per kind of run and the text, saved with mod+enter' },
   { flow: 'choose the models of an agent per kind of run', file: 'agent-settings.spec.ts', test: 'chooses the model of an agent per kind of run, keyboard only' },
+  // runs at an item (WEBU-28)
+  { flow: 'follow the log of a run at an item', file: 'item-runs.spec.ts', test: 'follows a run of an agent at an item with the keyboard: its log live, cancel it, start it again' },
+  { flow: 'cancel a run at an item', file: 'item-runs.spec.ts', test: 'follows a run of an agent at an item with the keyboard: its log live, cancel it, start it again' },
+  { flow: 'start a run of an agent again', file: 'item-runs.spec.ts', test: 'follows a run of an agent at an item with the keyboard: its log live, cancel it, start it again' },
+  { flow: 'give an item back to its agent', file: 'item-runs.spec.ts', test: 'gives an item back to its agent with the keyboard after a run failed and a person took it' },
+  { flow: 'go on with a strand GitHub paused', file: 'item-runs.spec.ts', test: 'goes on with the strand of an agent with the keyboard once GitHub is back' },
 ];
 
 /**
@@ -335,6 +341,37 @@ export const API_AFTER: { file: string; test: string; call: string; reason: stri
     test: 'connects a runner with the keyboard: the dialog shows the command and says when the runner is there',
     call: "redeemRunnerCode(page, code, 'connect')",
     reason: 'the machine redeems the code of the dialog (werkbuch-runner login); the flow is the dialog that waits for it',
+  },
+  // a false runner plays the machine (WEBU-28): what it reports is no key of a person
+  {
+    file: 'item-runs.spec.ts',
+    test: 'follows a run of an agent at an item with the keyboard: its log live, cancel it, start it again',
+    call: "runner.events(first, [{ kind: 'result', text: '12 passed' }])",
+    reason: 'the machine sends a line of the log while the page shows it: the flow is the log that grows live',
+  },
+  {
+    file: 'item-runs.spec.ts',
+    test: 'follows a run of an agent at an item with the keyboard: its log live, cancel it, start it again',
+    call: "runner.heartbeat(first)",
+    reason: 'the machine hears the cancel the person asked for at its next heartbeat',
+  },
+  {
+    file: 'item-runs.spec.ts',
+    test: 'follows a run of an agent at an item with the keyboard: its log live, cancel it, start it again',
+    call: "runner.result(first, 'canceled')",
+    reason: 'the machine ends the run it was told to cancel',
+  },
+  {
+    file: 'item-runs.spec.ts',
+    test: 'follows a run of an agent at an item with the keyboard: its log live, cancel it, start it again',
+    call: "runner.result(second, 'succeeded', 'The banner uses the consent API v2.')",
+    reason: 'the machine finishes the run the person started again',
+  },
+  {
+    file: 'item-runs.spec.ts',
+    test: 'follows a run of an agent at an item with the keyboard: its log live, cancel it, start it again',
+    call: 'runner.claim(item.id)',
+    reason: 'the machine takes the runs werkbuch queues: the first before the keys, the one the person started again after them',
   },
 ];
 

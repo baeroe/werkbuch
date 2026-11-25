@@ -285,6 +285,7 @@ return [
     'manage-agents:revoke-runner' => ['arguments' => fn (MatrixWorld $w) => ['runner' => $w->runner()->id]],
     'manage-agents:cancel-run' => ['arguments' => fn (MatrixWorld $w) => ['run' => $w->run('org_admin')->id]],
     'manage-agents:retry-run' => ['arguments' => fn (MatrixWorld $w) => ['run' => $w->run('org_admin', ['status' => RunStatus::Failed])->id]],
+    'manage-agents:resume-thread' => ['arguments' => fn (MatrixWorld $w) => ['item' => $w->resumable('org_admin')->key]],
     'manage-agents:save-config' => ['arguments' => fn (MatrixWorld $w) => ['bot' => $w->bot->id, 'input' => [
         'enabled' => true, 'runner_ids' => [], 'cli' => 'claude', 'model' => 'opus', 'models' => ['review' => 'haiku'],
     ]]],

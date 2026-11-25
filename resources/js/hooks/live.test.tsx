@@ -296,6 +296,71 @@ describe('useLiveSync', () => {
     expect(counts()).toEqual([3, 3, 2, 2]);
   });
 
+  it('reads only the details of items when checks changed, no list, and lights no row up (A648)', async () => {
+    const detail = await shown(qk.workItems.detail('WEB-47'));
+    const list = await shown(qk.workItems.list({ project: 'p_web' }));
+    const activity = await shown(qk.activity.list({ item: 'wi_47' }));
+    renderHook(() => useLiveSync(), { wrapper });
+    send({ event_id: null, type: 'work_item.checks_changed', item_id: 'wi_47' });
+    await pass(LIVE_BURST_MS);
+    expect([detail.fetches(), list.fetches(), activity.fetches()]).toEqual([2, 1, 1]);
+    // the next one, without an event too, is no repeat; a line of a log lights nothing up either
+    send({ event_id: null, type: 'work_item.checks_changed', item_id: 'wi_47' });
+    send({ event_id: null, type: 'agent_run.log', item_id: 'wi_47', run_id: 'run_1' });
+    await pass(LIVE_BURST_MS);
+    expect([detail.fetches(), list.fetches(), activity.fetches()]).toEqual([3, 1, 1]);
+    expect(useUiStore.getState().flashIds).toEqual([]);
+  });
+
+  it('reads the detail of an item again when a run there is queued, starts, ends or is canceled (WEBU-28)', async () => {
+    const byKey = await shown(qk.workItems.detail('WEB-47'));
+    const byId = await shown(qk.workItems.detail('wi_47'));
+    const list = await shown(qk.workItems.list({ project: 'p_web' }));
+    renderHook(() => useLiveSync(), { wrapper });
+    const counts = () => [byKey, byId, list].map((query) => query.fetches());
+
+    send({ event_id: 'ev_1', type: 'agent_run.queued', item_id: 'wi_47' });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([2, 2, 1]);
+
+    send({ event_id: 'ev_2', type: 'agent_run.started', item_id: 'wi_47' });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([3, 3, 1]);
+
+    send({ event_id: 'ev_3', type: 'agent_run.finished', item_id: 'wi_47' });
+    send({ event_id: 'ev_4', type: 'agent_run.canceled', item_id: 'wi_47' });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([4, 4, 1]);
+
+    // a run without an item (a review of a PR without one) names no detail; another event of a run names none either
+    send({ event_id: 'ev_5', type: 'agent_run.finished', item_id: null });
+    send({ event_id: 'ev_6', type: 'agent_run.lease_lost', item_id: 'wi_47' });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([4, 4, 1]);
+  });
+
+  it('reads the item again when the guard of its project changes, and only the grown log on agent_run.log (WEBU-28)', async () => {
+    const item = await shown(qk.workItems.detail('WEB-47'));
+    const log = await shown(qk.runs.log('run_1'));
+    const other = await shown(qk.runs.log('run_2'));
+    const runs = await shown(qk.runs.list({ item: 'wi_47' }));
+    renderHook(() => useLiveSync(), { wrapper });
+    const counts = () => [item, log, other, runs].map((query) => query.fetches());
+
+    send({ event_id: 'ev_1', type: 'project.merge_guard_detected', item_id: null });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([2, 1, 1, 1]);
+
+    send({ event_id: null, type: 'agent_run.log', item_id: 'wi_47', run_id: 'run_1' });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([2, 2, 1, 1]);
+
+    // a log message without its run names nothing to read
+    send({ event_id: null, type: 'agent_run.log', item_id: 'wi_47' });
+    await pass(LIVE_BURST_MS);
+    expect(counts()).toEqual([2, 2, 1, 1]);
+  });
+
   it('loads the account and its rights of the page again on a new org role, nothing else of the page (M2)', async () => {
     inertia.reload.mockClear();
     renderHook(() => useLiveSync(), { wrapper });
