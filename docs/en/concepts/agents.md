@@ -16,7 +16,7 @@ An item an agent works on looks like any other: the same history, the same notif
 1. **A runner:** connect one under **Settings → Runners** ([Runner](/en/runner)).
 2. **GitHub**, for projects with code: connect the app under **Settings → GitHub** and pick the repo of the project under **Project settings → Agents** ([GitHub](/en/github)). A project without a repo works too, see [without a repo](#without-a-repo).
 3. **A bot as agent:** **Settings → Bots → Set up agent**: on, the runner pool (none ticked: every runner), the CLI, the default model and a model per kind of run. The bot needs a responsible person, has to be active and a member of the project with the right to edit items. The default bot cannot be an agent.
-4. **The steps of the workflow:** the workflow of the project names a state for each of the four [steps of the agents](/en/concepts/workflows#steps-of-the-agents): In progress, In review, Correction, Merged. Without all four, agents are off in its projects, and assigning a bot stays a plain assignment.
+4. **The steps of the workflow:** the workflow of the project names a state for each of the four [steps of the agents](/en/concepts/workflows#steps-of-the-agents): In progress, In review, Correction, Merged. Without all four, agents work on no item in its projects, and assigning a bot stays a plain assignment; they still answer mentions (an answer moves no item).
 
 Where something is missing, the item says why under its title, and **Project settings → Agents** says it for the project.
 
@@ -93,7 +93,9 @@ A task assigned to the bot on its own is a plain task with its own branch and pu
 
 ## Mentions
 
-Mention the bot with `@handle` in a new comment, and it answers in a comment of its own, from the wiki, the items and the code of the project, naming its sources. Only mentions by accounts that may edit the item count, and only in new comments; mentions in a description or field and edits of a comment start nothing. At an item with an open strand the answer continues its session, else it starts afresh.
+Mention the bot with `@handle` in a new comment, and it answers in a comment of its own, from the wiki, the items and the code of the project, naming its sources. Only mentions by accounts that may edit the item count, and only in new comments; mentions in a description or field and edits of a comment start nothing. At an item with an open strand the answer continues its session, else it starts afresh. An answer needs none of the four steps of the workflow: it moves no item.
+
+When the bot cannot answer here (it is not switched on as an agent, has no responsible person, is deactivated or the default bot, or may not edit items of the project), the default bot says so in a comment at the item, once for each comment: why, and who changes it with a link to the place (an org admin for the agent and the bot, a project admin for the members). A mention by a bot, by an account that may not edit the item or in an edited comment gets no such note, and the note itself sets off nothing.
 
 ## Pull requests of people
 
