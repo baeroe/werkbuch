@@ -11,8 +11,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * The GitHub connection (spec 10.2) from GetGitHub: the app without key and secret (A510), its installations and the
- * repos with their project; a project the reader does not see is only `taken`.
+ * The GitHub connection (spec 10.2) from GetGitHub: the apps without key and secret (A510), each with its installations
+ * (A680), and the repos with their installation and project; a project the reader does not see is only `taken`.
  */
 final class GitHubResource extends JsonResource
 {
@@ -21,12 +21,11 @@ final class GitHubResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        /** @var array{app: GitHubApp|null, installations: Collection<int, GitHubInstallation>, repositories: Collection<int, GitHubRepository>, visible: list<string>} $status */
+        /** @var array{apps: Collection<int, GitHubApp>, repositories: Collection<int, GitHubRepository>, visible: list<string>} $status */
         $status = $this->resource;
-        $app = $status['app'];
 
         return [
-            'app' => $app === null ? null : [
+            'apps' => $status['apps']->map(fn (GitHubApp $app) => [
                 'id' => $app->id,
                 'app_id' => $app->app_id,
                 'slug' => $app->slug,
@@ -38,15 +37,15 @@ final class GitHubResource extends JsonResource
                 'permissions' => (object) $app->permissions,
                 'events' => $app->events,
                 'created_at' => $app->created_at?->toJSON(),
-            ],
-            'installations' => $status['installations']->map(fn (GitHubInstallation $installation) => [
-                'id' => $installation->id,
-                'installation_id' => $installation->installation_id,
-                'account_login' => $installation->account_login,
-                'account_type' => $installation->account_type,
-                'repository_selection' => $installation->repository_selection,
-                'suspended_at' => $installation->suspended_at?->toJSON(),
-                'removed_at' => $installation->removed_at?->toJSON(),
+                'installations' => $app->installations->map(fn (GitHubInstallation $installation) => [
+                    'id' => $installation->id,
+                    'installation_id' => $installation->installation_id,
+                    'account_login' => $installation->account_login,
+                    'account_type' => $installation->account_type,
+                    'repository_selection' => $installation->repository_selection,
+                    'suspended_at' => $installation->suspended_at?->toJSON(),
+                    'removed_at' => $installation->removed_at?->toJSON(),
+                ])->values()->all(),
             ])->values()->all(),
             'repositories' => $status['repositories']->map(function (GitHubRepository $repository) use ($status) {
                 $link = $repository->link;

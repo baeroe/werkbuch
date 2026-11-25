@@ -1,5 +1,7 @@
 <?php
 
+use App\Access\ProjectRole;
+use App\Access\RoleAssignments;
 use App\Actions\AgentRuns\ClaimRun;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
@@ -33,6 +35,21 @@ beforeEach(function () {
     $this->project = Project::factory()->identifier('WEB')->create();
     $this->agent = AgentWorld::agent([$this->project]);
     FakeGitHub::link($this->project);
+});
+
+it('takes the token of a repo from the app whose installation reaches it', function () use ($claim) {
+    [, $token] = AgentWorld::runner();
+    // a project with a repo of the app of another GitHub account (A680)
+    $second = $this->github->secondApp();
+    $labs = Project::factory()->identifier('LAB')->create();
+    app(RoleAssignments::class)->setProjectRole($this->agent, $labs, ProjectRole::Member);
+    FakeGitHub::link($labs, 'feldwerk-labs/app');
+
+    AgentWorld::run($this->agent, $labs, RunType::Task);
+    $run = $claim($token)->assertOk()->json('run');
+
+    expect($run['git'])->toMatchArray(['repo_url' => 'https://github.com/feldwerk-labs/app.git', 'token' => $this->github->tokens[0]])
+        ->and($this->github->issued)->toBe([['token' => $this->github->tokens[0], 'installation' => 55_000_002, 'app_id' => $second->app_id]]);
 });
 
 it('scopes the installation token to the one repo and the permissions of the run type', function () use ($claim) {

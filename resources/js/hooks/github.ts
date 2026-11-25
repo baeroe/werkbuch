@@ -3,7 +3,7 @@ import { confirmMergeGuard, disconnectGitHub, getGitHub, getProjectRepository, s
 import { qk } from './keys';
 import { useApiMutation } from './mutation';
 
-/** The GitHub connection: the app, its installations and repos. */
+/** The GitHub connection: the apps with their installations, and the repos. */
 export function useGitHub({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({ queryKey: qk.github.detail('status'), queryFn: getGitHub, enabled });
 }
@@ -12,13 +12,14 @@ export function useSyncGitHub() {
   return useApiMutation(() => syncGitHub(), [qk.github.all, qk.repository.all]);
 }
 
-/** Variable: the GitHub organization (`null`: the own account). Answers what to post to GitHub; it holds a state, so it leaves the cache. */
+/** Variables: `{ owner, owner_type }` of the GitHub account. Answers what to post to GitHub; it holds a state, so it leaves the cache. */
 export function useStartGitHubManifest() {
   return useApiMutation(startGitHubManifest, [], { gcTime: 0 });
 }
 
+/** Variable: the ULID of the app. */
 export function useDisconnectGitHub() {
-  return useApiMutation(() => disconnectGitHub(), [qk.github.all, qk.repository.all, qk.runs.all, qk.runners.all]);
+  return useApiMutation(disconnectGitHub, [qk.github.all, qk.repository.all, qk.runs.all, qk.runners.all]);
 }
 
 /** The repo of a project (its ULID); `null` without one. */

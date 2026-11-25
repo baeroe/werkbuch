@@ -20,7 +20,9 @@ use Tests\TestCase;
  * A false GitHub for the tests (WEBU-24): the REST API behind `Http::fake` with answers in the form of the real one
  * (`app-manifests/{code}/conversions`, `app/installations`, `…/access_tokens`, `installation/repositories`,
  * `repos/{owner}/{repo}/rules/branches/{branch}`), webhook payloads in the form of the documentation, signed for real
- * with HMAC-SHA256. `issued()` names the tokens it handed out, `requests()` what werkbuch asked.
+ * with HMAC-SHA256. Several apps (one per GitHub account, A680): a call as an app needs its JSON web token, signed with
+ * the key of that app (checked against it), and lists or gets tokens only for the installations of that app (another one
+ * is 404, as at GitHub). `issued` names the tokens it handed out with installation and app.
  */
 final class FakeGitHub
 {
@@ -31,6 +33,9 @@ final class FakeGitHub
 
     /** @var array<string, int> token → installation ID */
     private array $issuedFor = [];
+
+    /** @var list<array{token: string, installation: int, app_id: int}> the tokens it handed out, and to which app */
+    public array $issued = [];
 
     /** @var array<int, list<array<string, mixed>>> installation ID → repos */
     public array $repositories = [];
@@ -101,13 +106,13 @@ final class FakeGitHub
     public array $statuses = [];
 
     /**
-     * The app, an installation of `feldwerk` and one repo `feldwerk/website` (default branch `main`), and the fake.
+     * The app of `feldwerk`, its installation and one repo `feldwerk/website` (default branch `main`), and the fake.
      */
     public static function connected(): self
     {
         $fake = new self;
-        GitHubApp::factory()->create();
-        $installation = GitHubInstallation::factory()->create(['installation_id' => 55_000_001]);
+        $app = GitHubApp::factory()->create();
+        $installation = GitHubInstallation::factory()->create(['github_app_id' => $app->id, 'installation_id' => 55_000_001]);
         GitHubRepository::factory()->create(['installation_id' => $installation->id, 'github_id' => 700_000_001, 'full_name' => 'feldwerk/website', 'html_url' => 'https://github.com/feldwerk/website']);
 
         $fake->installations = [self::installationJson(55_000_001)];
@@ -115,6 +120,22 @@ final class FakeGitHub
         $fake->fake();
 
         return $fake;
+    }
+
+    /**
+     * A second app, of the GitHub account `feldwerk-labs`, its installation 55 000 002 and the repo `feldwerk-labs/app`
+     * (A680).
+     */
+    public function secondApp(): GitHubApp
+    {
+        $app = GitHubApp::factory()->account('feldwerk-labs')->create();
+        $installation = GitHubInstallation::factory()->create(['github_app_id' => $app->id, 'installation_id' => 55_000_002, 'account_login' => 'feldwerk-labs']);
+        GitHubRepository::factory()->create(['installation_id' => $installation->id, 'github_id' => 700_000_002, 'full_name' => 'feldwerk-labs/app', 'html_url' => 'https://github.com/feldwerk-labs/app']);
+
+        $this->installations[] = self::installationJson(55_000_002, 'feldwerk-labs', null, $app->app_id);
+        $this->repositories[55_000_002] = [self::repositoryJson(700_000_002, 'feldwerk-labs/app')];
+
+        return $app;
     }
 
     /** A project with the repo `feldwerk/website` on `main`. */
@@ -154,8 +175,10 @@ final class FakeGitHub
 
         return match (true) {
             Str::is('/app-manifests/*/conversions', $path) => Http::response($this->conversion(), 201),
-            $path === '/app/installations' => Http::response($page === 1 ? $this->installations : [], 200),
-            Str::is('/app/installations/*/access_tokens', $path) => Http::response($this->token($request), 201),
+            $path === '/app/installations' => $this->asApp($request, fn (int $app) => Http::response($page === 1 ? array_values(array_filter($this->installations, fn (array $installation) => $installation['app_id'] === $app)) : [], 200)),
+            Str::is('/app/installations/*/access_tokens', $path) => $this->asApp($request, fn (int $app) => $this->ofApp((int) explode('/', $path)[3], $app)
+                ? Http::response($this->token($request, $app), 201)
+                : Http::response(['message' => 'Not Found'], 404)),
             $path === '/installation/repositories' => Http::response($this->repositoriesFor($request), 200),
             Str::is('/repos/*/*/rules/branches/*', $path) => Http::response($this->rulesFor($path), 200),
             Str::is('/repos/*/*/issues/*/comments', $path) && $request->method() === 'POST' => Http::response($this->commentAnswer ?? $this->comment($path, $request), 201),
@@ -269,12 +292,50 @@ final class FakeGitHub
         return Http::response(null, 204);
     }
 
+    /**
+     * Answers a call as an app: its JSON web token has to be signed with the key of a connected app (the `iss`), else
+     * 401 as at GitHub.
+     *
+     * @param  Closure(int): mixed  $answer  gets the ID of the app
+     */
+    private function asApp(Request $request, Closure $answer): mixed
+    {
+        $parts = explode('.', str_replace('Bearer ', '', $request->header('Authorization')[0] ?? ''));
+        $claims = count($parts) === 3 ? json_decode((string) base64_decode(strtr($parts[1], '-_', '+/')), true) : null;
+        $app = is_array($claims) && is_numeric($claims['iss'] ?? null) ? GitHubApp::query()->where('app_id', (int) $claims['iss'])->first() : null;
+        $private = $app === null ? false : openssl_pkey_get_private($app->private_key);
+        $details = $private === false ? false : openssl_pkey_get_details($private);
+        $key = $details === false ? false : openssl_pkey_get_public($details['key']);
+        $signature = base64_decode(strtr($parts[2] ?? '', '-_', '+/'));
+
+        if ($app === null || $key === false || openssl_verify($parts[0].'.'.$parts[1], $signature, $key, OPENSSL_ALGO_SHA256) !== 1) {
+            return Http::response(['message' => 'A JSON web token could not be decoded'], 401);
+        }
+
+        return $answer($app->app_id);
+    }
+
+    /** Whether the installation belongs to the app (installations of other apps are not known to it). */
+    private function ofApp(int $installation, int $app): bool
+    {
+        foreach ($this->installations as $known) {
+            if ($known['id'] === $installation) {
+                return $known['app_id'] === $app;
+            }
+        }
+
+        // an installation the test did not list belongs to the app of feldwerk
+        return $app === GitHubAppFactory::DEFAULT_APP_ID;
+    }
+
     /** @return array<string, mixed> */
-    private function token(Request $request): array
+    private function token(Request $request, int $app): array
     {
         $token = 'ghs_'.Str::random(36);
         $this->tokens[] = $token;
-        $this->issuedFor[$token] = (int) explode('/', (string) parse_url($request->url(), PHP_URL_PATH))[3];
+        $installation = (int) explode('/', (string) parse_url($request->url(), PHP_URL_PATH))[3];
+        $this->issuedFor[$token] = $installation;
+        $this->issued[] = ['token' => $token, 'installation' => $installation, 'app_id' => $app];
         $body = $request->data();
 
         return [
@@ -310,10 +371,10 @@ final class FakeGitHub
     }
 
     /** @return array<string, mixed> an installation as GET /app/installations has it */
-    public static function installationJson(int $id, string $login = 'feldwerk', ?string $suspended = null): array
+    public static function installationJson(int $id, string $login = 'feldwerk', ?string $suspended = null, int $appId = GitHubAppFactory::DEFAULT_APP_ID): array
     {
         return [
-            'id' => $id, 'client_id' => 'Iv23liFake', 'app_id' => 4_200_123, 'app_slug' => 'feldwerk-werkbuch', 'target_id' => 9_001,
+            'id' => $id, 'client_id' => 'Iv23liFake', 'app_id' => $appId, 'app_slug' => strtolower($login).'-werkbuch', 'target_id' => 9_001,
             'target_type' => 'Organization', 'account' => ['login' => $login, 'id' => 9_001, 'type' => 'Organization'],
             'repository_selection' => 'selected', 'access_tokens_url' => self::API."/app/installations/{$id}/access_tokens",
             'permissions' => ['contents' => 'write', 'metadata' => 'read'], 'events' => ['push'],
@@ -426,16 +487,19 @@ final class FakeGitHub
     }
 
     /**
-     * Posts a delivery to the webhook, signed with the secret given (default: the app's).
+     * Posts a delivery of an app to the webhook (default: the first app), signed with the secret given (default: the
+     * app's); `X-GitHub-Hook-Installation-Target-ID` names the app (`$target` another value, `false` none).
      *
      * @param  array<string, mixed>  $payload
      */
-    public static function deliver(TestCase $test, string $event, array $payload, ?string $delivery = null, ?string $secret = null, ?string $signature = null): TestResponse
+    public static function deliver(TestCase $test, string $event, array $payload, ?string $delivery = null, ?string $secret = null, ?string $signature = null, ?GitHubApp $app = null, string|false|null $target = null): TestResponse
     {
         $body = (string) json_encode($payload, JSON_UNESCAPED_SLASHES);
-        $secret ??= GitHubApp::query()->firstOrFail()->webhook_secret;
+        $app ??= GitHubApp::query()->orderBy('id')->firstOrFail();
+        $secret ??= $app->webhook_secret;
+        $target ??= (string) $app->app_id;
 
-        return $test->call('POST', '/github/webhook', [], [], [], [
+        return $test->call('POST', '/github/webhook', [], [], [], [...($target === false ? [] : ['HTTP_X_GITHUB_HOOK_INSTALLATION_TARGET_ID' => $target]),
             'CONTENT_TYPE' => 'application/json',
             'HTTP_ACCEPT' => '*/*',
             'HTTP_USER_AGENT' => 'GitHub-Hookshot/abc1234',

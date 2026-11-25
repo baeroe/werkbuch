@@ -42,7 +42,7 @@ final class MergeThread
     public function handle(Actor $actor, string $threadId, string $sha): string
     {
         $thread = AgentThread::query()->find($threadId);
-        $link = $thread === null ? null : ProjectRepository::query()->with('repository.installation')->where('project_id', $thread->project_id)->first();
+        $link = $thread === null ? null : ProjectRepository::query()->with('repository.installation.app')->where('project_id', $thread->project_id)->first();
 
         // a strand merged meanwhile at this head (GitHub told of the merge before its answer came) still settles it
         $settles = $thread !== null && $thread->status === AgentThread::MERGED && $thread->merge_sha === $sha;

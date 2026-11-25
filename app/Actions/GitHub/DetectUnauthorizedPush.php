@@ -12,7 +12,6 @@ use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\Models\AgentRun;
 use App\Models\AgentThread;
-use App\Models\GitHubApp;
 use App\Models\Project;
 use App\Models\ProjectRepository;
 use App\Models\WorkItem;
@@ -26,8 +25,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 use RuntimeException;
 
 /**
- * The guard against an unauthorized merge (spec 11.3, A515): a `push` of the app (its bot account, `<slug>[bot]`) to the
- * base branch of a project whose commit is no merge of werkbuch (OwnMerges), or the app deleting the base branch, is
+ * The guard against an unauthorized merge (spec 11.3, A515): a `push` of the app of the repo (its bot account,
+ * `<slug>[bot]`, A680) to the base branch of a project whose commit is no merge of werkbuch (OwnMerges), or the app deleting the base branch, is
  * something an agent did itself (directly or by merging through the API with its token). Then every open strand of the
  * project pauses (`guard`), what runs of it is canceled and what waits waits (`merge_guard`), until a project admin
  * confirms (ConfirmMergeGuard). Locks: the project shared, its repo row (the base branch compared again there), its
@@ -58,7 +57,6 @@ final class DetectUnauthorizedPush
      */
     public function handle(Actor $actor, array $payload): string
     {
-        $app = GitHubApp::current();
         $ref = $payload['ref'] ?? null;
         $deleted = ($payload['deleted'] ?? false) === true;
         // a deleted branch has no commit after the push: the one it pointed at is what went
@@ -66,15 +64,16 @@ final class DetectUnauthorizedPush
         $repository = is_array($payload['repository'] ?? null) ? $payload['repository'] : [];
         $sender = is_array($payload['sender'] ?? null) ? $payload['sender'] : [];
 
-        if ($app === null || ! is_string($ref) || ! str_starts_with($ref, 'refs/heads/') || ! is_string($sha)
+        if (! is_string($ref) || ! str_starts_with($ref, 'refs/heads/') || ! is_string($sha)
             || preg_match('/^[0-9a-f]{40}\z/', $sha) !== 1 || $sha === self::ZERO || ! is_int($repository['id'] ?? null)
-            || ! is_string($sender['login'] ?? null) || strcasecmp($sender['login'], $app->botLogin()) !== 0) {
+            || ! is_string($sender['login'] ?? null)) {
             return 'ignored';
         }
 
         $branch = substr($ref, strlen('refs/heads/'));
-        $link = ProjectRepository::query()->whereHas('repository', fn ($query) => $query->where('github_id', $repository['id']))->first();
-        if ($link === null || $branch !== $link->base_branch) {
+        $link = ProjectRepository::query()->with('repository.installation.app')->whereHas('repository', fn ($query) => $query->where('github_id', $repository['id']))->first();
+        // only the bot of the app whose installation reaches the repo pushes for agents (A680: one app per account)
+        if ($link === null || $branch !== $link->base_branch || strcasecmp($sender['login'], $link->repository->installation->app->botLogin()) !== 0) {
             return 'ignored';
         }
 

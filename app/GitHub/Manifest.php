@@ -3,11 +3,12 @@
 namespace App\GitHub;
 
 /**
- * The manifest of the one app (spec 4, 10.2, 11.3): pushes, PRs, checks, CI logs; webhooks for PRs, pushes and checks
- * (`installation` and `installation_repositories` every app gets without asking; GitHub refuses them in a manifest).
- * The name is `<organization> werkbuch` (GitHub allows 34 characters and names are global: the person can change it at
- * GitHub), private to its owner, the webhook at `/github/webhook`, back to `/github/manifest` after registering and to
- * `/github/setup` after installing or changing the installation.
+ * The manifest of the app of a GitHub account (spec 4, 10.2, 11.3, A680): pushes, PRs, checks, CI logs; webhooks for
+ * PRs, pushes and checks (`installation` and `installation_repositories` every app gets without asking; GitHub refuses
+ * them in a manifest). The name is `<login> werkbuch` after the GitHub account (GitHub allows 34 characters and names
+ * are global: the person can change it at GitHub), private to its owner, the webhook at `/github/webhook` (one address
+ * for every app), back to `/github/manifest` after registering and to `/github/setup` after installing or changing the
+ * installation.
  */
 final class Manifest
 {
@@ -25,10 +26,10 @@ final class Manifest
     /**
      * @return array<string, mixed>
      */
-    public static function for(string $organization, string $appUrl): array
+    public static function for(string $owner, string $appUrl): array
     {
         $base = rtrim($appUrl, '/');
-        $name = trim(mb_substr($organization, 0, self::NAME_MAX - mb_strlen(self::SUFFIX))).self::SUFFIX;
+        $name = trim(mb_substr($owner, 0, self::NAME_MAX - mb_strlen(self::SUFFIX))).self::SUFFIX;
 
         return [
             'name' => $name,

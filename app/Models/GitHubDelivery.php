@@ -9,9 +9,10 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * A webhook delivery of GitHub (spec 11.4), once per delivery ID (`X-GitHub-Delivery`, a redelivery has the same):
- * received at once, worked in the queue (`processed_at`, `outcome`). The payload holds no secret of werkbuch.
+ * received at once, worked in the queue (`processed_at`, `outcome`), with the app that sent it (A680; null once that app is gone). The payload holds no secret of werkbuch.
  *
  * @property string $id
+ * @property string|null $github_app_id
  * @property string $delivery_id
  * @property string $event
  * @property string|null $action
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property CarbonImmutable|null $processed_at
  * @property string|null $outcome
  */
-#[Fillable(['delivery_id', 'event', 'action', 'payload', 'received_at', 'processed_at', 'outcome'])]
+#[Fillable(['github_app_id', 'delivery_id', 'event', 'action', 'payload', 'received_at', 'processed_at', 'outcome'])]
 final class GitHubDelivery extends Model
 {
     use HasUlids;

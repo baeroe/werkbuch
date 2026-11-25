@@ -237,6 +237,7 @@ use App\Models\Automation;
 use App\Models\Comment;
 use App\Models\CommentReaction;
 use App\Models\Event;
+use App\Models\GitHubApp;
 use App\Models\GitHubDelivery;
 use App\Models\Label;
 use App\Models\Notification;
@@ -1616,7 +1617,7 @@ return [
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => PruneRunEvents::run($a),
         'system' => true,
     ],
-    // the one GitHub app (WEBU-24): every account reads it, org admins connect, sync and disconnect it; the repo of a
+    // the GitHub apps, one per account (WEBU-24, WEBU-35): every account reads them, org admins connect, sync and disconnect them; the repo of a
     // project and the confirmation of an unauthorized merge are its admins'
     'GetGitHub' => [
         'action' => GetGitHub::class,
@@ -1625,7 +1626,7 @@ return [
     ],
     'StartManifest' => [
         'action' => StartManifest::class,
-        'run' => fn (Actor $a, MatrixWorld $w, string $column) => StartManifest::run($a, []),
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => StartManifest::run($a, ['owner' => 'feldwerk', 'owner_type' => 'Organization']),
         'allowed' => $catalogAdmins,
     ],
     'CompleteManifest' => [
@@ -1664,7 +1665,7 @@ return [
         'run' => function (Actor $a, MatrixWorld $w, string $column) {
             $w->github();
 
-            return DisconnectGitHub::run($a);
+            return DisconnectGitHub::run($a, GitHubApp::query()->firstOrFail());
         },
         'allowed' => $catalogAdmins,
         'event' => EventType::GitHubDisconnected,

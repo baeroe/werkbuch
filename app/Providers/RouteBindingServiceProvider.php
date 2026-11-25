@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\AgentRun;
 use App\Models\Attachment;
 use App\Models\Comment;
+use App\Models\GitHubApp;
 use App\Models\Notification;
 use App\Models\Page;
 use App\Models\PageVersion;
@@ -67,5 +68,7 @@ final class RouteBindingServiceProvider extends ServiceProvider
         Route::bind('pairing', fn (string $ref) => References::ulid(RunnerPairingCode::class, $ref));
         Route::bind('run', fn (string $ref) => References::ulid(AgentRun::class, $ref));
         Route::bind('delivery', fn (string $ref) => References::ulid(WebhookDelivery::class, $ref));
+        // a GitHub app of the instance by its ULID only (WEBU-35)
+        Route::bind('githubApp', fn (string $ref) => References::ulid(GitHubApp::class, $ref));
     }
 }

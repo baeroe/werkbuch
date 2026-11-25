@@ -27,7 +27,7 @@ final class CheckThreadMergeability
     public function handle(Actor $actor, string $threadId): string
     {
         $thread = AgentThread::query()->find($threadId);
-        $link = $thread === null ? null : ProjectRepository::query()->with('repository.installation')->where('project_id', $thread->project_id)->first();
+        $link = $thread === null ? null : ProjectRepository::query()->with('repository.installation.app')->where('project_id', $thread->project_id)->first();
         if ($thread === null || $link === null || $thread->status !== AgentThread::OPEN || $thread->pr_number === null) {
             return 'stale';
         }

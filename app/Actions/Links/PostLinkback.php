@@ -36,14 +36,15 @@ final class PostLinkback
 
     public function handle(Actor $actor, int $repositoryGithubId, int $number): string
     {
-        $repo = ProjectRepository::query()->with('repository.installation')
+        $repo = ProjectRepository::query()->with('repository.installation.app')
             ->whereHas('repository', fn ($query) => $query->where('github_id', $repositoryGithubId))->first();
         // only the items of the project the repo belongs to now (a former project keeps its links, the comment names none)
         $links = WorkItemLink::query()->with('workItem.project')->where('repository_github_id', $repositoryGithubId)->where('number', $number)
             ->whereHas('workItem', fn ($query) => $query->where('project_id', $repo?->project_id))->get()
             ->sortBy(fn (WorkItemLink $link) => [$link->workItem->number])->values();
         $row = GitHubPullRequestComment::query()->where('repository_github_id', $repositoryGithubId)->where('number', $number)->first();
-        $agent = $links->contains(fn (WorkItemLink $link) => AgentPullRequests::isAgent(null, $link->author) || $link->thread_id !== null);
+        $bot = AgentPullRequests::botOf($repositoryGithubId);
+        $agent = $links->contains(fn (WorkItemLink $link) => $link->thread_id !== null || AgentPullRequests::byBot($link->author, $bot));
 
         if ($repo === null || $agent || ($links->isEmpty() && $row?->comment_id === null)) {
             return 'skipped';

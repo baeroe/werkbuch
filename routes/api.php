@@ -266,7 +266,7 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
     Route::post('runs/{run}/cancel', [RunsController::class, 'cancel']);
     Route::post('runs/{run}/retry', [RunsController::class, 'retry']);
 
-    // the one GitHub app (spec 10.2, WEBU-24): every account reads it, org admins sync it; the repo of a project (spec
+    // the GitHub apps, one per GitHub account (spec 10.2, WEBU-24, WEBU-35): every account reads them, org admins sync them; the repo of a project (spec
     // 10.3) and the confirmation of an unauthorized merge (spec 11.3) for its admins; connecting and disconnecting only
     // from the session (below)
     Route::get('github', [GitHubController::class, 'show']);
@@ -282,9 +282,9 @@ Route::middleware(['auth:sanctum', EnsureAccountIsActive::class, EnsureTokenAbil
         // a one-time code for a runner is as good as a token of it (A473)
         Route::post('runner-pairings', [RunnerPairingsController::class, 'store']);
         Route::get('runner-pairings/{pairing}', [RunnerPairingsController::class, 'show']);
-        // the app holds the key to every repo it is installed on (A397)
+        // an app holds the key to every repo it is installed on (A397)
         Route::post('github/manifest', [GitHubController::class, 'manifest']);
-        Route::delete('github', [GitHubController::class, 'destroy']);
+        Route::delete('github/apps/{githubApp}', [GitHubController::class, 'destroy']);
     });
     Route::middleware(EnsureSession::class)->prefix('me')->group(function () {
         Route::put('password', [PasswordController::class, 'update'])->middleware('throttle:password-change');

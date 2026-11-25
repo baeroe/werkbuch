@@ -15,6 +15,7 @@ use App\Models\ProjectRepository;
 use App\Models\User;
 use App\Support\Actor;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -22,7 +23,7 @@ use Illuminate\Validation\ValidationException;
 use Tests\Support\FakeGitHub;
 
 /*
- * The installations and repos of the app (spec 10.2) and the repo of a project (spec 4, 10.3): read from a false GitHub,
+ * The installations and repos of the apps (spec 10.2, one app per GitHub account, A680) and the repo of a project (spec 4, 10.3): read from a false GitHub,
  * one repo per project and one project per repo, the base branch, the ruleset hint.
  */
 
@@ -67,7 +68,7 @@ it('passes over an installation without a numeric id and a repo without a name',
 
     $status = SyncGitHub::run(Actor::system($this->admin, 'test'));
 
-    expect($status['installations']->pluck('installation_id')->all())->toBe([55_000_001])
+    expect($status['apps']->sole()->installations->pluck('installation_id')->all())->toBe([55_000_001])
         ->and($status['repositories']->pluck('full_name')->all())->toBe(['feldwerk/website'])
         ->and(GitHubRepository::query()->whereIn('github_id', [700_000_004, 700_000_005])->exists())->toBeFalse();
 });
@@ -77,7 +78,7 @@ it('never takes a list of repos as complete that GitHub answered only in part', 
     // GitHub says there are 1 200 repos, but its pages end after one
     $this->github->totalCount = 1_200;
 
-    expect(fn () => SyncGitHub::pull(GitHubApp::current()))->toThrow(GitHubUnavailable::class, 'GitHub answered 1200 rows of repositories but gave 1.')
+    expect(fn () => SyncGitHub::pull(GitHubApp::query()->sole()))->toThrow(GitHubUnavailable::class, 'GitHub answered 1200 rows of repositories but gave 1.')
         ->and(fn () => SyncGitHub::run(Actor::system($this->admin, 'test')))->toThrow(Problem::class)
         ->and(GitHubRepository::query()->whereNotNull('removed_at')->exists())->toBeFalse()
         ->and($link->fresh()->repository->removed_at)->toBeNull();
@@ -85,8 +86,43 @@ it('never takes a list of repos as complete that GitHub answered only in part', 
     // more pages than werkbuch reads: incomplete as well
     $this->github->totalCount = null;
     $this->github->endless = true;
-    expect(fn () => SyncGitHub::pull(GitHubApp::current()))->toThrow(GitHubUnavailable::class, 'GitHub answered more than '.GitHubApi::MAX_PAGES.' pages.')
+    expect(fn () => SyncGitHub::pull(GitHubApp::query()->sole()))->toThrow(GitHubUnavailable::class, 'GitHub answered more than '.GitHubApi::MAX_PAGES.' pages.')
         ->and(GitHubRepository::query()->whereNotNull('removed_at')->exists())->toBeFalse();
+});
+
+it('reads every app with its own token and leaves the installations of the other apps alone', function () {
+    $second = $this->github->secondApp();
+    $this->github->repositories[55_000_002][] = FakeGitHub::repositoryJson(700_000_003, 'feldwerk-labs/docs');
+
+    $status = SyncGitHub::run(Actor::system($this->admin, 'test'));
+
+    expect($status['apps']->map(fn (GitHubApp $app) => [$app->owner_login, $app->installations->pluck('installation_id')->all()])->all())
+        ->toBe([['feldwerk', [55_000_001]], ['feldwerk-labs', [55_000_002]]])
+        ->and(GitHubRepository::query()->whereNull('removed_at')->orderBy('full_name')->pluck('full_name')->all())->toBe(['feldwerk-labs/app', 'feldwerk-labs/docs', 'feldwerk/website'])
+        ->and(collect($this->github->issued)->map(fn (array $token) => [$token['installation'], $token['app_id']])->all())
+        ->toBe([[55_000_001, GitHubApp::query()->where('owner_login', 'feldwerk')->value('app_id')], [55_000_002, $second->app_id]]);
+
+    // GitHub no longer lists the installation of the second app: only it is removed, the first app keeps its own
+    $this->github->installations = array_values(array_filter($this->github->installations, fn (array $installation) => $installation['id'] !== 55_000_002));
+    SyncGitHub::pull($second);
+    expect(GitHubInstallation::query()->whereNotNull('removed_at')->pluck('installation_id')->all())->toBe([55_000_002])
+        ->and(GitHubRepository::query()->where('full_name', 'feldwerk-labs/app')->sole()->removed_at)->not->toBeNull()
+        ->and(GitHubRepository::query()->where('full_name', 'feldwerk/website')->sole()->removed_at)->toBeNull();
+
+    // an app disconnected while GitHub answered: what GitHub said belongs to nobody
+    $this->github->installations[] = FakeGitHub::installationJson(55_000_002, 'feldwerk-labs', null, $second->app_id);
+    $this->github->meanwhile = function (Request $request) use ($second): void {
+        if (str_contains($request->url(), 'installation/repositories')) {
+            GitHubApp::query()->whereKey($second->id)->delete();
+        }
+    };
+    SyncGitHub::pull($second);
+    expect(GitHubInstallation::query()->pluck('installation_id')->all())->toBe([55_000_001]);
+});
+
+it('says an instance without an app has nothing to sync', function () {
+    GitHubApp::query()->delete();
+    expect(fn () => SyncGitHub::run(Actor::system($this->admin, 'test')))->toThrow(fn (Problem $e) => expect([$e->getStatusCode(), $e->reason])->toBe([409, 'github_not_connected']));
 });
 
 it('syncs over REST for org admins only and answers 503 when GitHub refuses', function () {
@@ -189,6 +225,16 @@ it('refuses an unknown or removed repo, a branch git does not take, and people w
     expect(fn () => $act(['repository_id' => 'feldwerk/website'], $member))->toThrow(fn (Problem $e) => expect([$e->getStatusCode(), $e->detail])->toBe([403, __('problem.detail.repository_admins_only')]))
         ->and(fn () => $act(['repository_id' => 'feldwerk/website'], User::factory()->create()))->toThrow(fn (Problem $e) => expect($e->getStatusCode())->toBe(403))
         ->and(fn () => LinkRepository::run(Actor::system($this->admin, 'test'), 'NOPE', []))->toThrow(fn (Problem $e) => expect($e->getStatusCode())->toBe(404));
+});
+
+it('asks GitHub about the ruleset of a repo with the app whose installation reaches it', function () {
+    $second = $this->github->secondApp();
+    $this->github->rules['feldwerk-labs/app:main'] = [['type' => 'update']];
+
+    $link = LinkRepository::run(Actor::system($this->admin, 'test'), $this->project, ['repository_id' => 'feldwerk-labs/app']);
+
+    expect($link?->protected)->toBeTrue()
+        ->and(collect($this->github->issued)->map(fn (array $token) => [$token['installation'], $token['app_id']])->all())->toBe([[55_000_002, $second->app_id]]);
 });
 
 it('leaves the ruleset unknown when GitHub cannot say', function () {

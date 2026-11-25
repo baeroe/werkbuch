@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\GitHubApp;
 use App\Models\GitHubInstallation;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -18,6 +19,8 @@ class GitHubInstallationFactory extends Factory
     public function definition(): array
     {
         return [
+            // the app of the account: the one of the world, else a new one
+            'github_app_id' => fn () => GitHubApp::query()->orderBy('id')->value('id') ?? GitHubApp::factory()->create()->id,
             'installation_id' => 55_000_000 + fake()->unique()->numberBetween(1, 999_999),
             'account_login' => 'feldwerk',
             'account_type' => 'Organization',

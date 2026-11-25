@@ -7,29 +7,29 @@ let api: MockApi;
 
 afterEach(() => api.restore());
 
-const status: GitHubStatus = { app: null, installations: [], repositories: [] };
+const status: GitHubStatus = { apps: [], repositories: [] };
 const repository = { project_id: 'p_web', base_branch: 'main', guard: null } as ProjectRepository;
 
 describe('github', () => {
-  it('reads, syncs and disconnects the connection', async () => {
+  it('reads, syncs and disconnects one app', async () => {
     api = mockApi({
       'GET /api/v1/github': () => ({ body: { data: status } }),
       'POST /api/v1/github/sync': () => ({ body: { data: status } }),
-      'DELETE /api/v1/github': () => ({ body: { canceled: 1 } }),
+      'DELETE /api/v1/github/apps/app_1': () => ({ body: { canceled: 1 } }),
     });
 
     expect(await getGitHub()).toEqual(status);
     expect(await syncGitHub()).toEqual(status);
-    expect(await disconnectGitHub()).toEqual({ canceled: 1 });
+    expect(await disconnectGitHub('app_1')).toEqual({ canceled: 1 });
   });
 
   it('starts the manifest flow for an organization or the own account', async () => {
-    const start = { url: 'https://github.com/settings/apps/new?state=s', manifest: { name: 'Feldwerk werkbuch' }, state: 's' };
+    const start = { url: 'https://github.com/settings/apps/new?state=s', manifest: { name: 'feldwerk werkbuch' }, state: 's' };
     api = mockApi({ 'POST /api/v1/github/manifest': () => ({ body: { data: start } }) });
 
-    expect(await startGitHubManifest('feldwerk')).toEqual(start);
-    await startGitHubManifest(null);
-    expect(api.calls.map((call) => call.body)).toEqual([{ organization: 'feldwerk' }, { organization: null }]);
+    expect(await startGitHubManifest({ owner: 'feldwerk', owner_type: 'Organization' })).toEqual(start);
+    await startGitHubManifest({ owner: 'mara', owner_type: 'User' });
+    expect(api.calls.map((call) => call.body)).toEqual([{ owner: 'feldwerk', owner_type: 'Organization' }, { owner: 'mara', owner_type: 'User' }]);
   });
 
   it('reads and sets the repo of a project and confirms its guard', async () => {

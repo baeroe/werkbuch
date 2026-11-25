@@ -4,6 +4,7 @@ use App\Actions\Runners\CreatePairingCode;
 use App\Domain\Agents\RunStatus;
 use App\Models\Attachment;
 use App\Models\Comment;
+use App\Models\GitHubApp;
 use App\Models\Label;
 use App\Models\Notification;
 use App\Models\PageVersion;
@@ -199,7 +200,7 @@ return [
     'show the GitHub connection' => ['GET', '/api/v1/github'],
     'sync GitHub' => ['POST', '/api/v1/github/sync'],
     'start the manifest flow' => ['POST', '/api/v1/github/manifest', 'session' => true],
-    'disconnect GitHub' => ['DELETE', '/api/v1/github', 'session' => true],
+    'disconnect a GitHub app' => ['DELETE', '/api/v1/github/apps/{githubApp}', 'session' => true, 'params' => fn (MatrixWorld $w) => ['githubApp' => GitHubApp::factory()->account('feldwerk-routes')->create()->id]],
     'show the repo of a project' => ['GET', '/api/v1/projects/{project}/repository', 'params' => fn (MatrixWorld $w) => ['project' => 'WEB']],
     'set the repo of a project' => ['PUT', '/api/v1/projects/{project}/repository', 'params' => fn (MatrixWorld $w) => ['project' => 'WEB']],
     'confirm an unauthorized merge' => ['POST', '/api/v1/projects/{project}/repository/confirm-guard', 'params' => fn (MatrixWorld $w) => ['project' => 'WEB']],

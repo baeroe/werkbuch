@@ -8,7 +8,6 @@ use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\GitHub\GitHubApi;
 use App\GitHub\GitHubUnavailable;
-use App\Models\GitHubApp;
 use App\Models\GitHubRepository;
 use App\Models\Project;
 use App\Models\ProjectRepository;
@@ -22,7 +21,7 @@ use Illuminate\Validation\ValidationException;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * Gives a project its repo, or none (spec 4 „Repo und Projekt“, 10.3): one of the repos the app reaches (by its ULID or
+ * Gives a project its repo, or none (spec 4 „Repo und Projekt“, 10.3): one of the repos the apps reach (by its ULID or
  * `owner/name`), at most one project per repo and one repo per project (both unique in the database), and the base
  * branch (default: the default branch of the repo). Before the lock it asks GitHub whether a ruleset protects the base
  * branch (only a hint, A513; null when GitHub does not say). While the guard holds the project the repo stays (409
@@ -131,17 +130,17 @@ final class LinkRepository
         return $valid ? $branch : throw ValidationException::withMessages(['base_branch' => __('field.base_branch.invalid')]);
     }
 
-    /** Whether a ruleset protects the branch; null when GitHub cannot say (no app, installation away, no answer). */
+    /** Whether a ruleset protects the branch; null when GitHub cannot say (installation away, no answer). */
     private static function protects(GitHubRepository $repository, string $branch): ?bool
     {
-        $app = GitHubApp::current();
         $installation = $repository->installation;
-        if ($app === null || ! $installation->usable()) {
+        if (! $installation->usable()) {
             return null;
         }
 
         try {
-            $token = GitHubApi::accessToken($app, $installation->installation_id, [$repository->github_id], ['metadata' => 'read'])['token'];
+            // the app whose installation reaches the repo (A680)
+            $token = GitHubApi::accessToken($installation->app, $installation->installation_id, [$repository->github_id], ['metadata' => 'read'])['token'];
         } catch (GitHubUnavailable) {
             return null;
         }

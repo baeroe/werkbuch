@@ -4,7 +4,6 @@ namespace App\GitHub;
 
 use App\Domain\GitHub\RepoPermissions;
 use App\Models\AgentRun;
-use App\Models\GitHubApp;
 use App\Models\ProjectRepository;
 
 /**
@@ -20,30 +19,31 @@ final class InstallationTokens
      *
      * @return array{repo_url: string, token: string, expires_at: string}|null
      *
-     * @throws GitHubUnavailable `unreachable` without an app or for a repo the app no longer reaches, `github` when GitHub refuses
+     * @throws GitHubUnavailable `unreachable` for a repo its app no longer reaches, `github` when GitHub refuses
      */
     public static function forRun(AgentRun $run): ?array
     {
-        $link = ProjectRepository::query()->with('repository.installation')->where('project_id', $run->project_id)->first();
+        $link = ProjectRepository::query()->with('repository.installation.app')->where('project_id', $run->project_id)->first();
 
         return $link === null ? null : ['repo_url' => $link->repository->cloneUrl(), ...self::forLink($link, RepoPermissions::forRun($run->type))];
     }
 
     /**
-     * A token for the repo of a project with these permissions.
+     * A token for the repo of a project with these permissions, from the app whose installation reaches it (A680: one
+     * app per GitHub account).
      *
      * @param  array<string, string>  $permissions
      * @return array{token: string, expires_at: string}
      */
     public static function forLink(ProjectRepository $link, array $permissions): array
     {
-        $app = GitHubApp::current();
         $repository = $link->repository;
+        $installation = $repository->installation;
 
-        if ($app === null || $repository->removed_at !== null || ! $repository->installation->usable()) {
+        if ($repository->removed_at !== null || ! $installation->usable()) {
             throw new GitHubUnavailable(GitHubUnavailable::UNREACHABLE, "The app does not reach {$repository->full_name}.");
         }
 
-        return GitHubApi::accessToken($app, $repository->installation->installation_id, [$repository->github_id], $permissions);
+        return GitHubApi::accessToken($installation->app, $installation->installation_id, [$repository->github_id], $permissions);
     }
 }

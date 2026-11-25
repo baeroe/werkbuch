@@ -30,7 +30,7 @@ final class PostReviewVerdict
     public function handle(Actor $actor, string $runId, bool $retry = false): string
     {
         $run = AgentRun::query()->find($runId);
-        $link = $run === null ? null : ProjectRepository::query()->with('repository.installation')->where('project_id', $run->project_id)->first();
+        $link = $run === null ? null : ProjectRepository::query()->with('repository.installation.app')->where('project_id', $run->project_id)->first();
         if ($run === null || $link === null || $run->pr_number === null || $run->head_sha === null) {
             return 'stale';
         }

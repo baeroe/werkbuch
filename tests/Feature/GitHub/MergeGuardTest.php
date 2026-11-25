@@ -346,28 +346,56 @@ it('lets an admin of the project confirm, opens the paused strands and frees the
     $this->postJson('/api/v1/projects/WEB/repository/confirm-guard')->assertConflict();
 });
 
-it('disconnects GitHub: the projects lose their repo, their strands pause and their runs end', function () {
+it('disconnects one app: the projects with its repos lose them, their strands pause and their runs end', function () {
     $open = AgentThread::factory()->create(['bot_id' => $this->agent->id, 'project_id' => $this->project->id]);
     $guarded = AgentThread::factory()->create(['bot_id' => $this->agent->id, 'project_id' => $this->project->id, 'status' => AgentThread::PAUSED, 'pause_reason' => 'guard']);
+    // a project with a repo of the app of another account (A680): it stays as it is
     $folder = Project::factory()->create();
+    $second = $this->github->secondApp();
+    $kept = FakeGitHub::link($folder, 'feldwerk-labs/app');
     $elsewhere = AgentThread::factory()->create(['bot_id' => $this->agent->id, 'project_id' => $folder->id]);
     [$runner] = AgentWorld::runner();
     $running = AgentWorld::run($this->agent, $this->project, RunType::Task, ['status' => RunStatus::Running, 'runner_id' => $runner->id, 'started_at' => now()]);
     $queued = AgentWorld::run($this->agent, $this->project);
     $other = AgentWorld::run($this->agent, $folder);
+    $first = GitHubApp::query()->where('owner_login', 'feldwerk')->sole();
 
-    $this->deleteJson('/api/v1/github', [], ['Authorization' => 'Bearer '.apiToken($this->admin, ['read', 'write'])])->assertForbidden();
+    $this->deleteJson('/api/v1/github/apps/'.$first->id, [], ['Authorization' => 'Bearer '.apiToken($this->admin, ['read', 'write'])])->assertForbidden();
     forgetApiAuth();
     $this->actingAs($this->admin, 'web');
-    $this->deleteJson('/api/v1/github')->assertOk()->assertExactJson(['canceled' => 2]);
+    $this->deleteJson('/api/v1/github/apps/'.strtoupper($first->id))->assertOk()->assertExactJson(['canceled' => 2]);
 
     expect([$open->fresh()->status, $open->fresh()->pause_reason, $guarded->fresh()->pause_reason, $elsewhere->fresh()->status])
         ->toBe([AgentThread::PAUSED, 'github', 'github', AgentThread::OPEN])
         ->and([$running->fresh()->status, $queued->fresh()->status, $other->fresh()->status])->toBe([RunStatus::Canceling, RunStatus::Canceled, RunStatus::Queued])
-        ->and([GitHubApp::query()->count(), GitHubInstallation::query()->count(), GitHubRepository::query()->count(), ProjectRepository::query()->count()])->toBe([0, 0, 0, 0])
-        ->and(eventsOf(EventType::GitHubDisconnected)->sole()->meta)->toMatchArray(['projects' => 1, 'canceled' => 2]);
+        ->and(GitHubApp::query()->pluck('id')->all())->toBe([$second->id])
+        ->and(GitHubInstallation::query()->pluck('installation_id')->all())->toBe([55_000_002])
+        ->and(GitHubRepository::query()->pluck('full_name')->all())->toBe(['feldwerk-labs/app'])
+        ->and(ProjectRepository::query()->pluck('id')->all())->toBe([$kept->id])
+        ->and(eventsOf(EventType::GitHubDisconnected)->sole()->meta)->toMatchArray(['owner' => 'feldwerk', 'projects' => 1, 'canceled' => 2]);
 
-    $this->deleteJson('/api/v1/github')->assertConflict()->assertJsonPath('reason', 'github_not_connected');
-    expect(fn () => DisconnectGitHub::run(Actor::system(User::factory()->create(), 'test')))->toThrow(Problem::class);
-    expect(fn () => LinkRepository::run(Actor::system($this->admin, 'test'), $this->project, ['repository_id' => 'feldwerk/website']))->toThrow(ValidationException::class);
+    // gone: as unknown
+    $this->deleteJson('/api/v1/github/apps/'.$first->id)->assertNotFound();
+    expect(fn () => DisconnectGitHub::run(Actor::system($this->admin, 'test'), $first->id))->toThrow(fn (Problem $e) => expect($e->getStatusCode())->toBe(404))
+        ->and(fn () => DisconnectGitHub::run(Actor::system(User::factory()->create(), 'test'), $second))->toThrow(fn (Problem $e) => expect($e->getStatusCode())->toBe(403))
+        ->and(fn () => LinkRepository::run(Actor::system($this->admin, 'test'), $this->project, ['repository_id' => 'feldwerk/website']))->toThrow(ValidationException::class);
+});
+
+it('takes only a push of the bot of the app whose installation reaches the repo for an agent', function () {
+    $second = $this->github->secondApp();
+    $folder = Project::factory()->identifier('LAB')->create();
+    $labs = FakeGitHub::link($folder, 'feldwerk-labs/app');
+
+    // the bot of the first app on the repo of the second: not the app of that repo
+    expect(DetectUnauthorizedPush::run(Actor::system(User::defaultBot(), 'test'), FakeGitHub::push(str_repeat('a', 40), sender: 'feldwerk-werkbuch[bot]', repositoryId: 700_000_002, fullName: 'feldwerk-labs/app')))->toBe('ignored')
+        ->and($labs->fresh()->guarded())->toBeFalse();
+
+    // the bot of the second app on its own repo: the guard of that project, the other project stays
+    Queue::fake([ProcessGitHubDelivery::class]);
+    FakeGitHub::deliver($this, 'push', FakeGitHub::push(str_repeat('b', 40), sender: 'feldwerk-labs-werkbuch[bot]', repositoryId: 700_000_002, fullName: 'feldwerk-labs/app'), 'd-labs', app: $second)->assertStatus(202);
+    (new ProcessGitHubDelivery(GitHubDelivery::query()->sole()->id))->handle();
+
+    expect($labs->fresh()->guarded())->toBeTrue()
+        ->and($this->link->fresh()->guarded())->toBeFalse()
+        ->and(GitHubDelivery::query()->sole()->outcome)->toBe('foreign');
 });

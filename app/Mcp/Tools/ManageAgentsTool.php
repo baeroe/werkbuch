@@ -47,7 +47,7 @@ final class ManageAgentsTool extends WriteTool
 
     protected string $title = 'Manage agents';
 
-    protected string $description = 'Changes runners (name, places, revoke; org admins), the agent configuration of a bot (org admins), runs (cancel, start again; who may change the item), the GitHub app (sync), the repo and the agent settings of a project, the working rules of the agents.';
+    protected string $description = 'Changes runners (name, places, revoke; org admins), the agent configuration of a bot (org admins), runs (cancel, start again; who may change the item), the GitHub apps (sync), the repo and the agent settings of a project, the working rules of the agents.';
 
     protected function actions(): array
     {
@@ -108,7 +108,7 @@ final class ManageAgentsTool extends WriteTool
             ),
             new McpAction(
                 name: 'sync-github',
-                summary: 'Reads the installations of the GitHub app and their repos from GitHub again (org admins).',
+                summary: 'Reads the installations of the GitHub apps and their repos from GitHub again (org admins).',
                 run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::body(['data' => (new GitHubResource(SyncGitHub::run($actor)))->resolve(request())]),
                 twin: 'POST github/sync',
             ),

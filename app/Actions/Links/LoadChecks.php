@@ -40,7 +40,7 @@ final class LoadChecks
      */
     public function handle(Actor $actor, int $repositoryGithubId, string $sha, ?string $token = null): string
     {
-        $link = ProjectRepository::query()->with('repository.installation')->whereHas('repository', fn ($query) => $query->where('github_id', $repositoryGithubId))->first();
+        $link = ProjectRepository::query()->with('repository.installation.app')->whereHas('repository', fn ($query) => $query->where('github_id', $repositoryGithubId))->first();
         if ($link === null) {
             return 'ignored';
         }

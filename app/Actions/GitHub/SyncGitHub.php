@@ -19,9 +19,10 @@ use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * Reads the installations of the app and the repos they reach from GitHub (spec 10.2): after the installation (GitHub
- * sends the person to `/github/setup`), on `installation` and `installation_repositories` webhooks and by hand (org
- * admins). For every linked repo it asks again whether a ruleset protects the base branch (only a hint, A513). GitHub
+ * Reads the installations of the apps and the repos they reach from GitHub (spec 10.2): after the installation (GitHub
+ * sends the person to `/github/setup`) and by hand (org admins) every app, one after the other; on `installation` and
+ * `installation_repositories` webhooks the app that sent them (A680: one app per GitHub account, each with its own
+ * installations). For every linked repo it asks again whether a ruleset protects the base branch (only a hint, A513). GitHub
  * first, without a lock, then one transaction under the lock of the organization writes it: an installation or repo
  * gone at GitHub keeps its row with `removed_at` (A512; a project keeps its link), one that comes back loses it. No
  * event: the state of GitHub is bookkeeping. Answers the connection as GetGitHub does.
@@ -39,10 +40,13 @@ final class SyncGitHub
     {
         Authorize::check($actor, 'manageGitHub', Organization::class);
 
-        $app = GitHubApp::current() ?? throw Problem::conflict('github_not_connected');
+        $apps = GitHubApp::query()->orderBy('owner_login')->orderBy('id')->get();
+        if ($apps->isEmpty()) {
+            throw Problem::conflict('github_not_connected');
+        }
 
         try {
-            self::pull($app);
+            $apps->each(fn (GitHubApp $app) => self::pull($app));
         } catch (GitHubUnavailable $e) {
             report($e);
 
@@ -53,7 +57,7 @@ final class SyncGitHub
     }
 
     /**
-     * Reads GitHub and writes what it says.
+     * Reads GitHub for one app and writes what it says about its installations; those of other apps stay as they are.
      *
      * @throws GitHubUnavailable
      */
@@ -88,17 +92,21 @@ final class SyncGitHub
             $installations[$id] = ['row' => $row, 'repositories' => $repositories, 'protection' => $protection];
         }
 
-        DB::transaction(function () use ($installations): void {
+        DB::transaction(function () use ($app, $installations): void {
             CatalogLock::take();
+            // gone meanwhile (disconnected): what GitHub said belongs to nobody
+            if (GitHubApp::query()->whereKey($app->id)->doesntExist()) {
+                return;
+            }
 
-            GitHubInstallation::query()->whereNotIn('installation_id', array_keys($installations) ?: [0])->whereNull('removed_at')
+            $app->installations()->whereNotIn('installation_id', array_keys($installations) ?: [0])->whereNull('removed_at')
                 ->each(function (GitHubInstallation $gone): void {
                     $gone->forceFill(['removed_at' => now()])->save();
                     $gone->repositories()->whereNull('removed_at')->update(['removed_at' => now(), 'updated_at' => now()]);
                 });
 
             foreach ($installations as $id => $installation) {
-                $row = GitHubInstallation::query()->updateOrCreate(['installation_id' => $id], [...$installation['row'], 'removed_at' => null]);
+                $row = GitHubInstallation::query()->updateOrCreate(['installation_id' => $id], [...$installation['row'], 'github_app_id' => $app->id, 'removed_at' => null]);
                 if ($installation['repositories'] !== null) {
                     self::repositories($row, $installation['repositories']);
                 }

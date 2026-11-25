@@ -6,7 +6,6 @@ use App\Events\EventType;
 use App\Exceptions\Problem;
 use App\GitHub\Manifest;
 use App\Models\GitHubApp;
-use App\Models\Organization;
 use App\Models\User;
 use App\Support\Actor;
 use Illuminate\Support\Facades\DB;
@@ -15,22 +14,21 @@ use Illuminate\Validation\ValidationException;
 use Tests\Support\FakeGitHub;
 
 /*
- * The manifest flow of the one app (spec 10.2, 11.3, WEBU-24) against a false GitHub: the browser posts the manifest,
- * GitHub sends the person back with a code and the state, the code becomes the app (key and secret encrypted, never in
- * an answer, event or log).
+ * The manifest flow of the app of a GitHub account (spec 10.2, 11.3, WEBU-24, WEBU-35) against a false GitHub: the
+ * browser posts the manifest, GitHub sends the person back with a code and the state, the code becomes the app (key and
+ * secret encrypted, never in an answer, event or log). One app per account (A680).
  */
 
-$start = function (User $admin, array $input = []): array {
+$start = function (User $admin, array $input = ['owner' => 'feldwerk', 'owner_type' => 'Organization']): array {
     return StartManifest::run(Actor::system($admin, 'test'), $input);
 };
 
-it('starts the manifest flow with the permissions and events of spec 11.3', function () use ($start) {
-    Organization::current()->update(['name' => 'Feldwerk']);
-    $started = $start(User::factory()->admin()->create());
+it('starts the manifest flow of an own account with the permissions and events of spec 11.3', function () use ($start) {
+    $started = $start(User::factory()->admin()->create(), ['owner' => ' mara-lindqvist ', 'owner_type' => 'User']);
 
     expect($started['url'])->toBe('https://github.com/settings/apps/new?state='.$started['state'])
         ->and($started['manifest'])->toMatchArray([
-            'name' => 'Feldwerk werkbuch',
+            'name' => 'mara-lindqvist werkbuch',
             'url' => config('app.url'),
             'hook_attributes' => ['url' => config('app.url').'/github/webhook', 'active' => true],
             'redirect_url' => config('app.url').'/github/manifest',
@@ -43,24 +41,28 @@ it('starts the manifest flow with the permissions and events of spec 11.3', func
 });
 
 it('registers the app under a GitHub organization and keeps the name within 34 characters', function () use ($start) {
-    Organization::current()->update(['name' => 'Eine sehr lange Organisation mit Namen']);
-    $started = $start(User::factory()->admin()->create(), ['organization' => ' feldwerk-gmbh ']);
+    $started = $start(User::factory()->admin()->create(), ['owner' => 'feldwerk-gmbh-mit-einem-sehr-langen-nam', 'owner_type' => 'Organization']);
 
-    expect($started['url'])->toStartWith('https://github.com/organizations/feldwerk-gmbh/settings/apps/new?state=')
-        ->and(mb_strlen($started['manifest']['name']))->toBeLessThanOrEqual(Manifest::NAME_MAX)
-        ->and($started['manifest']['name'])->toEndWith(' werkbuch')
-        ->and($start(User::factory()->admin()->create(), ['organization' => ''])['url'])->toStartWith('https://github.com/settings/apps/new');
+    expect($started['url'])->toStartWith('https://github.com/organizations/feldwerk-gmbh-mit-einem-sehr-langen-nam/settings/apps/new?state=')
+        ->and(mb_strlen($started['manifest']['name']))->toBe(Manifest::NAME_MAX)
+        ->and($started['manifest']['name'])->toBe('feldwerk-gmbh-mit-einem-s werkbuch');
 });
 
-it('refuses a login that is no GitHub login, members, and an instance with an app', function () use ($start) {
+it('refuses a login that is no GitHub login, an unknown kind of account, members, and an account with an app', function () use ($start) {
     $admin = User::factory()->admin()->create();
 
-    expect(fn () => $start($admin, ['organization' => 'feld--werk']))->toThrow(fn (ValidationException $e) => expect($e->errors())->toBe(['organization' => [__('field.organization.github_login')]]))
-        ->and(fn () => $start($admin, ['organization' => ['x']]))->toThrow(ValidationException::class)
+    expect(fn () => $start($admin, ['owner' => 'feld--werk', 'owner_type' => 'Team']))->toThrow(fn (ValidationException $e) => expect($e->errors())
+        ->toBe(['owner' => [__('field.owner.github_login')], 'owner_type' => [__('field.owner_type.github')]]))
+        ->and(fn () => $start($admin, ['owner' => ' ', 'owner_type' => 'User']))->toThrow(fn (ValidationException $e) => expect($e->errors())->toBe(['owner' => [__('field.owner.required')]]))
+        ->and(fn () => $start($admin, []))->toThrow(fn (ValidationException $e) => expect($e->errors())->toHaveKeys(['owner', 'owner_type']))
+        ->and(fn () => $start($admin, ['owner' => ['x'], 'owner_type' => 'User']))->toThrow(ValidationException::class)
         ->and(fn () => $start(User::factory()->create()))->toThrow(fn (Problem $e) => expect($e->getStatusCode())->toBe(403));
 
+    // one app per account (A680), whatever the case of its login; another account still connects
     GitHubApp::factory()->create();
-    expect(fn () => $start($admin))->toThrow(fn (Problem $e) => expect($e->reason)->toBe('github_connected'));
+    expect(fn () => $start($admin, ['owner' => 'Feldwerk', 'owner_type' => 'Organization']))
+        ->toThrow(fn (Problem $e) => expect([$e->getStatusCode(), $e->reason, $e->detail])->toBe([409, 'github_connected', __('problem.detail.github_account_connected', ['login' => 'Feldwerk'])]))
+        ->and($start($admin, ['owner' => 'feldwerk-labs', 'owner_type' => 'Organization'])['manifest']['name'])->toBe('feldwerk-labs werkbuch');
 });
 
 it('turns the code into the app once, with the key and the secret encrypted and in no event', function () use ($start) {
@@ -102,19 +104,32 @@ it('refuses a state of another person, a broken code and a second app', function
         ->and(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => '../x', 'state' => $state]))->toThrow(fn (ValidationException $e) => expect($e->errors())->toHaveKey('code'))
         ->and(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc']))->toThrow(Problem::class);
 
-    $again = $start($admin)['state'];
+    // the person registered under an account that has its app already (StartManifest named another one)
+    $again = $start($admin, ['owner' => 'feldwerk-labs', 'owner_type' => 'Organization'])['state'];
     GitHubApp::factory()->create();
     expect(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $again]))->toThrow(fn (Problem $e) => expect($e->reason)->toBe('github_connected'));
 });
 
-it('refuses a second app that came in while GitHub answered', function () use ($start) {
+it('connects a second app for another GitHub account', function () use ($start) {
+    $fake = (new FakeGitHub)->fake();
+    $admin = User::factory()->admin()->create();
+    GitHubApp::factory()->create();
+    $fake->conversionChanges = ['id' => 4_200_456, 'slug' => 'feldwerk-labs-werkbuch', 'name' => 'feldwerk-labs werkbuch', 'owner' => ['login' => 'feldwerk-labs', 'id' => 9_002, 'type' => 'Organization']];
+
+    $app = CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $start($admin, ['owner' => 'feldwerk-labs', 'owner_type' => 'Organization'])['state']]);
+
+    expect(GitHubApp::query()->orderBy('owner_login')->pluck('owner_login')->all())->toBe(['feldwerk', 'feldwerk-labs'])
+        ->and($app->app_id)->toBe(4_200_456);
+});
+
+it('refuses an app of the account that came in while GitHub answered', function () use ($start) {
     $admin = User::factory()->admin()->create();
     $state = $start($admin)['state'];
     // GitHub answers while another request stores an app
     Http::fake(function () {
         GitHubApp::factory()->create();
 
-        return Http::response(['id' => 1, 'slug' => 's', 'name' => 'n', 'owner' => ['login' => 'o', 'type' => 'User'], 'html_url' => 'https://github.com/apps/s', 'pem' => 'p', 'webhook_secret' => 'w'], 201);
+        return Http::response(['id' => 1, 'slug' => 's', 'name' => 'n', 'owner' => ['login' => 'feldwerk', 'type' => 'Organization'], 'html_url' => 'https://github.com/apps/s', 'pem' => 'p', 'webhook_secret' => 'w'], 201);
     });
 
     expect(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $state]))->toThrow(fn (Problem $e) => expect($e->reason)->toBe('github_connected'))
@@ -143,13 +158,14 @@ it('starts the flow over REST only from the session and never answers a key or s
 
     forgetApiAuth();
     $this->actingAs($admin, 'web');
-    $this->postJson('/api/v1/github/manifest', ['organization' => 'feldwerk'])->assertOk()
+    $this->postJson('/api/v1/github/manifest', ['owner' => 'feldwerk', 'owner_type' => 'Organization'])->assertOk()
         ->assertJsonPath('data.manifest.default_events', Manifest::EVENTS);
+    $this->postJson('/api/v1/github/manifest', ['owner' => '-x'])->assertUnprocessable()->assertJsonValidationErrors(['owner', 'owner_type']);
 
     $app = GitHubApp::factory()->create();
     $answer = $this->getJson('/api/v1/github')->assertOk();
-    expect($answer->json('data.app.slug'))->toBe('feldwerk-werkbuch')
-        ->and($answer->json('data.app.install_url'))->toBe('https://github.com/apps/feldwerk-werkbuch/installations/new')
+    expect($answer->json('data.apps.0.slug'))->toBe('feldwerk-werkbuch')
+        ->and($answer->json('data.apps.0.install_url'))->toBe('https://github.com/apps/feldwerk-werkbuch/installations/new')
         ->and($answer->getContent())->not->toContain('PRIVATE KEY')->not->toContain($app->webhook_secret);
-    $this->postJson('/api/v1/github/manifest')->assertConflict()->assertJsonPath('reason', 'github_connected');
+    $this->postJson('/api/v1/github/manifest', ['owner' => 'feldwerk', 'owner_type' => 'Organization'])->assertConflict()->assertJsonPath('reason', 'github_connected');
 });

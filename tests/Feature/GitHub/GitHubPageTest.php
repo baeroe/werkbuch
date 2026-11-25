@@ -27,7 +27,7 @@ it('turns the way back of GitHub into the app and sends the person on to the ins
     (new FakeGitHub)->fake();
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
-    $state = StartManifest::run(Actor::system($admin, 'test'), [])['state'];
+    $state = StartManifest::run(Actor::system($admin, 'test'), ['owner' => 'feldwerk', 'owner_type' => 'Organization'])['state'];
 
     $redirect = $this->get('/github/manifest?code=abc123&state='.$state)->assertRedirect()->headers->get('Location');
     expect(GitHubApp::query()->sole()->slug)->toBe('feldwerk-werkbuch')
@@ -47,10 +47,11 @@ it('brings a way back that fails to the settings with its sentence', function ()
     $this->get('/github/manifest?code=abc123&state=nope')->assertRedirect('/settings/github')->assertSessionHas('error', __('problem.detail.github_state'));
     // a code GitHub never gives: the sentence of the field
     $this->get('/github/manifest?code=no%20code&state=x')->assertRedirect('/settings/github')->assertSessionHas('error', __('field.code.github'));
-    // an app that is there already: the text of the reason
+    // an app of the account that is there already: the sentence of the problem
     GitHubApp::factory()->create();
     $state = StartManifest::issueState($admin->id);
-    $this->get('/github/manifest?code=abc123&state='.$state)->assertRedirect('/settings/github')->assertSessionHas('error', __('problem.reason.github_connected'));
+    $this->get('/github/manifest?code=abc123&state='.$state)->assertRedirect('/settings/github')
+        ->assertSessionHas('error', __('problem.detail.github_account_connected', ['login' => 'feldwerk']));
     expect(GitHubApp::query()->count())->toBe(1);
 });
 
@@ -71,8 +72,8 @@ it('reads the installation again only with the state werkbuch gave for the way b
     expect($fresh())->toBeFalse();
     Http::assertNothingSent();
 
-    // the way to the installation gives the admin a state of their own: GitHub sends it back
-    $link = $this->get('/github/install')->assertRedirect()->headers->get('Location');
+    // the way to the installation of an app gives the admin a state of their own: GitHub sends it back
+    $link = $this->get('/github/install?app='.strtoupper(GitHubApp::query()->sole()->id))->assertRedirect()->headers->get('Location');
     expect($link)->toStartWith('https://github.com/apps/feldwerk-werkbuch/installations/new?state=');
     parse_str((string) parse_url((string) $link, PHP_URL_QUERY), $query);
     $this->get('/github/setup?installation_id=55000001&setup_action=update&state='.$query['state'])->assertRedirect('/settings/github')->assertSessionMissing('error');
@@ -93,13 +94,18 @@ it('brings a way back from installing that GitHub does not answer to the setting
         ->assertRedirect('/settings/github')->assertSessionHas('error', __('problem.reason.github_unavailable'));
 });
 
-it('sends only an org admin of a connected instance to the installation', function () {
+it('sends only an org admin to the installation of an app the instance has', function () {
     $this->actingAs(User::factory()->admin()->create());
     $this->get('/github/install')->assertRedirect('/settings/github')->assertSessionMissing('error');
+    $this->get('/github/install?app=01J00000000000000000000000')->assertRedirect('/settings/github')->assertSessionMissing('error');
+    $this->get('/github/install?app=feldwerk')->assertRedirect('/settings/github');
 
-    FakeGitHub::connected();
+    $github = FakeGitHub::connected();
+    $second = $github->secondApp();
+    expect($this->get('/github/install?app='.$second->id)->headers->get('Location'))->toStartWith('https://github.com/apps/feldwerk-labs-werkbuch/installations/new?state=');
+
     $this->actingAs(User::factory()->create());
-    $this->get('/github/install')->assertRedirect('/settings/github')->assertSessionHas('error', __('problem.detail.github_admins_only'));
+    $this->get('/github/install?app='.$second->id)->assertRedirect('/settings/github')->assertSessionHas('error', __('problem.detail.github_admins_only'));
 });
 
 it('signs the app in with a JWT GitHub can check with the public key', function () {
