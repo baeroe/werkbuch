@@ -41,9 +41,9 @@ async function setAgent(page: Page, botId: string, runnerIds: string[] | null): 
 /**
  * What a test of the runs needs before its first key: a workflow `E2E …` with the four steps of the agents, a project
  * with it, the bot of this project as its member and agent with only the false runner in its pool, and an item of the
- * project. `cleanup` sets the agent back to off, revokes the runner and takes project and workflow away.
+ * project (`beforeAssign` writes what should be older than the first run). `cleanup` sets the agent back to off, revokes the runner and takes project and workflow away.
  */
-async function agentWorld(page: Page, what: string) {
+async function agentWorld(page: Page, what: string, { beforeAssign }: { beforeAssign?: (item: { id: string; key: string }) => Promise<void> } = {}) {
   await page.goto('/my-items');
   const name = `${prefix()} ${what}`;
   const workflow = await api(page, 'POST', '/api/v1/workflows', {
@@ -70,6 +70,7 @@ async function agentWorld(page: Page, what: string) {
   expect(member.status(), await member.text()).toBe(201);
   await setAgent(page, bot.id, [runner.id]);
   const item = await createItem(page, { project_id: project.id, title: `${prefix()} Cookie banner` });
+  await beforeAssign?.(item);
   // assigned to the agent: werkbuch queues a task
   const assigned = await api(page, 'PATCH', `/api/v1/work-items/${item.id}`, { assignee_id: bot.id });
   expect(assigned.status(), await assigned.text()).toBe(200);
@@ -140,6 +141,49 @@ test('follows a run of an agent at an item with the keyboard: its log live, canc
     await runner.result(second, 'succeeded', 'The banner uses the consent API v2.');
     await expect(cards.nth(0)).toContainText(label('settings.runners.run.status.succeeded'), LIVE);
     await expect(cards.nth(0)).toContainText('The banner uses the consent API v2.', LIVE);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('keeps the comment being read in place while a run on top starts and unfolds its log (WEBU-37)', async ({ page }) => {
+  test.setTimeout(240_000);
+  const { bot, runner, item, cleanup } = await agentWorld(page, 'reading', {
+    // older than the run: they stand under it, newest first
+    beforeAssign: async (created) => {
+      for (let number = 1; number <= 14; number += 1) {
+        const comment = await api(page, 'POST', `/api/v1/work-items/${created.id}/comments`, { body: `Note ${String(number).padStart(2, '0')}: checked the banner again in another browser.` });
+        expect(comment.status(), await comment.text()).toBe(201);
+      }
+    },
+  });
+  try {
+    // werkbuch queues the task a moment after the assignment (the consumer of the agents)
+    await expect
+      .poll(async () => ((await (await api(page, 'GET', `/api/v1/runs?filter[work_item_id]=${item.id}`)).json()) as { data: unknown[] }).data.length, { timeout: 60_000 })
+      .toBe(1);
+    await page.goto(`/items/${item.key}`);
+    const timeline = page.getByRole('list', { name: label('items.activity.list') });
+    const card = timeline.getByRole('article', { name: label('items.agents.run.label', { run: implement(), bot: bot.name }) });
+    const log = card.getByRole('log', { name: label('items.agents.log.label', { run: implement() }) });
+    // the waiting run stands on top, its log still closed
+    await expect(card).toBeVisible();
+    await expect(timeline.getByRole('listitem').first().getByRole('article')).toHaveAttribute('id', /^run-/);
+    await expect(log).toBeHidden();
+
+    // reading further down: note 10 at the top of the window
+    const reading = timeline.getByRole('article').filter({ hasText: 'Note 10:' });
+    await reading.evaluate((comment) => comment.scrollIntoView({ block: 'start' }));
+    const top = async () => (await reading.boundingBox())!.y;
+    await expect.poll(top).toBeLessThan(200);
+    const before = await top();
+
+    // a runner takes it (live): the run starts and its line unfolds the log above; the comment being read stays
+    const first = await runner.claim(item.id);
+    await runner.events(first, [{ kind: 'system', text: 'Worktree ready' }]);
+    await expect(log).toBeVisible(LIVE);
+    await expect.poll(async () => Math.abs((await top()) - before)).toBeLessThan(2);
+    expect((await card.boundingBox())!.y).toBeLessThan(0);
   } finally {
     await cleanup();
   }

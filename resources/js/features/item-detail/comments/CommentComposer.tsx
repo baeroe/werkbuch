@@ -220,6 +220,7 @@ export function CommentComposer({ item }: { item: WorkItem }) {
   function fold() {
     refocus.current = true;
     setProblem(null);
+    setAnnouncement('');
     setOpen(false);
   }
 
@@ -319,8 +320,8 @@ export function CommentComposer({ item }: { item: WorkItem }) {
           <span className="min-w-0 flex-1 truncate">{t(empty ? 'items.comments.write' : 'items.comments.continue')}</span>
           <Kbd keys="m" aria-hidden="true" />
         </button>
-        {/* the status takes no room until it says something: the newest line follows the opener closely (WEBU-37) */}
-        <div className="mt-1">{status}</div>
+        {/* read out, never in sight: the newest line follows the opener closely and never jumps (WEBU-37) */}
+        <div className="sr-only">{status}</div>
       </div>
     );
   }

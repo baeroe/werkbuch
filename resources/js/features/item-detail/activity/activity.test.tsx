@@ -6,7 +6,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -89,13 +89,14 @@ function renderActivity(history: MockRoute, { surface = 'peek', routes = {} }: {
     ...routes,
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <ItemDetailProvider surface={surface}>
         <Activity detail={detailOf(web48)} />
       </ItemDetailProvider>
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 
 /** The text of a line (without the initials of the avatar), its reason after " | ". */
@@ -549,6 +550,41 @@ describe('Activity', () => {
     await waitFor(() => expect(document.activeElement).toBe(lines[SHOWN_LINES]));
     expect(lines[SHOWN_LINES]!.textContent).toContain('„T54“ in „T55“');
     screen.getByText('noch 5 frühere Zeilen');
+  });
+
+  it('moves the focus to the card "Mehr laden" brings', async () => {
+    const comments = Array.from({ length: SHOWN_LINES + 2 }, (_, index) =>
+      makeComment({ id: `c_${String(index).padStart(3, '0')}`, work_item_id: 'wi_web_48', author_id: 'u_ida', body_json: doc(`Notiz ${index}`), created_at: at(index) }),
+    );
+    renderActivity(() => historyPage([]), { routes: { 'GET /api/v1/work-items/wi_web_48/comments': () => ({ body: list(comments) }) } });
+    const user = userEvent.setup();
+    const timeline = await screen.findByRole('list', { name: 'Verlauf' });
+    await user.click(await screen.findByRole('button', { name: 'Mehr laden' }));
+    const card = within(within(timeline).getAllByRole('listitem')[SHOWN_LINES]!).getByRole('article');
+    expect(card.textContent).toContain('Notiz 1');
+    await waitFor(() => expect(document.activeElement).toBe(card));
+  });
+
+  it('widens the window by the lines that come in on top, so the line at the bottom stays', async () => {
+    let events = Array.from({ length: SHOWN_LINES + 3 }, (_, index) => event(`ev_${String(index).padStart(3, '0')}`, index * 10, { changes: { title: { old: `T${index}`, new: `T${index + 1}` } } }));
+    const { client } = renderActivity(() => historyPage(events));
+    const timeline = await screen.findByRole('list', { name: 'Verlauf' });
+    const lines = () => within(timeline).getAllByRole('listitem');
+    await waitFor(() => expect(lines()).toHaveLength(SHOWN_LINES));
+    const bottom = lines().at(-1)!.textContent;
+    screen.getByText('noch 3 frühere Zeilen');
+
+    // two changes come in (live): on top, and the line at the bottom is still there
+    events = [...events, event('ev_new_1', 10_000, { changes: { title: { old: 'X', new: 'Y' } } }), event('ev_new_2', 10_020, { changes: { title: { old: 'Y', new: 'Z' } } })];
+    await act(() => client.invalidateQueries());
+    await waitFor(() => expect(lines()).toHaveLength(SHOWN_LINES + 2));
+    expect(lines()[0]!.textContent).toContain('„Y“ in „Z“');
+    expect(lines().at(-1)!.textContent).toBe(bottom);
+    screen.getByText('noch 3 frühere Zeilen');
+
+    // another filter keeps the window as it is, without widening it again
+    await userEvent.setup().click(within(screen.getByRole('group', { name: 'Aktivität filtern' })).getByRole('button', { name: 'Änderungen' }));
+    await waitFor(() => expect(within(screen.getByRole('list', { name: 'Verlauf' })).getAllByRole('listitem')).toHaveLength(SHOWN_LINES + 2));
   });
 
   it('shows comments and changes in order and filters them', async () => {

@@ -7,9 +7,12 @@
  * a filter that hides runs back to "Alles".
  * - The whole history and every comment load (every page, `useActivity`): the server pages from the oldest entry on,
  *   and the newest must never be missing. The timeline shows the newest `SHOWN_LINES` lines (a comment is a line);
- *   "Mehr laden" under them shows the earlier ones, `SHOWN_LINES` at a time, and the focus moves to the first of them.
+ *   "Mehr laden" under them shows the earlier ones, `SHOWN_LINES` at a time, and the focus moves to the first of them
+ *   (a card itself, a change its line).
  * - A line that comes in on top (a comment sent here, a change of someone else, live) shows where it lands while the
- *   start of the list is in sight; further down, the view keeps the line being read in place (`useReadingPlace`).
+ *   start of the list is in sight; further down, the view keeps the line being read in place (`useReadingPlace`, in
+ *   every browser). Lines of the same filter that come in on top widen the window by as many, so
+ *   the line at the bottom never drops out while it is read.
  * - A comment is a card (`CommentCard`) with its actions and reactions; one deleted while its undo toast stands is left
  *   out (`useHiddenComments`).
  * - Changes by the same account, made the same way for the same reason within five minutes, read as one line
@@ -111,6 +114,8 @@ export function Activity({ detail, runs = [] }: { detail: WorkItemDetail; runs?:
     return () => window.removeEventListener(SHOW_RUNS_EVENT, show);
   }, [hidesRuns]);
   const [shown, setShown] = useState(SHOWN_LINES);
+  /** The lines shown at the last render, per filter: lines that come in on top widen the window, the last stays in. */
+  const [counted, setCounted] = useState<{ filter: ActivityFilter; count: number } | null>(null);
   const list = useRef<HTMLOListElement>(null);
 
   const ctx: PhraseContext = {
@@ -127,6 +132,12 @@ export function Activity({ detail, runs = [] }: { detail: WorkItemDetail; runs?:
   const lines = withRuns(buildTimeline(entries, filter === 'runs' ? 'all' : filter), runs, filter);
   // a comment links its run only when the run is one of the item's (its line is there to jump to)
   const runIds = new Set(runs.map((run) => run.id));
+  const ready = activity.data !== undefined && named;
+  if (ready && (counted?.filter !== filter || counted.count !== lines.length)) {
+    // new lines of the same filter (live, a comment sent) come in on top: the line at the bottom stays where it is read
+    if (counted?.filter === filter && lines.length > counted.count) setShown((count) => count + lines.length - counted.count);
+    setCounted({ filter, count: lines.length });
+  }
   const earlier = Math.max(0, lines.length - shown);
   // newest first: the newest `shown` lines, turned around
   const newestFirst = lines.slice(earlier).reverse();
@@ -140,10 +151,12 @@ export function Activity({ detail, runs = [] }: { detail: WorkItemDetail; runs?:
     const index = reveal.current;
     if (index === null) return;
     reveal.current = null;
-    // the earlier lines come under the ones read so far: reading goes on with the first of them (the button may go)
+    // the earlier lines come under the ones read so far: reading goes on with the first of them (the button may go),
+    // a card (comment, run) itself, a change its line
     const line = list.current?.children.item(index) as HTMLElement | null | undefined;
-    line?.setAttribute('tabindex', '-1');
-    line?.focus();
+    const card = line?.querySelector<HTMLElement>(':scope > article') ?? line;
+    if (card && !card.hasAttribute('tabindex')) card.tabIndex = -1;
+    card?.focus();
   });
   useReadingPlace(list);
 
@@ -186,7 +199,7 @@ export function Activity({ detail, runs = [] }: { detail: WorkItemDetail; runs?:
             ref={list}
             tabIndex={-1}
             aria-label={t('items.activity.list')}
-            className="relative mt-3 flex flex-col gap-3 outline-none [overflow-anchor:none] before:absolute before:top-3 before:bottom-3 before:left-2.5 before:border-l before:border-dashed before:border-line-strong"
+            className="relative mt-3 flex flex-col gap-3 outline-none before:absolute before:top-3 before:bottom-3 before:left-2.5 before:border-l before:border-dashed before:border-line-strong"
           >
             {newestFirst.map((line) =>
               line.kind === 'comment' ? (
