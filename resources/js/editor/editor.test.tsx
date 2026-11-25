@@ -1091,9 +1091,47 @@ describe('the menus of the editor', () => {
         </div>,
         itemRoutes,
       );
-      fireEvent.click(await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' }));
+      const link = await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' });
+      fireEvent.click(link);
       expect(useUiStore.getState().peekItemId).toBeNull();
       expect(visit.mock.calls[0][0]).toBe('/items/WEB-47');
+      // while reading a link may be dragged
+      expect(link.hasAttribute('draggable')).toBe(false);
+      client.clear();
+    });
+
+    it('only selects a reference on a plain click in an editor of a dialog, which stays open over visits', async () => {
+      const { client } = renderWithData(
+        <div role="dialog">
+          <RichTextEditor value={paragraph(reference('wi_web_47'), { type: 'text', text: ' und ' }, reference('pg_web_structure', 'page'))} onChange={vi.fn()} preset="description" projectId="p_web" />
+        </div>,
+        itemRoutes,
+      );
+      const item = await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' });
+      const page = await screen.findByRole('link', { name: 'Seitenstruktur, Wiki WEB' });
+      // no preview, no page loaded behind the dialog: the click is prevented, so Inertia leaves it alone
+      expect(fireEvent.click(item)).toBe(false);
+      expect(fireEvent.click(page)).toBe(false);
+      expect(useUiStore.getState().peekItemId).toBeNull();
+      expect(visit).not.toHaveBeenCalled();
+      // a modifier or the middle button is still the browser's: a new tab
+      expect(fireEvent.click(item, { metaKey: true })).toBe(true);
+      expect(fireEvent.click(page, { button: 1 })).toBe(true);
+      expect(visit).not.toHaveBeenCalled();
+      // never dragged into the text, the link nor what is in it
+      expect(item.getAttribute('draggable')).toBe('false');
+      expect(item.firstElementChild?.getAttribute('draggable')).toBe('false');
+      client.clear();
+    });
+
+    it('sets draggable again after ProseMirror took it off the link', async () => {
+      const { client } = renderWithData(<RichTextEditor value={paragraph(reference('wi_web_47'))} onChange={vi.fn()} preset="page" projectId="p_web" />, itemRoutes);
+      const link = await screen.findByRole('link', { name: 'WEB-47 Kontaktformular sendet doppelt' });
+      link.removeAttribute('draggable');
+      // the next render of the reference (here: a new title) sets it again
+      act(() => void client.setQueryData(qk.references.item('wi_web_47'), { ...web47, title: 'Formular sendet doppelt' }));
+      await waitFor(() => expect(screen.getByRole('link', { name: 'WEB-47 Formular sendet doppelt' })).toBe(link));
+      expect(link.getAttribute('draggable')).toBe('false');
       client.clear();
     });
 
@@ -1107,7 +1145,7 @@ describe('the menus of the editor', () => {
       client.clear();
     });
 
-    it('selects a reference with the arrows and opens it with Enter, never splitting the line', async () => {
+    it('opens a selected reference with Enter and never splits the line there; Enter in text still does', async () => {
       const user = userEvent.setup();
       const editorRef = createRef<Editor | null>();
       const onChange = vi.fn();
@@ -1126,7 +1164,7 @@ describe('the menus of the editor', () => {
       expect(tiptap.getJSON()).toEqual(value);
       expect(onChange).not.toHaveBeenCalled();
 
-      // Enter on a selected node that opens nothing, and with the cursor in text, does what it did
+      // with the cursor in text Enter splits the line as ever (a selected reference without a link: the next test)
       act(() => {
         tiptap.commands.setTextSelection(2);
         tiptap.view.focus();

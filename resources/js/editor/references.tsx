@@ -9,8 +9,8 @@
  *
  * A reference is a link while reading and in an editor alike (WEBU-38): a plain click opens an item in the preview,
  * as a row of a list does, and a page as the page; a click with a modifier or the middle button leaves it to the
- * browser (a new tab). In a modal dialog an item link goes to the page: a preview would open behind the dialog. In an
- * editor the link is no tab stop: the arrows select the reference (`selectable`) and Enter opens it
+ * browser (a new tab). In a modal dialog a plain click only selects a reference of an editor and takes a reference read
+ * there to its page: a preview or a visit would happen behind the dialog. In an editor the link is no tab stop: the arrows select the reference (`selectable`) and Enter opens it
  * (`OpenSelectedKey`, nodes.tsx), Backspace and Delete remove it, a click beside it places the cursor.
  */
 
@@ -19,7 +19,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import Mention from '@tiptap/extension-mention';
 import { NodeViewWrapper, ReactNodeViewRenderer, useEditorState, type ReactNodeViewProps } from '@tiptap/react';
 import { EyeOff } from 'lucide-react';
-import type { MouseEvent, ReactNode } from 'react';
+import { useLayoutEffect, useRef, type MouseEvent, type ReactNode } from 'react';
 import { isGone } from '@/api/client';
 import { isPlainClick } from '@/components/items/ItemLink';
 import { TypeGlyph } from '@/components/fields/TypeGlyph';
@@ -134,14 +134,16 @@ function Loading({ failed }: { failed: boolean }) {
   return <span className="rt-ref">{failed ? t('editor.reference.unknown') : '…'}</span>;
 }
 
-/** Whether an element stands in a modal dialog: a preview opened from there would show behind it. */
+/** Whether an element stands in a modal dialog: a preview or a visit from there would happen behind it. */
 const inDialog = (element: Element): boolean => element.closest('[role="dialog"], [role="alertdialog"]') !== null;
 
 /**
  * The link of a reference, while reading and in an editor (WEBU-38). `onOpen` takes a plain click over (the preview of
- * an item); without it, or with a modifier, the link does what links do. `label` names the link for screen readers in
- * full: a visually hidden span after the text would be read with a space before its comma (Chrome sets a positioned
- * element apart).
+ * an item); without it, or with a modifier, the link does what links do. In a modal dialog a plain click neither opens
+ * a preview nor loads a page behind it: in an editor there (the dialog to create an item stays open over visits) it
+ * only selects the reference, while reading there (the versions of a page) it goes to the page of the item. `label`
+ * names the link for screen readers in full: a visually hidden span after the text would be read with a space before
+ * its comma (Chrome sets a positioned element apart).
  */
 function Shown({
   href,
@@ -159,24 +161,37 @@ function Shown({
   onOpen?: () => void;
   children: ReactNode;
 }) {
+  const link = useRef<HTMLElement | null>(null);
+  // in an editor the browser would drag the address into the text: ProseMirror takes `draggable` off the link after a
+  // mousedown on the selected node, so it is set again after every render; while reading a link may be dragged
+  useLayoutEffect(() => {
+    if (editable && link.current) link.current.draggable = false;
+  });
   return (
     <Link
+      ref={link}
       href={href}
       className={wraps ? 'rt-ref rt-ref-flow' : 'rt-ref'}
       aria-label={label}
       // in an editor the arrows select the reference and Enter opens it: a tab stop per reference would only stand
       // between the text and the next control
       tabIndex={editable ? -1 : undefined}
-      // the browser would drag the address into the text
-      draggable={false}
+      draggable={editable ? false : undefined}
       onClick={(event: MouseEvent) => {
-        if (!onOpen || !isPlainClick(event) || inDialog(event.currentTarget)) return;
-        // a prevented click is one Inertia leaves alone
+        if (!isPlainClick(event)) return;
+        if (inDialog(event.currentTarget)) {
+          // a prevented click is one Inertia leaves alone: in an editor of a dialog it only selects
+          if (editable) event.preventDefault();
+          return;
+        }
+        if (!onOpen) return;
         event.preventDefault();
         onOpen();
       }}
     >
-      {children}
+      <span className="contents" draggable={editable ? false : undefined}>
+        {children}
+      </span>
     </Link>
   );
 }
