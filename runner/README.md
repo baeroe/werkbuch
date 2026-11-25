@@ -7,7 +7,7 @@ instance URL (`~/.config/werkbuch-runner/config.yaml`) and its token (in the key
 
 ## Install
 
-Settings → Runners → Connect runner in werkbuch shows the command with a one-time code:
+Settings → Runners → Connect a runner in werkbuch shows the command with a one-time code:
 
 ```sh
 curl -fsSL https://werkbuch.example.com/runner/install.sh | sh -s -- --code ABCD-EFGH
