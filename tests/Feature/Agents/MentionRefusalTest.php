@@ -95,9 +95,10 @@ it('writes in the language of the organization', function () use ($ask, $notes) 
     expect($notes($this->item)->sole()->body_text)->toBe('Bob beantwortet diese Erwähnung nicht. Bob ist nicht als Agent eingeschaltet. Ein Org-Admin kann das ändern: Bob als Agent einrichten');
 });
 
-it('names every bot of the comment that does not answer in one note and lets the others work', function () use ($ask, $notes) {
+it('names every agent of the comment that does not answer in one note and lets the others work', function () use ($ask, $notes) {
     $bob = AgentWorld::agent([$this->project], ['enabled' => false], 'Bob');
     $kira = AgentWorld::agent([$this->project]);
+    // a bot never set up as an agent of the runner (it may wake by a webhook, A364) and the default bot get no line
     $otto = User::factory()->bot()->create(['name' => 'Otto']);
     app(RoleAssignments::class)->setProjectRole($otto, $this->project, ProjectRole::Member);
     $viewer = AgentWorld::agent([], [], 'Vera');
@@ -111,12 +112,24 @@ it('names every bot of the comment that does not answer in one note and lets the
     expect(AgentRun::query()->sole()->bot_id)->toBe($kira->id)
         ->and($paragraphs->all())->toBe([
             'Bob does not answer this mention. Bob is not switched on as an agent. An org admin can change that: Set up Bob as an agent',
-            'Otto does not answer this mention. Otto is not switched on as an agent. An org admin can change that: Set up Otto as an agent',
-            'Vera does not answer this mention. Vera may not change items of WEBU: it is no member. A project admin can change that: Members of WEBU',
-            'Automation does not answer this mention. Automation is the default bot of the organization: it never works as an agent. Mention a bot that is set up as an agent.',
+            'Vera does not answer this mention. Vera may not change items of WEBU: it is no member who may edit. A project admin can change that: Members of WEBU',
         ])
-        ->and($note->body['content'][2]['content'][1]['marks'][0]['attrs']['href'])->toBe(config('app.url').'/projects/WEBU/settings/members')
-        ->and($note->body['content'][3]['content'])->toHaveCount(1);
+        ->and($note->body['content'][1]['content'][1]['marks'][0]['attrs']['href'])->toBe(config('app.url').'/projects/WEBU/settings/members');
+});
+
+it('says nothing about a bot that was never set up as an agent, the default bot included', function () use ($ask, $notes) {
+    // like Kira of the demo: a bot whose webhook hears bot.mentioned, without an agent config
+    $hook = User::factory()->bot()->create(['name' => 'Hook']);
+    app(RoleAssignments::class)->setProjectRole($hook, $this->project, ProjectRole::Member);
+    app(RoleAssignments::class)->setProjectRole(User::defaultBot(), $this->project, ProjectRole::Member);
+
+    $ask($this, $hook);
+    $ask($this, User::defaultBot());
+    $ask($this, $hook, ' @'.User::defaultBot()->handle);
+
+    expect($notes($this->item))->toHaveCount(0)
+        ->and(AgentRun::query()->count())->toBe(0)
+        ->and(eventsOf(EventType::BotMentioned))->toHaveCount(4);
 });
 
 it('names the way for a bot without a responsible person and a deactivated bot', function () use ($notes) {
