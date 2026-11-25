@@ -136,7 +136,7 @@ it('names the way for a bot without a responsible person and a deactivated bot',
         ->and($owner->body['content'][0]['content'][1]['marks'][0]['attrs']['href'])->toBe(config('app.url')."/settings/bots?agent={$nobody->id}");
 });
 
-it('explains nothing to a reader, a bot, a gone comment and an archived or deleted project', function () use ($notes) {
+it('explains nothing to a reader, a bot, a gone comment or item and an archived or deleted project', function () use ($notes) {
     $bob = AgentWorld::agent([$this->project], ['enabled' => false], 'Bob');
     $reader = memberOf($this->project, ProjectRole::Viewer, ['name' => 'Rita']);
     $other = AgentWorld::agent([$this->project], [], 'Otto');
@@ -153,6 +153,13 @@ it('explains nothing to a reader, a bot, a gone comment and an archived or delet
     $gone = $comment();
     $gone->delete();
     expect(StartComment::run($system, $this->item, $bob, $gone))->toBeNull();
+
+    // the item went before the event came: the lock finds it no more
+    $doomed = WorkItem::factory()->for($this->project)->create()->load('project');
+    $question = Comment::factory()->for($doomed, 'workItem')->create(['author_id' => $this->mara->id]);
+    WorkItem::query()->whereKey($doomed->id)->delete();
+    expect(StartComment::run($system, $doomed, $bob, $question))->toBeNull()
+        ->and(Comment::query()->where('author_id', User::defaultBot()->id)->count())->toBe(0);
 
     // an archived item, an archived project, a project being deleted
     $this->item->forceFill(['archived_at' => now()])->save();
