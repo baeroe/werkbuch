@@ -8,6 +8,9 @@ import (
 	"testing"
 )
 
+// jwt is a made-up installation token in the form GitHub gives since 2026: `ghs_<app>_<JWT>`, base64url segments.
+var jwt = "ghs_123456_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9." + strings.Repeat("eyJpc3MiOiIxMjM0NTYi-_", 15) + "." + strings.Repeat("c2ln_-Q", 40)
+
 func TestPatterns(t *testing.T) {
 	cases := map[string]string{
 		"runner wbr_abcdefghijklmnopqrstuvwxyz012345 ok":         "runner [token] ok",
@@ -17,6 +20,11 @@ func TestPatterns(t *testing.T) {
 		"Authorization: Bearer secret-value":                     "Authorization: Bearer [token]",
 		"bare wb_abcdefghijklmnopqrstuvwx":                       "bare [token]",
 		"nothing here":                                           "nothing here",
+		// the installation tokens of 2026 (A730), made up: whole, the dot that ends the sentence stays
+		"pushed with " + jwt + ".":                         "pushed with [token].",
+		"x-access-token:" + jwt + "@github.com":            "x-access-token:[token]@github.com",
+		jwt + "\n" + jwt:                                   "[token]\n[token]",
+		"github_pat_" + strings.Repeat("A1_b2", 12) + ".x": "[token]",
 	}
 	for in, want := range cases {
 		if got := String(in); got != want {

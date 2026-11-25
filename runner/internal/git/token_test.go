@@ -12,10 +12,17 @@ import (
 	"github.com/baeroe/werkbuch/runner/internal/fakegit"
 )
 
-const (
-	first  = "ghs_first0000000000000000000000"
-	second = "ghs_second000000000000000000000"
+// first and second are made-up installation tokens in the form GitHub gives since 2026 (A730): `ghs_<app>_<JWT>`, about
+// 520 characters with two dots.
+var (
+	first  = jwtToken("first")
+	second = jwtToken("second")
 )
+
+func jwtToken(seed string) string {
+	payload := strings.Repeat("eyJpc3MiOiIxMjM0NTYi"+seed, 12)
+	return "ghs_123456_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9." + payload + "." + strings.Repeat("sig-_"+seed, 20)
+}
 
 func TestEnv(t *testing.T) {
 	var none *TokenFile
@@ -40,6 +47,9 @@ func TestEnv(t *testing.T) {
 }
 
 func TestTokenFile(t *testing.T) {
+	if len(first) < 500 || strings.Count(first, ".") != 2 {
+		t.Fatalf("not the form of 2026: %d characters", len(first))
+	}
 	dir := t.TempDir()
 	f := NewTokenFile(dir, "https://github.com/acme/app.git")
 	if err := f.Write(first); err != nil {
@@ -67,7 +77,8 @@ func TestTokenFile(t *testing.T) {
 			}
 		}
 	}
-	for _, bad := range []string{"ghs_x\nline", "ghs_x y", "ghs_x'", "ghs_x:", ""} {
+	bad := []string{"ghs_x\nline", "ghs_x y", "ghs_x'", "ghs_x:", `ghs_x"`, `ghs_x\`, "ghs_x#", ".ghs_x", "-ghs_x", "", "ghs_" + strings.Repeat("a", TokenMax)}
+	for _, bad := range bad {
 		if f.Write(bad) == nil {
 			t.Fatalf("took %q", bad)
 		}
@@ -168,7 +179,7 @@ func TestGhCalledByItsPathSeesOnlyTheTokenOfTheRun(t *testing.T) {
 	bin := t.TempDir()
 	fakeGh := filepath.Join(bin, "gh")
 	// a fake gh as gh reads its token: GH_TOKEN, GITHUB_TOKEN, else hosts.yml of GH_CONFIG_DIR
-	os.WriteFile(fakeGh, []byte("#!/bin/sh\ntok=${GH_TOKEN:-$GITHUB_TOKEN}\n[ -z \"$tok\" ] && tok=$(sed -n 's/^    oauth_token: //p' \"$GH_CONFIG_DIR/hosts.yml\")\nprintf '%s' \"$tok\"\n"), 0o700)
+	os.WriteFile(fakeGh, []byte("#!/bin/sh\ntok=${GH_TOKEN:-$GITHUB_TOKEN}\n[ -z \"$tok\" ] && tok=$(sed -n 's/^    oauth_token: \"\\(.*\\)\"$/\\1/p' \"$GH_CONFIG_DIR/hosts.yml\")\nprintf '%s' \"$tok\"\n"), 0o700)
 	file := NewTokenFile(t.TempDir(), "https://github.com/acme/app.git")
 	file.Write(first)
 	env := ghEnv(t, file)

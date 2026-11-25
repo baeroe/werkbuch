@@ -331,7 +331,8 @@ final class FakeGitHub
     /** @return array<string, mixed> */
     private function token(Request $request, int $app): array
     {
-        $token = 'ghs_'.Str::random(36);
+        // the form GitHub gives since 2026 (A730): `ghs_<app>_<JWT>`, about 520 characters with two dots
+        $token = "ghs_{$app}_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.".Str::random(380).'.'.Str::random(86);
         $this->tokens[] = $token;
         $installation = (int) explode('/', (string) parse_url($request->url(), PHP_URL_PATH))[3];
         $this->issuedFor[$token] = $installation;
