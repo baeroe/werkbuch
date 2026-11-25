@@ -32,25 +32,33 @@ final class SyncGitHub
     use AsAction;
 
     /**
+     * Every app (or only `$only`), one after the other: an app GitHub does not answer for holds up none of the others
+     * (A686); they are read, and the 503 names the accounts that failed.
+     *
      * @return array<string, mixed>
      *
      * @throws Problem 403, 409 `github_not_connected`, 503 `github_unavailable`
      */
-    public function handle(Actor $actor): array
+    public function handle(Actor $actor, ?GitHubApp $only = null): array
     {
         Authorize::check($actor, 'manageGitHub', Organization::class);
 
-        $apps = GitHubApp::query()->orderBy('owner_login')->orderBy('id')->get();
+        $apps = $only !== null ? collect([$only]) : GitHubApp::query()->orderBy('owner_login')->orderBy('id')->get();
         if ($apps->isEmpty()) {
             throw Problem::conflict('github_not_connected');
         }
 
-        try {
-            $apps->each(fn (GitHubApp $app) => self::pull($app));
-        } catch (GitHubUnavailable $e) {
-            report($e);
-
-            throw Problem::unavailable('github_unavailable');
+        $failed = [];
+        foreach ($apps as $app) {
+            try {
+                self::pull($app);
+            } catch (GitHubUnavailable $e) {
+                report($e);
+                $failed[] = $app->owner_login;
+            }
+        }
+        if ($failed !== []) {
+            throw Problem::unavailable('github_unavailable', __('problem.detail.github_sync_failed', ['logins' => implode(', ', $failed)]));
         }
 
         return GetGitHub::run($actor);

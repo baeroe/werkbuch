@@ -56,7 +56,11 @@ final class CompleteManifest
 
         return DB::transaction(function () use ($actor, $app): GitHubApp {
             CatalogLock::take();
-            StartManifest::refuseTaken((string) $app['owner_login']);
+            // GitHub created the app already: the account (another one than StartManifest named, or one that got its app
+            // meanwhile) is refused with the app to delete at GitHub (A686)
+            if (GitHubApp::query()->where('owner_login', $app['owner_login'])->exists()) {
+                throw Problem::conflict('github_connected', detail: __('problem.detail.github_account_connected_created', ['login' => $app['owner_login'], 'slug' => $app['slug']]));
+            }
 
             $created = GitHubApp::query()->create([...$app, 'created_by' => $actor->user->id]);
             EventRecorder::record(EventType::GitHubConnected, $actor, Organization::current(), null, [

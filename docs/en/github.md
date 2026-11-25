@@ -105,6 +105,8 @@ GitHub keeps the recent deliveries of the app with their answers: **Settings →
 
 ## Troubleshooting
 
+- **“The GitHub account has its app already” after creating an app:** you were signed in to GitHub as an account that has its app in werkbuch (or another than you named). GitHub created the app anyway; werkbuch names its slug. Delete it at GitHub under **Settings → Developer settings → GitHub Apps**, sign in with the right account and connect again.
+- **Read again names an account:** GitHub did not answer for the app of that account; the other apps were read. Check the app at GitHub (suspended, deleted) and read again.
 - **A repo is missing in the list:** add it under **Change repos on GitHub**, then **Read again**.
 - **Pull requests do not link:** the key belongs to another project, stands only in code, or the delivery did not arrive (see the recent deliveries).
 - **CI is not seen:** werkbuch reads check runs, workflow runs of GitHub Actions and commit statuses of the head commit. CI that sets none of the three stays invisible, and a missing permission (see [permissions](#permissions)) hides what it covers.

@@ -105,6 +105,8 @@ GitHub hält die letzten Zustellungen der App mit ihren Antworten: **Settings �
 
 ## Fehlersuche
 
+- **„Das GitHub-Konto hat seine App schon“ nach dem Anlegen:** Du warst bei GitHub mit einem Konto angemeldet, das in werkbuch schon seine App hat (oder mit einem anderen als angegeben). GitHub hat die App trotzdem angelegt; werkbuch nennt ihren Slug. Lösche sie bei GitHub unter **Settings → Developer settings → GitHub Apps**, melde dich mit dem richtigen Konto an und verbinde erneut.
+- **„Neu einlesen“ nennt ein Konto:** GitHub hat für die App dieses Kontos nicht geantwortet; die anderen Apps sind eingelesen. Prüf die App bei GitHub (ausgesetzt, gelöscht) und lies erneut ein.
 - **Ein Repo fehlt in der Liste:** Unter **Repos bei GitHub ändern** hinzufügen, dann **Neu einlesen**.
 - **Pull Requests verknüpfen sich nicht:** Der Key gehört zu einem anderen Projekt, steht nur in Code, oder die Zustellung kam nicht an (siehe die letzten Zustellungen).
 - **CI wird nicht gesehen:** werkbuch liest Check-Runs, Workflow-Läufe von GitHub Actions und Commit-Status des Head-Commits. Eine CI, die keins der drei setzt, bleibt unsichtbar, und eine fehlende Berechtigung (siehe [Berechtigungen](#berechtigungen)) verbirgt, was sie abdeckt.

@@ -17,6 +17,7 @@ use App\Support\Actor;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -118,6 +119,25 @@ it('reads every app with its own token and leaves the installations of the other
     };
     SyncGitHub::pull($second);
     expect(GitHubInstallation::query()->pluck('installation_id')->all())->toBe([55_000_001]);
+});
+
+it('reads the other apps when GitHub fails for one and names the one that failed', function () {
+    $second = $this->github->secondApp();
+    $this->github->repositories[55_000_002][] = FakeGitHub::repositoryJson(700_000_003, 'feldwerk-labs/docs');
+    // GitHub refuses the token of the installation of the first app
+    $this->github->refuse = ['/app/installations/55000001/access_tokens' => 502];
+    Exceptions::fake();
+
+    expect(fn () => SyncGitHub::run(Actor::system($this->admin, 'test')))
+        ->toThrow(fn (Problem $e) => expect([$e->getStatusCode(), $e->reason, $e->detail])->toBe([503, 'github_unavailable', __('problem.detail.github_sync_failed', ['logins' => 'feldwerk'])]))
+        ->and(GitHubRepository::query()->where('full_name', 'feldwerk-labs/docs')->exists())->toBeTrue();
+    Exceptions::assertReported(GitHubUnavailable::class);
+
+    // only one app: the others are not asked
+    $this->github->refuse = [];
+    $this->github->issued = [];
+    SyncGitHub::run(Actor::system($this->admin, 'test'), $second);
+    expect(collect($this->github->issued)->pluck('app_id')->unique()->all())->toBe([$second->app_id]);
 });
 
 it('says an instance without an app has nothing to sync', function () {

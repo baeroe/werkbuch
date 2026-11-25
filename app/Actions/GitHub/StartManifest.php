@@ -79,12 +79,12 @@ final class StartManifest
 
     /**
      * A state for a way back from GitHub (registering, installing; `purpose`), good for an hour and once, bound to the
-     * person.
+     * person and, for the way back from installing, to the app it installs (A686).
      */
-    public static function issueState(string $userId, string $purpose = 'manifest'): string
+    public static function issueState(string $userId, string $purpose = 'manifest', ?string $appId = null): string
     {
         $state = Str::random(40);
-        Cache::put(self::stateKey($state, $purpose), $userId, now()->addMinutes(self::STATE_MINUTES));
+        Cache::put(self::stateKey($state, $purpose), $appId === null ? $userId : $userId.'|'.$appId, now()->addMinutes(self::STATE_MINUTES));
 
         return $state;
     }
@@ -92,7 +92,22 @@ final class StartManifest
     /** Whether the state is the person's for this purpose; it is taken either way. */
     public static function takeState(mixed $state, string $userId, string $purpose = 'manifest'): bool
     {
-        return is_string($state) && Cache::pull(self::stateKey($state, $purpose)) === $userId;
+        return self::takeStateOf($state, $userId, $purpose) !== false;
+    }
+
+    /**
+     * Takes the state: `false` when it is not the person's for this purpose, else the ULID of the app it was given for
+     * (null for none).
+     */
+    public static function takeStateOf(mixed $state, string $userId, string $purpose = 'manifest'): string|false|null
+    {
+        $value = is_string($state) ? Cache::pull(self::stateKey($state, $purpose)) : null;
+        if (! is_string($value)) {
+            return false;
+        }
+        [$owner, $app] = array_pad(explode('|', $value, 2), 2, null);
+
+        return $owner === $userId ? $app : false;
     }
 
     public static function stateKey(string $state, string $purpose = 'manifest'): string

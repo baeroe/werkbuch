@@ -38,6 +38,9 @@ final class HandleGitHubDelivery
     /** The actions of a `pull_request` after which its head may be a commit werkbuch has no check runs of yet. */
     public const NEW_HEAD = ['opened', 'reopened', 'synchronize', 'ready_for_review'];
 
+    /** The events about a repo: worked only for a repo the app of the delivery reaches (A686). */
+    public const REPOSITORY_EVENTS = ['push', 'pull_request', 'check_run', 'check_suite'];
+
     /**
      * @throws GitHubUnavailable when GitHub does not answer the sync (the job tries again)
      */
@@ -51,7 +54,7 @@ final class HandleGitHubDelivery
         // the app that sent it (A680); gone since (disconnected), nothing of it is worked
         $app = $delivery->github_app_id === null ? null : GitHubApp::query()->find($delivery->github_app_id);
         $outcome = match (true) {
-            $app === null => 'ignored',
+            $app === null, ! self::reaches($app, $delivery) => 'ignored',
             in_array($delivery->event, ['installation', 'installation_repositories'], true) => self::sync($app),
             $delivery->event === 'push' => self::push($actor, $delivery->data()),
             $delivery->event === 'pull_request' => self::pullRequest($actor, $delivery->data()),
@@ -150,6 +153,21 @@ final class HandleGitHubDelivery
         }
 
         return $outcome;
+    }
+
+    /**
+     * Whether an event of a repo (`push`, `pull_request`, `check_*`) is about a repo the app of the delivery reaches
+     * (A686): only then its bot and its tokens are the ones of that repo. Other events are the app's own.
+     */
+    private static function reaches(GitHubApp $app, GitHubDelivery $delivery): bool
+    {
+        if (! in_array($delivery->event, self::REPOSITORY_EVENTS, true)) {
+            return true;
+        }
+        $repository = $delivery->data()['repository'] ?? null;
+        $id = is_array($repository) ? ($repository['id'] ?? null) : null;
+
+        return is_int($id) && GitHubApp::ofRepository($id)?->id === $app->id;
     }
 
     private static function sync(GitHubApp $app): string

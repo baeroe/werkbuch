@@ -107,7 +107,9 @@ it('refuses a state of another person, a broken code and a second app', function
     // the person registered under an account that has its app already (StartManifest named another one)
     $again = $start($admin, ['owner' => 'feldwerk-labs', 'owner_type' => 'Organization'])['state'];
     GitHubApp::factory()->create();
-    expect(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $again]))->toThrow(fn (Problem $e) => expect($e->reason)->toBe('github_connected'));
+    // GitHub created the app already: the sentence names it and the way to delete it (A686)
+    expect(fn () => CompleteManifest::run(Actor::system($admin, 'test'), ['code' => 'abc', 'state' => $again]))
+        ->toThrow(fn (Problem $e) => expect([$e->reason, $e->detail])->toBe(['github_connected', __('problem.detail.github_account_connected_created', ['login' => 'feldwerk', 'slug' => 'feldwerk-werkbuch'])]));
 });
 
 it('connects a second app for another GitHub account', function () use ($start) {

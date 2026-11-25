@@ -398,4 +398,10 @@ it('takes only a push of the bot of the app whose installation reaches the repo 
     expect($labs->fresh()->guarded())->toBeTrue()
         ->and($this->link->fresh()->guarded())->toBeFalse()
         ->and(GitHubDelivery::query()->sole()->outcome)->toBe('foreign');
+
+    // a push of a repo the app of the delivery does not reach is nothing of it (A686), whoever pushed
+    FakeGitHub::deliver($this, 'push', FakeGitHub::push(str_repeat('c', 40)), 'd-crossed', app: $second)->assertStatus(202);
+    (new ProcessGitHubDelivery(GitHubDelivery::query()->where('delivery_id', 'd-crossed')->value('id')))->handle();
+    expect(GitHubDelivery::query()->where('delivery_id', 'd-crossed')->value('outcome'))->toBe('ignored')
+        ->and($this->link->fresh()->guarded())->toBeFalse();
 });

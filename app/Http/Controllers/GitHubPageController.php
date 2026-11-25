@@ -35,7 +35,7 @@ final class GitHubPageController extends Controller
             return self::back($e);
         }
 
-        return redirect()->away(Manifest::installUrl($app->slug, StartManifest::issueState($actor->user->id, 'setup')));
+        return redirect()->away(Manifest::installUrl($app->slug, StartManifest::issueState($actor->user->id, 'setup', $app->id)));
     }
 
     public function setup(Request $request): RedirectResponse
@@ -64,7 +64,7 @@ final class GitHubPageController extends Controller
             return redirect('/settings/github');
         }
 
-        return redirect()->away(Manifest::installUrl($app->slug, StartManifest::issueState($actor->user->id, 'setup')));
+        return redirect()->away(Manifest::installUrl($app->slug, StartManifest::issueState($actor->user->id, 'setup', $app->id)));
     }
 
     /** Back to the settings with the sentence of the refusal. */

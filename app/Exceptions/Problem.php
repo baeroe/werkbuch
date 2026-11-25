@@ -103,9 +103,9 @@ final class Problem extends RuntimeException implements HttpExceptionInterface
     }
 
     /** A service the request needs does not answer (`search_unavailable`, `mail_failed`): 503, the text of the reason explains it. */
-    public static function unavailable(string $reason): self
+    public static function unavailable(string $reason, ?string $detail = null): self
     {
-        return new self(503, $reason);
+        return new self(503, $reason, $detail);
     }
 
     public function getStatusCode(): int

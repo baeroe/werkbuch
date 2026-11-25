@@ -51,7 +51,7 @@ it('brings a way back that fails to the settings with its sentence', function ()
     GitHubApp::factory()->create();
     $state = StartManifest::issueState($admin->id);
     $this->get('/github/manifest?code=abc123&state='.$state)->assertRedirect('/settings/github')
-        ->assertSessionHas('error', __('problem.detail.github_account_connected', ['login' => 'feldwerk']));
+        ->assertSessionHas('error', __('problem.detail.github_account_connected_created', ['login' => 'feldwerk', 'slug' => 'feldwerk-werkbuch']));
     expect(GitHubApp::query()->count())->toBe(1);
 });
 
@@ -84,6 +84,29 @@ it('reads the installation again only with the state werkbuch gave for the way b
     expect($fresh())->toBeFalse();
 });
 
+it('reads only the app of the installation GitHub names on the way back', function () {
+    $github = FakeGitHub::connected();
+    $second = $github->secondApp();
+    $first = GitHubApp::query()->where('owner_login', 'feldwerk')->sole();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $apps = fn () => collect($github->issued)->pluck('app_id')->unique()->values()->all();
+
+    // the installation werkbuch knows names its app, whatever app the state was given for
+    $this->get('/github/setup?installation_id=55000002&setup_action=update&state='.StartManifest::issueState($admin->id, 'setup', $first->id))->assertRedirect('/settings/github');
+    expect($apps())->toBe([$second->app_id]);
+
+    // a new installation: the app of the state
+    $github->issued = [];
+    $this->get('/github/setup?installation_id=55000099&setup_action=install&state='.StartManifest::issueState($admin->id, 'setup', $first->id))->assertRedirect('/settings/github');
+    expect($apps())->toBe([$first->app_id]);
+
+    // a state without an app (from before): every app
+    $github->issued = [];
+    $this->get('/github/setup?state='.StartManifest::issueState($admin->id, 'setup'))->assertRedirect('/settings/github');
+    expect($apps())->toBe([$first->app_id, $second->app_id]);
+});
+
 it('brings a way back from installing that GitHub does not answer to the settings with its sentence', function () {
     $github = FakeGitHub::connected();
     $github->refuse['/app/installations'] = 500;
@@ -91,7 +114,7 @@ it('brings a way back from installing that GitHub does not answer to the setting
     $this->actingAs($admin);
 
     $this->get('/github/setup?state='.StartManifest::issueState($admin->id, 'setup'))
-        ->assertRedirect('/settings/github')->assertSessionHas('error', __('problem.reason.github_unavailable'));
+        ->assertRedirect('/settings/github')->assertSessionHas('error', __('problem.detail.github_sync_failed', ['logins' => 'feldwerk']));
 });
 
 it('sends only an org admin to the installation of an app the instance has', function () {
