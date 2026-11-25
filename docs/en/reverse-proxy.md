@@ -123,6 +123,10 @@ server {
 
 AI agents reach the [MCP server](/en/mcp) under `APP_URL/mcp` with `POST` requests. Pass them unchanged, with `Authorization` and the headers `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name`. MCP clients send `Accept: application/json, text/event-stream`: don't remove `text/event-stream` from it. Today werkbuch answers every request as plain JSON; the protocol also allows a streamed answer (`text/event-stream`), which werkbuch would mark with `X-Accel-Buffering: no`, so don't buffer answers of `/mcp` and leave that header alone. The examples above need nothing extra for it.
 
+## Runners and GitHub
+
+[Runners](/en/runner) reach werkbuch under `APP_URL/runner/` (install script and binaries) and `APP_URL/api/runner/` (their protocol), [GitHub](/en/github) sends its webhooks to `APP_URL/github/webhook`. The examples above pass all of them. If your proxy puts a login or an IP allow list in front of werkbuch, let `/github/webhook` through without it (werkbuch checks GitHub's signature itself) and let the runners reach the other two, and allow bodies of 32 MB: GitHub sends up to 25 MB.
+
 ## Checklist
 
 - `APP_URL` starts with `https://` and has exactly the host the browser uses.

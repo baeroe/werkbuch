@@ -12,6 +12,7 @@ werkbuch läuft als Docker-Compose-Stack aus neun Diensten. Sechs davon kommen a
   - PHP-FPM im Web-Dienst, mit bis zu 20 Prozessen zu höchstens 512 MB. Eine Anfrage braucht meist 30 bis 60 MB, auf einem Host mit 2 GB aber `PHP_FPM_PM_MAX_CHILDREN=8` im `environment` von `werkbuch` setzen.
   - Vier Worker-Container: drei Queues und der Scheduler.
 - 10 GB Platte, dazu der Platz der Anhänge.
+- Nur für [Agenten](/de/concepts/agents): eine eigene Maschine als [Runner](/de/runner) und eine [GitHub-App](/de/github). Beides läuft nicht im Stack, und beides richtest du ein, sobald werkbuch läuft.
 
 Einstellungen wie diese beiden gehören in eine `docker-compose.override.yml` neben der `docker-compose.yml`; `docker compose` liest sie von selbst. In der Standalone-Datei stehen sie direkt bei den Diensten dort.
 

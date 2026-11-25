@@ -8,7 +8,7 @@ All work in the background goes through queues in the database. Three worker ser
 
 | Service | Queues, in this order | Does |
 |---|---|---|
-| `queue` | `mail`, `default`, `live`, `notifications`, `bulk` | hands every event to its consumers, sends the live updates to Reverb, writes the inbox and sends mails (sign-in mails first: invitations and password reset on the queue `mail`, then notifications), deletes projects, runs templates and the nightly automations |
+| `queue` | `mail`, `default`, `live`, `notifications`, `bulk` | hands every event to its consumers, sends the live updates to Reverb, writes the inbox and sends mails (sign-in mails first: invitations and password reset on the queue `mail`, then notifications), deletes projects, runs templates and the nightly automations, works off the deliveries of GitHub and moves the [agents](/en/concepts/agents) on (runs, reviews, merges) |
 | `queue-index` | `search`, `media` | keeps the search index in step with every change, makes the previews of uploaded pictures |
 | `queue-webhooks` | `webhooks` | delivers webhooks |
 
@@ -20,18 +20,19 @@ Run exactly one `queue-index`, never scale it: two workers on `search` can write
 
 | When | What |
 |---|---|
-| every minute | `app:redispatch-events` (events whose hand-over got lost), `app:send-notification-mails` (collected mails that lost their job), `app:run-templates` (templates whose schedule is due) |
-| every hour | the reminders of what is due (at 08:00 in the time zone of each person), the nightly automations auto-archive and auto-close (at 03:00 in the time zone of the organization), pruning read notifications, uploads nobody took and the webhook log |
+| every minute | `app:redispatch-events` (events whose hand-over got lost), `app:send-notification-mails` (collected mails that lost their job), `app:run-templates` (templates whose schedule is due), runs of agents that lost their runner or ran out of time, strands of agents that wait for GitHub (a pull request, checks) |
+| every hour | the reminders of what is due (at 08:00 in the time zone of each person), the nightly automations auto-archive and auto-close (at 03:00 in the time zone of the organization), pruning read notifications, uploads nobody took, the webhook log, the logs of runs and the deliveries of GitHub (both after 30 days) |
 
 Without the scheduler there are no reminders, no scheduled templates, no nightly automations and no clean-up; changes, mails and webhooks still go out through the workers. `docker compose ps` shows whether every service is healthy.
 
 ## Outbound connections
 
-Only three things leave the stack:
+Only four things leave the stack:
 
 - **Webhook deliveries** from `queue-webhooks`, to the address and port of each webhook. The test ping and **Send again** run in the request of the person who clicks them, so they go out from `werkbuch`.
 - **Mail** over SMTP to `MAIL_HOST` and `MAIL_PORT`: notification mails, invitations and password resets from `queue`, the test mail of the [system page](#system-page) from `werkbuch`.
-- **Name lookups** of the receivers and of the mail server, through Docker's DNS.
+- **GitHub:** calls to `api.github.com` (port 443) once a [GitHub app](/en/github) is connected: tokens for runs, pull requests, checks, reviews and merges, from `queue` and `werkbuch`.
+- **Name lookups** of the receivers, the mail server and GitHub, through Docker's DNS.
 
 werkbuch never sends through a proxy: `HTTP_PROXY` and `HTTPS_PROXY` of the environment are ignored for webhooks, since a proxy would look the name up itself and get round the check of the address ([Webhooks](/en/webhooks#private-networks)). An outbound proxy is not supported in this version. Meilisearch runs with `MEILI_NO_ANALYTICS`, and `mariadb`, `meilisearch` and `reverb` sit in the internal network `backend` without any way out.
 
@@ -43,7 +44,7 @@ networks:
     enable_ipv6: true
 ```
 
-**Firewall:** inbound, only the published port of `werkbuch` (`7740`) has to be open, and only for your reverse proxy. Outbound, the containers need DNS, the port of your mail server and the ports of your webhook receivers (usually 443). Docker routes the traffic of containers past the `INPUT` and `OUTPUT` rules of the host, ufw included; rules for containers belong in the `DOCKER-USER` chain.
+**Firewall:** inbound, only the published port of `werkbuch` (`7740`) has to be open, and only for your reverse proxy. Outbound, the containers need DNS, the port of your mail server, the ports of your webhook receivers (usually 443) and, with GitHub, `api.github.com:443`. With GitHub connected, its webhooks come in on the published port through your proxy as well. Docker routes the traffic of containers past the `INPUT` and `OUTPUT` rules of the host, ufw included; rules for containers belong in the `DOCKER-USER` chain.
 
 ## Private webhook targets
 
@@ -95,6 +96,21 @@ What the log can still hold:
 - The error log of nginx (also stderr) names the whole request line, query string included, when nginx itself refuses or fails a request: a body over its size limit, PHP-FPM or Reverb not answering. For an upload of an MCP agent that is a signed address which is valid for 15 minutes at most; for an invitation it is the link itself, which stays open until it is accepted or expires after 7 days (invite the same address again to close the old link). Treat the logs as confidential.
 
 `LOG_OUTPUT_LEVEL=debug` of the base image is not supported in werkbuch's image: its debug files belong to root, so that a fault of the app can never rewrite the configuration PHP reads at its next start.
+
+## Runners and GitHub
+
+The image carries the [runner](/en/runner) of its own version for macOS and Linux, `arm64` and `amd64`, and hands it out without a sign-in: the binary is no secret.
+
+| Path | Who | Limit |
+|---|---|---|
+| `GET /runner/install.sh`, `GET /runner/download/<os>/<arch>` and `….sha256` | the install script and the self-update of runners | 30 requests a minute per address |
+| `POST /api/runner/pair` | a runner with a one-time code | 10 a minute per address |
+| `/api/runner/*` | runners with their token: fetch runs, heartbeat, log, result | 3000 a minute per runner |
+| `POST /github/webhook` | GitHub, signed with the secret of the app, bodies up to 25 MB | 60 unsigned requests a minute per address |
+
+Runners call werkbuch, never the other way round: the runner protocol needs no open port at the runner. Behind your proxy these paths need nothing of their own, but `/github/webhook` has to be reachable from the internet even when the rest is not ([GitHub](/en/github#the-webhook-behind-the-proxy)).
+
+The private key and the webhook secret of the GitHub app are stored encrypted with `APP_KEY`; without `storage/app/.app-key` from the [backup](/en/backup) the app has to be connected anew. The log of each run stays in the database for 30 days, at most 2000 lines or 1 MB per run, tokens cut out; the deliveries of GitHub stay 30 days as well. The runners write their own log on their machine.
 
 ## Configuration in a running container
 
