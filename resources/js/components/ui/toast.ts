@@ -8,6 +8,8 @@ type ToastBase = {
   /** What the toast is about (`reaction:<comment>:<emoji>`): only an error with the same subject refreshes this one. */
   subject?: string;
   action?: ToastAction;
+  /** The action stands below the text instead of beside it: a long message keeps the width of the toast (A721). */
+  stack?: boolean;
   /** Milliseconds until the toast closes on its own. */
   duration?: number;
 };

@@ -218,4 +218,12 @@ describe('ToastCard', () => {
     // the card is not in the store: its action does nothing, and nothing breaks
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  it('puts the action of a long message below its text (A721)', () => {
+    render(<ToastCard item={{ id: 98, title: 'GitHub hat nicht geantwortet.', tone: 'error', duration: 20000, stack: true, action: { label: 'Apps bei GitHub öffnen', onClick: vi.fn() } }} />);
+
+    const button = screen.getByRole('button', { name: 'Apps bei GitHub öffnen' });
+    // below the title, in the column of the text
+    expect(button.parentElement).toBe(screen.getByText('GitHub hat nicht geantwortet.').parentElement);
+  });
 });

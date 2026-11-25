@@ -50,26 +50,21 @@ export function ToastCard({ item, className, ...rest }: { item: Omit<Toast, 'kee
   return (
     <div
       className={cx(
-        'tracing-strong pointer-events-auto relative flex w-full max-w-sm animate-toast-in items-center gap-2.5 overflow-hidden rounded-card py-1.5 pr-1.5 pl-3 text-ui [--glass-shadow:var(--elev-2)]',
+        'tracing-strong pointer-events-auto relative flex w-full max-w-sm animate-toast-in gap-2.5 overflow-hidden rounded-card py-1.5 pr-1.5 pl-3 text-ui [--glass-shadow:var(--elev-2)]',
+        item.stack ? 'items-start' : 'items-center',
         className,
       )}
       {...rest}
     >
-      {item.tone === 'success' && <CircleCheck className="size-4 shrink-0 text-st-completed" aria-hidden="true" />}
-      {item.tone === 'error' && <CircleAlert className="size-4 shrink-0 text-danger" aria-hidden="true" />}
+      {item.tone === 'success' && <CircleCheck className={cx('size-4 shrink-0 text-st-completed', item.stack && 'mt-2')} aria-hidden="true" />}
+      {item.tone === 'error' && <CircleAlert className={cx('size-4 shrink-0 text-danger', item.stack && 'mt-2')} aria-hidden="true" />}
       <div className="min-w-0 flex-1 py-1">
         <p className={cx('font-medium break-words text-pretty', item.tone === 'error' ? 'text-danger' : 'text-ink')}>{item.title}</p>
         {item.description && <p className="mt-0.5 text-sm break-words text-pretty text-muted">{item.description}</p>}
+        {/* a long message keeps its width: the action stands below it */}
+        {item.stack && item.action && <ToastActionButton id={item.id} label={item.action.label} className="mt-1 -ml-2" />}
       </div>
-      {item.action && (
-        <button
-          type="button"
-          onClick={() => runToastAction(item.id)}
-          className="inline-flex h-11 shrink-0 cursor-pointer items-center rounded-ctl px-2 text-ui font-semibold text-accent-text transition-colors duration-120 hover:bg-hover md:h-7"
-        >
-          {item.action.label}
-        </button>
-      )}
+      {!item.stack && item.action && <ToastActionButton id={item.id} label={item.action.label} />}
       <IconButton icon={X} label={t('ui.toaster.close')} tooltip={false} onClick={() => dismissToast(item.id)} />
       {/* a new round (the same error again) draws the time line anew */}
       <span
@@ -79,5 +74,20 @@ export function ToastCard({ item, className, ...rest }: { item: Omit<Toast, 'kee
         className="absolute inset-x-0 bottom-0 h-0.5 origin-left animate-drain bg-line-strong group-data-paused:[animation-play-state:paused]"
       />
     </div>
+  );
+}
+
+function ToastActionButton({ id, label, className }: { id: number; label: string; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => runToastAction(id)}
+      className={cx(
+        'inline-flex h-11 shrink-0 cursor-pointer items-center rounded-ctl px-2 text-ui font-semibold text-accent-text transition-colors duration-120 hover:bg-hover md:h-7',
+        className,
+      )}
+    >
+      {label}
+    </button>
   );
 }

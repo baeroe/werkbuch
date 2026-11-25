@@ -41,7 +41,7 @@ function useFlash(): void {
     if (flash.status) toast({ title: flash.status, tone: 'success' });
     const link = flash.error_link;
     if (flash.error && link) {
-      toast({ title: flash.error, tone: 'error', duration: FLASH_LINK_MS, action: { label: link.label, onClick: () => window.open(link.url, '_blank', 'noopener,noreferrer') } });
+      toast({ title: flash.error, tone: 'error', duration: FLASH_LINK_MS, stack: true, action: { label: link.label, onClick: () => window.open(link.url, '_blank', 'noopener,noreferrer') } });
     } else if (flash.error) toast({ title: flash.error, tone: 'error' });
   }, [flash]);
 }
