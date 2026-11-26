@@ -291,8 +291,8 @@ func TestReview(t *testing.T) {
 	if _, err := os.Stat(e.Summary().Dir); !os.IsNotExist(err) {
 		t.Fatal("the worktree of a review goes after the run")
 	}
-	if _, err := os.Stat(torn); err != nil {
-		t.Fatal("the teardown command did not run")
+	if _, err := os.Stat(torn); err == nil {
+		t.Fatal("a review has no teardown (and no setup)")
 	}
 	// no shell for a review: the runner hands it the diff and the log of the pull request
 	diff, _ := os.ReadFile(filepath.Join(kept, "pull-request.diff"))
@@ -505,23 +505,37 @@ func TestANaturalEndKeepsItsStatusAndEndsTheGroup(t *testing.T) {
 	}
 }
 
-func TestSetupAndTeardownSeeTheWorktree(t *testing.T) {
-	// a setup command names its own project after the strand (A670), the teardown removes the same one
+func TestSetupRunsInEveryCodeRunOfAStrandAndTeardownStaysForLightOnes(t *testing.T) {
 	w := newWorld(t)
-	torn := filepath.Join(t.TempDir(), "teardown")
-	run := w.run("01vars", protocol.Review, "review", func(r *protocol.Run) {
-		r.HeadSHA = str(gitIn(t, w.origin, "rev-parse", "HEAD"))
-		r.SetupCommand = str(`echo "project werkbuch-$WERKBUCH_STRAND in $WERKBUCH_WORKTREE"`)
-		r.TeardownCommand = str(`printf '%s|%s' "$WERKBUCH_WORKTREE" "$WERKBUCH_STRAND" > ` + torn)
-	})
-	e, _ := w.execute(run)
+	counter := filepath.Join(t.TempDir(), "setups")
+	torn := filepath.Join(t.TempDir(), "torn")
+	same := func(r *protocol.Run) {
+		r.Thread.ID = "strand"
+		r.SetupCommand = str("echo x >> " + counter)
+		r.TeardownCommand = str("touch " + torn)
+	}
+	w.execute(w.run("01a", protocol.Task, "answer", same))
+	e, _ := w.execute(w.run("01b", protocol.Correction, "answer", same))
 	dir := e.Summary().Dir
-	if !strings.Contains(w.texts(run.ID), "setup: project werkbuch-run-01vars in "+dir) {
-		t.Fatalf("%s\n%s", dir, w.texts(run.ID))
+	// a light run in the worktree of the strand: no setup, and it does not erase the teardown
+	w.execute(w.run("01c", protocol.Comment, "answer", same))
+	if data, _ := os.ReadFile(counter); strings.Count(string(data), "x") != 2 {
+		t.Fatalf("setup ran %q times for task, correction and comment", data)
 	}
-	data, _ := os.ReadFile(torn)
-	if string(data) != dir+"|run-01vars" {
-		t.Fatalf("teardown saw %q (%s)", data, dir)
+	if err := w.x.Git.Remove(context.Background(), dir, w.x.Teardown); err != nil {
+		t.Fatal(err)
 	}
-	t.Logf("setup said: project werkbuch-run-01vars in %s; teardown saw: %s", dir, data)
+	if _, err := os.Stat(torn); err != nil {
+		t.Fatal("the teardown did not run when the worktree of the strand went")
+	}
+}
+
+func TestAFailedSetupEndsTheRunWithItsMessage(t *testing.T) {
+	w := newWorld(t)
+	run := w.run("01bad", protocol.Task, "answer", func(r *protocol.Run) { r.SetupCommand = str("echo broken; exit 3") })
+	w.execute(run)
+	res := w.fake.State(run.ID).Result
+	if res.Status != protocol.Failed || !strings.Contains(w.texts(run.ID), "setup: broken") {
+		t.Fatalf("%+v\n%s", res, w.texts(run.ID))
+	}
 }
