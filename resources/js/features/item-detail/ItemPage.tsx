@@ -9,9 +9,9 @@
  * loaded before; any other failure shows an error with "Erneut versuchen", or keeps the item when it was loaded.
  */
 
-import { CopyKey } from '@/components/items/CopyKey';
 import { router, usePage } from '@inertiajs/react';
 import { useEffect } from 'react';
+import { CopyKey } from '@/components/items/CopyKey';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { TypeTab } from '@/components/ui/TypeTab';

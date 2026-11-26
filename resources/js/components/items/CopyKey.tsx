@@ -11,7 +11,7 @@ export function CopyKey({ itemKey, className, children }: { itemKey: string; cla
       type="button"
       aria-label={t('items.key.copy', { key: itemKey })}
       title={t('items.key.copy', { key: itemKey })}
-      className={cx('cursor-copy rounded-chip', className)}
+      className={cx('cursor-copy rounded-chip focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-(--focus-ring) focus-visible:[box-shadow:var(--focus-halo)]', className)}
       onClick={(event) => {
         void copyOrSelect(itemKey, event.currentTarget).then((result) =>
           toast(result === 'copied' ? { title: t('common.copied'), tone: 'success' } : { title: t('settings.tokens.copy_failed'), tone: 'error' }),

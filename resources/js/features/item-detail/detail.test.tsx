@@ -649,6 +649,14 @@ describe('properties in the detail', () => {
     expect(await within(await screen.findByRole('region', { name: 'Properties' })).findByText('Umgebung')).toBeTruthy();
   });
 
+  it('copies the key from the tab of the preview', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderWith(<ItemPeek itemId="wi_web_47" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'WEB-47 kopieren' }));
+    expect(writeText).toHaveBeenCalledWith('WEB-47');
+  });
+
   it('shows no properties section for a type without properties', async () => {
     typeList = types.map((type) => (type.id === 't_bug' ? { ...type, properties: [] } : type));
     renderWith(<ItemPeek itemId="wi_web_47" />);

@@ -18,11 +18,11 @@
  * the preview.
  */
 
-import { CopyKey } from '@/components/items/CopyKey';
 import { FileQuestionMark } from 'lucide-react';
 import type { RefObject } from 'react';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { CopyKey } from '@/components/items/CopyKey';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { TypeTab } from '@/components/ui/TypeTab';
