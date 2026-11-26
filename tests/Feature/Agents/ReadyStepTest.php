@@ -89,3 +89,50 @@ it('begins like before without the step ready', function () {
 
     expect(AgentRun::query()->count())->toBe(1)->and(ItemAgentState::of($item->fresh())['ready_state'])->toBeNull();
 });
+
+it('begins an item of the bot that stands in Reopened without a strand like one from Todo', function () use ($move) {
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Reopened']]);
+    UpdateWorkItem::run(actor($this->mara), $item, ['assignee_id' => $this->kira->id]);
+
+    $moved = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Backlog'], 'assignee_id' => $this->kira->id]);
+    $move($this, $moved, 'Reopened');
+
+    expect(AgentRun::query()->where('work_item_id', $item->id)->count())->toBe(1)
+        ->and(AgentRun::query()->where('work_item_id', $moved->id)->count())->toBe(1);
+});
+
+it('corrects the strand with a PR when a person moves the item to Reopened, and starts no second task', function () use ($move) {
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
+    UpdateWorkItem::run(actor($this->mara), $item, ['assignee_id' => $this->kira->id]);
+    $thread = AgentThread::query()->sole();
+    $thread->forceFill(['pr_number' => 7])->save();
+    AgentRun::query()->update(['status' => 'succeeded']);
+
+    $move($this, $item, 'Reopened');
+
+    expect(AgentRun::query()->where('type', 'task')->count())->toBe(1)
+        ->and(AgentRun::query()->where('type', 'correction')->count())->toBe(1);
+});
+
+it('leaves an item with a running task and no PR alone when it is moved back to Todo', function () use ($move) {
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
+    UpdateWorkItem::run(actor($this->mara), $item, ['assignee_id' => $this->kira->id]);
+    $move($this, $item, 'In Progress');
+    $move($this, $item, 'Todo');
+
+    expect(AgentRun::query()->count())->toBe(1);
+});
+
+it('takes up a child of an epic in Reopened and does not wait for a child that is started or somebody else\'s', function () {
+    $epic = WorkItem::factory()->for($this->project)->epic()->create(['state_id' => $this->states['Todo']]);
+    $reopened = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Reopened']]);
+    WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Backlog'], 'assignee_id' => $this->mara->id]);
+    $started = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['In Progress']]);
+
+    UpdateWorkItem::run(actor($this->mara), $epic, ['assignee_id' => $this->kira->id]);
+    $thread = AgentThread::query()->sole();
+
+    expect(AgentRun::query()->sole()->work_item_id)->toBe($reopened->id)
+        ->and(StartTask::waitsForReady($thread, $epic->fresh(), $this->kira))->toBeFalse();
+    expect($started->fresh()->state_id)->toBe($this->states['In Progress']);
+});

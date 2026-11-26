@@ -170,6 +170,10 @@ final class FollowEvent
      */
     private static function begin(Actor $actor, Event $event, WorkItem $item): string
     {
+        if (AgentFlow::threadAt($item->id) !== null) {
+            return 'ignored';
+        }
+
         $bot = $item->assignee_id === null ? null : User::query()->find($item->assignee_id);
         if ($bot !== null && $bot->isBot() && StartTask::run($actor, $item, $bot, $event->id) !== null) {
             return 'task';

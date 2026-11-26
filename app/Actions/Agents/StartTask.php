@@ -99,7 +99,13 @@ final class StartTask
     /** Whether open children wait for Todo: the epic is not ready while some do (A772). */
     public static function waitsForReady(AgentThread $thread, WorkItem $epic, User $bot): bool
     {
-        return self::readyStates($epic) !== null && self::candidates($thread, $epic, $bot)->exists();
+        $ready = self::readyStates($epic);
+
+        // only children still in Backlog or Unstarted wait for Todo; a child that is started or failed is not waited for
+        return $ready !== null && self::candidates($thread, $epic, $bot)
+            ->whereNotIn('state_id', $ready)
+            ->whereHas('state', fn ($query) => $query->whereIn('category', [StateCategory::Backlog->value, StateCategory::Unstarted->value]))
+            ->exists();
     }
 
     /** @return Builder<WorkItem> */
