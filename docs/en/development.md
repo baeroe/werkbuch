@@ -76,6 +76,17 @@ ddev exec pnpm --dir docs build                           # these docs
 
 Tests use their own database `testing`, which DDEV creates on start. The tests in `tests/Integration` also need Meilisearch running (`ddev describe` lists the service `meilisearch`); they use the index prefix `testing_` and never touch the indexes of the app. All other tests search a fake engine in memory. `ddev exec` passes its arguments through a shell: wrap commands with glob patterns in single quotes.
 
+### Continuous integration
+
+`.github/workflows/tests.yml` runs on every pull request and every push to `main`. The ruleset of `main` asks for one check, `tests`; it is a gate over the jobs that do the work and fails as soon as one of them did not pass:
+
+- `lint` runs Pint (`--parallel`), Larastan, `tsc` and the build, without coverage.
+- `pest (<n>/8)` runs Pest on eight runners, each with its own MariaDB, Meilisearch, Mailpit and Gotenberg: `vendor/bin/pest --shard=<n>/8 --coverage-php=…`. Pest balances the test classes by their times in `tests/.pest/shards.json`; a class the file does not know goes to the shards in turn. When the shards drift apart (one takes much longer than the others), write the file anew from the times of a CI run: `gh run download <run> --pattern 'pest-times-*' --dir /tmp/times && php scripts/pest-shards.php /tmp/times/*/*.xml` (or from a local run, `ddev exec vendor/bin/pest --update-shards`).
+- `e2e-build` runs Vitest with coverage and its thresholds per folder, once for the gate and for the merged frontend coverage.
+- `tests` waits for the three, fails if one of them failed or was skipped, and merges the coverage of the eight shards (`php scripts/pest-coverage.php coverage/pest 8`): below 100 % of the lines of `app/` it names every file with the lines no test ran.
+
+`ddev artisan test --coverage --min=100` stays the same check in one run. The other jobs are no required check: the e2e suite (below), `docs`, `runner` and `clickdummy` on every run, `load` and `image` on a pull request only when it touches what they check (`scripts/ci-changes.sh`: the load suite for `app/`, `database/`, `config/`, `routes/`, `bootstrap/`, `tests/Load/` and the Composer files; the image for the Dockerfile, `docker/`, the compose files, the runner and the manifests of the dependencies; both for the workflow itself) and always on `main`.
+
 ### Browser tests and merged coverage
 
 The Playwright suite in `e2e/` runs on your machine against the DDEV site, because the browsers are native binaries and the `node_modules` of the app belong to the container. `e2e/` is a pnpm project of its own.
@@ -127,7 +138,7 @@ The seeder writes the demo catalog, 30 people `load-NN@example.com` (`load-01` i
 
 At the end the suite prints a table of every row (median, the three runs, the queries, the peak of memory of a row that runs once, the queries against 100 items and for the smaller answer) and writes it to `storage/logs/load-budget.md`. A row the constant `OVER_BUDGET` in `ApiLoadTest` names (`'<row>' => 'Task <n>: <reason>'`) still runs and shows up in the table; only its median is not checked, its queries are. A test makes sure the constant names only rows that exist.
 
-In GitHub Actions the job `load` runs the suite next to `tests` on every pull request, with its own MariaDB (database `load`) and Meilisearch. It is no required check; the table is the artifact `load-budget`. Before the suite, the job sets the buffer pool of its MariaDB to 1 GiB (`SET GLOBAL innodb_buffer_pool_size`), as DDEV has it; the image's 128 MiB would not hold the 580 MB of data. Like `tests` and the e2e jobs, it also sets `max_allowed_packet` to 64 MiB, as the stack has it. Its runner is still slower than DDEV, so a median close to the budget there is worth a look.
+In GitHub Actions the job `load` runs the suite on every push to `main` and on a pull request that changes the app, the database or the suite, with its own MariaDB (database `load`) and Meilisearch. It is no required check; the table is the artifact `load-budget`. Before the suite, the job sets the buffer pool of its MariaDB to 1 GiB (`SET GLOBAL innodb_buffer_pool_size`), as DDEV has it; the image's 128 MiB would not hold the 580 MB of data. Like the Pest shards and the e2e jobs, it also sets `max_allowed_packet` to 64 MiB, as the stack has it. Its runner is still slower than DDEV, so a median close to the budget there is worth a look.
 
 Never run the load suite at the same time as the other tests or the browser tests: they share MariaDB, Meilisearch and the CPU of the VM, and the measurements would be off.
 
