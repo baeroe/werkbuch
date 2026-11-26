@@ -415,7 +415,7 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 			return failed("gh: " + err.Error()), ""
 		}
 		defer empty.Remove()
-		cmd.Env = append(os.Environ(), git.ClosedEnv(empty.Dir)...)
+		cmd.Env = append(withoutGitAuth(os.Environ()), git.ClosedEnv(empty.Dir)...)
 	}
 	cmd.Env = append(cmd.Env,
 		"WERKBUCH_RUN_ID="+run.ID,
@@ -668,4 +668,18 @@ func (t *tail) String() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return string(t.buf)
+}
+
+// withoutGitAuth drops what an environment of the daemon (or of a run it sits in) may hold of git's credential setup,
+// so a light run sees only ClosedEnv: GIT_CONFIG_COUNT/KEY_n/VALUE_n entries and the token file.
+func withoutGitAuth(env []string) []string {
+	var out []string
+	for _, kv := range env {
+		if strings.HasPrefix(kv, git.TokenFileEnv+"=") || strings.HasPrefix(kv, "GIT_CONFIG_COUNT=") ||
+			strings.HasPrefix(kv, "GIT_CONFIG_KEY_") || strings.HasPrefix(kv, "GIT_CONFIG_VALUE_") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
