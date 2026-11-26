@@ -20,6 +20,7 @@ use App\Models\PersonalAccessToken;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Actor;
+use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -58,8 +59,11 @@ it('extends the lease with every heartbeat and tells the runner of a cancel', fu
     [$run] = $claimed();
     $this->travel(40)->seconds();
 
-    $beat($run)->assertOk()->assertJsonPath('cancel', false)
-        ->assertJsonPath('lease_expires_at', now()->addSeconds(Protocol::LEASE_SECONDS)->startOfSecond()->toJSON())
+    $lease = $beat($run)->assertOk()->assertJsonPath('cancel', false)
+        ->assertJsonPath('deadline_at', $run->deadline()?->toJSON())->json('lease_expires_at');
+    // the lease has microseconds now: within a second of the expected moment
+    expect(abs(CarbonImmutable::parse($lease)->diffInSeconds(now()->addSeconds(Protocol::LEASE_SECONDS))))->toBeLessThan(1);
+    $beat($run)->assertOk()
         ->assertJsonPath('deadline_at', $run->deadline()?->toJSON());
 
     $person = User::factory()->admin()->create();
