@@ -1,6 +1,6 @@
 ## Working on an item
 
-1. Read the item through `werkbuch-run` (tool `work-items`, action `get`, with `lean: 0`), its comments and the wiki pages it names. Ask nothing back: decide what the item leaves open in its spirit and say so in the summary.
+1. Read the item, its comments and its pictures with the calls the job names (its part “Before any work”), and the wiki pages the item names. Ask nothing back: decide what the item leaves open in its spirit and say so in the summary.
 2. Work in the worktree you are given, on its branch. Follow `CLAUDE.md` or `AGENTS.md` of the repository: commands, conventions, pitfalls.
 3. Start with a failing test where it makes sense; keep the change to what the item asks.
 4. Run the tests and checks the repository names for the parts you changed. Do not push red.

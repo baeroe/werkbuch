@@ -115,7 +115,7 @@ werkbuch builds the prompt of every run in layers, in this order:
 2. **Working rules per kind of run** for the whole organization, under **Settings → Agents**: prefilled with the standard of werkbuch in the language of the organization, **Restore the standard** per kind. Org admins change them.
 3. **Guidance for agents** of the item's type, in the type dialog.
 4. **Project information and rules for agents**, under **Project settings → Agents**.
-5. **The run:** the item with its key and title, and the epic with its siblings for a child.
+5. **The run:** the item with its key and title, the calls of `werkbuch-run` that read the item (with its files and relations, and the epic of a child), its comments page by page and its pictures (`attachments` with `content` gives a PNG, JPEG, GIF or WebP as an image), with their arguments word for word, and the epic with its siblings for a child. The text of the item is not in the prompt: the contract tells every run to read it before any work and, when reading fails a second time, to change nothing and say which call failed.
 
 The CLI also reads the rules of the code in the repo (`CLAUDE.md`, `AGENTS.md`). Commands and conventions belong there, the texts in werkbuch say how to work. There is no instruction per bot.
 

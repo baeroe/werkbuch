@@ -115,7 +115,7 @@ werkbuch baut den Prompt jedes Auftrags in Schichten, in dieser Reihenfolge:
 2. **Arbeitsregeln je Auftragstyp** für die ganze Organisation, unter **Einstellungen → Agenten**: vorbelegt mit dem Standard von werkbuch in der Sprache der Organisation, **Standard wiederherstellen** je Typ. Ändern dürfen Org-Admins.
 3. **Vorgehen für Agenten** des Typs des Items, im Typ-Dialog.
 4. **Projektinformationen und Regeln für Agenten**, unter **Projekteinstellungen → Agenten**.
-5. **Der Auftrag:** das Item mit Key und Titel, bei einem Kind dazu das Epic mit seinen Geschwistern.
+5. **Der Auftrag:** das Item mit Key und Titel, die Aufrufe von `werkbuch-run`, die das Item (mit Dateien und Relationen, bei einem Kind dazu das Epic), seine Kommentare Seite für Seite und seine Bilder lesen (`attachments` mit `content` gibt ein PNG, JPEG, GIF oder WebP als Bild), mit ihren Argumenten wörtlich, bei einem Kind dazu das Epic mit seinen Geschwistern. Der Text des Items steht nicht im Prompt: Der Vertrag sagt jedem Auftrag, ihn vor jeder Arbeit zu lesen und, wenn das Lesen ein zweites Mal scheitert, nichts zu ändern und zu sagen, welcher Aufruf scheiterte.
 
 Das CLI liest außerdem die Regeln des Codes im Repo (`CLAUDE.md`, `AGENTS.md`). Kommandos und Konventionen gehören dorthin, die Texte in werkbuch sagen, wie gearbeitet wird. Eine Anweisung je Bot gibt es nicht.
 

@@ -1799,6 +1799,7 @@
     "problem.detail.agent_rules_admins_only": "Die Arbeitsregeln der Agenten ändern nur Org-Admins.",
     "problem.detail.agents_admins_only": "Agenten richten nur Org-Admins ein.",
     "problem.detail.already_member": "Du bist schon Mitglied von :identifier.",
+    "problem.detail.attachment_content_too_large": "Das Bild ist größer als :max MB; sieh es dir im Browser an.",
     "problem.detail.attachment_inline": "Bilder und Dateien im Text verschwinden mit dem Text; aufgeräumt wird mit app:prune-attachments.",
     "problem.detail.automations_admins_only": "Automatisierungen ändern nur Admins des Projekts.",
     "problem.detail.bot_settings_admins_only": "Beschreibung und verantwortliche Person eines Bots ändern nur Org-Admins.",

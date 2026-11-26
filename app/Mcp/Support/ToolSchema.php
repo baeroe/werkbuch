@@ -36,12 +36,13 @@ final class ToolSchema
 
     /**
      * The input schema of a tool with these actions. A tool with one action has no argument `action`; its own required
-     * arguments are required then.
+     * arguments are required then. A tool with a default action (`$default`, A771) takes a call without `action` as
+     * that one: `action` is not required then, only what every action needs.
      *
      * @param  list<McpAction>  $actions
      * @return array<string, mixed>
      */
-    public static function input(array $actions): array
+    public static function input(array $actions, ?string $default = null): array
     {
         $properties = [];
         $required = $actions[0]->required ?? [];
@@ -53,6 +54,10 @@ final class ToolSchema
                 'description' => "What to do:\n".implode("\n", array_map(self::line(...), $actions)),
             ];
             $required = ['action'];
+            if ($default !== null) {
+                $properties['action']['default'] = $default;
+                $required = array_values(array_intersect(...array_map(fn (McpAction $action): array => $action->required, $actions)));
+            }
         }
 
         $properties = [...$properties, ...self::arguments($actions)];

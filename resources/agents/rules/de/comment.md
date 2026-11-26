@@ -1,5 +1,6 @@
 ## Eine Frage beantworten
 
+- Item und Kommentare mit den Aufrufen lesen, die der Auftrag nennt (sein Teil „Before any work“), vor der Antwort.
 - Kurz und direkt antworten, in der Sprache der Frage.
 - Die Antwort aus Wiki, Items und Code des Projekts nehmen und sagen, wo sie steht.
 - Wer es nicht weiß, sagt es und nennt, was beim Herausfinden hilft.

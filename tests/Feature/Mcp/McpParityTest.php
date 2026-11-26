@@ -47,7 +47,7 @@ it('reads what REST reads', function (string $suite, string $key) {
     expect($result['isError'])->toBeFalse((string) json_encode($result))
         // `meta.path` of a list included: the path of the twin, not of /mcp
         ->and($result['structuredContent'])->toBe(Output::markdown($body));
-})->with(ToolRows::dataset(write: false));
+})->with(array_filter(ToolRows::dataset(write: false), fn (array $row) => ! isset(ToolRows::READS_WITHOUT_TWIN[$row[1]])));
 
 /**
  * Calls a write row with the given arguments and checks its answer: a success in the shape of the first success of

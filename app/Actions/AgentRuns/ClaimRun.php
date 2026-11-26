@@ -303,7 +303,7 @@ final class ClaimRun
             'teardown_command' => $settings->teardown_command,
             'commit_identity' => ['name' => $bot->name, 'email' => $bot->handle.'@users.noreply.'.(is_string($host) ? $host : 'localhost')],
             ...RunPrompts::for($run),
-            'werkbuch' => ['mcp_url' => url('/mcp'), 'server_name' => 'werkbuch-run', 'token' => $token],
+            'werkbuch' => ['mcp_url' => url('/mcp'), 'server_name' => Protocol::MCP_SERVER, 'token' => $token],
             'git' => $git,
         ];
     }

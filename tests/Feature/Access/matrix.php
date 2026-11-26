@@ -53,6 +53,7 @@ use App\Actions\Attachments\GetAttachment;
 use App\Actions\Attachments\IssueUploadUrl;
 use App\Actions\Attachments\PruneAttachments;
 use App\Actions\Attachments\PruneUnownedAttachments;
+use App\Actions\Attachments\ReadAttachmentContent;
 use App\Actions\Attachments\ShowAttachment;
 use App\Actions\Attachments\UploadAttachment;
 use App\Actions\Automations\FollowWorkflow;
@@ -367,6 +368,13 @@ return [
     'GetAttachment' => [
         'action' => GetAttachment::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => GetAttachment::run($a, Attachment::factory()->forItem($w->item($column))->create()),
+        'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
+        'hidden' => ['outsider_private'],
+    ],
+    'ReadAttachmentContent' => [
+        'action' => ReadAttachmentContent::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => ReadAttachmentContent::run($a, Attachment::factory()->forItem($w->item($column))
+            ->stored((string) base64_decode(explode(',', imageDataUrl())[1]), 'image/png', 'matrix.png')->create()),
         'allowed' => array_values(array_diff($everyone, ['outsider_private'])),
         'hidden' => ['outsider_private'],
     ],
