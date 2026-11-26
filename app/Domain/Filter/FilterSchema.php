@@ -17,7 +17,7 @@ use App\Domain\WorkItems\Priority;
  * catalog), `operator` (no operator, or one the field does not offer), `value` (a value of the wrong form, or one for
  * an operator without a value).
  *
- * Values: ULIDs in small letters (`me` where the field takes it), the words of `StateCategory` and `Priority`, days
+ * Values: ULIDs in small letters (`me` where the field takes it, `none` for "no value" where an item can have none), the words of `StateCategory` and `Priority`, days
  * `YYYY-MM-DD` or `today`, `this_week`, `this_month`, `{relative: '±N(d|w)'}`, `true`/`false`, a text of 1–255
  * characters that is not blank, a finite number below `ItemValue::NUMBER_LIMIT` in amount. `is`/`is_not` on an id,
  * enum or list field take one value or a list, `in`/`not_in` a list of 1–100 (doubles are dropped, the order stays),
@@ -224,6 +224,9 @@ final class FilterSchema
         }
         if ($value === 'me') {
             return $field->acceptsMe ? 'me' : null;
+        }
+        if ($value === Field::NONE) {
+            return $field->takesNone() ? Field::NONE : null;
         }
 
         $id = strtolower($value);

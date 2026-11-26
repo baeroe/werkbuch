@@ -214,6 +214,7 @@ export const FLOW_TESTS: ({ flow: string } & Proof)[] = [
 
   // lists and their layouts
   { flow: 'filter a list', file: 'filter.spec.ts', test: 'filters by priority with f' },
+  { flow: 'filter a list', file: 'filter.spec.ts', test: 'filters by unassigned from the list of values, alone and with a person' },
   { flow: 'save a list as a view', file: 'views-acceptance.spec.ts', test: 'filters with f, saves as a view, stars it and opens it from the sidebar' },
   { flow: 'move a card on the board', file: 'board.spec.ts', test: 'moves a card with shift+arrow to the next allowed column' },
   { flow: 'move a card where the ranks ran out', file: 'board.spec.ts', test: 'moves a card where the ranks ran out' },

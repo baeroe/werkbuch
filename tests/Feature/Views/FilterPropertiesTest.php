@@ -94,6 +94,25 @@ describe('matchesFilter', function () {
     });
 });
 
+describe('none among the values of a choice', function () {
+    it('matches an item without a value, or one of the others', function () {
+        $w = $this->world;
+        $nordlicht = ($this->option)('customer', 'Nordlicht');
+        $korn = ($this->option)('customer', 'Bäckerei Korn');
+        $customer = fn (WorkItem $item, string $op, array $values) => $w->matches($item, ['field' => 'property:customer', 'op' => $op, 'value' => $values]);
+
+        expect($customer($w->epicWithoutCustomer, 'in', ['none']))->toBeTrue()
+            ->and($customer($w->web47, 'in', ['none']))->toBeFalse()
+            ->and($customer($w->epicWithoutCustomer, 'in', ['none', $nordlicht]))->toBeTrue()
+            ->and($customer($w->web47, 'in', ['none', $nordlicht]))->toBeTrue()
+            ->and($customer($w->web47, 'in', ['none', $korn]))->toBeFalse()
+            ->and($customer($w->web47, 'not_in', ['none']))->toBeTrue()
+            ->and($customer($w->epicWithoutCustomer, 'not_in', ['none']))->toBeFalse()
+            ->and($customer($w->web47, 'not_in', ['none', $korn]))->toBeTrue()
+            ->and($customer($w->web47, 'not_in', ['none', $nordlicht]))->toBeFalse();
+    });
+});
+
 describe('properties', function () use ($doc) {
     it('number operators work on numbers', function () {
         $w = $this->world;

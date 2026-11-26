@@ -5,6 +5,7 @@ use App\Domain\Filter\CoreField;
 use App\Domain\Filter\Field;
 use App\Domain\Filter\Filter;
 use App\Domain\Filter\FilterSchema;
+use App\Domain\Filter\InvalidInput;
 use App\Domain\Filter\Op;
 use App\Models\Organization;
 use App\Models\WorkItem;
@@ -123,6 +124,31 @@ describe('matchesFilter', function () {
                 ->and($w->matches($w->web47, ['field' => 'assignee', 'op' => 'is_not_empty']))->toBeTrue();
         });
 
+        it('takes none as "nobody" among the people: none, in [none, a], not_in [none, a]', function () {
+            $w = $this->world;
+            $unassigned = $w->item(['assignee_id' => null]);
+            $mara = $w->item(['assignee_id' => $w->mara->id]);
+            $jonas = $w->item(['assignee_id' => $w->jonas->id]);
+
+            expect($w->matches($unassigned, ['field' => 'assignee', 'op' => 'is', 'value' => 'none']))->toBeTrue()
+                ->and($w->matches($mara, ['field' => 'assignee', 'op' => 'is', 'value' => 'none']))->toBeFalse()
+                ->and($w->matches($unassigned, ['field' => 'assignee', 'op' => 'in', 'value' => ['none', 'me']]))->toBeTrue()
+                ->and($w->matches($mara, ['field' => 'assignee', 'op' => 'in', 'value' => ['none', 'me']]))->toBeTrue()
+                ->and($w->matches($jonas, ['field' => 'assignee', 'op' => 'in', 'value' => ['none', 'me']]))->toBeFalse()
+                ->and($w->matches($unassigned, ['field' => 'assignee', 'op' => 'is_not', 'value' => 'none']))->toBeFalse()
+                ->and($w->matches($jonas, ['field' => 'assignee', 'op' => 'is_not', 'value' => 'none']))->toBeTrue()
+                ->and($w->matches($unassigned, ['field' => 'assignee', 'op' => 'not_in', 'value' => ['none', $w->jonas->id]]))->toBeFalse()
+                ->and($w->matches($jonas, ['field' => 'assignee', 'op' => 'not_in', 'value' => ['none', $w->jonas->id]]))->toBeFalse()
+                ->and($w->matches($mara, ['field' => 'assignee', 'op' => 'not_in', 'value' => ['none', $w->jonas->id]]))->toBeTrue()
+                // the parent can be none too
+                ->and($w->matches($w->web47, ['field' => 'parent', 'op' => 'in', 'value' => ['none', $w->epicWithoutCustomer->id]]))->toBeTrue();
+        });
+
+        it('refuses none where an item always has a value', function () {
+            expect(fn () => FilterSchema::parse(['version' => 1, 'conditions' => [['field' => 'project', 'op' => 'is', 'value' => 'none']]], CatalogProperties::load()))
+                ->toThrow(InvalidInput::class);
+        });
+
         it('matches priority, project, type and state', function () {
             $w = $this->world;
 
@@ -169,6 +195,21 @@ describe('matchesFilter', function () {
                 ->and($w->matches($w->web47, ['field' => 'label', 'op' => 'not_in', 'value' => [$w->ux->id]]))->toBeTrue()
                 // an item without labels has none of them
                 ->and($w->matches($w->ops12, ['field' => 'label', 'op' => 'is_not', 'value' => $w->forms->id]))->toBeTrue();
+        });
+
+        it('takes none as "no label" among the labels', function () {
+            $w = $this->world;
+            $none = fn (WorkItem $item, string $op, array $values) => $w->matches($item, ['field' => 'label', 'op' => $op, 'value' => $values]);
+
+            expect($none($w->ops12, 'in', ['none']))->toBeTrue()
+                ->and($none($w->web47, 'in', ['none']))->toBeFalse()
+                ->and($none($w->ops12, 'in', ['none', $w->forms->id]))->toBeTrue()
+                ->and($none($w->web47, 'in', ['none', $w->forms->id]))->toBeTrue()
+                ->and($none($w->web47, 'in', ['none', $w->ux->id]))->toBeFalse()
+                ->and($none($w->web47, 'not_in', ['none']))->toBeTrue()
+                ->and($none($w->ops12, 'not_in', ['none']))->toBeFalse()
+                ->and($none($w->web47, 'not_in', ['none', $w->ux->id]))->toBeTrue()
+                ->and($none($w->web47, 'not_in', ['none', $w->forms->id]))->toBeFalse();
         });
 
         it('is_empty matches an item without labels; contains is membership', function () {

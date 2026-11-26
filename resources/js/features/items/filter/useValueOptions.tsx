@@ -34,7 +34,7 @@ import { intlLocale, t } from '@/lib/i18n';
 import type { Project, User } from '@/types';
 import { CATEGORY_ICONS } from '../display/GroupIcon';
 import { CATEGORY_LABEL_KEYS } from '../display/groupLabels';
-import type { FieldDef } from './fieldOps';
+import { NONE, takesNone, type FieldDef } from './fieldOps';
 
 export interface ValueOptions {
   options: PickerOption[];
@@ -72,7 +72,7 @@ export function useValueOptions(def: FieldDef, project: Project | undefined, { o
   const labels = useLabels();
   const me = useCurrentUser();
   const epics = useEpics(project?.id, source === 'parent' && open);
-  const refIds = source === 'parent' ? values.filter((value): value is string => typeof value === 'string') : [];
+  const refIds = source === 'parent' ? values.filter((value): value is string => typeof value === 'string' && value !== NONE) : [];
   const refs = useQueries({ queries: refIds.map((id) => itemRefQuery(id)) });
 
   const used =
@@ -147,6 +147,12 @@ export function useValueOptions(def: FieldDef, project: Project | undefined, { o
           icon: <ToneDot tone={option.color} className="size-2" />,
         }));
       break;
+  }
+
+  // "no value" is a choice of its own, first in the list (`none`), so nobody has to find it in the operator menu
+  if (takesNone(def)) {
+    const key = def.field === 'assignee' ? 'assignee' : def.field === 'label' ? 'label' : def.field === 'parent' ? 'parent' : 'value';
+    options = [{ value: NONE, label: t(`items.filter.value.empty_${key}`) }, ...options];
   }
 
   /**
