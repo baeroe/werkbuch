@@ -9,6 +9,7 @@
  * loaded before; any other failure shows an error with "Erneut versuchen", or keeps the item when it was loaded.
  */
 
+import { CopyKey } from '@/components/items/CopyKey';
 import { router, usePage } from '@inertiajs/react';
 import { useEffect } from 'react';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -36,7 +37,9 @@ function ItemPageContent({ detail }: { detail: WorkItemDetail }) {
         <ItemHeader detail={detail} surface="page" />
         <div className="relative mt-8 rounded-card border border-line bg-surface shadow-elev-1">
           <span className="absolute bottom-full left-5">
-            <TypeTab tone={type.tone} icon={type.icon} label={item.key} />
+            <CopyKey itemKey={item.key}>
+              <TypeTab tone={type.tone} icon={type.icon} label={item.key} />
+            </CopyKey>
           </span>
           <div className="px-4 pt-4 pb-6 md:px-6 md:pt-5">
             <ItemBody detail={detail} surface="page" />

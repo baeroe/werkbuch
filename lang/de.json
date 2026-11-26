@@ -1496,6 +1496,7 @@
     "items.hierarchy.has_children": ":key hat Kind-Items. Nur Epics können Kind-Items haben.",
     "items.hierarchy.has_parent": ":key hat ein Eltern-Item. Epics haben kein Eltern-Item.",
     "items.hierarchy.no_child_type": "Im Projekt ist kein Typ aktiviert, der Kind-Item sein kann.",
+    "items.key.copy": ":key kopieren",
     "items.layout.board": "Board",
     "items.layout.list": "Liste",
     "items.layout.table": "Tabelle",
