@@ -289,6 +289,8 @@ func TestALightRunGetsNeitherTheGitTokenNorGh(t *testing.T) {
 	// the daemon (or a run it sits in) has git's credential setup in its environment
 	t.Setenv("WERKBUCH_GIT_TOKEN_FILE", "/some/file")
 	t.Setenv("GIT_CONFIG_COUNT", "2")
+	t.Setenv("GIT_CONFIG_KEY_0", "core.pager") // GIT_CONFIG_COUNT counts from 0: git refuses a missing key
+	t.Setenv("GIT_CONFIG_VALUE_0", "cat")
 	t.Setenv("GIT_CONFIG_KEY_1", "credential.https://github.com.helper")
 	t.Setenv("GIT_CONFIG_VALUE_1", "!f")
 	t.Setenv("GIT_CONFIG_PARAMETERS", "'credential.helper=!f'")
