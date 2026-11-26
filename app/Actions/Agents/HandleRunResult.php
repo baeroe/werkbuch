@@ -192,6 +192,10 @@ final class HandleRunResult
             return 'nothing';
         }
 
+        if (($run->result['outcome'] ?? null) === 'blocked') {
+            return self::blocked($actor, $run, $thread, $item);
+        }
+
         // the run of the strand's own item at a PR: did it push (A606)? The head the strand knows, or the commit the runner
         // reports (the webhook of the push may come after the result)
         $start = $run->context['start_head'] ?? null;
@@ -223,6 +227,30 @@ final class HandleRunResult
         }
 
         return $outcome;
+    }
+
+    /**
+     * The agent could not do what the item asks (`Outcome: blocked`, WEBU-50): a comment of what it needs, the item to
+     * „Pending“ and to the responsible person, no review, no merge. At its own item the strand pauses (`needs_person`);
+     * a child of an epic leaves the strand running, the next child goes on and the epic is not ready while a child waits.
+     */
+    private static function blocked(Actor $actor, AgentRun $run, AgentThread $thread, WorkItem $item): string
+    {
+        $text = isset($run->result['summary']) ? (string) $run->result['summary'] : null;
+
+        if ($thread->work_item_id === $item->id) {
+            PauseThread::run($actor, $thread, 'needs_person', $text, $run->id);
+
+            return 'blocked';
+        }
+
+        AgentFlow::comment($run->bot, $item, rtrim(__('agents.comment.needs_person', [], AgentFlow::locale())."\n\n".($text ?? '')), $run->id);
+        AgentFlow::move($run->bot, $item, AgentStep::Blocked);
+        if ($run->bot->owner_id !== null) {
+            AgentFlow::assign($run->bot, $item, $run->bot->owner_id);
+        }
+
+        return self::continueEpic($actor, $thread) ?? 'blocked';
     }
 
     /**

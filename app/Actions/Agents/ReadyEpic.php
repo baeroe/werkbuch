@@ -9,6 +9,7 @@ use App\Jobs\MarkPullRequestReady;
 use App\Models\AgentRun;
 use App\Models\AgentThread;
 use App\Models\User;
+use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\AgentFlow;
@@ -17,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * An epic the agent works through is ready (spec 7.6) when no child is open any more: the children the agent did stand
+ * An epic the agent works through is ready (spec 7.6) when no child is open or waits for a person (WEBU-50) any more: the children the agent did stand
  * in „In Review“, every other child is Completed or Canceled. Then werkbuch notes it (`ready_requested_at`: CI and review
  * count from there, A594), marks a draft PR ready and the epic goes to „In Review“; a PR the agent opened as no draft
  * has its CI looked at at once. Without a repo the epic is done
@@ -78,6 +79,12 @@ final class ReadyEpic
     private static function done(AgentThread $thread, WorkItem $epic): bool
     {
         $did = AgentRun::query()->where('thread_id', $thread->id)->where('type', RunType::Task->value)->where('status', 'succeeded')->pluck('work_item_id')->all();
+
+        // a child that waits for a person (WEBU-50) keeps the epic from being ready
+        $blocked = Workflow::query()->find($epic->project->workflow_id)?->agentStates()['blocked'] ?? null;
+        if ($blocked !== null && WorkItem::query()->where('parent_id', $epic->id)->whereNull('archived_at')->where('state_id', $blocked)->exists()) {
+            return false;
+        }
 
         return ! WorkItem::query()->where('parent_id', $epic->id)->whereNull('archived_at')->whereNotIn('id', $did)
             ->whereHas('state', fn ($query) => $query->whereNotIn('category', [StateCategory::Completed->value, StateCategory::Canceled->value]))->exists();

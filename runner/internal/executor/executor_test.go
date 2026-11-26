@@ -539,3 +539,16 @@ func TestAFailedSetupEndsTheRunWithItsMessage(t *testing.T) {
 		t.Fatalf("%+v\n%s", res, w.texts(run.ID))
 	}
 }
+
+func TestOutcome(t *testing.T) {
+	for answer, want := range map[string]string{
+		"Outcome: blocked\n\nWhat I need": "blocked",
+		"**Outcome:** Blocked":            "blocked",
+		"Outcome: done":                   "done",
+		"no line at all":                  "done",
+	} {
+		if got := Outcome(answer); got != want {
+			t.Errorf("Outcome(%q) = %s, want %s", answer, got, want)
+		}
+	}
+}

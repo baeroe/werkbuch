@@ -194,13 +194,17 @@ export function AgentNotice({ item, runs, agent }: { item: WorkItem; runs: reado
           ? t('items.agents.paused.brake_title', { bot: bot.name, after: brake })
           : reason === 'no_change'
             ? t('items.agents.paused.no_change_title', { bot: bot.name })
-            : t('items.agents.paused.stopped_title', { bot: bot.name });
+            : reason === 'needs_person'
+              ? t('items.agents.paused.needs_person_title', { bot: bot.name })
+              : t('items.agents.paused.stopped_title', { bot: bot.name });
       text =
         reason === 'brake'
           ? t('items.agents.paused.brake', { pr, owner: owner?.name ?? t('items.agents.paused.owner'), bot: bot.name })
           : reason === 'no_change'
             ? t('items.agents.paused.no_change', { owner: owner?.name ?? t('items.agents.paused.owner'), bot: bot.name })
-            : t('items.agents.paused.stopped', { assignee: users.get(item.assignee_id ?? '')?.name ?? t('items.agents.paused.someone'), pr, bot: bot.name });
+            : reason === 'needs_person'
+              ? t('items.agents.paused.needs_person', { owner: owner?.name ?? t('items.agents.paused.owner'), bot: bot.name })
+              : t('items.agents.paused.stopped', { assignee: users.get(item.assignee_id ?? '')?.name ?? t('items.agents.paused.someone'), pr, bot: bot.name });
       if (!withBot) {
         action = (
           <Button variant="secondary" size="sm" icon={Bot} pending={givingBack} disabledReason={editReason} onClick={giveBack} data-give-back="">

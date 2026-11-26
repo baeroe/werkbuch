@@ -111,7 +111,7 @@ describe('toInput', () => {
     // the steps of the agents did not change: the server keeps them
     expect(input).not.toHaveProperty('agent_states');
     expect(toInput(blankDraft()).id).toBeUndefined();
-    expect(toInput(blankDraft()).agent_states).toEqual({ working: null, review: null, correction: null, merged: null, ready: null });
+    expect(toInput(blankDraft()).agent_states).toEqual({ working: null, review: null, correction: null, merged: null, ready: null, blocked: null });
   });
 });
 
@@ -130,7 +130,7 @@ describe('agentStatesToSend', () => {
     // In Review is removed, and the merged step changes
     const removed = { ...draft, states: draft.states.filter((state) => state.id !== 'app_review'), agent_states: { ...draft.agent_states, merged: null } };
 
-    expect(agentStatesToSend(removed, agency, { app_review: 'app_approval' })).toEqual({ working: 'app_progress', review: 'app_approval', correction: 'app_todo', merged: null, ready: null });
+    expect(agentStatesToSend(removed, agency, { app_review: 'app_approval' })).toEqual({ working: 'app_progress', review: 'app_approval', correction: 'app_todo', merged: null, ready: null, blocked: null });
     // a target of another category, or none: the step goes empty
     expect(agentStatesToSend(removed, agency, { app_review: 'app_done' })?.review).toBeNull();
     expect(agentStatesToSend(removed, agency)?.review).toBeNull();

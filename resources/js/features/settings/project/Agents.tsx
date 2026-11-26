@@ -65,6 +65,7 @@ const STEP_NAMES: Record<AgentStep, TranslationKey> = {
   correction: 'catalog.agent_step.correction',
   merged: 'catalog.agent_step.merged',
   ready: 'catalog.agent_step.ready',
+  blocked: 'catalog.agent_step.blocked',
 };
 
 const STEP_HINTS: Record<AgentStep, TranslationKey> = {
@@ -73,6 +74,7 @@ const STEP_HINTS: Record<AgentStep, TranslationKey> = {
   correction: 'settings.project.agents.step_hint.correction',
   merged: 'settings.project.agents.step_hint.merged',
   ready: 'settings.project.agents.step_hint.ready',
+  blocked: 'settings.project.agents.step_hint.blocked',
 };
 
 /** The categories a step accepts in words, "Unstarted oder Backlog". */

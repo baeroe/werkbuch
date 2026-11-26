@@ -62,7 +62,7 @@ final class Workflow extends Model
     /**
      * The state each step of the agents sets (spec 7.4): every step once, a state id or null.
      *
-     * @return array{working: ?string, review: ?string, correction: ?string, merged: ?string, ready: ?string}
+     * @return array{working: ?string, review: ?string, correction: ?string, merged: ?string, ready: ?string, blocked: ?string}
      */
     public function agentStates(): array
     {

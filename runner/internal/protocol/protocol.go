@@ -247,6 +247,7 @@ type Result struct {
 	Status    string  `json:"status"`
 	SessionID *string `json:"session_id,omitempty"`
 	Verdict   *string `json:"verdict,omitempty"`
+	Outcome   *string `json:"outcome,omitempty"`
 	Text      *string `json:"text,omitempty"`
 	Commit    *string `json:"commit,omitempty"`
 	Summary   *string `json:"summary,omitempty"`

@@ -8,10 +8,10 @@
 import type { AgentCli, AgentStep, Label, Project, ProjectAgentBot, ProjectRole, RunType, State, StateCategory, User, Workflow } from '@/types';
 
 /** The steps agents need; `ready` (Todo) is optional: without it an agent begins an item at once (A772). */
-export const AGENT_STEPS: readonly Exclude<AgentStep, 'ready'>[] = ['working', 'review', 'correction', 'merged'];
+export const AGENT_STEPS: readonly Exclude<AgentStep, 'ready' | 'blocked'>[] = ['working', 'review', 'correction', 'merged'];
 
-/** Every step an editor shows: the required ones, then the optional `ready`. */
-export const ALL_STEPS: readonly AgentStep[] = [...AGENT_STEPS, 'ready'];
+/** Every step an editor shows: the required ones, then the optional `ready` and `blocked`. */
+export const ALL_STEPS: readonly AgentStep[] = [...AGENT_STEPS, 'ready', 'blocked'];
 
 /** The categories a step accepts (spec 7.4). */
 export const STEP_CATEGORIES: Record<AgentStep, readonly StateCategory[]> = {
@@ -20,6 +20,7 @@ export const STEP_CATEGORIES: Record<AgentStep, readonly StateCategory[]> = {
   correction: ['unstarted', 'backlog'],
   merged: ['completed'],
   ready: ['unstarted'],
+  blocked: ['started'],
 };
 
 export type AgentSteps = Record<AgentStep, string | null>;
@@ -27,7 +28,7 @@ export type AgentSteps = Record<AgentStep, string | null>;
 /** The steps agents need (everything but the optional `ready`). */
 export type RequiredSteps = Pick<AgentSteps, 'working' | 'review' | 'correction' | 'merged'>;
 
-export const NO_STEPS: AgentSteps = { working: null, review: null, correction: null, merged: null, ready: null };
+export const NO_STEPS: AgentSteps = { working: null, review: null, correction: null, merged: null, ready: null, blocked: null };
 
 type StateLike = Pick<State, 'id' | 'name' | 'category'>;
 
@@ -75,6 +76,7 @@ export function suggestSteps(states: readonly StateLike[]): AgentSteps {
     correction: correction?.id ?? null,
     merged: fitting('merged')[0]?.id ?? null,
     ready: null, // Todo is a decision of the team, never guessed
+    blocked: null, // Pending too
   };
 }
 

@@ -596,6 +596,17 @@ func Verdict(answer string) string {
 	return "changes"
 }
 
+var outcomeLine = regexp.MustCompile("(?im)^[\\s>*_#`-]*outcome\\b[\\s*_`]*[:=-]?[\\s*_`]*(done|blocked)\\b")
+
+// Outcome reads `Outcome: blocked` out of the answer of a task or correction (the agent could not do what the item asks);
+// anything else, also a missing line, is done (WEBU-50).
+func Outcome(answer string) string {
+	if m := outcomeLine.FindStringSubmatch(answer); m != nil && strings.ToLower(m[1]) == "blocked" {
+		return "blocked"
+	}
+	return "done"
+}
+
 func (x *Executor) complete(ctx context.Context, res *protocol.Result, run protocol.Run, ws *git.Workspace, o adapters.Outcome) {
 	answer := redact.String(o.Answer)
 	switch {
@@ -611,6 +622,10 @@ func (x *Executor) complete(ctx context.Context, res *protocol.Result, run proto
 		text := adapters.Cut(answer, protocol.TextMax)
 		res.Text = &text
 	case protocol.Codes(run.Type):
+		if run.Type != protocol.Conflict {
+			out := Outcome(answer)
+			res.Outcome = &out
+		}
 		if answer != "" {
 			summary := adapters.Cut(answer, protocol.SummaryMax)
 			res.Summary = &summary

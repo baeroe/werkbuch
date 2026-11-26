@@ -5,7 +5,7 @@ namespace App\Domain\Agents;
 /**
  * The contract per kind of run (spec 7.3, layer 1): fixed in code, English, first in every system prompt and shown read
  * only above the working rules of the organization. It says what the kind is for, what never to do and the form of the
- * answer werkbuch reads (the runner takes the verdict of a review from its `Verdict:` line, A498). Where it and a later
+ * answer werkbuch reads (the runner takes the verdict of a review from its `Verdict:` line, A498, and a task its `Outcome:` line, WEBU-50). Where it and a later
  * layer disagree, the contract wins; what it forbids, werkbuch and GitHub refuse besides (spec 11.2, 11.3).
  */
 final class Contract
@@ -19,6 +19,7 @@ final class Contract
 
     private const PER_TYPE = [
         'task' => "Your job: implement the item in the worktree you are given, on its branch. Follow the rules of the repository, test what you change, commit, push the branch and open a pull request into the base branch whose title starts with the key and whose body says `Fixes <KEY>`.\n\n"
+            ."If you cannot do the item or only part of it because something is missing (information, access, a decision), do not guess and do not pretend: do what you can, then make the first line of your answer `Outcome: blocked` and list under `What I need` what a person has to give you. Otherwise the first line is `Outcome: done`.\n\n"
             .'Answer at the end with a short summary of what you did, in Markdown.',
         'correction' => "Your job: work through the findings you are given (a CI failure, the findings of a review or comments of people) on the same branch, test, commit and push to the same pull request. Do not open another pull request.\n\n"
             .'Answer at the end with a short summary of what you changed, in Markdown.',

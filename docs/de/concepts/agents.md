@@ -81,6 +81,10 @@ Ein Auftrag, der scheitert, sein Zeitlimit reißt oder zweimal verloren geht, hi
 - **Abbrechen** eines Auftrags am Item; das darf, wer das Item bearbeiten darf.
 - **Fragen:** den Bot in einem Kommentar erwähnen (siehe [Erwähnungen](#erwahnungen)). Eine Frage ändert nie Code; wer eine Änderung will, stellt das Item zurück oder weist es wieder zu.
 
+## Wenn der Agent nicht weiterkommt
+
+Kann der Agent ein Item oder einen Teil davon nicht umsetzen, weil etwas fehlt (Information, Zugriff, Entscheidung), beendet er seine Antwort mit `Outcome: blocked` und nennt, was er braucht. werkbuch schreibt das als Kommentar des Bots, setzt das Item auf den optionalen Schritt `blocked` (meist **Pending**, [Schritte der Agenten](/de/concepts/workflows#schritte-der-agenten)) und gibt es der verantwortlichen Person des Bots. Der Strang pausiert: kein Review, kein Merge. Antworte in den Kommentaren und weise das Item wieder dem Bot zu; dann beginnt eine Korrektur mit den Kommentaren seit dem letzten Auftrag. Ein gepushter Teil bleibt auf dem Branch. Bei einem Kind eines Epics läuft der Strang mit dem nächsten Kind weiter; das Epic wird nicht bereit, solange ein Kind auf eine Person wartet. Ohne den Schritt `blocked` behält das Item seinen Status; Kommentar, Zuweisung und Pause bleiben.
+
 ## Beginnen in Todo
 
 Mit dem optionalen Schritt `ready` (meist **Todo**, [Schritte der Agenten](/de/concepts/workflows#schritte-der-agenten)) beginnt der Bot ein Item erst, wenn es ihm gehört **und** in diesem Status steht. Im Backlog zugewiesen, startet nichts: das Item sagt „Bob beginnt, sobald das Item auf Todo steht“. Weise es in Todo zu oder stelle ein Item des Bots auf Todo, dann startet der Auftrag Umsetzen. Ein Item des Bots, das eine Person ohne Strang auf **Korrektur** stellt, beginnt wie aus Todo; mit Strang korrigiert es wie bisher. Erwähnungen, Reviews, rote CI und Konflikte hängen nicht vom Status ab. Ohne den Schritt `ready` beginnt ein Agent sofort, wie bisher.

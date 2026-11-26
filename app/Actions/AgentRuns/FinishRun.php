@@ -37,7 +37,7 @@ final class FinishRun
     public const ERROR_MAX = 500;
 
     /**
-     * @param  array<array-key, mixed>  $input  `attempt`, `status`, `session_id`, `verdict`, `text`, `commit`, `summary`, `usage`, `error`
+     * @param  array<array-key, mixed>  $input  `attempt`, `status`, `session_id`, `verdict`, `outcome`, `text`, `commit`, `summary`, `usage`, `error`
      *
      * @throws ValidationException
      * @throws Problem 404, 409 `run_replaced`
@@ -48,6 +48,7 @@ final class FinishRun
             'status' => ['required', Rule::in(RunStatus::REPORTED)],
             'session_id' => ['sometimes', 'nullable', 'string', 'max:200'],
             'verdict' => ['sometimes', 'nullable', Rule::in(['approve', 'changes'])],
+            'outcome' => ['sometimes', 'nullable', Rule::in(['done', 'blocked'])],
             'text' => ['sometimes', 'nullable', 'string', 'max:'.self::TEXT_MAX],
             'commit' => ['sometimes', 'nullable', 'string', 'regex:/^[0-9a-f]{7,64}\z/'],
             'summary' => ['sometimes', 'nullable', 'string', 'max:'.self::SUMMARY_MAX],
@@ -59,6 +60,7 @@ final class FinishRun
             'status' => __('field.status.runner'),
             'session_id' => __('field.session_id.invalid'),
             'verdict' => __('field.verdict.invalid'),
+            'outcome' => __('field.outcome.invalid'),
             'text' => __('field.text.max', ['max' => self::TEXT_MAX]),
             'commit' => __('field.commit.invalid'),
             'summary' => __('field.summary.max', ['max' => self::SUMMARY_MAX]),
@@ -74,6 +76,7 @@ final class FinishRun
 
             $result = array_filter([
                 'verdict' => $run->type === RunType::Review ? ($valid['verdict'] ?? null) : null,
+                'outcome' => in_array($run->type, [RunType::Task, RunType::Correction], true) ? ($valid['outcome'] ?? null) : null,
                 'text' => isset($valid['text']) ? Secrets::blank($valid['text']) : null,
                 'commit' => $valid['commit'] ?? null,
                 'summary' => isset($valid['summary']) ? Secrets::blank($valid['summary']) : null,

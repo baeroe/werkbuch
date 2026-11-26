@@ -922,7 +922,7 @@ describe('the steps of the agents in the workflow editor', () => {
     expect(within(panel()).getByText('Ohne „Gemergt“ sind die Agenten in den Projekten dieses Workflows aus.')).toBeTruthy();
     await user.click(save());
     await waitFor(() => expect(callsTo('PUT', '/api/v1/workflows/wf_agency')).toHaveLength(2));
-    expect((callsTo('PUT', '/api/v1/workflows/wf_agency')[1]!.body as WorkflowInput).agent_states).toEqual({ working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: null, ready: null });
+    expect((callsTo('PUT', '/api/v1/workflows/wf_agency')[1]!.body as WorkflowInput).agent_states).toEqual({ working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: null, ready: null, blocked: null });
   });
 
   it('proposes statuses by category and name, takes the proposal into the empty steps and saves them', async () => {
@@ -946,7 +946,7 @@ describe('the steps of the agents in the workflow editor', () => {
 
     await user.click(save());
     await waitFor(() => expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(1));
-    expect(sent('/api/v1/workflows/wf_standard').agent_states).toEqual({ working: 'std_progress', review: 'std_pending', correction: 'std_backlog', merged: 'std_done', ready: null });
+    expect(sent('/api/v1/workflows/wf_standard').agent_states).toEqual({ working: 'std_progress', review: 'std_pending', correction: 'std_backlog', merged: 'std_done', ready: null, blocked: null });
   });
 
   it('keeps In Arbeit and In Review apart', async () => {
@@ -1015,7 +1015,7 @@ describe('the steps of the agents in the workflow editor', () => {
     await waitFor(() => expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(1));
     const body = sent('/api/v1/workflows/wf_standard') as WorkflowInput & { state_mapping: Record<string, string> };
     expect(body.state_mapping).toEqual({ std_pending: 'std_check' });
-    expect(body.agent_states).toEqual({ working: 'std_progress', review: 'std_check', correction: 'std_backlog', merged: 'std_done', ready: null });
+    expect(body.agent_states).toEqual({ working: 'std_progress', review: 'std_check', correction: 'std_backlog', merged: 'std_done', ready: null, blocked: null });
   });
 
   it('shows the refusals of the server at the steps', async () => {

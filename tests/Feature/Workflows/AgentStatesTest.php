@@ -15,7 +15,7 @@ use Tests\Support\WorkflowFixtures;
  * the input leaves them out, following `state_mapping` when their state goes.
  */
 
-$steps = fn (string $working, string $review, string $correction, string $merged) => [...compact('working', 'review', 'correction', 'merged'), 'ready' => null];
+$steps = fn (string $working, string $review, string $correction, string $merged) => [...compact('working', 'review', 'correction', 'merged'), 'ready' => null, 'blocked' => null];
 
 $errorsOf = function (Closure $save): array {
     try {
@@ -43,7 +43,7 @@ it('saves the steps with the states of the input and answers them as ULIDs', fun
 it('answers no steps for a workflow without them and lets a step stay empty', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin)->getJson('/api/v1/workflows/'.Workflow::default()->id)->assertOk()
-        ->assertJsonPath('data.agent_states', ['working' => null, 'review' => null, 'correction' => null, 'merged' => null, 'ready' => null]);
+        ->assertJsonPath('data.agent_states', ['working' => null, 'review' => null, 'correction' => null, 'merged' => null, 'ready' => null, 'blocked' => null]);
 
     $input = [...WorkflowFixtures::standardInput('Halb'), 'agent_states' => ['working' => 'std_progress', 'review' => null]];
     $response = $this->actingAs($admin)->postJson('/api/v1/workflows', $input)->assertCreated();
@@ -106,7 +106,7 @@ it('records a change of the steps and clears one sent as null', function () use 
     $ids = $workflow->states->pluck('id', 'name');
 
     $saved = SaveWorkflow::run($actor, $workflow, [...WorkflowFixtures::inputOf($workflow), 'agent_states' => ['working' => $ids['Pending'], 'review' => $ids['In Progress'], 'correction' => $ids['Backlog']]]);
-    $after = ['working' => $ids['Pending'], 'review' => $ids['In Progress'], 'correction' => $ids['Backlog'], 'merged' => null, 'ready' => null];
+    $after = ['working' => $ids['Pending'], 'review' => $ids['In Progress'], 'correction' => $ids['Backlog'], 'merged' => null, 'ready' => null, 'blocked' => null];
 
     expect($saved->agentStates())->toBe($after)
         ->and(eventsOf(EventType::WorkflowUpdated, $workflow)->sole()->changes)->toBe(['agent_states' => ['old' => $before, 'new' => $after]]);
@@ -126,7 +126,7 @@ it('lets a removed state take its step along the state mapping, or clears it whe
     $saved = SaveWorkflow::run($actor, $workflow, $input);
     $review = $saved->states->firstWhere('name', 'In Review')->id;
 
-    expect($saved->agentStates())->toBe(['working' => $ids['In Progress'], 'review' => $review, 'correction' => $ids['Backlog'], 'merged' => $ids['Done'], 'ready' => null]);
+    expect($saved->agentStates())->toBe(['working' => $ids['In Progress'], 'review' => $review, 'correction' => $ids['Backlog'], 'merged' => $ids['Done'], 'ready' => null, 'blocked' => null]);
 
     // In Progress goes to Done: the target is no started state, the step is cleared
     $input = WorkflowFixtures::inputOf($saved);

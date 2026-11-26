@@ -24,6 +24,7 @@ export const STEP_NAMES: Record<AgentStep, TranslationKey> = {
   correction: 'catalog.agent_step.correction',
   merged: 'catalog.agent_step.merged',
   ready: 'catalog.agent_step.ready',
+  blocked: 'catalog.agent_step.blocked',
 };
 
 const STEP_HINTS: Record<AgentStep, TranslationKey> = {
@@ -32,6 +33,7 @@ const STEP_HINTS: Record<AgentStep, TranslationKey> = {
   correction: 'settings.workflows.agents.hint.correction',
   merged: 'settings.workflows.agents.hint.merged',
   ready: 'settings.workflows.agents.hint.ready',
+  blocked: 'settings.workflows.agents.hint.blocked',
 };
 
 /** "Started", "Unstarted oder Backlog": the categories a step accepts, in words. */
@@ -105,7 +107,7 @@ export function AgentSteps({ draft, saved, readOnly, errorOf, onChange }: AgentS
           const hint =
             removedName !== null
               ? t('settings.workflows.agents.removed_note', { name: removedName })
-              : value !== null || step === 'ready'
+              : value !== null || step === 'ready' || step === 'blocked'
                 ? undefined
                 : suggested !== null
                   ? t('settings.workflows.agents.proposal', { name: nameOf(suggested) })

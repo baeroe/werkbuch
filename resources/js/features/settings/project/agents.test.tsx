@@ -206,7 +206,7 @@ describe('Agents: repository', () => {
     expect(within(steps).getByText('In Arbeit')).toBeTruthy();
     expect(within(steps).getByText('Sobald ein Auftrag startet. Kategorie Started.')).toBeTruthy();
     expect(within(steps).getByText('Bei CI rot, Befunden im Review, einem gescheiterten Auftrag oder der Bremse. Kategorie Unstarted oder Backlog.')).toBeTruthy();
-    expect(within(steps).getAllByRole('definition').map((entry) => entry.textContent)).toEqual(['In Progress', 'Review', 'Todo', 'Done', 'Kein Status']);
+    expect(within(steps).getAllByRole('definition').map((entry) => entry.textContent)).toEqual(['In Progress', 'Review', 'Todo', 'Done', 'Kein Status', 'Kein Status']);
     expect(within(steps).getByRole('link', { name: 'Im Workflow „Agentur-Freigabe“ bearbeiten' }).getAttribute('href')).toBe('/settings/workflows?workflow=wf_agency');
     expect(document.title).toBe('Agenten – Einstellungen WEB – werkbuch');
   });
@@ -362,7 +362,7 @@ describe('Agents: readers', () => {
     expect(screen.getByRole('button', { name: /Repo: feldwerk\/website/ })).toBeTruthy();
     expect(screen.getByRole<HTMLInputElement>('textbox', { name: /Basis-Branch/ }).readOnly).toBe(true);
     expect(screen.queryByRole('button', { name: 'Speichern' })).toBeNull();
-    expect(screen.getAllByText('Kein Status')).toHaveLength(5);
+    expect(screen.getAllByText('Kein Status')).toHaveLength(6);
   });
 
   it('reads a project without a repo', async () => {

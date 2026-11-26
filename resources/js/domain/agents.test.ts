@@ -4,11 +4,11 @@ import { agentProjectReason, botModels, boundStates, isModelLabel, missingSteps,
 
 describe('suggestSteps', () => {
   it('proposes the first started status, a review by name, an unstarted correction and the first completed one', () => {
-    expect(suggestSteps(agency.states)).toEqual({ working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: 'app_done', ready: null });
+    expect(suggestSteps(agency.states)).toEqual({ working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: 'app_done', ready: null, blocked: null });
   });
 
   it('takes the second started status for the review when none is named so', () => {
-    expect(suggestSteps(standard.states)).toEqual({ working: 'std_progress', review: 'std_pending', correction: 'std_todo', merged: 'std_done', ready: null });
+    expect(suggestSteps(standard.states)).toEqual({ working: 'std_progress', review: 'std_pending', correction: 'std_todo', merged: 'std_done', ready: null, blocked: null });
   });
 
   it('falls back to the one started status and to a backlog one, and leaves a step without a fitting status empty', () => {
@@ -16,7 +16,7 @@ describe('suggestSteps', () => {
       { id: 'a', name: 'Backlog', category: 'backlog' as const },
       { id: 'b', name: 'Doing', category: 'started' as const },
     ];
-    expect(suggestSteps(states)).toEqual({ working: 'b', review: 'b', correction: 'a', merged: null, ready: null });
+    expect(suggestSteps(states)).toEqual({ working: 'b', review: 'b', correction: 'a', merged: null, ready: null, blocked: null });
   });
 });
 

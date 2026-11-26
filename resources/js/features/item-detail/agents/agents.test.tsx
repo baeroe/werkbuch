@@ -410,6 +410,9 @@ describe('the ways back', () => {
     agent = state({ thread: openThread({ status: 'paused', pause_reason: 'no_change' }) });
     await act(() => client.invalidateQueries({ queryKey: qk.workItems.all }));
     expect(await screen.findByText('Kira hat aufgehört: der letzte Auftrag hat nichts geändert')).toBeTruthy();
+    agent = state({ thread: openThread({ status: 'paused', pause_reason: 'needs_person' }) });
+    await act(() => client.invalidateQueries({ queryKey: qk.workItems.all }));
+    expect(await screen.findByText('Kira kommt nicht weiter und braucht eine Person')).toBeTruthy();
     await userEvent.click(within(notice()!).getByRole('button', { name: 'Wieder Kira zuweisen' }));
     await waitFor(() => expect(lastToast()?.title).toBe('WEB-51 ist wieder bei Kira'));
   });
