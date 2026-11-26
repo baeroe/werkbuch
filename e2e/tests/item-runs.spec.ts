@@ -156,9 +156,6 @@ test('keeps the comment being read in place while a run on top starts and unfold
         const comment = await api(page, 'POST', `/api/v1/work-items/${created.id}/comments`, { body: `Note ${String(number).padStart(2, '0')}: checked the banner again in another browser.` });
         expect(comment.status(), await comment.text()).toBe(201);
       }
-      // a run keeps whole seconds (`agent_runs.created_at`), comments microseconds: in the same second the run would
-      // sort as the older one (in the CI it stood between the notes). The run comes a second later than every note.
-      await page.waitForTimeout(1_100);
     },
   });
   try {

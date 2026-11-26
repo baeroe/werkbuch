@@ -21,6 +21,9 @@ return new class extends Migration
     private function precision(int $digits): void
     {
         Schema::table('agent_runs', function (Blueprint $table) use ($digits) {
+            $table->timestamp('lease_expires_at', $digits)->nullable()->change();
+            $table->timestamp('started_at', $digits)->nullable()->change();
+            $table->timestamp('finished_at', $digits)->nullable()->change();
             $table->timestamp('created_at', $digits)->nullable()->change();
             $table->timestamp('updated_at', $digits)->nullable()->change();
         });
