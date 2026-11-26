@@ -201,7 +201,8 @@ func (x *Executor) repo(run protocol.Run) string {
 // spec says where a run works: the strand's worktree (its name or ID), else a folder of the run.
 func (x *Executor) spec(run protocol.Run) git.Spec {
 	spec := git.Spec{Repo: x.repo(run), Name: "run-" + run.ID}
-	if run.TeardownCommand != nil {
+	// a light run has no shell and gets neither setup nor teardown
+	if run.TeardownCommand != nil && !protocol.Light(run.Type) {
 		spec.Teardown = *run.TeardownCommand
 	}
 	if run.HeadSHA != nil {
@@ -364,7 +365,8 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 		defer x.Git.Remove(context.WithoutCancel(ctx), ws.Dir, x.Teardown)
 	}
 	s.add(protocol.Event{Kind: protocol.KindSystem, Text: "working in " + ws.Dir, At: time.Now().UTC()})
-	if ws.Created && run.SetupCommand != nil && *run.SetupCommand != "" {
+	// every code run sets up its folder again (also an existing worktree): the command has to be repeatable
+	if !protocol.Light(run.Type) && run.SetupCommand != nil && *run.SetupCommand != "" {
 		out, err := hooks.Run(ctx, ws.Dir, *run.SetupCommand, ws.Env)
 		if out != "" {
 			s.add(protocol.Event{Kind: protocol.KindSystem, Text: adapters.Cut("setup: "+out, protocol.EventTextMax), At: time.Now().UTC()})

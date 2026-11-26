@@ -2791,7 +2791,7 @@
     "settings.project.agents.worktree.description": "Was der Runner für dieses Projekt um einen Worktree tut, auf jedem Runner. MCP-Server, Skills und Plugins richtet man auf der Maschine ein; werkbuch gibt jedem Agenten nur seinen eigenen Server mit dem Token des Auftrags dazu.",
     "settings.project.agents.worktree.none": "keiner",
     "settings.project.agents.worktree.setup": "Setup-Befehl",
-    "settings.project.agents.worktree.setup_hint": "Läuft im neuen Worktree, bevor der Agent startet. $WERKBUCH_WORKTREE ist sein Pfad, $WERKBUCH_STRAND sein Name als Projektname, etwa für ein eigenes DDEV-Projekt.",
+    "settings.project.agents.worktree.setup_hint": "Läuft vor jedem Code-Auftrag im Worktree (auch in einem vorhandenen), muss also wiederholbar sein. $WERKBUCH_WORKTREE ist sein Pfad, $WERKBUCH_STRAND sein Name als Projektname, etwa für ein eigenes DDEV-Projekt.",
     "settings.project.agents.worktree.teardown": "Teardown-Befehl",
     "settings.project.agents.worktree.teardown_hint": "Läuft, bevor der Runner den Worktree entfernt (nach dem Merge oder wenn der Strang endet), mit denselben Variablen.",
     "settings.project.agents.worktree.title": "Worktree",

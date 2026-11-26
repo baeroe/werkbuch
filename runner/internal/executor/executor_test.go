@@ -291,8 +291,8 @@ func TestReview(t *testing.T) {
 	if _, err := os.Stat(e.Summary().Dir); !os.IsNotExist(err) {
 		t.Fatal("the worktree of a review goes after the run")
 	}
-	if _, err := os.Stat(torn); err != nil {
-		t.Fatal("the teardown command did not run")
+	if _, err := os.Stat(torn); err == nil {
+		t.Fatal("a review has no teardown (and no setup)")
 	}
 	// no shell for a review: the runner hands it the diff and the log of the pull request
 	diff, _ := os.ReadFile(filepath.Join(kept, "pull-request.diff"))
@@ -505,23 +505,29 @@ func TestANaturalEndKeepsItsStatusAndEndsTheGroup(t *testing.T) {
 	}
 }
 
-func TestSetupAndTeardownSeeTheWorktree(t *testing.T) {
-	// a setup command names its own project after the strand (A670), the teardown removes the same one
+func TestSetupRunsInEveryCodeRunAndNotInALightOne(t *testing.T) {
+	// a setup command names its own project after the strand (A670); it runs again in a worktree that exists, a light run gets none
 	w := newWorld(t)
-	torn := filepath.Join(t.TempDir(), "teardown")
-	run := w.run("01vars", protocol.Review, "review", func(r *protocol.Run) {
-		r.HeadSHA = str(gitIn(t, w.origin, "rev-parse", "HEAD"))
-		r.SetupCommand = str(`echo "project werkbuch-$WERKBUCH_STRAND in $WERKBUCH_WORKTREE"`)
-		r.TeardownCommand = str(`printf '%s|%s' "$WERKBUCH_WORKTREE" "$WERKBUCH_STRAND" > ` + torn)
-	})
-	e, _ := w.execute(run)
-	dir := e.Summary().Dir
-	if !strings.Contains(w.texts(run.ID), "setup: project werkbuch-run-01vars in "+dir) {
-		t.Fatalf("%s\n%s", dir, w.texts(run.ID))
+	setup := func(id string, typ string, more func(*protocol.Run)) string {
+		run := w.run(id, typ, "answer", func(r *protocol.Run) {
+			r.SetupCommand = str(`echo "project werkbuch-$WERKBUCH_STRAND in $WERKBUCH_WORKTREE"`)
+			if more != nil {
+				more(r)
+			}
+		})
+		w.execute(run)
+		return w.texts(run.ID)
 	}
-	data, _ := os.ReadFile(torn)
-	if string(data) != dir+"|run-01vars" {
-		t.Fatalf("teardown saw %q (%s)", data, dir)
+	first := setup("01code1", protocol.Task, nil)
+	if !strings.Contains(first, "setup: project werkbuch-") {
+		t.Fatal(first)
 	}
-	t.Logf("setup said: project werkbuch-run-01vars in %s; teardown saw: %s", dir, data)
+	again := setup("01code2", protocol.Correction, func(r *protocol.Run) { r.Thread.ID = "thread-01code1" })
+	if !strings.Contains(again, "setup: ") {
+		t.Fatal(again)
+	}
+	light := setup("01light", protocol.Comment, nil)
+	if strings.Contains(light, "setup: ") {
+		t.Fatal(light)
+	}
 }
