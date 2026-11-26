@@ -162,6 +162,17 @@ it('reads the shorthand into the same engine', function () use ($ids) {
         ->and($ids($this->actingAs($this->mara)->getJson("/api/v1/work-items?filter[label]={$this->forms->id},{$this->ux->id}")))->toBe(($this->ids)('Alpha', 'Gamma Release', 'Delta'));
 });
 
+it('reads none among others in the shorthand: nobody or me', function () use ($ids) {
+    $short = $ids($this->actingAs($this->mara)->getJson('/api/v1/work-items?filter[assignee]=none,me'));
+    $long = $ids($this->actingAs($this->mara)->postJson('/api/v1/work-items/query', ['filter' => ['version' => 1, 'conditions' => [
+        ['field' => 'assignee', 'op' => 'in', 'value' => ['none', 'me']],
+    ]]]));
+    $nobody = $ids($this->actingAs($this->mara)->getJson('/api/v1/work-items?filter[assignee]=none'));
+    $mine = $ids($this->actingAs($this->mara)->getJson('/api/v1/work-items?filter[assignee]=me'));
+
+    expect($short)->toBe($long)->and(count($short))->toBe(count($nobody) + count($mine))->and(count($nobody))->toBeGreaterThan(0);
+});
+
 it('answers 404 for the shorthand project the reader does not see, as before', function () {
     $ops = Project::factory()->identifier('OPS')->private()->create();
     WorkItem::factory()->for($ops)->create();

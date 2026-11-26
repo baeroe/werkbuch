@@ -156,10 +156,12 @@ it('reads every key of the shorthand into the conditions of the long form', func
         // an empty value is no condition, `true` is the other flag
         ->and(Shorthand::read(['assignee' => '', 'q' => null, 'archived' => 'true'], actor($mara))['conditions'])
         ->toEqual(FilterSchema::parse($filter(['field' => 'archived', 'op' => 'is', 'value' => true]), $catalog)->conditions)
-        // `none` only alone, and only for a field that can be empty
-        ->and(fn () => Shorthand::read(['assignee' => 'none,me', 'created_by' => 'none', 'state' => 'Todo'], actor($mara)))
+        // `none` among others is "nobody or …"
+        ->and(Shorthand::read(['assignee' => 'none,me'], actor($mara))['conditions'])
+        ->toEqual(FilterSchema::parse($filter(['field' => 'assignee', 'op' => 'in', 'value' => ['none', 'me']]), $catalog)->conditions)
+        // `none` only for a field that can be empty
+        ->and(fn () => Shorthand::read(['created_by' => 'none', 'state' => 'Todo,none'], actor($mara)))
         ->toThrow(fn (ValidationException $e) => expect($e->errors())->toBe([
-            'filter.assignee' => [__('field.filter.value')],
             'filter.created_by' => [__('field.filter.operator')],
             'filter.state' => [__('field.filter.value')],
         ]));

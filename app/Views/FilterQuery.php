@@ -108,13 +108,18 @@ final class FilterQuery
     {
         $category = $field === CoreField::StateCategory;
         $column = $query->qualifyColumn($category ? 'state_id' : self::column($field));
+        [$values, $none] = self::withoutNone($values);
         $set = $category ? self::statesIn($values) : $values;
 
         match ($op) {
-            Op::Is, Op::In => $query->whereIn($column, $set),
-            Op::IsNot, Op::NotIn => $field->nullable()
-                ? $query->where(fn (Builder $or) => $or->whereNull($column)->orWhereNotIn($column, $set))
-                : $query->whereNotIn($column, $set),
+            Op::Is, Op::In => $none
+                ? $query->where(fn (Builder $or) => $or->whereNull($column)->orWhereIn($column, $set))
+                : $query->whereIn($column, $set),
+            Op::IsNot, Op::NotIn => $none
+                ? $query->whereNotNull($column)->whereNotIn($column, $set)
+                : ($field->nullable()
+                    ? $query->where(fn (Builder $or) => $or->whereNull($column)->orWhereNotIn($column, $set))
+                    : $query->whereNotIn($column, $set)),
             Op::IsEmpty => $query->whereNull($column),
             Op::IsNotEmpty => $query->whereNotNull($column),
             default => self::nothing($query),
@@ -122,20 +127,26 @@ final class FilterQuery
     }
 
     /**
-     * The labels: `is`, `in` and `contains` mean "has one of them", `is_not`/`not_in` "has none of them".
+     * The labels: `is`, `in` and `contains` mean "has one of them", `is_not`/`not_in` "has none of them"; `none` among
+     * them is "has no label" (so `in [none, a]` is "no label or a").
      *
      * @param  Builder<WorkItem>  $query
      * @param  list<string|int|float|bool>  $ids
      */
     private static function labels(Builder $query, Op $op, array $ids): void
     {
+        [$ids, $none] = self::withoutNone($ids);
         $labels = fn (?array $ids) => DB::query()->from('work_item_labels')
             ->whereColumn('work_item_labels.work_item_id', $query->qualifyColumn('id'))
             ->when($ids !== null, fn (QueryBuilder $labels) => $labels->whereIn('work_item_labels.label_id', (array) $ids));
 
         match ($op) {
-            Op::Is, Op::In, Op::Contains => $query->whereExists($labels($ids)),
-            Op::IsNot, Op::NotIn => $query->whereNotExists($labels($ids)),
+            Op::Is, Op::In, Op::Contains => $none
+                ? $query->where(fn (Builder $or) => $or->whereNotExists($labels(null))->orWhereExists($labels($ids)))
+                : $query->whereExists($labels($ids)),
+            Op::IsNot, Op::NotIn => $none
+                ? $query->whereExists($labels(null))->whereNotExists($labels($ids))
+                : $query->whereNotExists($labels($ids)),
             Op::IsEmpty => $query->whereNotExists($labels(null)),
             Op::IsNotEmpty => $query->whereExists($labels(null)),
             default => self::nothing($query),
@@ -273,7 +284,7 @@ final class FilterQuery
             $op === Op::IsEmpty => $query->whereNotExists($rows()),
             $op === Op::IsNotEmpty => $query->whereExists($rows()),
             default => match ($field->propertyType) {
-                FieldType::Dropdown, FieldType::Member => self::propertyChoice($exists, $field->propertyType, $op, self::scalars($operands)),
+                FieldType::Dropdown, FieldType::Member => self::propertyChoice($query, $rows, $field->propertyType, $op, self::scalars($operands)),
                 FieldType::Boolean => self::propertyFlag($exists, $op, $operands),
                 FieldType::Number => $exists(self::numberCondition($op, $operands)),
                 FieldType::Date => $exists(self::dayCondition('work_item_values.value_date', $op, $value, $operands, $one, fn (string $day) => $day, $calendar)),
@@ -286,20 +297,26 @@ final class FilterQuery
 
     /**
      * An option or a person, one or several: `is`, `in` and `contains` mean "has one of them", `is_not`/`not_in`
-     * "has none of them".
+     * "has none of them"; `none` among them is "has no value" (`in [none, a]`: no value or a).
      *
-     * @param  callable(?Closure, bool=): mixed  $exists
+     * @param  Builder<WorkItem>  $query
+     * @param  callable(): QueryBuilder  $rows
      * @param  list<string|int|float|bool>  $ids
      */
-    private static function propertyChoice(callable $exists, FieldType $type, Op $op, array $ids): void
+    private static function propertyChoice(Builder $query, callable $rows, FieldType $type, Op $op, array $ids): void
     {
+        [$ids, $none] = self::withoutNone($ids);
         $column = $type === FieldType::Dropdown ? 'work_item_values.value_option_id' : 'work_item_values.value_user_id';
-        $in = fn (QueryBuilder $rows) => $rows->whereIn($column, $ids);
+        $has = fn (?array $in): QueryBuilder => $rows()->when($in !== null, fn (QueryBuilder $rows) => $rows->whereIn($column, (array) $in));
 
         match ($op) {
-            Op::Is, Op::In, Op::Contains => $exists($in),
-            Op::IsNot, Op::NotIn => $exists($in, false),
-            default => $exists(null),
+            Op::Is, Op::In, Op::Contains => $none
+                ? $query->where(fn (Builder $or) => $or->whereNotExists($has(null))->orWhereExists($has($ids)))
+                : $query->whereExists($has($ids)),
+            Op::IsNot, Op::NotIn => $none
+                ? $query->whereExists($has(null))->whereNotExists($has($ids))
+                : $query->whereNotExists($has($ids)),
+            default => self::nothing($query),
         };
     }
 
@@ -409,6 +426,17 @@ final class FilterQuery
     private static function epicTypes(): QueryBuilder
     {
         return DB::query()->select('id')->from('work_item_types')->where('is_epic', true);
+    }
+
+    /**
+     * The values without `none`, and whether `none` was among them.
+     *
+     * @param  list<string|int|float|bool>  $values
+     * @return array{0: list<string|int|float|bool>, 1: bool}
+     */
+    private static function withoutNone(array $values): array
+    {
+        return [array_values(array_filter($values, fn (mixed $value) => $value !== Field::NONE)), in_array(Field::NONE, $values, true)];
     }
 
     /** Whether the values of the kind are ids or words, texts all of them. */
