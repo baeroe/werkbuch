@@ -1795,6 +1795,7 @@
     "problem.detail.agent_rules_admins_only": "Only org admins change the working rules of the agents.",
     "problem.detail.agents_admins_only": "Only org admins set up agents.",
     "problem.detail.already_member": "You are already a member of :identifier.",
+    "problem.detail.attachment_content_too_large": "The picture is larger than :max MB; look at it in the browser instead.",
     "problem.detail.attachment_inline": "Images and files in a text go with the text; app:prune-attachments cleans them up.",
     "problem.detail.automations_admins_only": "Only admins of the project change automations.",
     "problem.detail.bot_settings_admins_only": "Only org admins change the description and the responsible person of a bot.",

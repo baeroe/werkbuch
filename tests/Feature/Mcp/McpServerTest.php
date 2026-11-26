@@ -185,15 +185,19 @@ it('gives each action the ability of its twin', function (string $suite) {
     foreach (ToolRows::tools($suite) as $tool) {
         foreach ($tool->actionNames() as $name) {
             $action = $tool->actionNamed($name);
-            // a read through a body (POST work-items/query) reads; an action without a twin writes
-            $needed = $action->twin === null ? 'write' : EnsureTokenAbility::required(ToolRows::route($action), ToolRows::twin($action)[0]);
+            // a read through a body (POST work-items/query) reads; an action without a twin writes, unless it reads by name (A772)
+            $needed = match (true) {
+                isset(ToolRows::READS_WITHOUT_TWIN["{$tool->name()}:{$name}"]) => 'read',
+                $action->twin === null => 'write',
+                default => EnsureTokenAbility::required(ToolRows::route($action), ToolRows::twin($action)[0]),
+            };
             $checked["{$tool->name()}:{$name}"] = $tool->ability() === $needed ? $needed : "{$tool->ability()}, but its twin needs {$needed}";
         }
     }
 
     // a line that is no ability names a mismatch
     expect(array_filter($checked, fn (string $line) => ! in_array($line, ['read', 'write'], true)))->toBe([])
-        ->and($checked)->toMatchArray($suite === 'werkbuch' ? ['whoami:call' => 'read', 'search:call' => 'read', 'organization:get' => 'read', 'organization:state-usage' => 'read', 'people:list-users' => 'read', 'manage-people:update-user' => 'write', 'manage-people:revoke-token' => 'write', 'manage-organization:update' => 'write', 'manage-organization:delete-workflow' => 'write'] : [
+        ->and($checked)->toMatchArray($suite === 'werkbuch' ? ['whoami:call' => 'read', 'search:call' => 'read', 'attachments:content' => 'read', 'organization:get' => 'read', 'organization:state-usage' => 'read', 'people:list-users' => 'read', 'manage-people:update-user' => 'write', 'manage-people:revoke-token' => 'write', 'manage-organization:update' => 'write', 'manage-organization:delete-workflow' => 'write'] : [
             'twins:list-users' => 'read', 'twins:members' => 'read', 'twins:query' => 'read', 'twins:groups' => 'read',
             'manage-twins:create-view' => 'write', 'manage-twins:create-label' => 'write', 'manage-twins:delete-view' => 'write',
         ]);

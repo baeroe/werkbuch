@@ -167,6 +167,7 @@ return [
     'manage-comments:react' => ['arguments' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create()->id, 'input' => ['emoji' => '👍']]],
     'manage-comments:unreact' => ['arguments' => fn (MatrixWorld $w) => ['comment' => Comment::factory()->for($w->item('project_admin'), 'workItem')->create()->id, 'input' => ['emoji' => '👍']]],
     'attachments:get' => ['arguments' => fn (MatrixWorld $w) => ['attachment' => Attachment::factory()->forItem($w->item('project_admin'))->create()->id]],
+    'attachments:content' => ['arguments' => fn (MatrixWorld $w) => ['attachment' => Attachment::factory()->forItem($w->item('project_admin'))->stored('notes', 'text/plain', 'notes.txt')->create()->id]],
     'manage-attachments:delete' => ['arguments' => fn (MatrixWorld $w) => ['attachment' => Attachment::factory()->forItem($w->item('project_admin'), 'file')->create()->id]],
     'pages:tree' => ['arguments' => function (MatrixWorld $w) {
         $w->page('project_admin');

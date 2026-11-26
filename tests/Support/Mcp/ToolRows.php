@@ -34,6 +34,14 @@ final class ToolRows
     public const REFUSALS = [409, 422];
 
     /**
+     * Reading actions without a REST twin, with the reason (an action without a twin writes otherwise, K9): their
+     * answer is content no REST body carries, so they have no parity row either.
+     */
+    public const READS_WITHOUT_TWIN = [
+        'attachments:content' => 'A772: a picture as MCP image content; the file itself is /attachments/{id} outside /api/v1 (A235)',
+    ];
+
+    /**
      * @return array<string, array{arguments?: Closure(MatrixWorld): array<string, mixed>, refuses?: array{status: int, reason: string}}>
      */
     public static function rows(string $suite): array

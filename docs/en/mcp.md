@@ -295,11 +295,12 @@ Writes comments. Only the author edits a comment; the author or a project admin 
 
 ### `attachments`
 
-The data of a picture or file. The file itself comes from `url` with the same bearer token (`?download=1` to download it). (Needs `read`.)
+The data and the content of a picture or file. `content` gives a picture as an image (the preview when there is one, at most 5 MB), a text file as text (the first 200 KB), anything else only its name, type and size; it is how an agent looks at the pictures of an item. The file itself comes from `url` with the same bearer token (`?download=1` to download it). (Needs `read`.)
 
 | Action | Purpose | Required | REST twin |
 |---|---|---|---|
 | `get` | The data of an attachment. | `attachment` | `GET /attachments/{attachment}` |
+| `content` | Its content: a picture as an image, a text as text. | `attachment` | – |
 
 ### `manage-attachments`
 

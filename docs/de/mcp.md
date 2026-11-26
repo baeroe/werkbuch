@@ -295,11 +295,12 @@ Schreibt Kommentare. Bearbeiten darf nur, wer ihn schrieb; löschen dazu die Pro
 
 ### `attachments`
 
-Die Daten eines Bilds oder einer Datei. Die Datei selbst liefert `url` mit demselben Bearer-Token (`?download=1` zum Herunterladen). (Braucht `read`.)
+Die Daten und der Inhalt eines Bilds oder einer Datei. `content` gibt ein Bild als Bild (die Vorschau, wenn es eine gibt, höchstens 5 MB), eine Textdatei als Text (die ersten 200 KB), alles andere nur mit Name, Typ und Größe; so sieht ein Agent die Bilder eines Items. Die Datei selbst liefert `url` mit demselben Bearer-Token (`?download=1` zum Herunterladen). (Braucht `read`.)
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
 | `get` | Die Daten eines Anhangs. | `attachment` | `GET /attachments/{attachment}` |
+| `content` | Der Inhalt: ein Bild als Bild, ein Text als Text. | `attachment` | – |
 
 ### `manage-attachments`
 
