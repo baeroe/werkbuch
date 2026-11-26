@@ -107,7 +107,6 @@ it('words contract, rules and job in the language of the organization with the c
     $full = fn () => RunPrompts::for(AgentRun::factory()->type($type)->create(['bot_id' => $this->kira->id, 'project_id' => $this->project->id, 'work_item_id' => $item->id, 'pr_number' => 3, 'head_sha' => str_repeat('a', 40)]));
     Organization::current()->update(['locale' => 'de']);
     $de = $full();
-    $de['prompt'] = $de['prompt'];
 
     expect($de['system_prompt'])->toContain(Contract::for($type, 'de'))->and($de['prompt'])->toContain('Lies vor jeder Arbeit')->toContain(RunPrompts::data('de'))
         ->and($de['prompt'])->not->toContain('Before any work');

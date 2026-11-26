@@ -55,14 +55,13 @@ final class RunPrompts
         $project = $run->project->identifier;
         $context = $run->context;
         $say = fn (string $key, string $otherwise) => is_string($context[$key] ?? null) ? $context[$key] : $otherwise;
-        $where = self::where($thread, $locale);
 
         $job = match ($run->type) {
-            RunType::Task => $t("Run `task` for {$subject} of the project {$project}.", "Führe `task` für {$subject} des Projekts {$project} aus.")."\n\n{$titled}{$where}".self::epic($thread, $item, $locale),
-            RunType::Correction => $t("Run `correction` for {$subject} of the project {$project}.", "Führe `correction` für {$subject} des Projekts {$project} aus.")."\n\n{$titled}{$where}"
+            RunType::Task => $t("Run `task` for {$subject} of the project {$project}.", "Führe `task` für {$subject} des Projekts {$project} aus.")."\n\n{$titled}".self::where($thread, $locale).self::epic($thread, $item, $locale),
+            RunType::Correction => $t("Run `correction` for {$subject} of the project {$project}.", "Führe `correction` für {$subject} des Projekts {$project} aus.")."\n\n{$titled}".self::where($thread, $locale)
                 .$t("Findings to work through (from {$say('source', 'werkbuch')}):", "Abzuarbeitende Befunde (von {$say('source', 'werkbuch')}):")."\n\n"
                 .RunPrompt::quote($say('findings', $t('Look at the item and the pull request again.', 'Sieh dir das Item und den Pull Request noch einmal an.'))),
-            RunType::Conflict => $t("Run `conflict` for {$subject} of the project {$project}.", "Führe `conflict` für {$subject} des Projekts {$project} aus.")."\n\n{$titled}{$where}"
+            RunType::Conflict => $t("Run `conflict` for {$subject} of the project {$project}.", "Führe `conflict` für {$subject} des Projekts {$project} aus.")."\n\n{$titled}".self::where($thread, $locale)
                 .$t("The pull request has conflicts with its base branch `{$thread?->base_branch}`: merge it into your branch, resolve them and push.",
                     "Der Pull Request hat Konflikte mit seinem Basis-Branch `{$thread?->base_branch}`: merge ihn in deinen Branch, löse sie und pushe."),
             RunType::Review => $t("Run `review` of the pull request #{$run->pr_number} of `{$say('repository', 'the repository')}` at the commit `{$run->head_sha}` (base branch `{$say('base_branch', $thread->base_branch ?? 'main')}`).",
