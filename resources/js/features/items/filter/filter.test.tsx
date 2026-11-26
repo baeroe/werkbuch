@@ -357,11 +357,20 @@ describe('the filter bar', () => {
     await searchFocused('Assignee suchen …');
     const options = await screen.findAllByRole('option');
     // Ich, then the active people by name, then the bots; deactivated accounts are not offered
-    expect(options.map(visibleText)).toEqual(['IchLene Vogt', 'Lene Vogt', 'Mara Lindqvist', 'Theo Okafor', 'PixelBot']);
-    await user.keyboard('{ArrowDown}{Enter}');
+    expect(options.map(visibleText)).toEqual(['Nicht zugewiesen', 'IchLene Vogt', 'Lene Vogt', 'Mara Lindqvist', 'Theo Okafor', 'PixelBot']);
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
     expect(last()).toEqual([{ field: 'assignee', op: 'is', value: 'me' }]);
     await user.keyboard('{Escape}');
     expect(await findChip(/^Filter: Assignee ist Ich$/)).toBeTruthy();
+  });
+
+  it('offers "unassigned" in the list and stores it as an empty check', async () => {
+    const user = userEvent.setup();
+    const { last } = renderBar();
+    await addField(user, 'Assignee');
+    await searchFocused('Assignee suchen …');
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(last()).toEqual([{ field: 'assignee', op: 'is_empty' }]);
   });
 
   it('offers me for a people property, and the epics as parents', async () => {
@@ -467,8 +476,8 @@ describe('the filter bar', () => {
     expect(await optionsOf('Projekt', 'Projekt suchen …')).toEqual(['WEB', 'APP']);
     expect(await optionsOf('Typ', 'Typ suchen …')).toEqual(['Task', 'Bug', 'Epic', 'Kundenwunsch', 'Altlastarchiviert']);
     expect(await optionsOf('Kategorie', 'Kategorie suchen …')).toEqual(['Backlog', 'Unstarted', 'Started', 'Completed', 'Canceled']);
-    expect(await optionsOf('Label', 'Label suchen …')).toEqual(['Formulare', 'Performance', 'Produktion', 'UX']);
-    expect(await optionsOf('Kunde', 'Kunde suchen …')).toEqual(['Studio Nordlicht', 'Hafenkontor', 'Gärtnerei Moos', 'Altkundearchiviert']);
+    expect(await optionsOf('Label', 'Label suchen …')).toEqual(['Kein Wert', 'Formulare', 'Performance', 'Produktion', 'UX']);
+    expect(await optionsOf('Kunde', 'Kunde suchen …')).toEqual(['Kein Wert', 'Studio Nordlicht', 'Hafenkontor', 'Gärtnerei Moos', 'Altkundearchiviert']);
     // a property's field says it is one
     await user.keyboard('f');
     await searchFocused('Feld suchen …');
