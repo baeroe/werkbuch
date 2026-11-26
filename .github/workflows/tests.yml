@@ -14,10 +14,96 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # required check: the name must stay `tests`
-  tests:
+  # Which of the slow jobs that rarely concern a pull request it needs (WEBU-46, A783): the paths it changes against its
+  # base (the merge commit of a pull request has the base as its first parent). On main every job runs.
+  changes:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.paths.outputs.image }}
+      load: ${{ steps.paths.outputs.load }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+
+      - name: Changed paths
+        id: paths
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            git diff --name-only HEAD^1 HEAD | scripts/ci-changes.sh | tee -a "$GITHUB_OUTPUT"
+          else
+            scripts/ci-changes.sh all | tee -a "$GITHUB_OUTPUT"
+          fi
+
+  # Pint, Larastan, tsc and the build, without coverage (PCOV slowed Pint down to more than three minutes, A782)
+  lint:
+    name: lint (Pint, Larastan, tsc, build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          extensions: intl, zip, bcmath, pdo_mysql, gd
+          coverage: none
+
+      # version comes from "packageManager" in package.json
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Composer
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Environment
+        run: cp .env.example .env && php artisan key:generate
+
+      - name: Pint
+        run: vendor/bin/pint --test --parallel
+
+      - name: Larastan
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+  # Pest with coverage on eight runners (WEBU-46, A780): `--shard` of Pest balances the test files by the times in
+  # tests/.pest/shards.json. Each shard has a MariaDB, a Meilisearch, a Mailpit and a Gotenberg of its own, as the one
+  # job had, and uploads its coverage; the job `tests` merges the eight and holds the 100 % lines.
+  pest:
+    name: pest (${{ matrix.shard }}/8)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      # every shard runs to its end: the gate names each one that failed
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
 
     services:
       mariadb:
@@ -61,6 +147,7 @@ jobs:
       MEILISEARCH_KEY: ci-werkbuch-master-key
       MAILPIT_URL: http://127.0.0.1:8025
       GOTENBERG_URL: http://127.0.0.1:3000
+      SHARD: ${{ matrix.shard }}
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -85,14 +172,6 @@ jobs:
           # uploads up to ATTACHMENTS_MAX_MB (25) pass PHP; above it UploadAttachment answers 413
           ini-values: upload_max_filesize=30M, post_max_size=32M
 
-      # version comes from "packageManager" in package.json
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
       - name: Composer cache directory
         id: composer-cache
         run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
@@ -109,25 +188,6 @@ jobs:
       - name: Environment
         run: cp .env.example .env && php artisan key:generate
 
-      - name: Pint
-        run: vendor/bin/pint --test
-
-      - name: Larastan
-        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
-
-      - name: pnpm install
-        run: pnpm install --frozen-lockfile
-
-      - name: TypeScript
-        run: pnpm typecheck
-
-      # 100 % lines of resources/js (the Playwright coverage joins in the e2e job)
-      - name: Vitest with coverage
-        run: pnpm test:coverage
-
-      - name: Build
-        run: pnpm build
-
       - name: Meilisearch
         run: curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:7700/health
 
@@ -143,14 +203,91 @@ jobs:
           $size = (int) (new PDO("mysql:host=127.0.0.1;port=3306", "root", "root"))->query("SELECT @@max_allowed_packet")->fetchColumn();
           echo "max_allowed_packet {$size}", PHP_EOL; exit($size === 67108864 ? 0 : 1);'
 
+      # Pest directly, as the load suite: `php artisan test` adds nothing a shard needs. The gate is the merge in `tests`.
       - name: Pest with coverage
-        run: php artisan test --coverage --min=100
+        run: vendor/bin/pest --shard="$SHARD/8" --coverage-php="coverage/pest-$SHARD.cov" --log-junit="coverage/pest-$SHARD.xml"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pest-coverage-${{ matrix.shard }}
+          path: coverage/pest-${{ matrix.shard }}.cov
+          if-no-files-found: error
+          retention-days: 3
+
+      # the times of every test class, for tests/.pest/shards.json when the shards drift apart
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: "!cancelled()"
+        with:
+          name: pest-times-${{ matrix.shard }}
+          path: coverage/pest-${{ matrix.shard }}.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The required check: the name must stay `tests` (the ruleset of main asks only for it). A gate over the jobs it
+  # needs (A781): lint, the eight Pest shards and Vitest (with its thresholds per folder, in `e2e-build`), then the
+  # coverage of the shards merged, 100 % lines of app/. It runs after a failed or skipped job too and fails then; a run
+  # a newer push cancelled skips it, as the e2e merge.
+  tests:
+    needs: [lint, pest, e2e-build]
+    if: "!cancelled()"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: The checks passed
+        env:
+          LINT: ${{ needs.lint.result }}
+          PEST: ${{ needs.pest.result }}
+          VITEST: ${{ needs.e2e-build.result }}
+        run: |
+          failed=0
+          for check in "lint:$LINT" "pest:$PEST" "e2e-build:$VITEST"; do
+            if [ "${check#*:}" != success ]; then
+              echo "::error::The job ${check%%:*} did not pass (result: ${check#*:})."
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+      # the sources: the merge builds the report from the files of app/
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          extensions: intl, zip, bcmath, pdo_mysql, gd
+          coverage: none
+
+      - name: Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Composer
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      # one folder per artifact, coverage/pest/pest-coverage-<shard>/
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: pest-coverage-*
+          path: coverage/pest
+          merge-multiple: false
+
+      - name: Coverage of the shards
+        run: php scripts/pest-coverage.php coverage/pest 8
 
   # The load suite (tests/Load, phpunit.load.xml): the API against 50 000 items, each answer within 1.5 s as the median
   # of three runs, the queries as against 100 items (A187, K10). No required check; the table of every row is the
-  # artifact `load-budget`.
+  # artifact `load-budget`. On a pull request only when it changes the app, the database or the suite (A783).
   load:
     name: load (50 000 items)
+    needs: changes
+    if: needs.changes.outputs.load == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
 
@@ -269,7 +406,8 @@ jobs:
       - name: pnpm install
         run: pnpm install --frozen-lockfile
 
-      # the Vitest half of the merged coverage (the job `tests` runs it as well, for its own gate: K7)
+      # the Vitest half of the merged coverage and the gate of Vitest (its thresholds per folder): the required job
+      # `tests` needs this job, Vitest runs once (A781)
       - name: Vitest with coverage
         run: pnpm test:coverage
 
@@ -657,8 +795,11 @@ jobs:
 
   # Success criterion 1 per architecture, natively (A421): the image is built for the platform of the runner (amd64 on
   # ubuntu-24.04, arm64 on ubuntu-24.04-arm) and the compose stack is smoke-tested against it. Nothing is pushed; the
-  # Playwright suite stays on `php artisan serve` (A420). Not a required check.
+  # Playwright suite stays on `php artisan serve` (A420). Not a required check. On a pull request only when it changes
+  # the image, the compose stack or the runner (A783).
   image:
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
     strategy:
       fail-fast: false
       matrix:

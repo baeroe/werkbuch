@@ -49,12 +49,7 @@ it('keeps the required job named tests', function () {
     expect($workflow['jobs']['tests'])->not->toHaveKey('name');
 });
 
-it('gives the required job an hour', function () {
-    // it took 32–38 min in phase 15 (Pest about 24, Vitest about 4); at 45 a slow runner would end it like a red test (A464)
-    expect(RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['tests']['timeout-minutes'])->toBe(60);
-});
-
-it('builds both platforms on every pull request without pushing', function () {
+it('builds both platforms without pushing', function () {
     $text = RepoFiles::text('.github/workflows/tests.yml');
     $workflow = RepoFiles::yaml('.github/workflows/tests.yml');
 
@@ -71,6 +66,7 @@ it('builds both platforms on every pull request without pushing', function () {
 
     expect($text)->not->toContain('docker/login-action');
     expect($workflow['permissions']['contents'])->toBe('read');
+    // on a pull request only when it changes the image (A783), on main always
     expect($workflow['on'])->toHaveKey('pull_request');
 });
 
@@ -272,6 +268,130 @@ $stepUsing = function (array $job, string $action, array $with = []): array {
 /** @return list<string> the scripts of the `run:` steps of a job */
 $runs = fn (array $job): array => array_values(array_map(fn (array $step): string => (string) $step['run'], array_filter($job['steps'], fn (array $step): bool => isset($step['run']))));
 
+/** @return int the number of Pest shards, the same in the matrix, the command, the name and the merge */
+$shards = function (array $jobs): int {
+    $pest = $jobs['pest'];
+    $count = count($pest['strategy']['matrix']['shard']);
+
+    expect($pest['strategy']['matrix']['shard'])->toBe(range(1, $count))
+        ->and($pest['name'])->toBe('pest (${{ matrix.shard }}/'.$count.')')
+        ->and($pest['env']['SHARD'])->toBe('${{ matrix.shard }}');
+
+    return $count;
+};
+
+it('runs Pest on shards with coverage', function () use ($shards, $stepUsing) {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+    $pest = $jobs['pest'];
+    $count = $shards($jobs);
+
+    // a shard of each test file a run, and its coverage for the merge; every shard runs to its end
+    $run = collect($pest['steps'])->firstWhere('name', 'Pest with coverage')['run'];
+    expect($run)->toBe('vendor/bin/pest --shard="$SHARD/'.$count.'" --coverage-php="coverage/pest-$SHARD.cov" --log-junit="coverage/pest-$SHARD.xml"')
+        ->and($pest['strategy']['fail-fast'])->toBeFalse()
+        ->and($count)->toBeGreaterThanOrEqual(2);
+
+    expect($stepUsing($pest, 'actions/upload-artifact', ['name' => 'pest-coverage-${{ matrix.shard }}'])['with'])
+        ->toMatchArray(['path' => 'coverage/pest-${{ matrix.shard }}.cov', 'if-no-files-found' => 'error']);
+
+    // PCOV in the shards, the services of the one job they replace
+    expect($stepUsing($pest, 'shivammathur/setup-php')['with']['coverage'])->toBe('pcov')
+        ->and(array_keys($pest['services']))->toEqualCanonicalizing(['mariadb', 'meilisearch', 'mailpit']);
+
+    // tests/.pest/shards.json balances the shards by time and knows the classes of the suite
+    $timings = json_decode(RepoFiles::text('tests/.pest/shards.json'), true)['timings'];
+    expect(count($timings))->toBeGreaterThan(400)
+        ->and($timings)->toHaveKey('Tests\\Unit\\WorkflowsTest');
+});
+
+it('gates the required check on lint, every shard, Vitest and the merged coverage', function () use ($shards, $stepUsing) {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+    $gate = $jobs['tests'];
+
+    // a failed or skipped job makes it fail; a run a newer push cancelled merges nothing (A781)
+    expect($gate['needs'])->toEqualCanonicalizing(['lint', 'pest', 'e2e-build'])
+        ->and($gate['if'])->toBe('!cancelled()');
+
+    $first = $gate['steps'][0];
+    expect($first['name'])->toBe('The checks passed')
+        ->and($first['env'])->toBe(['LINT' => '${{ needs.lint.result }}', 'PEST' => '${{ needs.pest.result }}', 'VITEST' => '${{ needs.e2e-build.result }}'])
+        ->and($first['run'])->toContain('!= success')
+        ->and($first['run'])->toContain('exit "$failed"');
+
+    expect($stepUsing($gate, 'actions/download-artifact', ['pattern' => 'pest-coverage-*'])['with'])
+        ->toMatchArray(['path' => 'coverage/pest', 'merge-multiple' => false]);
+    $last = end($gate['steps']);
+    expect($last['run'])->toBe('php scripts/pest-coverage.php coverage/pest '.$shards($jobs));
+
+    // the gate itself runs no suite
+    expect(collect($gate)->get('services'))->toBeNull();
+});
+
+it('gives the gate a quarter of an hour and every shard half an hour', function () {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+
+    // a shard takes a few minutes (WEBU-46); the time the gate waits for the jobs it needs does not count
+    expect($jobs['tests']['timeout-minutes'])->toBe(15)
+        ->and($jobs['pest']['timeout-minutes'])->toBe(30);
+});
+
+it('lints without coverage', function () use ($stepUsing, $runs) {
+    $lint = RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['lint'];
+
+    // with PCOV loaded Pint took more than three minutes (A782)
+    expect($stepUsing($lint, 'shivammathur/setup-php')['with']['coverage'])->toBe('none')
+        ->and($runs($lint))->toContain('vendor/bin/pint --test --parallel')
+        ->and($runs($lint))->toContain('vendor/bin/phpstan analyse --no-progress --memory-limit=1G')
+        ->and($runs($lint))->toContain('pnpm typecheck')
+        ->and($runs($lint))->toContain('pnpm build');
+});
+
+/** @return array<string, string> what scripts/ci-changes.sh writes for the paths on stdin (or its arguments) */
+$changes = function (array $paths, array $arguments = []): array {
+    $process = new Symfony\Component\Process\Process(['bash', repo_path('scripts/ci-changes.sh'), ...$arguments]);
+    $process->setInput(implode("\n", $paths).($paths === [] ? '' : "\n"));
+    $process->mustRun();
+
+    return collect(explode("\n", trim($process->getOutput())))
+        ->mapWithKeys(fn (string $line): array => [explode('=', $line)[0] => explode('=', $line)[1]])
+        ->all();
+};
+
+it('runs the image and the load suite only for what concerns them, and always on main', function () use ($changes) {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+
+    foreach (['image' => 'image', 'load' => 'load'] as $job => $output) {
+        expect($jobs[$job]['needs'])->toBe('changes')
+            ->and($jobs[$job]['if'])->toBe("needs.changes.outputs.{$output} == 'true'");
+    }
+
+    $detect = collect($jobs['changes']['steps'])->firstWhere('id', 'paths');
+    expect($detect['run'])->toContain('git diff --name-only HEAD^1 HEAD | scripts/ci-changes.sh')
+        ->and($detect['run'])->toContain('scripts/ci-changes.sh all')
+        ->and($detect['env']['EVENT'])->toBe('${{ github.event_name }}')
+        ->and($jobs['changes']['steps'][0]['with']['fetch-depth'])->toBe(2)
+        ->and($jobs['changes']['outputs'])->toBe(['image' => '${{ steps.paths.outputs.image }}', 'load' => '${{ steps.paths.outputs.load }}']);
+
+    expect($changes([], ['all']))->toBe(['image' => 'true', 'load' => 'true'])
+        ->and($changes([]))->toBe(['image' => 'false', 'load' => 'false'])
+        ->and($changes(['resources/js/app.tsx', 'docs/en/setup.md', 'e2e/tests/board.spec.ts']))->toBe(['image' => 'false', 'load' => 'false'])
+        ->and($changes(['app/Models/WorkItem.php']))->toBe(['image' => 'false', 'load' => 'true'])
+        ->and($changes(['database/migrations/x.php']))->toBe(['image' => 'false', 'load' => 'true'])
+        ->and($changes(['tests/Load/ApiLoadTest.php']))->toBe(['image' => 'false', 'load' => 'true'])
+        ->and($changes(['docker/nginx/conf.d/00-werkbuch.conf']))->toBe(['image' => 'true', 'load' => 'false'])
+        ->and($changes(['Dockerfile']))->toBe(['image' => 'true', 'load' => 'false'])
+        ->and($changes(['runner/internal/git/git.go']))->toBe(['image' => 'true', 'load' => 'false'])
+        ->and($changes(['docker-compose.standalone.yml']))->toBe(['image' => 'true', 'load' => 'false'])
+        ->and($changes(['composer.lock']))->toBe(['image' => 'true', 'load' => 'true'])
+        ->and($changes(['.github/workflows/tests.yml']))->toBe(['image' => 'true', 'load' => 'true'])
+        ->and($changes(['scripts/ci-changes.sh']))->toBe(['image' => 'true', 'load' => 'true']);
+
+    // every path the image copies from the repository makes it run
+    foreach (['Dockerfile', '.dockerignore', 'docker/entrypoint.d/99-werkbuch.sh', 'resources/runner/install.sh', 'scripts/compose-smoke.mjs'] as $path) {
+        expect($changes([$path])['image'])->toBe('true', $path);
+    }
+});
+
 it('runs the e2e suite once per Playwright project', function () use ($playwrightProjects, $stepUsing, $runs) {
     $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
     $e2e = $jobs['e2e'];
@@ -360,8 +480,13 @@ it('builds the coverage build once', function () use ($stepUsing, $runs) {
         }
     }
 
-    // the gate of the required job keeps its Vitest run (K7)
-    expect($runs($jobs['tests']))->toContain('pnpm test:coverage');
+    // Vitest runs once, in e2e-build; the required job needs that job for its gate (A781)
+    foreach ($jobs as $name => $job) {
+        if ($name !== 'e2e-build') {
+            expect(str_contains(implode("\n", $runs($job)), 'test:coverage'))->toBeFalse("{$name} runs Vitest again");
+        }
+    }
+    expect($jobs['tests']['needs'])->toContain('e2e-build');
 });
 
 it('names the e2e jobs for what they do and none of them like the required check', function () {
@@ -385,14 +510,13 @@ it('runs the load suite outside the required job', function () use ($stepUsing, 
     // Pest directly: `php artisan test` puts --configuration=phpunit.xml in front and ends with exit code 1 (K10)
     expect($runs($load))->toContain('vendor/bin/pest --configuration=phpunit.load.xml')
         ->and($load['timeout-minutes'])->toBe(40)
-        ->and($load)->not->toHaveKey('needs')
         ->and($load['name'] ?? 'load')->not->toBe('tests');
 
     // a database `load` and a real Meilisearch of its own
     expect(array_keys($load['services']))->toEqualCanonicalizing(['mariadb', 'meilisearch'])
         ->and($load['services']['mariadb']['env']['MARIADB_DATABASE'])->toBe('load')
-        ->and($load['services']['mariadb']['image'])->toBe($jobs['tests']['services']['mariadb']['image'])
-        ->and($load['services']['meilisearch']['image'])->toBe($jobs['tests']['services']['meilisearch']['image']);
+        ->and($load['services']['mariadb']['image'])->toBe($jobs['pest']['services']['mariadb']['image'])
+        ->and($load['services']['meilisearch']['image'])->toBe($jobs['pest']['services']['meilisearch']['image']);
 
     // the buffer pool of DDEV's MariaDB (1 GiB), set before the suite seeds and measures
     $names = array_map(fn (array $step) => $step['name'] ?? null, $load['steps']);
@@ -406,8 +530,10 @@ it('runs the load suite outside the required job', function () use ($stepUsing, 
     expect($upload['with']['path'])->toBe('storage/logs/load-budget.md')
         ->and($upload['if'])->toBe('always()');
 
-    // the required job never runs the load suite
-    expect(str_contains(implode("\n", $runs($jobs['tests'])), 'phpunit.load.xml'))->toBeFalse('the job tests runs the load suite');
+    // the required job and its shards never run the load suite
+    foreach (['tests', 'pest'] as $id) {
+        expect(str_contains(implode("\n", $runs($jobs[$id])), 'phpunit.load.xml'))->toBeFalse("the job {$id} runs the load suite");
+    }
 });
 
 it('gives the MariaDB of every job that runs the app the max_allowed_packet of the stack', function () {
@@ -416,7 +542,7 @@ it('gives the MariaDB of every job that runs the app the max_allowed_packet of t
     expect($compose)->toBe(['--max-allowed-packet=64M']);
 
     // the step before the first connection of the app: the suite, the load suite, the migration of the e2e database
-    foreach (['tests' => 'Pest with coverage', 'load' => 'Load suite', 'e2e' => 'Migrate'] as $id => $first) {
+    foreach (['pest' => 'Pest with coverage', 'load' => 'Load suite', 'e2e' => 'Migrate'] as $id => $first) {
         $names = array_map(fn (array $step) => $step['name'] ?? null, $jobs[$id]['steps']);
         $packet = array_search('MariaDB packet', $names, true);
         expect($packet)->toBeInt("{$id} sets no max_allowed_packet")
@@ -445,8 +571,10 @@ it('checks the runner in a job of its own', function () use ($stepUsing, $runs) 
     expect($build['env']['CGO_ENABLED'])->toBe('0')
         ->and($build['run'])->toContain('GOOS=darwin GOARCH=arm64')->toContain('GOOS=linux GOARCH=amd64');
 
-    // the required job never builds Go
-    expect(str_contains(implode("\n", $runs($jobs['tests'])), 'go test'))->toBeFalse('the job tests runs the runner');
+    // the required job and its shards never build Go
+    foreach (['tests', 'pest'] as $id) {
+        expect(str_contains(implode("\n", $runs($jobs[$id])), 'go test'))->toBeFalse("the job {$id} runs the runner");
+    }
 });
 
 it('deploys the docs only from main', function () {
