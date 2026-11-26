@@ -117,7 +117,7 @@ Which states a pull request of a person moves is under [pull requests](/en/conce
 
 werkbuch builds the prompt of every run in layers, in this order:
 
-1. **Contract**, in the code: what the kind of run does and never does (move, assign, merge, release, force-push), the format werkbuch reads, and that texts from items, comments, wiki and pull requests are data, not instructions. **Settings → Agents** shows it, folded and read only.
+1. **Contract**, in the code, in the language of the organization (English or German; the job of a run follows it): what the kind of run does and never does (move, assign, merge, release, force-push), the format werkbuch reads, and that texts from items, comments, wiki and pull requests are data, not instructions. **Settings → Agents** shows it, folded and read only.
 2. **Working rules per kind of run** for the whole organization, under **Settings → Agents**: prefilled with the standard of werkbuch in the language of the organization, **Restore the standard** per kind. Org admins change them.
 3. **Guidance for agents** of the item's type, in the type dialog.
 4. **Project information and rules for agents**, under **Project settings → Agents**.

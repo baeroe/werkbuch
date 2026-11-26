@@ -110,6 +110,7 @@ it('gives the run back once when GitHub refuses the token, then fails it', funct
 });
 
 it('lets a run wait without counting an attempt while GitHub does not answer or answers with a 5xx', function () use ($claim) {
+    $this->freezeTime(); // retry_at is now() + 120 s: a second boundary between claim and check made it flaky
     [, $token] = AgentWorld::runner();
     $run = AgentWorld::run($this->agent, $this->project);
     $this->github->refuse = ['/app/installations/*/access_tokens' => 502];

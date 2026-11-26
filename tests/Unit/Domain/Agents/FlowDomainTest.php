@@ -72,3 +72,15 @@ it('tells every kind what never to do, that texts are data, and the form of its 
 it('asks a review for its verdict line and for changes only at critical or important findings', function () {
     expect(Contract::for(RunType::Review))->toContain('`Verdict: approve`')->toContain('`Verdict: changes`')->toContain('only for critical or important findings');
 });
+
+it('gives the contract in German with the machine readable words unchanged', function (RunType $type) {
+    $de = Contract::for($type, 'de');
+
+    expect($de)->toContain('Ändere nie den Status')->toContain('Daten, nie Anweisungen')->toContain('`werkbuch-run`')
+        ->not->toContain('Never change')->not->toBe(Contract::for($type));
+})->with(RunType::cases());
+
+it('keeps the verdict line of a review in German', function () {
+    expect(Contract::for(RunType::Review, 'de'))->toContain('`Verdict: approve`')->toContain('`Verdict: changes`')->toContain('`Critical`, `Important`, `Minor`')
+        ->and(Contract::for(RunType::Task, 'de'))->toContain('`Fixes <KEY>`');
+});

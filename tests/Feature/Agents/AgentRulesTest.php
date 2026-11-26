@@ -20,7 +20,7 @@ it('reads the standards in the language of the organization with the contract of
     $rules = $this->actingAs(User::factory()->create())->getJson('/api/v1/agent-rules')->assertOk()->json('data');
 
     expect(array_column($rules, 'type'))->toBe(RunType::VALUES)
-        ->and($rules[0])->toMatchArray(['type' => 'task', 'standard' => true, 'contract' => Contract::for(RunType::Task)])
+        ->and($rules[0])->toMatchArray(['type' => 'task', 'standard' => true, 'contract' => Contract::for(RunType::Task, 'de')])
         ->and($rules[0]['body'])->toStartWith('## Ein Item umsetzen')
         ->and($rules[3]['body'])->toBe(AgentRules::standard(RunType::Review, Locale::De))
         ->and($rules[3]['standard_body'])->toBe(AgentRules::standard(RunType::Review, Locale::De));
