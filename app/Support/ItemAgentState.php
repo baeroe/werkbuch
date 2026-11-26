@@ -2,10 +2,13 @@
 
 namespace App\Support;
 
+use App\Domain\Workflow\AgentStep;
 use App\Models\AgentProjectSettings;
 use App\Models\AgentRun;
 use App\Models\ProjectRepository;
 use App\Models\User;
+use App\Models\Workflow;
+use App\Models\WorkflowState;
 use App\Models\WorkItem;
 
 /**
@@ -22,6 +25,7 @@ final class ItemAgentState
      *     thread: array{id: string, bot_id: string, status: string, pause_reason: string|null, corrections: int, conflicts: int, pr_number: int|null, branch: string|null, runner_id: string|null}|null,
      *     runs: int,
      *     refusal: string|null,
+     *     ready_state: string|null,
      *     brakes: array{max_corrections: int, max_conflicts: int},
      *     repository: bool,
      *     guard: array{branch: string|null, sha: string|null, here: bool}|null,
@@ -33,6 +37,8 @@ final class ItemAgentState
         $assignee = $item->assignee_id === null ? null : User::query()->find($item->assignee_id);
         $settings = AgentProjectSettings::of($item->project_id);
         $repository = ProjectRepository::query()->where('project_id', $item->project_id)->first();
+
+        $refusal = $assignee !== null && $assignee->isBot() ? AgentFlow::refusal($assignee, $item->project) : null;
 
         return [
             'thread' => $thread === null ? null : [
@@ -47,7 +53,9 @@ final class ItemAgentState
                 'runner_id' => $thread->runner_id,
             ],
             'runs' => AgentRun::query()->where('work_item_id', $item->id)->count(),
-            'refusal' => $assignee !== null && $assignee->isBot() ? AgentFlow::refusal($assignee, $item->project) : null,
+            'refusal' => $refusal,
+            'ready_state' => $assignee !== null && $assignee->isBot() && $refusal === null && $thread === null && $item->archived_at === null && ! AgentFlow::readyToBegin($item)
+                ? WorkflowState::query()->whereKey(Workflow::query()->find($item->project->workflow_id)?->agentState(AgentStep::Ready))->value('name') : null,
             'brakes' => ['max_corrections' => $settings->max_corrections, 'max_conflicts' => $settings->max_conflicts],
             'repository' => $repository !== null,
             'guard' => $repository === null || ! $repository->guarded() ? null : [

@@ -12,6 +12,7 @@ use App\Models\AgentThread;
 use App\Models\Comment;
 use App\Models\Event;
 use App\Models\User;
+use App\Models\Workflow;
 use App\Models\WorkflowState;
 use App\Models\WorkItem;
 use App\Support\Actor;
@@ -144,11 +145,43 @@ final class FollowEvent
         }
 
         $thread = AgentThread::query()->where('work_item_id', $item->id)->where('status', AgentThread::OPEN)->whereNotNull('pr_number')->orderByDesc('id')->first();
+        if ($to !== null && $thread === null && self::isReady($item, $to)) {
+            return self::begin($actor, $event, $item);
+        }
+
         if ($to === null || $thread === null || $item->assignee_id !== $thread->bot_id || ! in_array($to->category, [StateCategory::Backlog, StateCategory::Unstarted], true)) {
             return 'ignored';
         }
 
         return StartCorrection::run($actor, $thread, 'comments', AgentFlow::commentsSince($thread, $item)) === null ? 'ignored' : 'correction';
+    }
+
+    /** Whether a state is the step `ready` of the workflow of the item (WEBU-44, A772). */
+    private static function isReady(WorkItem $item, WorkflowState $to): bool
+    {
+        $steps = Workflow::query()->find($item->project->workflow_id)?->agentStates();
+
+        return $steps !== null && $steps['ready'] !== null && in_array($to->id, [$steps['ready'], $steps['correction']], true);
+    }
+
+    /**
+     * A person moved an item to Todo (`ready`) that has no PR yet: the bot it is assigned to begins it; a child of an
+     * epic the agent works through is taken up by the epic (A772).
+     */
+    private static function begin(Actor $actor, Event $event, WorkItem $item): string
+    {
+        if (AgentFlow::threadAt($item->id) !== null) {
+            return 'ignored';
+        }
+
+        $bot = $item->assignee_id === null ? null : User::query()->find($item->assignee_id);
+        if ($bot !== null && $bot->isBot() && StartTask::run($actor, $item, $bot, $event->id) !== null) {
+            return 'task';
+        }
+
+        $epic = self::epicOf($item);
+
+        return $epic !== null && ($item->assignee_id === null || $item->assignee_id === $epic->bot_id) && HandleRunResult::continueEpic($actor, $epic) === 'next_child' ? 'task' : 'ignored';
     }
 
     /**

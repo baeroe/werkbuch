@@ -13,8 +13,10 @@ enum AgentStep: string
     case Review = 'review';
     case Correction = 'correction';
     case Merged = 'merged';
+    /** Optional (WEBU-44, A772): where an item waits for its agent; without it an agent starts at once. */
+    case Ready = 'ready';
 
-    /** The steps in the order of the flow (the keys of `workflows.agent_states`). */
+    /** The steps the agents need in the order of the flow (the keys of `workflows.agent_states`); `ready` is optional. */
     public const KEYS = ['working', 'review', 'correction', 'merged'];
 
     /**
@@ -27,6 +29,7 @@ enum AgentStep: string
         return match ($this) {
             self::Working, self::Review => [StateCategory::Started],
             self::Correction => [StateCategory::Backlog, StateCategory::Unstarted],
+            self::Ready => [StateCategory::Unstarted],
             self::Merged => [StateCategory::Completed],
         };
     }
@@ -39,6 +42,7 @@ enum AgentStep: string
             self::Review => __('catalog.agent_step.review'),
             self::Correction => __('catalog.agent_step.correction'),
             self::Merged => __('catalog.agent_step.merged'),
+            self::Ready => __('catalog.agent_step.ready'),
         };
     }
 
@@ -56,13 +60,13 @@ enum AgentStep: string
     /**
      * Stored steps as they are to be read: every step once, in order, a state id or null (anything else falls away).
      *
-     * @return array{working: ?string, review: ?string, correction: ?string, merged: ?string}
+     * @return array{working: ?string, review: ?string, correction: ?string, merged: ?string, ready: ?string}
      */
     public static function read(mixed $stored): array
     {
-        $steps = ['working' => null, 'review' => null, 'correction' => null, 'merged' => null];
+        $steps = ['working' => null, 'review' => null, 'correction' => null, 'merged' => null, 'ready' => null];
 
-        foreach (self::KEYS as $key) {
+        foreach (array_keys($steps) as $key) {
             $value = is_array($stored) ? ($stored[$key] ?? null) : null;
             $steps[$key] = is_string($value) ? $value : null;
         }
@@ -71,12 +75,14 @@ enum AgentStep: string
     }
 
     /**
-     * Whether every step names a state.
+     * Whether every step the agents need names a state (`ready` is optional).
      *
      * @param  array<string, ?string>  $steps
      */
     public static function complete(array $steps): bool
     {
-        return ! in_array(null, self::read($steps), true);
+        $read = self::read($steps);
+
+        return ! in_array(null, array_map(fn (string $key) => $read[$key], self::KEYS), true);
     }
 }

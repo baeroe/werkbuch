@@ -159,7 +159,7 @@ final class WorkflowInput
      * when it was kept. In progress and in review (both Started) need two states.
      *
      * @param  array{states: list<array{index: array-key, key: string, existing: ?string, category: StateCategory}>, state_mapping: array<array-key, mixed>, agent_states: ?array<array-key, mixed>}  $valid
-     * @return array{working: ?string, review: ?string, correction: ?string, merged: ?string}
+     * @return array{working: ?string, review: ?string, correction: ?string, merged: ?string, ready: ?string}
      *
      * @throws Problem 422 with the errors at their steps or states
      */
@@ -212,6 +212,10 @@ final class WorkflowInput
         // two steps of the same category on one state would make the agents' steps indistinguishable (A540)
         if ($errors === [] && $steps['working'] !== null && $steps['working'] === $steps['review']) {
             $errors['agent_states.review'] = [__('field.agent_states.same')];
+        }
+
+        if ($errors === [] && $steps['ready'] !== null && $steps['ready'] === $steps['correction']) {
+            $errors['agent_states.ready'] = [__('field.agent_states.same_ready')];
         }
 
         if ($errors !== []) {

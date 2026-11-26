@@ -33,7 +33,7 @@ import { Switch } from '@/components/ui/Switch';
 import { Textarea } from '@/components/ui/Textarea';
 import { toast } from '@/components/ui/toast';
 import { useUserMap } from '@/components/fields/itemData';
-import { AGENT_STEPS, botModels, isModelLabel, missingSteps, parseModel, RUN_TYPES, STEP_CATEGORIES, stepsComplete } from '@/domain/agents';
+import { AGENT_STEPS, ALL_STEPS, botModels, isModelLabel, missingSteps, parseModel, RUN_TYPES, STEP_CATEGORIES, stepsComplete } from '@/domain/agents';
 import { useProjectAgents, useSaveProjectAgents } from '@/hooks/agents';
 import { useLabels } from '@/hooks/catalog';
 import { useConfirmMergeGuard, useGitHub, useProjectRepository, useSetProjectRepository } from '@/hooks/github';
@@ -64,6 +64,7 @@ const STEP_NAMES: Record<AgentStep, TranslationKey> = {
   review: 'catalog.agent_step.review',
   correction: 'catalog.agent_step.correction',
   merged: 'catalog.agent_step.merged',
+  ready: 'catalog.agent_step.ready',
 };
 
 const STEP_HINTS: Record<AgentStep, TranslationKey> = {
@@ -71,6 +72,7 @@ const STEP_HINTS: Record<AgentStep, TranslationKey> = {
   review: 'settings.project.agents.step_hint.review',
   correction: 'settings.project.agents.step_hint.correction',
   merged: 'settings.project.agents.step_hint.merged',
+  ready: 'settings.project.agents.step_hint.ready',
 };
 
 /** The categories a step accepts in words, "Unstarted oder Backlog". */
@@ -595,7 +597,7 @@ function AgentsForm({ project, canManage, readOnlyReason, link, settings, github
 
       <SettingsCard title={t('settings.project.agents.steps.title')} description={t('settings.project.agents.steps.description', { workflow: workflow.name })}>
         <dl className="flex flex-col gap-4">
-          {AGENT_STEPS.map((step) => (
+          {ALL_STEPS.map((step) => (
             <StepRow key={step} step={step} workflow={workflow} />
           ))}
         </dl>

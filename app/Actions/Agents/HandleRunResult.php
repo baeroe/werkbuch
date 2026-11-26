@@ -104,6 +104,10 @@ final class HandleRunResult
         $bot = User::query()->findOrFail($thread->bot_id);
         $next = StartTask::nextChild($thread, $epic, $bot);
 
+        if ($next === null && StartTask::waitsForReady($thread, $epic, $bot)) {
+            return 'waiting_ready'; // children in the backlog: the epic is not ready yet (A772)
+        }
+
         return $next !== null && StartTask::enqueue($actor, $bot, $thread, $next, null) !== null ? 'next_child' : ReadyEpic::run($actor, $thread);
     }
 

@@ -111,7 +111,7 @@ describe('toInput', () => {
     // the steps of the agents did not change: the server keeps them
     expect(input).not.toHaveProperty('agent_states');
     expect(toInput(blankDraft()).id).toBeUndefined();
-    expect(toInput(blankDraft()).agent_states).toEqual({ working: null, review: null, correction: null, merged: null });
+    expect(toInput(blankDraft()).agent_states).toEqual({ working: null, review: null, correction: null, merged: null, ready: null });
   });
 });
 
@@ -119,7 +119,7 @@ describe('agentStatesToSend', () => {
   it('sends the steps of a new workflow, and of a saved one only when they changed', () => {
     expect(agentStatesToSend(draftOf(agency), null)).toEqual(agency.agent_states);
     expect(agentStatesToSend(draftOf(agency), agency)).toBeUndefined();
-    const changed = { ...draftOf(agency), agent_states: { ...agency.agent_states, review: 'app_approval' } };
+    const changed = { ...draftOf(agency), agent_states: { ...draftOf(agency).agent_states, review: 'app_approval' } };
     expect(agentStatesToSend(changed, agency)).toEqual({ ...agency.agent_states, review: 'app_approval' });
     // a workflow the server has not given steps yet reads as none
     expect(agentStatesToSend(draftOf(standard), { ...standard, agent_states: undefined as never })).toBeUndefined();
@@ -130,7 +130,7 @@ describe('agentStatesToSend', () => {
     // In Review is removed, and the merged step changes
     const removed = { ...draft, states: draft.states.filter((state) => state.id !== 'app_review'), agent_states: { ...draft.agent_states, merged: null } };
 
-    expect(agentStatesToSend(removed, agency, { app_review: 'app_approval' })).toEqual({ working: 'app_progress', review: 'app_approval', correction: 'app_todo', merged: null });
+    expect(agentStatesToSend(removed, agency, { app_review: 'app_approval' })).toEqual({ working: 'app_progress', review: 'app_approval', correction: 'app_todo', merged: null, ready: null });
     // a target of another category, or none: the step goes empty
     expect(agentStatesToSend(removed, agency, { app_review: 'app_done' })?.review).toBeNull();
     expect(agentStatesToSend(removed, agency)?.review).toBeNull();

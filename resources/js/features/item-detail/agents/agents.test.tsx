@@ -495,6 +495,16 @@ describe('a run that waits', () => {
   });
 });
 
+/* --------------------------------------------------------- an item that waits for Todo */
+
+describe('an item in the backlog of a bot that begins in Todo', () => {
+  it('says what it waits for', async () => {
+    agent = state({ thread: null, ready_state: 'Todo' });
+    renderItem();
+    expect(await screen.findByText('Kira beginnt, sobald das Item auf „Todo“ steht')).toBeTruthy();
+  });
+});
+
 /* --------------------------------------------------------- a bot that is no agent */
 
 describe('a bot that does not work here as an agent', () => {

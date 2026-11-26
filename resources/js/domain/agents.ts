@@ -7,7 +7,11 @@
 
 import type { AgentCli, AgentStep, Label, Project, ProjectAgentBot, ProjectRole, RunType, State, StateCategory, User, Workflow } from '@/types';
 
-export const AGENT_STEPS: readonly AgentStep[] = ['working', 'review', 'correction', 'merged'];
+/** The steps agents need; `ready` (Todo) is optional: without it an agent begins an item at once (A772). */
+export const AGENT_STEPS: readonly Exclude<AgentStep, 'ready'>[] = ['working', 'review', 'correction', 'merged'];
+
+/** Every step an editor shows: the required ones, then the optional `ready`. */
+export const ALL_STEPS: readonly AgentStep[] = [...AGENT_STEPS, 'ready'];
 
 /** The categories a step accepts (spec 7.4). */
 export const STEP_CATEGORIES: Record<AgentStep, readonly StateCategory[]> = {
@@ -15,11 +19,15 @@ export const STEP_CATEGORIES: Record<AgentStep, readonly StateCategory[]> = {
   review: ['started'],
   correction: ['unstarted', 'backlog'],
   merged: ['completed'],
+  ready: ['unstarted'],
 };
 
 export type AgentSteps = Record<AgentStep, string | null>;
 
-export const NO_STEPS: AgentSteps = { working: null, review: null, correction: null, merged: null };
+/** The steps agents need (everything but the optional `ready`). */
+export type RequiredSteps = Pick<AgentSteps, 'working' | 'review' | 'correction' | 'merged'>;
+
+export const NO_STEPS: AgentSteps = { working: null, review: null, correction: null, merged: null, ready: null };
 
 type StateLike = Pick<State, 'id' | 'name' | 'category'>;
 
@@ -27,12 +35,12 @@ type StateLike = Pick<State, 'id' | 'name' | 'category'>;
 export const fitsStep = (step: AgentStep, category: StateCategory) => STEP_CATEGORIES[step].includes(category);
 
 /** The steps without a status. */
-export function missingSteps(steps: AgentSteps): AgentStep[] {
+export function missingSteps(steps: RequiredSteps): AgentStep[] {
   return AGENT_STEPS.filter((step) => steps[step] === null);
 }
 
 /** All four steps name a status of the workflow that fits: only then do agents work in its projects. */
-export function stepsComplete(states: readonly StateLike[], steps: AgentSteps): boolean {
+export function stepsComplete(states: readonly StateLike[], steps: RequiredSteps): boolean {
   return AGENT_STEPS.every((step) => {
     const state = states.find((entry) => entry.id === steps[step]);
     return state !== undefined && fitsStep(step, state.category);
@@ -66,6 +74,7 @@ export function suggestSteps(states: readonly StateLike[]): AgentSteps {
     review: review?.id ?? null,
     correction: correction?.id ?? null,
     merged: fitting('merged')[0]?.id ?? null,
+    ready: null, // Todo is a decision of the team, never guessed
   };
 }
 

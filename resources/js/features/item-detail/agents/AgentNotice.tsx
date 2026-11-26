@@ -251,6 +251,14 @@ export function AgentNotice({ item, runs, agent }: { item: WorkItem; runs: reado
     );
   }
 
+  if (agent?.ready_state && assignee) {
+    parts.push(
+      <Banner key="ready" tone="neutral" icon={Hourglass} title={t('items.agents.ready.title', { bot: assignee.name, state: agent.ready_state })}>
+        <span className="block max-w-[65ch]">{t('items.agents.ready.text', { bot: assignee.name, state: agent.ready_state })}</span>
+      </Banner>,
+    );
+  }
+
   if (parts.length === 0) return null;
   return (
     <div data-agent-notice="" className="mt-3 flex flex-col gap-2">

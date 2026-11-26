@@ -69,8 +69,9 @@ A workflow names the state each step of the agents sets, and every project of th
 | `review` (In review) | Started | a state "In Review" of its own (in the standard workflow: Pending) |
 | `correction` (Correction) | Backlog or Unstarted | Todo |
 | `merged` (Merged) | Completed | Done |
+| `ready` (Ready, optional) | Unstarted | Todo |
 
-Org admins set them in the workflow editor, section **Agents** (**Take the proposal** fills the empty steps from the state names and categories), or over REST and MCP (`agent_states` of the workflow, step → id of a state). The agent settings of a project show the steps to read, and switching the workflow of a project says beforehand whether agents stay on. Left out of a save, the steps stay. A step on a state of another category is a `422` at the step, and In progress and In review need two different states; a state that a step names keeps its category (`422` at the state). When a state goes, its step follows the state that takes over its items (`state_mapping`) if that state fits, else the step is empty. Only a workflow that names all four steps lets pull requests move items.
+Org admins set them in the workflow editor, section **Agents** (**Take the proposal** fills the empty steps from the state names and categories), or over REST and MCP (`agent_states` of the workflow, step → id of a state). The agent settings of a project show the steps to read, and switching the workflow of a project says beforehand whether agents stay on. Left out of a save, the steps stay. A step on a state of another category is a `422` at the step, and In progress and In review need two different states; a state that a step names keeps its category (`422` at the state). When a state goes, its step follows the state that takes over its items (`state_mapping`) if that state fits, else the step is empty. Only a workflow that names the first four steps lets pull requests move items. `ready` is optional: with it an agent begins an item only when it is in that state (and not in the backlog), see [begin](/en/concepts/agents#begin-in-todo); it needs a state of its own, not the one of `correction`.
 
 ### Pull requests
 
