@@ -23,7 +23,8 @@ use Throwable;
  * sees no tool. A tool the token may not use is missing from `tools/list` and unknown when called (the package answers
  * -32602 before `handle`, which still refuses it, defence in depth).
  *
- * A tool with one action has no argument `action`; its action is called `call`. The annotations (`IsReadOnly`,
+ * A tool with one action has no argument `action`; its action is called `call`. A tool that once had one action and
+ * got a second keeps answering a call without `action` with its first (`defaultAction`, A771). The annotations (`IsReadOnly`,
  * `IsDestructive`, `IsOpenWorld`) are class attributes and not inherited: every tool carries its own (K17), and sets
  * `$title` (English, without "Tool").
  */
@@ -34,6 +35,12 @@ abstract class WerkbuchTool extends Tool
 
     /** @return list<McpAction> */
     abstract protected function actions(): array;
+
+    /** The action of a call without `action`, for a tool that had only this one before (A771); else `null`. */
+    protected function defaultAction(): ?string
+    {
+        return null;
+    }
 
     final public function handle(McpRequest $request): ResponseFactory
     {
@@ -59,7 +66,7 @@ abstract class WerkbuchTool extends Tool
      */
     public function toArray(): array
     {
-        return [...parent::toArray(), 'inputSchema' => ToolSchema::input($this->actions())];
+        return [...parent::toArray(), 'inputSchema' => ToolSchema::input($this->actions(), $this->defaultAction())];
     }
 
     final public function shouldRegister(Request $http): bool
@@ -92,7 +99,7 @@ abstract class WerkbuchTool extends Tool
     }
 
     /**
-     * The action the call names; a tool with a single action needs no name.
+     * The action the call names; a tool with a single action needs no name, one with a default action none either.
      *
      * @throws ValidationException
      */
@@ -103,7 +110,7 @@ abstract class WerkbuchTool extends Tool
             return $actions[0];
         }
 
-        return $this->actionNamed((string) $args->action())
+        return $this->actionNamed((string) ($args->action() ?? $this->defaultAction()))
             ?? throw ValidationException::withMessages(['action' => __('field.mcp.action', ['allowed' => implode(', ', $this->actionNames())])]);
     }
 }

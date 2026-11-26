@@ -8,6 +8,12 @@ namespace App\Domain\Agents;
  */
 final class Protocol
 {
+    /**
+     * The name of the MCP server of werkbuch in the configuration a run gets (`ClaimRun`) and in its prompts (the
+     * contract, `RunPrompts`): the CLI calls its tools `mcp__werkbuch-run__<tool>`.
+     */
+    public const MCP_SERVER = 'werkbuch-run';
+
     /** The version a runner has to speak; a runner with an older one gets no runs (spec 6.1). */
     public const VERSION = 1;
 

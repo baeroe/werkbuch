@@ -185,7 +185,7 @@ it('gives each action the ability of its twin', function (string $suite) {
     foreach (ToolRows::tools($suite) as $tool) {
         foreach ($tool->actionNames() as $name) {
             $action = $tool->actionNamed($name);
-            // a read through a body (POST work-items/query) reads; an action without a twin writes, unless it reads by name (A772)
+            // a read through a body (POST work-items/query) reads; an action without a twin writes, unless it reads by name (A771)
             $needed = match (true) {
                 isset(ToolRows::READS_WITHOUT_TWIN["{$tool->name()}:{$name}"]) => 'read',
                 $action->twin === null => 'write',

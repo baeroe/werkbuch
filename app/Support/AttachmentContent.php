@@ -5,8 +5,8 @@ namespace App\Support;
 use App\Models\Attachment;
 
 /**
- * The content of an attachment as ReadAttachmentContent reads it (A772): a picture (its bytes and type, `preview` when
- * it is the preview), a text (`cut` when it goes on) or nothing readable (`other`).
+ * The content of an attachment as ReadAttachmentContent reads it (A771): a picture (its bytes and type, `preview` when
+ * it is the preview), a text (`cut` when it goes on) or nothing readable through MCP (`other`: no agent holds a token that downloads it).
  */
 final readonly class AttachmentContent
 {
@@ -37,7 +37,7 @@ final readonly class AttachmentContent
             'shown' => match ($this->kind) {
                 self::IMAGE => $this->preview ? 'the preview as an image' : 'the original as an image',
                 self::TEXT => $this->cut ? 'the first '.strlen($this->data).' bytes as text' : 'the whole file as text',
-                default => 'nothing: neither a picture nor text; GET the url of attachments:get with the same token to download it',
+                default => 'nothing: not readable through MCP; say so in your answer if you need it',
             },
         ];
     }

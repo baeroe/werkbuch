@@ -4,6 +4,7 @@ use App\Domain\Agents\Contract;
 use App\Domain\Agents\RunType;
 use App\Models\AgentRun;
 use App\Models\Attachment;
+use App\Models\Comment;
 use App\Models\Project;
 use App\Models\WorkItem;
 use App\Support\RunPrompts;
@@ -33,9 +34,10 @@ it('names the calls that read the item, its comments and its pictures to every k
 
     expect($prompt($item, $type, $more))
         ->toContain("Before any work, read the item through `werkbuch-run` with exactly these arguments:\n\n"
-            ."- tool `work-items`: `{\"action\": \"get\", \"item\": \"{$key}\"}` (the item with its description)\n"
-            ."- tool `comments`: `{\"action\": \"list\", \"item\": \"{$key}\", \"per_page\": 100}` (its comments, oldest first; follow `meta.next_cursor`)\n"
-            .'- tool `attachments`: `{"action": "content", "attachment": "<id>"}` for every `attachment:<id>` in the description or the comments')
+            ."- tool `work-items`: `{\"action\": \"get\", \"item\": \"{$key}\", \"include\": [\"attachments\", \"relations\"]}` (the item with its description, values, files and relations)\n"
+            ."- tool `comments`: `{\"action\": \"list\", \"item\": \"{$key}\", \"per_page\": 100}` (its comments, oldest first), and while `meta.next_cursor` is set: `{\"action\": \"list\", \"item\": \"{$key}\", \"per_page\": 100, \"cursor\": \"<meta.next_cursor>\"}`\n"
+            .'- tool `attachments`: `{"action": "content", "attachment": "<id>"}` for every `attachment:<id>` in the item (description, values) or the comments and every file in its `attachments`')
+        ->not->toContain('the epic it belongs to')
         ->toContain('ToolSearch with `select:mcp__werkbuch-run__work-items,mcp__werkbuch-run__comments,mcp__werkbuch-run__attachments`')
         // the text of the item stays out: the agent reads it
         ->not->toContain('Secret plan');
@@ -46,6 +48,13 @@ it('names the calls that read the item, its comments and its pictures to every k
     'review' => [RunType::Review, ['pr_number' => 3, 'head_sha' => str_repeat('a', 40)]],
     'comment' => [RunType::Comment, ['context' => ['author' => 'Mara', 'question' => 'Why?']]],
 ]);
+
+it('names the epic of a child to read as well', function () use ($prompt) {
+    $epic = WorkItem::factory()->for($this->project)->epic()->create();
+    $child = WorkItem::factory()->for($this->project)->childOf($epic)->create();
+
+    expect($prompt($child))->toContain("- tool `work-items`: `{\"action\": \"get\", \"item\": \"{$epic->key}\"}` (the epic it belongs to)\n- tool `comments`");
+});
 
 it('names no calls for a run without an item', function () use ($prompt) {
     expect($prompt(null, RunType::Review, ['pr_number' => 3, 'head_sha' => str_repeat('a', 40)]))->not->toContain('Before any work');
@@ -59,15 +68,23 @@ it('tells every kind to read the item first and to stop when reading fails twice
 
 it('names calls the tools of werkbuch-run answer with the token of the run', function () {
     Storage::fake('local');
-    $item = WorkItem::factory()->for($this->project)->create();
+    $epic = WorkItem::factory()->for($this->project)->epic()->create();
+    $item = WorkItem::factory()->for($this->project)->childOf($epic)->create();
+    Comment::factory()->count(2)->for($item, 'workItem')->create();
     $picture = Attachment::factory()->forItem($item)->stored('notes', 'text/plain', 'notes.txt')->create();
     $run = AgentRun::factory()->type(RunType::Task)->create(['bot_id' => $this->kira->id, 'project_id' => $this->project->id, 'work_item_id' => $item->id]);
-    preg_match_all('/tool `([a-z-]+)`: `(\{[^`]+\})`/', RunPrompts::for($run)['prompt'], $calls, PREG_SET_ORDER);
+    preg_match_all('/`(\{"action"[^`]+\})`/', RunPrompts::for($run)['prompt'], $calls);
+    $tools = ['work-items', 'work-items', 'comments', 'comments', 'attachments'];
     $mcp = McpClient::for($this, AgentWorld::token($run));
 
-    expect(array_column($calls, 1))->toBe(['work-items', 'comments', 'attachments']);
-    foreach ($calls as [, $tool, $arguments]) {
-        $answer = $mcp->call($tool, json_decode(str_replace('<id>', $picture->id, $arguments), true, flags: JSON_THROW_ON_ERROR));
-        expect($answer['isError'])->toBeFalse("{$tool}: ".json_encode($answer));
+    expect($calls[1])->toHaveCount(5);
+    $cursor = null;
+    foreach ($calls[1] as $n => $arguments) {
+        // a page of one comment, so the call with the cursor of the next page runs too
+        $arguments = str_replace(['<id>', '"per_page": 100', '<meta.next_cursor>'], [$picture->id, '"per_page": 1', (string) $cursor], $arguments);
+        $answer = $mcp->call($tools[$n], json_decode($arguments, true, flags: JSON_THROW_ON_ERROR));
+        expect($answer['isError'])->toBeFalse("{$tools[$n]}: ".json_encode($answer));
+        $cursor ??= $answer['structuredContent']['meta']['next_cursor'] ?? null;
     }
+    expect($cursor)->toBeString();
 });

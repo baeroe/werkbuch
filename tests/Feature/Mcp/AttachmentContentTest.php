@@ -14,7 +14,7 @@ use Tests\Support\Mcp\McpClient;
 use Tests\TestCase;
 
 /*
- * `attachments:content` (A772): what an agent sees of a picture or file of an item. A picture comes back as MCP image
+ * `attachments:content` (A771): what an agent sees of a picture or file of an item. A picture comes back as MCP image
  * content (the preview when there is one), a text file as text, anything else as its facts only; whoever may not read
  * it gets the 404 of an unknown one.
  */
@@ -59,12 +59,18 @@ it('gives a picture as an image, the preview when there is one', function () use
         ->and($original['content'][1])->toBe(['type' => 'image', 'data' => base64_encode($picture('gif')), 'mimeType' => 'image/gif']);
 });
 
-it('refuses a picture over the limit with a sentence', function () use ($content) {
+it('gives a picture up to the limit and refuses a larger one with a sentence', function () use ($content) {
+    $most = Attachment::factory()->forItem($this->item)->stored(str_repeat('x', ReadAttachmentContent::IMAGE_MAX), 'image/gif', 'most.gif')->create();
     $big = Attachment::factory()->forItem($this->item)->stored(str_repeat('x', ReadAttachmentContent::IMAGE_MAX + 1), 'image/gif', 'big.gif')->create();
+
+    // a model takes an image of at most 5 MiB base64-encoded
+    $shown = $content($this, $this->token, $most->id);
+    expect($shown['content'][1]['type'])->toBe('image')
+        ->and(strlen($shown['content'][1]['data']))->toBe(5 * 1024 * 1024);
 
     $refused = $content($this, $this->token, $big->id);
     expect($refused['isError'])->toBeTrue()
-        ->and($refused['structuredContent'])->toMatchArray(['status' => 413, 'reason' => 'payload_too_large', 'detail' => 'The picture is larger than 5 MB; look at it in the browser instead.']);
+        ->and($refused['structuredContent'])->toMatchArray(['status' => 413, 'reason' => 'payload_too_large', 'detail' => 'The picture is larger than 3.75 MB; look at it in the browser instead.']);
 });
 
 it('gives a text file as text, its beginning when it is long', function () use ($content, $facts) {
@@ -81,13 +87,39 @@ it('gives a text file as text, its beginning when it is long', function () use (
         ->and($cut['content'][1]['text'])->toBe(str_repeat('ä', ReadAttachmentContent::TEXT_MAX / 2));
 });
 
-it('names anything else only by its facts', function () use ($content, $facts) {
+it('names anything else only by its facts, a picture no model reads too', function () use ($content, $facts) {
     $pdf = Attachment::factory()->forItem($this->item)->stored('%PDF-1.4', 'application/pdf', 'plan.pdf')->create();
+    $avif = Attachment::factory()->forItem($this->item)->stored('avif', 'image/avif', 'shot.avif')->create();
 
     $named = $content($this, $this->token, $pdf->id);
     expect($named['content'])->toHaveCount(1)
-        ->and($facts($named))->toMatchArray(['filename' => 'plan.pdf', 'mime' => 'application/pdf', 'size' => 8])
-        ->and($facts($named)['shown'])->toStartWith('nothing');
+        ->and($facts($named))->toMatchArray(['filename' => 'plan.pdf', 'mime' => 'application/pdf', 'size' => 8, 'shown' => 'nothing: not readable through MCP; say so in your answer if you need it']);
+
+    $avifNamed = $content($this, $this->token, $avif->id);
+    expect($avifNamed['content'])->toHaveCount(1)
+        ->and($facts($avifNamed))->toMatchArray(['filename' => 'shot.avif', 'mime' => 'image/avif', 'shown' => 'nothing: not readable through MCP; say so in your answer if you need it']);
+});
+
+it('answers a picture or a text whose file is gone as an unknown one', function () use ($picture, $content) {
+    $png = Attachment::factory()->forItem($this->item)->stored($picture('png'), 'image/png', 'shot.png')->create();
+    $text = Attachment::factory()->forItem($this->item)->stored('notes', 'text/plain', 'notes.txt')->create();
+    foreach ([$png, $text] as $attachment) {
+        Storage::disk('local')->deleteDirectory(dirname((string) $attachment->getFirstMedia('file')?->getPathRelativeToRoot()));
+    }
+
+    expect($content($this, $this->token, $png->id)['structuredContent']['status'])->toBe(404)
+        ->and($content($this, $this->token, $text->id)['structuredContent']['status'])->toBe(404);
+});
+
+it('reads the data of an attachment for a call without action, as before content came', function () {
+    $text = Attachment::factory()->forItem($this->item)->stored('notes', 'text/plain', 'notes.txt')->create();
+    $mcp = McpClient::for($this, $this->token);
+
+    $without = $mcp->call('attachments', ['attachment' => $text->id]);
+    expect($without['isError'])->toBeFalse()
+        ->and($without['structuredContent']['data'])->toMatchArray(['id' => $text->id, 'filename' => 'notes.txt'])
+        ->and($mcp->call('attachments', ['action' => 'get', 'attachment' => $text->id])['structuredContent'])->toBe($without['structuredContent'])
+        ->and($mcp->call('attachments', ['action' => 'nope', 'attachment' => $text->id])['structuredContent']['status'])->toBe(422);
 });
 
 it('answers whoever may not read it, and a file that is gone, as an unknown one', function () use ($picture, $content) {

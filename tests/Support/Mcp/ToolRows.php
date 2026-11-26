@@ -38,7 +38,7 @@ final class ToolRows
      * answer is content no REST body carries, so they have no parity row either.
      */
     public const READS_WITHOUT_TWIN = [
-        'attachments:content' => 'A772: a picture as MCP image content; the file itself is /attachments/{id} outside /api/v1 (A235)',
+        'attachments:content' => 'A771: a picture as MCP image content; the file itself is /attachments/{id} outside /api/v1 (A235)',
     ];
 
     /**

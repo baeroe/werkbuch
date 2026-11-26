@@ -21,12 +21,12 @@ use stdClass;
 final readonly class McpResult
 {
     /**
-     * @param  list<Response>  $parts  the content of a result that is no JSON body (an image, A772)
+     * @param  list<Response>  $parts  the content of a result that is no JSON body (an image, A771)
      */
     private function __construct(private stdClass $body, private bool $list = false, private array $parts = []) {}
 
     /**
-     * A result in parts of content of its own (text, an image) instead of a body; no REST twin answers it (A772).
+     * A result in parts of content of its own (text, an image) instead of a body; no REST twin answers it (A771).
      */
     public static function content(Response ...$parts): self
     {

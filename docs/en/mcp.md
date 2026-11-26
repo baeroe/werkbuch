@@ -76,7 +76,7 @@ Beyond that, a tool sees exactly what its account sees over REST. Something the 
 
 ## Tools
 
-A tool with several actions takes the argument `action`. A tool with one action (`whoami`, `search`, `get-upload-url`, `automations`, `manage-automations`, `relations`, `attachments`, `manage-attachments`) takes none; the table names its action all the same (`call` for the first three). The guide writes an action as `tool:action`, for example `work-items:get`. **Required** names the arguments an action needs besides `action`; **REST twin** is the operation below `/api/v1` the action mirrors, with its parameters, body and answer in the reference at `/api/docs`.
+A tool with several actions takes the argument `action`. A tool with one action (`whoami`, `search`, `get-upload-url`, `automations`, `manage-automations`, `relations`, `manage-attachments`) takes none; the table names its action all the same (`call` for the first three). `attachments` had only `get` until it got `content`: a call without `action` still reads `get`. The guide writes an action as `tool:action`, for example `work-items:get`. **Required** names the arguments an action needs besides `action`; **REST twin** is the operation below `/api/v1` the action mirrors, with its parameters, body and answer in the reference at `/api/docs`.
 
 <!-- tools:start -->
 
@@ -295,7 +295,7 @@ Writes comments. Only the author edits a comment; the author or a project admin 
 
 ### `attachments`
 
-The data and the content of a picture or file. `content` gives a picture as an image (the preview when there is one, at most 5 MB), a text file as text (the first 200 KB), anything else only its name, type and size; it is how an agent looks at the pictures of an item. The file itself comes from `url` with the same bearer token (`?download=1` to download it). (Needs `read`.)
+The data and the content of a picture or file. `content` gives a PNG, JPEG, GIF or WebP as an image (the preview when there is one, at most 3.75 MB, which base64-encoded stays under the 5 MB a model takes), a text file as text (the first 200 KB), anything else (also an AVIF) only its name, type and size; it is how an agent looks at the pictures of an item. The file itself comes from `url` with the same bearer token (`?download=1` to download it). (Needs `read`.)
 
 | Action | Purpose | Required | REST twin |
 |---|---|---|---|

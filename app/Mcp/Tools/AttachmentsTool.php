@@ -21,7 +21,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 /**
  * `attachments` (spec 4.16): the data of one attachment for whoever sees what names it. The file itself is `url`
  * (outside `/api/v1`), which the same bearer token reads (A235); `content` gives it to an agent as an image or text,
- * without a REST twin (A772). The write is `manage-attachments`; an upload goes through `get-upload-url`.
+ * without a REST twin (A771). The write is `manage-attachments`; an upload goes through `get-upload-url`.
  */
 #[IsReadOnly]
 #[IsOpenWorld(false)]
@@ -54,7 +54,13 @@ final class AttachmentsTool extends ReadTool
         )];
     }
 
-    /** The facts of the attachment as JSON, then the picture or the text (A772). */
+    /** A call without `action` reads the data as before `content` came (A771). */
+    protected function defaultAction(): string
+    {
+        return 'get';
+    }
+
+    /** The facts of the attachment as JSON, then the picture or the text (A771). */
     private static function content(AttachmentContent $content): McpResult
     {
         $facts = Response::json($content->facts());
