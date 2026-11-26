@@ -6,6 +6,7 @@ use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Http\Request;
 use Tests\Support\OpenApi\Contract;
 use Tests\Support\OpenApi\RecordContract;
 
@@ -56,6 +57,10 @@ abstract class TestCase extends BaseTestCase
             Contract::assertClean();
         } finally {
             parent::tearDown();
+            // TrustHosts sets the host patterns on Symfony's Request statically, for every later test of the process: a
+            // request as `production` (ApiDocsRoutesTest) left the host of APP_URL, and a test that came next without
+            // ProblemTest in between, as in a Pest shard, got 400 for http://localhost (WEBU-46)
+            Request::setTrustedHosts([]);
         }
     }
 }

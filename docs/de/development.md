@@ -76,6 +76,17 @@ ddev exec pnpm --dir docs build                           # diese Doku
 
 Die Tests nutzen eine eigene Datenbank `testing`, die DDEV beim Start anlegt. Die Tests in `tests/Integration` brauchen zusätzlich ein laufendes Meilisearch (`ddev describe` nennt den Dienst `meilisearch`); sie nutzen das Index-Präfix `testing_` und lassen die Indizes der App in Ruhe. Alle anderen Tests suchen in einer nachgebauten Suchmaschine im Speicher. `ddev exec` reicht seine Argumente an eine Shell weiter: Kommandos mit Glob-Mustern gehören in einfache Anführungszeichen.
 
+### Continuous Integration
+
+`.github/workflows/tests.yml` läuft bei jedem Pull Request und jedem Push auf `main`. Das Ruleset von `main` verlangt einen Check, `tests`; er ist ein Tor über die Jobs, die die Arbeit machen, und scheitert, sobald einer davon nicht bestanden hat:
+
+- `lint` läuft Pint (`--parallel`), Larastan, `tsc` und den Build, ohne Abdeckung.
+- `pest (<n>/8)` läuft Pest auf acht Runnern, jeder mit eigener MariaDB, eigenem Meilisearch, Mailpit und Gotenberg: `vendor/bin/pest --shard=<n>/8 --coverage-php=…`. Pest verteilt die Testklassen nach ihren Zeiten in `tests/.pest/shards.json`; eine Klasse, die die Datei nicht kennt, geht reihum an die Shards. Laufen die Shards auseinander (einer braucht deutlich länger als die anderen), die Datei aus den Zeiten eines CI-Laufs neu schreiben: `gh run download <run> --pattern 'pest-times-*' --dir /tmp/times && php scripts/pest-shards.php /tmp/times/*/*.xml` (oder aus einem lokalen Lauf, `ddev exec vendor/bin/pest --update-shards`).
+- `e2e-build` läuft Vitest mit Abdeckung und seinen Schwellen je Ordner, einmal für das Tor und für die zusammengeführte Frontend-Abdeckung.
+- `tests` wartet auf die drei, scheitert, wenn einer davon scheiterte oder übersprungen wurde, und führt die Abdeckung der acht Shards zusammen (`php scripts/pest-coverage.php coverage/pest 8`): unter 100 % der Zeilen von `app/` nennt es jede Datei mit den Zeilen, die kein Test lief.
+
+`ddev artisan test --coverage --min=100` bleibt dieselbe Prüfung in einem Lauf. Die übrigen Jobs sind kein Pflicht-Check: die e2e-Suite (unten), `docs`, `runner` und `clickdummy` bei jedem Lauf (e2e, `clickdummy`, `load` und `image` starten nach den Pest-Shards: das Konto hat 20 Runner gleichzeitig für alle Läufe zusammen, und die Shards des Pflicht-Checks bekommen sie zuerst), `load` und `image` bei einem Pull Request nur, wenn er berührt, was sie prüfen (`scripts/ci-changes.sh`: die Last-Suite für `app/`, `database/`, `config/`, `routes/`, `bootstrap/`, `tests/Load/`, `tests/Pest.php`, `tests/TestCase.php`, `phpunit.load.xml` und die Composer-Dateien; das Image für das Dockerfile, `docker/`, die Compose-Dateien, den Runner, die Manifeste der Abhängigkeiten und was es beim Start ausführt (`config/werkbuch.php`, `routes/`, `bootstrap/`, `resources/agents/`); beide für den Workflow selbst), und auf `main` immer.
+
 ### Browser-Tests und zusammengeführte Abdeckung
 
 Die Playwright-Suite in `e2e/` läuft auf deinem Rechner gegen die DDEV-Seite, weil die Browser native Programme sind und das `node_modules` der App dem Container gehört. `e2e/` ist ein eigenes pnpm-Projekt.
@@ -127,7 +138,7 @@ Der Seeder schreibt den Demo-Katalog, 30 Personen `load-NN@example.com` (`load-0
 
 Am Ende gibt die Suite eine Tabelle aller Zeilen aus (Median, die drei Läufe, die Abfragen, den Spitzenspeicher einer Zeile, die einmal läuft, die Abfragen gegen 100 Items und für die kleinere Antwort) und schreibt sie nach `storage/logs/load-budget.md`. Eine Zeile, die die Konstante `OVER_BUDGET` in `ApiLoadTest` nennt (`'<zeile>' => 'Task <n>: <grund>'`), läuft trotzdem und steht in der Tabelle; nur ihr Median wird nicht geprüft, ihre Abfragen schon. Ein Test hält fest, dass die Konstante nur Zeilen nennt, die es gibt.
 
-In GitHub Actions läuft die Suite im Job `load` bei jedem Pull Request neben `tests`, mit eigener MariaDB (Datenbank `load`) und eigenem Meilisearch. Er ist kein Pflicht-Check; die Tabelle ist das Artefakt `load-budget`. Vor der Suite setzt der Job den Buffer Pool seiner MariaDB auf 1 GiB (`SET GLOBAL innodb_buffer_pool_size`), wie ihn DDEV hat; die 128 MiB des Images fassten die 580 MB Daten nicht. Wie `tests` und die e2e-Jobs setzt er außerdem `max_allowed_packet` auf 64 MiB, wie im Stack. Sein Runner bleibt langsamer als DDEV, ein Median nahe am Budget ist dort einen Blick wert.
+In GitHub Actions läuft die Suite im Job `load` bei jedem Push auf `main` und bei einem Pull Request, der die App, die Datenbank oder die Suite ändert, mit eigener MariaDB (Datenbank `load`) und eigenem Meilisearch. Er ist kein Pflicht-Check; die Tabelle ist das Artefakt `load-budget`. Vor der Suite setzt der Job den Buffer Pool seiner MariaDB auf 1 GiB (`SET GLOBAL innodb_buffer_pool_size`), wie ihn DDEV hat; die 128 MiB des Images fassten die 580 MB Daten nicht. Wie die Pest-Shards und die e2e-Jobs setzt er außerdem `max_allowed_packet` auf 64 MiB, wie im Stack. Sein Runner bleibt langsamer als DDEV, ein Median nahe am Budget ist dort einen Blick wert.
 
 Lass die Lastsuite nie gleichzeitig mit den anderen Tests oder den Browser-Tests laufen: Sie teilen sich MariaDB, Meilisearch und die CPU der VM, die Messungen stimmten dann nicht.
 
