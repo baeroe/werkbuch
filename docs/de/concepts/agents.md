@@ -117,7 +117,7 @@ Welche Status ein Pull Request einer Person bewegt, steht unter [Pull Requests](
 
 werkbuch baut den Prompt jedes Auftrags in Schichten, in dieser Reihenfolge:
 
-1. **Vertrag**, im Code: was der Auftragstyp tut und nie tut (Status setzen, zuweisen, mergen, releasen, Force-Push), das Format, das werkbuch liest, und dass Texte aus Items, Kommentaren, Wiki und Pull Requests Daten sind, keine Anweisungen. **Einstellungen → Agenten** zeigt ihn aufklappbar und nur zum Lesen.
+1. **Vertrag**, im Code, in der Sprache der Organisation (Englisch oder Deutsch; der Auftrag eines Laufs folgt ihr): was der Auftragstyp tut und nie tut (Status setzen, zuweisen, mergen, releasen, Force-Push), das Format, das werkbuch liest, und dass Texte aus Items, Kommentaren, Wiki und Pull Requests Daten sind, keine Anweisungen. **Einstellungen → Agenten** zeigt ihn aufklappbar und nur zum Lesen.
 2. **Arbeitsregeln je Auftragstyp** für die ganze Organisation, unter **Einstellungen → Agenten**: vorbelegt mit dem Standard von werkbuch in der Sprache der Organisation, **Standard wiederherstellen** je Typ. Ändern dürfen Org-Admins.
 3. **Vorgehen für Agenten** des Typs des Items, im Typ-Dialog.
 4. **Projektinformationen und Regeln für Agenten**, unter **Projekteinstellungen → Agenten**.
