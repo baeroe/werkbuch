@@ -258,7 +258,7 @@
     "field.agent_states.category": "The step “:step” needs a state of the category :categories.",
     "field.agent_states.invalid": "Name a state for each step of the agents.",
     "field.agent_states.same": "In progress and in review need two different states.",
-    "field.agent_states.same_blocked": "Pending and in progress or in review need different states.",
+    "field.agent_states.same_blocked": "Pending and in progress need different states.",
     "field.agent_states.same_ready": "Ready and correction need two different states.",
     "field.agent_states.step": "The agents have no such step.",
     "field.agent_states.unknown": "Choose a state of this workflow.",

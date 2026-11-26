@@ -546,6 +546,8 @@ func TestOutcome(t *testing.T) {
 		"**Outcome:** Blocked":            "blocked",
 		"Outcome: done":                   "done",
 		"no line at all":                  "done",
+		"Summary\nOutcome: blocked":       "done",
+		"\n\nOutcome: blocked":            "blocked",
 	} {
 		if got := Outcome(answer); got != want {
 			t.Errorf("Outcome(%q) = %s, want %s", answer, got, want)

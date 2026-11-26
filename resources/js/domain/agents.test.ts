@@ -4,11 +4,11 @@ import { agentProjectReason, botModels, boundStates, isModelLabel, missingSteps,
 
 describe('suggestSteps', () => {
   it('proposes the first started status, a review by name, an unstarted correction and the first completed one', () => {
-    expect(suggestSteps(agency.states)).toEqual({ working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: 'app_done', ready: null, blocked: null });
+    expect(suggestSteps(agency.states)).toEqual({ working: 'app_progress', review: 'app_review', correction: 'app_todo', merged: 'app_done', ready: null, blocked: 'app_review' });
   });
 
   it('takes the second started status for the review when none is named so', () => {
-    expect(suggestSteps(standard.states)).toEqual({ working: 'std_progress', review: 'std_pending', correction: 'std_todo', merged: 'std_done', ready: null, blocked: null });
+    expect(suggestSteps(standard.states)).toEqual({ working: 'std_progress', review: 'std_pending', correction: 'std_todo', merged: 'std_done', ready: null, blocked: 'std_pending' });
   });
 
   it('falls back to the one started status and to a backlog one, and leaves a step without a fitting status empty', () => {

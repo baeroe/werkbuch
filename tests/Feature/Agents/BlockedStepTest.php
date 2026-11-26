@@ -27,7 +27,7 @@ beforeEach(function () {
     $workflow = Workflow::default();
     $this->states = $workflow->states->pluck('id', 'name');
     $workflow->forceFill(['agent_states' => [
-        'working' => $this->states['In Progress'], 'review' => $this->states['Todo'], 'correction' => $this->states['Backlog'], 'merged' => $this->states['Done'],
+        'working' => $this->states['In Progress'], 'review' => $this->states['Pending'], 'correction' => $this->states['Backlog'], 'merged' => $this->states['Done'],
         'blocked' => $this->states['Pending'],
     ]])->save();
     $this->kira = AgentWorld::agent([$this->project]);
@@ -69,4 +69,30 @@ it('goes on with the next child of an epic and does not make the epic ready whil
     AgentRun::query()->where('work_item_id', $second->id)->update(['status' => 'succeeded']);
     $second->forceFill(['state_id' => $this->states['Todo']])->save();
     expect(ReadyEpic::run(actor($this->mara), $thread))->toBe('waiting');
+});
+
+it('keeps the epic from being ready also without the step blocked at the workflow', function () use ($finishBlocked) {
+    $workflow = Workflow::default();
+    $workflow->forceFill(['agent_states' => [...$workflow->agentStates(), 'blocked' => null]])->save();
+    $epic = WorkItem::factory()->for($this->project)->epic()->create(['state_id' => $this->states['Todo']]);
+    $first = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo']]);
+    UpdateWorkItem::run(actor($this->mara), $epic, ['assignee_id' => $this->kira->id]);
+    $thread = AgentThread::query()->sole();
+
+    $finishBlocked($this, AgentRun::query()->sole());
+
+    expect($first->fresh()->state_id)->not->toBe($this->states['Pending'])
+        ->and(ReadyEpic::run(actor($this->mara), $thread))->toBe('waiting');
+});
+
+it('starts a correction when a person gives the item back to the agent', function () use ($finishBlocked) {
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
+    UpdateWorkItem::run(actor($this->mara), $item, ['assignee_id' => $this->kira->id]);
+    $finishBlocked($this, AgentRun::query()->sole());
+    Comment::factory()->for($item, 'workItem')->create(['author_id' => $this->mara->id]);
+
+    UpdateWorkItem::run(actor($this->mara), $item->fresh(), ['assignee_id' => $this->kira->id]);
+
+    expect(AgentRun::query()->where('type', 'correction')->count())->toBe(1)
+        ->and(AgentThread::query()->sole()->status)->toBe(AgentThread::OPEN);
 });

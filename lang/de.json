@@ -258,7 +258,7 @@
     "field.agent_states.category": "Der Schritt „:step“ braucht einen Status der Kategorie :categories.",
     "field.agent_states.invalid": "Nenne je Schritt der Agenten einen Status.",
     "field.agent_states.same": "In Arbeit und In Review brauchen zwei verschiedene Status.",
-    "field.agent_states.same_blocked": "Pending und In Arbeit bzw. In Review brauchen verschiedene Status.",
+    "field.agent_states.same_blocked": "Pending und In Arbeit brauchen verschiedene Status.",
     "field.agent_states.same_ready": "Bereit und Korrektur brauchen zwei verschiedene Status.",
     "field.agent_states.step": "Diesen Schritt der Agenten gibt es nicht.",
     "field.agent_states.unknown": "Wähle einen Status dieses Workflows.",

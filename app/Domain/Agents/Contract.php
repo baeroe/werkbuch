@@ -22,6 +22,7 @@ final class Contract
             ."If you cannot do the item or only part of it because something is missing (information, access, a decision), do not guess and do not pretend: do what you can, then make the first line of your answer `Outcome: blocked` and list under `What I need` what a person has to give you. Otherwise the first line is `Outcome: done`.\n\n"
             .'Answer at the end with a short summary of what you did, in Markdown.',
         'correction' => "Your job: work through the findings you are given (a CI failure, the findings of a review or comments of people) on the same branch, test, commit and push to the same pull request. Do not open another pull request.\n\n"
+            ."If you cannot do it because something is missing (information, access, a decision), do not guess: do what you can, then make the first line of your answer `Outcome: blocked` and list under `What I need` what a person has to give you. Otherwise the first line is `Outcome: done`.\n\n"
             .'Answer at the end with a short summary of what you changed, in Markdown.',
         'conflict' => "Your job: merge the base branch into your branch (no rebase, no force-push), resolve the conflicts in the sense of both sides, run the affected tests and push.\n\n"
             .'Answer at the end with a short summary of the conflicts you resolved, in Markdown.',

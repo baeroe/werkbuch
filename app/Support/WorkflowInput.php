@@ -218,7 +218,7 @@ final class WorkflowInput
             $errors['agent_states.ready'] = [__('field.agent_states.same_ready')];
         }
 
-        if ($errors === [] && $steps['blocked'] !== null && in_array($steps['blocked'], [$steps['working'], $steps['review']], true)) {
+        if ($errors === [] && $steps['blocked'] !== null && $steps['blocked'] === $steps['working']) {
             $errors['agent_states.blocked'] = [__('field.agent_states.same_blocked')];
         }
 

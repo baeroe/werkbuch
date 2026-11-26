@@ -70,13 +70,14 @@ export function suggestSteps(states: readonly StateLike[]): AgentSteps {
   const started = fitting('working');
   const review = started.find((state) => /review/i.test(state.name)) ?? started[1] ?? started[0];
   const correction = fitting('correction').find((state) => state.category === 'unstarted') ?? fitting('correction')[0];
+  const blocked = started.find((state) => /pending|block|wait/i.test(state.name)) ?? review;
   return {
     working: started[0]?.id ?? null,
     review: review?.id ?? null,
     correction: correction?.id ?? null,
     merged: fitting('merged')[0]?.id ?? null,
     ready: null, // Todo is a decision of the team, never guessed
-    blocked: null, // Pending too
+    blocked: blocked !== undefined && blocked.id !== started[0]?.id ? blocked.id : null,
   };
 }
 

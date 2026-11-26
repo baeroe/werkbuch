@@ -318,3 +318,14 @@ it('takes the token of a run with the run when a project is purged (A489)', func
         ->and(PersonalAccessToken::query()->where('agent_run_id', $run->id)->exists())->toBeFalse()
         ->and(PersonalAccessToken::query()->where('tokenable_id', test()->agent->id)->exists())->toBeFalse();
 });
+
+it('keeps the outcome of a task or correction, refuses an unknown one and drops it for a review (WEBU-50)', function () use ($claimed, $finish) {
+    [$run] = $claimed();
+    $finish($run, ['status' => 'succeeded', 'outcome' => 'maybe'])->assertUnprocessable();
+    $finish($run, ['status' => 'succeeded', 'outcome' => 'blocked', 'summary' => 'x'])->assertOk();
+    expect($run->fresh()->result['outcome'])->toBe('blocked');
+
+    [$review] = $claimed(RunType::Review);
+    $finish($review, ['status' => 'succeeded', 'verdict' => 'approve', 'outcome' => 'blocked'])->assertOk();
+    expect($review->fresh()->result['outcome'] ?? null)->toBeNull();
+});

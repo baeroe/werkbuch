@@ -9,7 +9,6 @@ use App\Jobs\MarkPullRequestReady;
 use App\Models\AgentRun;
 use App\Models\AgentThread;
 use App\Models\User;
-use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\AgentFlow;
@@ -80,9 +79,15 @@ final class ReadyEpic
     {
         $did = AgentRun::query()->where('thread_id', $thread->id)->where('type', RunType::Task->value)->where('status', 'succeeded')->pluck('work_item_id')->all();
 
-        // a child that waits for a person (WEBU-50) keeps the epic from being ready
-        $blocked = Workflow::query()->find($epic->project->workflow_id)?->agentStates()['blocked'] ?? null;
-        if ($blocked !== null && WorkItem::query()->where('parent_id', $epic->id)->whereNull('archived_at')->where('state_id', $blocked)->exists()) {
+        // a child whose last run said `Outcome: blocked` waits for a person (WEBU-50) and keeps the epic from being ready,
+        // with or without the step blocked at the workflow; closed by a person, it no longer waits
+        $last = [];
+        foreach (AgentRun::query()->where('thread_id', $thread->id)->whereIn('type', [RunType::Task->value, RunType::Correction->value])->where('status', 'succeeded')->orderBy('id')->get(['work_item_id', 'result']) as $run) {
+            $last[$run->work_item_id] = ($run->result['outcome'] ?? null) === 'blocked';
+        }
+        $waiting = array_keys(array_filter($last));
+        if ($waiting !== [] && WorkItem::query()->where('parent_id', $epic->id)->whereNull('archived_at')->whereIn('id', $waiting)
+            ->whereHas('state', fn ($query) => $query->whereNotIn('category', [StateCategory::Completed->value, StateCategory::Canceled->value]))->exists()) {
             return false;
         }
 

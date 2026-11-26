@@ -598,11 +598,17 @@ func Verdict(answer string) string {
 
 var outcomeLine = regexp.MustCompile("(?im)^[\\s>*_#`-]*outcome\\b[\\s*_`]*[:=-]?[\\s*_`]*(done|blocked)\\b")
 
-// Outcome reads `Outcome: blocked` out of the answer of a task or correction (the agent could not do what the item asks);
+// Outcome reads `Outcome: blocked` from the first line of the answer of a task or correction (the agent could not do what the item asks);
 // anything else, also a missing line, is done (WEBU-50).
 func Outcome(answer string) string {
-	if m := outcomeLine.FindStringSubmatch(answer); m != nil && strings.ToLower(m[1]) == "blocked" {
-		return "blocked"
+	for _, line := range strings.Split(answer, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if m := outcomeLine.FindStringSubmatch(line); m != nil && strings.ToLower(m[1]) == "blocked" {
+			return "blocked"
+		}
+		break
 	}
 	return "done"
 }

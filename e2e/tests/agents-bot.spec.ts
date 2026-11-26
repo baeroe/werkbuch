@@ -133,7 +133,7 @@ test('sets the steps of the agents in a workflow with the keyboard: takes the pr
     await pressMod(page, 'Enter');
     await expect(page.getByText(label('settings.workflows.editor.saved', { name }))).toBeVisible();
     const stored = (await (await api(page, 'GET', `/api/v1/workflows/${workflow.id}`)).json()) as { data: { agent_states: Record<string, string | null> } };
-    expect(stored.data.agent_states).toEqual({ working: idOf('Doing'), review: idOf('In review'), correction: idOf('Open'), merged: idOf('Done'), ready: null, blocked: null });
+    expect(stored.data.agent_states).toEqual({ working: idOf('Doing'), review: idOf('In review'), correction: idOf('Open'), merged: idOf('Done'), ready: null, blocked: idOf('In review') });
   } finally {
     if (id) {
       const removed = await api(page, 'DELETE', `/api/v1/workflows/${id}`);
