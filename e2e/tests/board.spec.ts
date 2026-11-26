@@ -50,6 +50,21 @@ test('moves a card with shift+arrow to the next allowed column', async ({ page }
   }
 });
 
+test('copies the key from the tab of a card and leaves the card closed', async ({ page }) => {
+  await page.goto('/my-items');
+  const { identifier, key } = await boardProject(page, 'copy');
+  try {
+    await page.goto(`/projects/${identifier}?layout=board`);
+    await expect(card(page, 'Todo', key)).toBeVisible();
+    await card(page, 'Todo', key).getByRole('button', { name: tr('en', 'items.key.copy', { key }) }).click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(key);
+    // only the tab copies: no preview opened
+    await expect(page.getByRole('complementary', { name: 'Preview' })).toHaveCount(0);
+  } finally {
+    await removeE2eProject(page, identifier);
+  }
+});
+
 test('moves the cursor to the column before and after with ← and →', async ({ page }) => {
   await page.goto('/my-items');
   const { identifier, keys } = await boardProject(page, 'columns', ['Password reset']);

@@ -5,6 +5,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { MouseEvent, ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useRelationTypes } from '@/hooks/catalog';
@@ -346,6 +347,16 @@ describe('rows and cards', () => {
     const tabRow = card.querySelector('[data-tab-row]')!;
     expect(tabRow.firstElementChild).toBe(crumb);
     expect(tabRow.textContent).toContain('WEB-48');
+  });
+
+  it('copies the key from the tab of a card without opening it', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const onOpen = vi.fn();
+    renderItems(<ItemCard item={web48} onOpen={onOpen} />);
+    await userEvent.click(screen.getByRole('button', { name: 'WEB-48 kopieren' }));
+    expect(writeText).toHaveBeenCalledWith('WEB-48');
+    expect(onOpen).not.toHaveBeenCalled();
   });
 
   it('adds the parts the caller names to the name of the card, before the selection', () => {

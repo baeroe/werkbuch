@@ -1504,6 +1504,7 @@
     "items.hierarchy.has_children": ":key has child items. Only epics can have child items.",
     "items.hierarchy.has_parent": ":key has a parent item. Epics have no parent item.",
     "items.hierarchy.no_child_type": "The project enables no type that can be a child item.",
+    "items.key.copy": "Copy :key",
     "items.layout.board": "Board",
     "items.layout.list": "List",
     "items.layout.table": "Table",
