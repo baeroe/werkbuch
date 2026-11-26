@@ -70,6 +70,9 @@ final class AgentRun extends Model
     /** @use HasFactory<AgentRunFactory> */
     use HasFactory, HasUlids;
 
+    /** With microseconds (`created_at`, `updated_at` are timestamp(6)): the activity orders runs among events by moment. */
+    protected $dateFormat = 'Y-m-d H:i:s.u';
+
     public const TYPES = RunType::VALUES;
 
     public const STATUSES = RunStatus::VALUES;
