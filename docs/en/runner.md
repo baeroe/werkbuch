@@ -8,7 +8,7 @@ Everything that is set up per instance (names, places, which bot works where, ru
 
 - macOS (Apple Silicon or Intel) or Linux, `arm64` or `amd64`. Windows is not supported.
 - `git`, and Claude Code (`claude`) or Codex (`codex`) installed and signed in for the user the runner runs as.
-- For runs that change code: what the projects need to build and test, for werkbuch itself Colima, DDEV and Node. The setup command of a project starts it per worktree (see [settings in werkbuch](#settings-in-werkbuch)).
+- For runs that change code: what the projects need to build and test, for werkbuch itself Colima, DDEV and Node. The setup command of a project starts it per worktree (see [setup and teardown](#setup-and-teardown)).
 - Outgoing HTTPS to your instance and, for projects with a repo, to `github.com`.
 
 ## A user of its own
@@ -110,7 +110,36 @@ Each runner is a card under **Settings → Runners**: online (a contact within t
 | per repo | 1 | of those per repo (two runs of one repo share the test database of DDEV) |
 | light | 2 | reviews and answers, in a pot of their own |
 
-The runner gets the places with every answer; a change holds without a restart. Which runner a bot uses is its **runner pool** (**Settings → Bots → Set up agent**; none ticked: every runner). The setup and teardown commands of the worktrees belong to the project (**Project settings → Agents**): the runner runs them with `sh -c` in the worktree, after it made it and before it removes it. Both see two variables: `WERKBUCH_WORKTREE`, the absolute path of the worktree, and `WERKBUCH_STRAND`, the name of the strand as a project name (lower case letters, digits and `-`). For werkbuch, each worktree needs a DDEV project name of its own, set in the git-ignored `.ddev/config.local.yaml` (never with `ddev config --project-name`, which changes the tracked `.ddev/config.yaml`): for example `printf 'name: werkbuch-%s\n' "$WERKBUCH_STRAND" > .ddev/config.local.yaml && ddev start` and `ddev delete -Oy`.
+The runner gets the places with every answer; a change holds without a restart. Which runner a bot uses is its **runner pool** (**Settings → Bots → Set up agent**; none ticked: every runner).
+
+### Setup and teardown
+
+The setup and teardown commands of the worktrees belong to the project (**Project settings → Agents**): the runner runs them with `sh -c` in the worktree, after it made it and before it removes it. Both see two variables: `WERKBUCH_WORKTREE`, the absolute path of the worktree, and `WERKBUCH_STRAND`, the name of the strand as a project name (lower case letters, digits and `-`).
+
+Without a setup command the agent gets a bare checkout: no dependencies, no database, nothing to run the tests with. Set it before the first run of the project: the runner sets a worktree up when it makes it, a worktree that already exists is not set up again. A failed setup is not tried again either: remove the worktree (its path is in the log of the run, under `working in …`) or finish the setup there by hand. Write it so it can run twice on the same worktree. A review, and an answer to a mention at an item without a strand, gets a fresh worktree per run and goes through setup and teardown each time (each command may take up to 15 minutes): a heavy setup makes every review that slow.
+
+With DDEV, each worktree needs a project name of its own, set in the git-ignored `.ddev/config.local.yaml` (never with `ddev config --project-name`, which changes the tracked `.ddev/config.yaml`). The setup command for werkbuch itself, which also gives Reverb the host of the worktree:
+
+```sh
+set -e
+cd "$WERKBUCH_WORKTREE"
+n="wb-$WERKBUCH_STRAND"
+printf 'name: %s\n' "$n" > .ddev/config.local.yaml
+[ -f .env ] || cp .env.example .env
+sed -i.bak "s/^REVERB_HOST=.*/REVERB_HOST=$n.ddev.site/" .env && rm .env.bak
+ddev start -y
+ddev composer install --no-interaction
+ddev exec pnpm install --frozen-lockfile
+grep -q '^APP_KEY=base64' .env || ddev artisan key:generate
+ddev artisan migrate --force
+ddev artisan app:search-sync
+```
+
+For a Laravel app without Reverb the same without the line `REVERB_HOST` and without `app:search-sync`. The teardown command removes the DDEV project with its database:
+
+```sh
+cd "$WERKBUCH_WORKTREE" && ddev delete -Oy
+```
 
 ## A run on the machine
 
