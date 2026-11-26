@@ -21,12 +21,13 @@ it('takes a started state for working and review, backlog or unstarted for a cor
 
 it('names the four steps in the order of the flow', function () {
     expect(AgentStep::KEYS)->toBe(['working', 'review', 'correction', 'merged'])
-        ->and(array_column(AgentStep::cases(), 'value'))->toBe(AgentStep::KEYS);
+        ->and(array_column(AgentStep::cases(), 'value'))->toBe([...AgentStep::KEYS, 'ready']);
 });
 
 it('reads stored steps leniently: every step once, a state id or null', function () {
-    expect(AgentStep::read(null))->toBe(['working' => null, 'review' => null, 'correction' => null, 'merged' => null])
-        ->and(AgentStep::read(['review' => 'st_a', 'merged' => 3, 'nope' => 'x']))->toBe(['working' => null, 'review' => 'st_a', 'correction' => null, 'merged' => null])
+    expect(AgentStep::read(null))->toBe(['working' => null, 'review' => null, 'correction' => null, 'merged' => null, 'ready' => null])
+        ->and(AgentStep::read(['review' => 'st_a', 'merged' => 3, 'nope' => 'x']))->toBe(['working' => null, 'review' => 'st_a', 'correction' => null, 'merged' => null, 'ready' => null])
         ->and(AgentStep::complete(['working' => 'a', 'review' => 'b', 'correction' => 'c', 'merged' => null]))->toBeFalse()
-        ->and(AgentStep::complete(['working' => 'a', 'review' => 'b', 'correction' => 'c', 'merged' => 'd']))->toBeTrue();
+        ->and(AgentStep::complete(['working' => 'a', 'review' => 'b', 'correction' => 'c', 'merged' => 'd']))->toBeTrue()
+        ->and(AgentStep::complete(['working' => 'a', 'review' => 'b', 'correction' => 'c', 'merged' => 'd', 'ready' => null]))->toBeTrue();
 });

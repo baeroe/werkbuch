@@ -67,6 +67,21 @@ final class AgentFlow
         };
     }
 
+    /**
+     * Whether an agent may begin an item now (WEBU-44, A772): without the step `ready` always; with it only an item in
+     * that state or in the state of the correction (an item of the bot set back without a strand begins like one in
+     * Todo, A772). In the backlog it waits.
+     */
+    public static function readyToBegin(WorkItem $item): bool
+    {
+        $steps = Workflow::query()->find($item->project->workflow_id)?->agentStates();
+        if ($steps === null || $steps['ready'] === null) {
+            return true;
+        }
+
+        return in_array($item->state_id, [$steps['ready'], $steps['correction']], true);
+    }
+
     /** The open or paused strand of an item (or epic), when it has one: not locked, lock it with `lockStrand`. */
     public static function threadAt(string $itemId): ?AgentThread
     {

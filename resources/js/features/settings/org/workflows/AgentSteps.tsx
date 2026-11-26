@@ -10,7 +10,7 @@
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { StatusIcon } from '@/components/ui/StatusIcon';
-import { AGENT_STEPS, fitsStep, missingSteps, STEP_CATEGORIES, suggestSteps, type AgentSteps as Steps } from '@/domain/agents';
+import { AGENT_STEPS, ALL_STEPS, fitsStep, missingSteps, STEP_CATEGORIES, suggestSteps, type AgentSteps as Steps } from '@/domain/agents';
 import { intlLocale, t, type TranslationKey } from '@/lib/i18n';
 import type { AgentStep, StateCategory, Workflow } from '@/types';
 import { CATEGORY_LABELS } from '../../catalog/choices';
@@ -23,6 +23,7 @@ export const STEP_NAMES: Record<AgentStep, TranslationKey> = {
   review: 'catalog.agent_step.review',
   correction: 'catalog.agent_step.correction',
   merged: 'catalog.agent_step.merged',
+  ready: 'catalog.agent_step.ready',
 };
 
 const STEP_HINTS: Record<AgentStep, TranslationKey> = {
@@ -30,6 +31,7 @@ const STEP_HINTS: Record<AgentStep, TranslationKey> = {
   review: 'settings.workflows.agents.hint.review',
   correction: 'settings.workflows.agents.hint.correction',
   merged: 'settings.workflows.agents.hint.merged',
+  ready: 'settings.workflows.agents.hint.ready',
 };
 
 /** "Started", "Unstarted oder Backlog": the categories a step accepts, in words. */
@@ -92,7 +94,7 @@ export function AgentSteps({ draft, saved, readOnly, errorOf, onChange }: AgentS
       }
     >
       <div className="flex flex-col divide-y divide-line">
-        {AGENT_STEPS.map((step) => {
+        {ALL_STEPS.map((step) => {
           const value = draft.agent_states[step];
           const current = value === null ? undefined : draft.states.find((state) => state.id === value);
           const removedName = value !== null && !current ? (saved?.states.find((state) => state.id === value)?.name ?? t('settings.workflows.agents.removed_unknown')) : null;
@@ -103,7 +105,7 @@ export function AgentSteps({ draft, saved, readOnly, errorOf, onChange }: AgentS
           const hint =
             removedName !== null
               ? t('settings.workflows.agents.removed_note', { name: removedName })
-              : value !== null
+              : value !== null || step === 'ready'
                 ? undefined
                 : suggested !== null
                   ? t('settings.workflows.agents.proposal', { name: nameOf(suggested) })

@@ -79,11 +79,15 @@ A run that fails, times out or is lost twice leaves a comment with the reason, a
 - **Cancel** a run at the item; whoever may edit the item may.
 - **Ask:** mention the bot in a comment (see [mentions](#mentions)). A question never changes code; to get a change, move the item back or assign it again.
 
+## Begin in Todo
+
+With the optional step `ready` (usually **Todo**, [steps of the agents](/en/concepts/workflows#steps-of-the-agents)) the bot begins an item only when it is its own **and** stands in that state. Assigned in the backlog, nothing starts: the item says "Bob begins as soon as the item is in Todo". Assign it in Todo, or move an item of the bot to Todo, and the implement run starts. An item of the bot that a person puts into **Correction** without a strand begins like one from Todo; with a strand it corrects as before. Mentions, reviews, red CI and conflicts do not depend on the state. Without the step `ready` an agent begins at once, as before.
+
 ## Epics
 
 When an epic is assigned to the bot, it works the whole epic on one branch with one pull request:
 
-- One strand at the epic, branch `agent/<KEY>-<slug>` from the base branch. The open children that belong to nobody or to the bot become implement runs one after the other, in their manual order; the bot assigns each child to itself when it starts.
+- One strand at the epic, branch `agent/<KEY>-<slug>` from the base branch. The open children that belong to nobody or to the bot (with the step `ready` only those in Todo; a child moved there later joins the queue, and the epic is not marked ready while open children wait in the backlog) become implement runs one after the other, in their manual order; the bot assigns each child to itself when it starts.
 - After the first child the agent opens a **draft** pull request. Children of the bot wait in **In review**.
 - Children that belong to a person stay hers; she pushes her work to the epic branch herself.
 - When no child is open any more, werkbuch marks the pull request ready; only then CI and review run.

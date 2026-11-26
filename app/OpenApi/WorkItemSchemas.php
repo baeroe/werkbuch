@@ -400,6 +400,7 @@ final class WorkItemSchemas
             'runs' => ['type' => 'integer', 'description' => 'How many runs of agents the item had, in any status (`GET /runs?filter[work_item_id]=` lists them).'],
             'refusal' => ['type' => ['string', 'null'], 'enum' => [...AgentFlow::REFUSALS, null],
                 'description' => 'Why the bot the item is assigned to does not work on it as an agent; `null` for a person or an agent that does.'],
+            'ready_state' => ['type' => ['string', 'null'], 'description' => 'The name of the state (Todo) the item has to reach before the agent it is assigned to begins it; `null` when it waits for nothing.'],
             'brakes' => self::object('The brakes of the project: at most so many corrections and conflicts per strand.', [
                 'max_corrections' => ['type' => 'integer'], 'max_conflicts' => ['type' => 'integer'],
             ], ['max_corrections', 'max_conflicts'], false),
@@ -408,7 +409,7 @@ final class WorkItemSchemas
                 'branch' => $nullable, 'sha' => $nullable,
                 'here' => ['type' => 'boolean', 'description' => 'A run of this item came before it.'],
             ], ['branch', 'sha', 'here'], false), ['type' => 'null']]],
-        ], ['thread', 'runs', 'refusal', 'brakes', 'repository', 'guard'], false);
+        ], ['thread', 'runs', 'refusal', 'ready_state', 'brakes', 'repository', 'guard'], false);
     }
 
     /**

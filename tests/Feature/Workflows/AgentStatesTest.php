@@ -15,7 +15,7 @@ use Tests\Support\WorkflowFixtures;
  * the input leaves them out, following `state_mapping` when their state goes.
  */
 
-$steps = fn (string $working, string $review, string $correction, string $merged) => compact('working', 'review', 'correction', 'merged');
+$steps = fn (string $working, string $review, string $correction, string $merged) => [...compact('working', 'review', 'correction', 'merged'), 'ready' => null];
 
 $errorsOf = function (Closure $save): array {
     try {
@@ -43,7 +43,7 @@ it('saves the steps with the states of the input and answers them as ULIDs', fun
 it('answers no steps for a workflow without them and lets a step stay empty', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin)->getJson('/api/v1/workflows/'.Workflow::default()->id)->assertOk()
-        ->assertJsonPath('data.agent_states', ['working' => null, 'review' => null, 'correction' => null, 'merged' => null]);
+        ->assertJsonPath('data.agent_states', ['working' => null, 'review' => null, 'correction' => null, 'merged' => null, 'ready' => null]);
 
     $input = [...WorkflowFixtures::standardInput('Halb'), 'agent_states' => ['working' => 'std_progress', 'review' => null]];
     $response = $this->actingAs($admin)->postJson('/api/v1/workflows', $input)->assertCreated();
@@ -73,6 +73,15 @@ it('refuses a step on a state of the wrong category, an unknown state and an unk
         ->toBe(['agent_states.merged' => [__('field.agent_states.unknown')]]);
 });
 
+it('takes the optional step ready, on a state of its own', function () use ($errorsOf, $steps) {
+    $actor = actor(User::factory()->admin()->create());
+    $input = [...WorkflowFixtures::standardInput('Bereit'), 'agent_states' => [...$steps('std_progress', 'std_pending', 'std_backlog', 'std_done'), 'ready' => 'std_todo']];
+
+    expect(SaveWorkflow::run($actor, null, $input)->agentStates()['ready'])->not->toBeNull()
+        ->and($errorsOf(fn () => SaveWorkflow::run($actor, null, [...$input, 'name' => 'Gleich', 'agent_states' => [...$input['agent_states'], 'correction' => 'std_todo']])))
+        ->toBe(['agent_states.ready' => [__('field.agent_states.same_ready')]]);
+});
+
 it('keeps the steps when the input leaves them out, also through its own answer sent back', function () use ($steps) {
     $actor = actor(User::factory()->admin()->create());
     $workflow = SaveWorkflow::run($actor, null, [...WorkflowFixtures::standardInput('Bleibt'), 'agent_states' => $steps('std_progress', 'std_pending', 'std_todo', 'std_done')]);
@@ -97,7 +106,7 @@ it('records a change of the steps and clears one sent as null', function () use 
     $ids = $workflow->states->pluck('id', 'name');
 
     $saved = SaveWorkflow::run($actor, $workflow, [...WorkflowFixtures::inputOf($workflow), 'agent_states' => ['working' => $ids['Pending'], 'review' => $ids['In Progress'], 'correction' => $ids['Backlog']]]);
-    $after = ['working' => $ids['Pending'], 'review' => $ids['In Progress'], 'correction' => $ids['Backlog'], 'merged' => null];
+    $after = ['working' => $ids['Pending'], 'review' => $ids['In Progress'], 'correction' => $ids['Backlog'], 'merged' => null, 'ready' => null];
 
     expect($saved->agentStates())->toBe($after)
         ->and(eventsOf(EventType::WorkflowUpdated, $workflow)->sole()->changes)->toBe(['agent_states' => ['old' => $before, 'new' => $after]]);
@@ -117,7 +126,7 @@ it('lets a removed state take its step along the state mapping, or clears it whe
     $saved = SaveWorkflow::run($actor, $workflow, $input);
     $review = $saved->states->firstWhere('name', 'In Review')->id;
 
-    expect($saved->agentStates())->toBe(['working' => $ids['In Progress'], 'review' => $review, 'correction' => $ids['Backlog'], 'merged' => $ids['Done']]);
+    expect($saved->agentStates())->toBe(['working' => $ids['In Progress'], 'review' => $review, 'correction' => $ids['Backlog'], 'merged' => $ids['Done'], 'ready' => null]);
 
     // In Progress goes to Done: the target is no started state, the step is cleared
     $input = WorkflowFixtures::inputOf($saved);

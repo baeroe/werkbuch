@@ -79,11 +79,15 @@ Ein Auftrag, der scheitert, sein Zeitlimit reißt oder zweimal verloren geht, hi
 - **Abbrechen** eines Auftrags am Item; das darf, wer das Item bearbeiten darf.
 - **Fragen:** den Bot in einem Kommentar erwähnen (siehe [Erwähnungen](#erwahnungen)). Eine Frage ändert nie Code; wer eine Änderung will, stellt das Item zurück oder weist es wieder zu.
 
+## Beginnen in Todo
+
+Mit dem optionalen Schritt `ready` (meist **Todo**, [Schritte der Agenten](/de/concepts/workflows#schritte-der-agenten)) beginnt der Bot ein Item erst, wenn es ihm gehört **und** in diesem Status steht. Im Backlog zugewiesen, startet nichts: das Item sagt „Bob beginnt, sobald das Item auf Todo steht“. Weise es in Todo zu oder stelle ein Item des Bots auf Todo, dann startet der Auftrag Umsetzen. Ein Item des Bots, das eine Person ohne Strang auf **Korrektur** stellt, beginnt wie aus Todo; mit Strang korrigiert es wie bisher. Erwähnungen, Reviews, rote CI und Konflikte hängen nicht vom Status ab. Ohne den Schritt `ready` beginnt ein Agent sofort, wie bisher.
+
 ## Epics
 
 Ist ein Epic dem Bot zugewiesen, arbeitet er das ganze Epic auf einem Branch mit einem Pull Request ab:
 
-- Ein Strang am Epic, Branch `agent/<KEY>-<slug>` vom Basis-Branch. Die offenen Kinder, die niemandem oder dem Bot gehören, werden nacheinander Aufträge Umsetzen, in ihrer manuellen Reihenfolge; der Bot weist sich jedes Kind beim Start selbst zu.
+- Ein Strang am Epic, Branch `agent/<KEY>-<slug>` vom Basis-Branch. Die offenen Kinder, die niemandem oder dem Bot gehören (mit dem Schritt `ready` nur die in Todo; ein Kind, das später dorthin kommt, wird eingereiht, und das Epic wird nicht bereit, solange offene Kinder im Backlog warten), werden nacheinander Aufträge Umsetzen, in ihrer manuellen Reihenfolge; der Bot weist sich jedes Kind beim Start selbst zu.
 - Nach dem ersten Kind öffnet der Agent einen **Entwurfs**-Pull-Request. Kinder des Bots warten auf **In Review**.
 - Kinder, die einer Person gehören, bleiben ihre; sie pusht ihre Arbeit selbst auf den Epic-Branch.
 - Ist kein Kind mehr offen, stellt werkbuch den Pull Request bereit; erst dann laufen CI und Review.

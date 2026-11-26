@@ -120,11 +120,11 @@ export interface Workflow {
   states: State[];
   transitions: Transition[];
   /** The status werkbuch sets in each step of an agent (spec 7.4, WEBU-25); always all four keys, `null` for none. */
-  agent_states: Record<AgentStep, string | null>;
+  agent_states: Record<Exclude<AgentStep, 'ready'>, string | null> & { ready?: string | null };
 }
 
 /** The steps of an agent's work that set a status (spec 7.4). */
-export type AgentStep = 'working' | 'review' | 'correction' | 'merged';
+export type AgentStep = 'working' | 'review' | 'correction' | 'merged' | 'ready';
 
 /* ------------------------------------------------------------- types and properties */
 
@@ -1140,6 +1140,8 @@ export interface ItemAgentState {
     runner_id: string | null;
   } | null;
   refusal: AgentRefusal | null;
+  /** The state the item must reach before its agent begins it (`ready` step), else null. */
+  ready_state?: string | null;
   brakes: { max_corrections: number; max_conflicts: number };
   repository: boolean;
   guard: { branch: string | null; sha: string | null; here: boolean } | null;

@@ -7,7 +7,7 @@
 import type { WorkflowInput } from '@/api/workflows';
 import { statesInOrder } from '@/domain/workflow';
 import { t } from '@/lib/i18n';
-import { AGENT_STEPS, fitsStep, NO_STEPS, type AgentSteps } from '@/domain/agents';
+import { ALL_STEPS, fitsStep, NO_STEPS, type AgentSteps } from '@/domain/agents';
 import type { StateCategory, StateIcon, Transition, Workflow } from '@/types';
 import { localId } from '../../catalog/localId';
 
@@ -65,7 +65,7 @@ export function copyDraftOf(workflow: Workflow): Draft {
     initial_state_id: next(draft.initial_state_id),
     states: draft.states.map((state) => ({ ...state, id: next(state.id) })),
     transitions: draft.transitions.map(([from, to]): Transition => [next(from), next(to)]),
-    agent_states: Object.fromEntries(AGENT_STEPS.map((step) => [step, draft.agent_states[step] === null ? null : next(draft.agent_states[step])])) as AgentSteps,
+    agent_states: Object.fromEntries(ALL_STEPS.map((step) => [step, draft.agent_states[step] === null ? null : next(draft.agent_states[step])])) as AgentSteps,
   };
 }
 
@@ -95,10 +95,10 @@ export function comparable(draft: Draft): string {
  */
 export function agentStatesToSend(draft: Draft, saved: Workflow | null, stateMapping: Record<string, string> = {}): AgentSteps | undefined {
   const stored = { ...NO_STEPS, ...saved?.agent_states };
-  if (saved && AGENT_STEPS.every((step) => draft.agent_states[step] === stored[step])) return undefined;
+  if (saved && ALL_STEPS.every((step) => draft.agent_states[step] === stored[step])) return undefined;
   const states = new Map(draft.states.map((state) => [state.id, state]));
   return Object.fromEntries(
-    AGENT_STEPS.map((step) => {
+    ALL_STEPS.map((step) => {
       const id = draft.agent_states[step];
       if (id === null || states.has(id)) return [step, id];
       const target = states.get(stateMapping[id] ?? '');
