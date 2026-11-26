@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentRun } from '@/api/types';
+import type { AgentRun } from '@/types';
 import type { TimelineEntry } from './timeline';
 import { withRuns } from './Activity';
 
