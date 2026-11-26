@@ -387,6 +387,7 @@ it('runs the image and the load suite only for what concerns them, and always on
         ->and($changes([]))->toBe(['image' => 'false', 'load' => 'false'])
         ->and($changes(['resources/js/app.tsx', 'docs/en/setup.md', 'e2e/tests/board.spec.ts']))->toBe(['image' => 'false', 'load' => 'false'])
         ->and($changes(['app/Models/WorkItem.php']))->toBe(['image' => 'false', 'load' => 'true'])
+        ->and($changes(['config/scout.php']))->toBe(['image' => 'false', 'load' => 'true'])
         ->and($changes(['database/migrations/x.php']))->toBe(['image' => 'false', 'load' => 'true'])
         ->and($changes(['tests/Load/ApiLoadTest.php']))->toBe(['image' => 'false', 'load' => 'true'])
         ->and($changes(['docker/nginx/conf.d/00-werkbuch.conf']))->toBe(['image' => 'true', 'load' => 'false'])
@@ -397,8 +398,10 @@ it('runs the image and the load suite only for what concerns them, and always on
         ->and($changes(['.github/workflows/tests.yml']))->toBe(['image' => 'true', 'load' => 'true'])
         ->and($changes(['scripts/ci-changes.sh']))->toBe(['image' => 'true', 'load' => 'true']);
 
-    // every path the image copies from the repository makes it run
-    foreach (['Dockerfile', '.dockerignore', 'docker/entrypoint.d/99-werkbuch.sh', 'resources/runner/install.sh', 'scripts/compose-smoke.mjs'] as $path) {
+    // the Docker, runner and compose paths and what the image runs at its start (version, routes, boot, rules of the
+    // agents) make it run; any other change of the app reaches the image only on main
+    foreach (['Dockerfile', '.dockerignore', 'docker/entrypoint.d/99-werkbuch.sh', 'resources/runner/install.sh', 'scripts/compose-smoke.mjs',
+        'config/werkbuch.php', 'routes/api.php', 'bootstrap/app.php', 'resources/agents/rules/en/task.md'] as $path) {
         expect($changes([$path])['image'])->toBe('true', $path);
     }
 });

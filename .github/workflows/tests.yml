@@ -29,6 +29,8 @@ jobs:
 
       - name: Changed paths
         id: paths
+        # bash with pipefail: a failing script ends the step, never an output cut short
+        shell: bash
         env:
           EVENT: ${{ github.event_name }}
         run: |
@@ -225,8 +227,8 @@ jobs:
 
   # The required check: the name must stay `tests` (the ruleset of main asks only for it). A gate over the jobs it
   # needs (A781): lint, the eight Pest shards and Vitest (with its thresholds per folder, in `e2e-build`), then the
-  # coverage of the shards merged, 100 % lines of app/. It runs after a failed or skipped job too and fails then; a run
-  # a newer push cancelled skips it, as the e2e merge.
+  # coverage of the shards merged, 100 % lines of app/. It runs after a failed or skipped job too and fails then; in a
+  # cancelled run it stands as cancelled, which the ruleset does not count as passed (A781).
   tests:
     needs: [lint, pest, e2e-build]
     if: "!cancelled()"

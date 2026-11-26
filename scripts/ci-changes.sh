@@ -5,8 +5,10 @@
 #
 #   git diff --name-only HEAD^1 HEAD | scripts/ci-changes.sh
 #
-# image: the Docker image and its smoke, built from the Dockerfile, the nginx and PHP config, the entrypoint, the compose
-#   files, the runner it ships and the manifests of the dependencies it installs.
+# image: the Docker image and its smoke, for the Docker, runner and compose paths (Dockerfile, docker/, the compose files,
+#   the smoke, the runner it ships, the manifests of the dependencies) and for what the image runs at its start: the
+#   version and the routes (config/werkbuch.php, routes/, the route cache), the boot (bootstrap/) and the rules of the
+#   agents it copies (resources/agents/). Any other change of the app reaches the image only on main.
 # load: the load suite, which measures the app and the database against 50 000 items.
 # Both: this script and the workflow itself.
 set -euo pipefail
@@ -30,7 +32,8 @@ while IFS= read -r path; do
 
   case "$path" in
     Dockerfile | .dockerignore | docker/* | docker-compose.yml | docker-compose.standalone.yml | .env.docker.example \
-      | scripts/compose-smoke.* | runner/* | resources/runner/* | docs/en/concepts/* \
+      | scripts/compose-smoke.* | runner/* | resources/runner/* | resources/agents/* | docs/en/concepts/* \
+      | config/werkbuch.php | routes/* | bootstrap/* \
       | composer.json | composer.lock | package.json | pnpm-lock.yaml | pnpm-workspace.yaml | .node-version)
       image=true
       ;;
