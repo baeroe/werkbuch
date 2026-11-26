@@ -39,7 +39,7 @@ it('runs the services of spec 8.1 with the workers split like DDEV', function ()
 
 it('uses the pinned MariaDB of the CI and the Meilisearch of DDEV and the CI', function () use ($compose) {
     $services = $compose()['services'];
-    $ci = RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['tests']['services'];
+    $ci = RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['pest']['services'];
     $ddev = RepoFiles::yaml('.ddev/docker-compose.meilisearch.yaml')['services']['meilisearch']['image'];
 
     expect($services['mariadb']['image'])->toBe($ci['mariadb']['image'])
@@ -385,7 +385,7 @@ it('pins one Meilisearch, v1.56.1 by digest, in DDEV, every CI job and both comp
         ->and($compose()['services']['meilisearch']['image'])->toBe($pinned)
         ->and(RepoFiles::yaml('docker-compose.standalone.yml')['services']['meilisearch']['image'])->toBe($pinned);
 
-    foreach (['tests', 'e2e', 'load'] as $job) {
+    foreach (['pest', 'e2e', 'load'] as $job) {
         expect($jobs[$job]['services']['meilisearch']['image'])->toBe($pinned, "the CI job {$job} runs another Meilisearch");
     }
 });
