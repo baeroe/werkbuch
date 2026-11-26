@@ -1,5 +1,6 @@
 <?php
 
+use Symfony\Component\Process\Process;
 use Tests\Support\RepoFiles;
 
 /** @return list<string> the workflow files below .github/workflows */
@@ -348,7 +349,7 @@ it('lints without coverage', function () use ($stepUsing, $runs) {
 
 /** @return array<string, string> what scripts/ci-changes.sh writes for the paths on stdin (or its arguments) */
 $changes = function (array $paths, array $arguments = []): array {
-    $process = new Symfony\Component\Process\Process(['bash', repo_path('scripts/ci-changes.sh'), ...$arguments]);
+    $process = new Process(['bash', repo_path('scripts/ci-changes.sh'), ...$arguments]);
     $process->setInput(implode("\n", $paths).($paths === [] ? '' : "\n"));
     $process->mustRun();
 
