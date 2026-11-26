@@ -7,7 +7,6 @@
 
 import { Link } from '@inertiajs/react';
 import { ChevronRight } from 'lucide-react';
-import { CopyKey } from '@/components/items/CopyKey';
 import { ItemKey } from '@/components/items/ItemKey';
 import { cx } from '@/components/ui/cx';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
@@ -48,9 +47,7 @@ export function ItemPath({ item, project }: { item: WorkItem; project: Project |
           </li>
         )}
         <li aria-current="page" className="shrink-0 text-ink">
-          <CopyKey itemKey={item.key} className="relative flex min-h-11 items-center md:min-h-6">
-            <ItemKey value={item.key} />
-          </CopyKey>
+          <ItemKey value={item.key} />
         </li>
       </ol>
     </nav>

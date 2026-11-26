@@ -173,21 +173,19 @@ afterEach(() => {
 /* ------------------------------------------------------------------------ the page */
 
 describe('ItemPage', () => {
-  it('copies the key when its tab or its place in the path is clicked', async () => {
+  it('copies the key when its tab is clicked', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     renderWith(<ItemPage itemKey="WEB-47" />);
     await heading();
-    // the path, and the tab of the card
-    const buttons = await screen.findAllByRole('button', { name: 'WEB-47 kopieren' });
-    expect(buttons).toHaveLength(2);
-    await userEvent.click(buttons[0]!);
+    const button = await screen.findByRole('button', { name: 'WEB-47 kopieren' });
+    await userEvent.click(button);
     expect(writeText).toHaveBeenCalledWith('WEB-47');
     await waitFor(() => expect(currentToasts().some((toast) => toast.title === 'Kopiert')).toBe(true));
-    expect(document.activeElement).toBe(buttons[0]);
+    expect(document.activeElement).toBe(button);
     // the clipboard refuses: the toast says so
     writeText.mockRejectedValueOnce(new Error('no'));
-    await userEvent.click(buttons[1]!);
+    await userEvent.click(button);
     await waitFor(() => expect(currentToasts().some((toast) => toast.tone === 'error')).toBe(true));
   });
 
