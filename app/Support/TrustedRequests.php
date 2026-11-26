@@ -60,4 +60,10 @@ final class TrustedRequests
 
         return ['^'.preg_quote(strtolower($host)).'$'];
     }
+
+    /** WEBU-46 probe: a line no test runs, the coverage gate must fail (never merged) */
+    public static function probe(int $x): int
+    {
+        return $x + 1;
+    }
 }
