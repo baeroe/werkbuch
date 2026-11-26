@@ -336,6 +336,16 @@ it('gives the gate a quarter of an hour and every shard half an hour', function 
         ->and($jobs['pest']['timeout-minutes'])->toBe(30);
 });
 
+it('starts the long jobs that are no required check after the Pest shards', function () {
+    $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
+
+    // the runners of the account are few and shared by every run: the shards of the required check get them first (A785)
+    foreach (['e2e', 'load', 'image', 'clickdummy'] as $id) {
+        expect((array) $jobs[$id]['needs'])->toContain('pest')
+            ->and($jobs[$id]['if'])->toStartWith('!cancelled()');
+    }
+});
+
 it('lints without coverage', function () use ($stepUsing, $runs) {
     $lint = RepoFiles::yaml('.github/workflows/tests.yml')['jobs']['lint'];
 
@@ -362,8 +372,8 @@ it('runs the image and the load suite only for what concerns them, and always on
     $jobs = RepoFiles::yaml('.github/workflows/tests.yml')['jobs'];
 
     foreach (['image' => 'image', 'load' => 'load'] as $job => $output) {
-        expect($jobs[$job]['needs'])->toBe('changes')
-            ->and($jobs[$job]['if'])->toBe("needs.changes.outputs.{$output} == 'true'");
+        expect($jobs[$job]['needs'])->toBe(['changes', 'pest'])
+            ->and($jobs[$job]['if'])->toBe("!cancelled() && needs.changes.outputs.{$output} == 'true'");
     }
 
     $detect = collect($jobs['changes']['steps'])->firstWhere('id', 'paths');
@@ -400,7 +410,8 @@ it('runs the e2e suite once per Playwright project', function () use ($playwrigh
     expect($e2e['strategy']['matrix']['project'])->toBe($playwrightProjects())
         ->and($e2e['strategy']['fail-fast'])->toBeFalse()
         ->and($e2e['timeout-minutes'])->toBeLessThanOrEqual(60)
-        ->and($e2e['needs'])->toBe('e2e-build')
+        ->and($e2e['needs'])->toBe(['e2e-build', 'pest'])
+        ->and($e2e['if'])->toBe("!cancelled() && needs.e2e-build.result == 'success'")
         ->and($e2e['env']['E2E_PROJECT'])->toBe('${{ matrix.project }}');
 
     // the build of the job e2e-build, never one of its own

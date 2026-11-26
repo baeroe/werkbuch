@@ -286,8 +286,9 @@ jobs:
   # artifact `load-budget`. On a pull request only when it changes the app, the database or the suite (A783).
   load:
     name: load (50 000 items)
-    needs: changes
-    if: needs.changes.outputs.load == 'true'
+    # after the Pest shards, so they get the runners first (A785)
+    needs: [changes, pest]
+    if: "!cancelled() && needs.changes.outputs.load == 'true'"
     runs-on: ubuntu-24.04
     timeout-minutes: 40
 
@@ -433,7 +434,9 @@ jobs:
   # Playwright against `php artisan serve` with MariaDB, Meilisearch and Mailpit as services, one job per project.
   e2e:
     name: e2e (${{ matrix.project }})
-    needs: e2e-build
+    # after the Pest shards, so they get the runners first (A785); a failed shard does not hold the suite back
+    needs: [e2e-build, pest]
+    if: "!cancelled() && needs.e2e-build.result == 'success'"
     runs-on: ubuntu-24.04
     # one project takes about a quarter of the suite (about 23 minutes of tests in CI, Phase 15)
     timeout-minutes: 60
@@ -752,6 +755,9 @@ jobs:
 
   # the clickdummy: domain tests, typecheck, review build and the Playwright flows. Not a required check.
   clickdummy:
+    # after the Pest shards, so they get the runners first (A785)
+    needs: pest
+    if: "!cancelled()"
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -798,8 +804,9 @@ jobs:
   # Playwright suite stays on `php artisan serve` (A420). Not a required check. On a pull request only when it changes
   # the image, the compose stack or the runner (A783).
   image:
-    needs: changes
-    if: needs.changes.outputs.image == 'true'
+    # after the Pest shards, so they get the runners first (A785)
+    needs: [changes, pest]
+    if: "!cancelled() && needs.changes.outputs.image == 'true'"
     strategy:
       fail-fast: false
       matrix:
