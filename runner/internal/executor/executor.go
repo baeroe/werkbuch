@@ -470,7 +470,7 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 		sc.Buffer(make([]byte, 64*1024), 16*1024*1024)
 		for sc.Scan() {
 			s.add(stream.Feed(sc.Bytes())...)
-			if d, ok := stream.(interface{ Done() bool }); ok && d.Done() {
+			if stream.Done() {
 				finished.Do(func() { close(finishedCh) })
 			}
 		}

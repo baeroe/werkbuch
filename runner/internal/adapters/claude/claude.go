@@ -166,7 +166,8 @@ func (s *stream) Feed(raw []byte) []protocol.Event {
 		if s.done {
 			return nil
 		}
-		s.done = true
+		// the first result with content (or an error) is the final one
+		s.done = l.IsError || strings.TrimSpace(l.Result) != ""
 		if l.Usage != nil {
 			s.out.Usage = &protocol.Usage{Input: l.Usage.Input + l.Usage.CacheRead + l.Usage.CacheCreation, Output: l.Usage.Output}
 		}

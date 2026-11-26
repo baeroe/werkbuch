@@ -66,6 +66,8 @@ type Stream interface {
 	Feed(line []byte) []protocol.Event
 	// Outcome is what the lines told so far.
 	Outcome() Outcome
+	// Done tells the final result is in: the run ends there and later lines change nothing.
+	Done() bool
 }
 
 // Adapter knows one CLI.
