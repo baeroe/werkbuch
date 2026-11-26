@@ -1458,6 +1458,8 @@
     "items.filter.value.choose": "Choose a value …",
     "items.filter.value.disabled": ":name (deactivated)",
     "items.filter.value.empty": "Nothing matches.",
+    "items.filter.value.empty_assignee": "Unassigned",
+    "items.filter.value.empty_value": "No value",
     "items.filter.value.from": ":field from",
     "items.filter.value.hidden": "Hidden",
     "items.filter.value.loading": "Loading …",

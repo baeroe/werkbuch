@@ -1458,6 +1458,8 @@
     "items.filter.value.choose": "Wert wählen …",
     "items.filter.value.disabled": ":name (deaktiviert)",
     "items.filter.value.empty": "Nichts passt.",
+    "items.filter.value.empty_assignee": "Nicht zugewiesen",
+    "items.filter.value.empty_value": "Kein Wert",
     "items.filter.value.from": ":field von",
     "items.filter.value.hidden": "Verborgen",
     "items.filter.value.loading": "Lädt …",
