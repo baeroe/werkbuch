@@ -63,19 +63,19 @@ A ruleset on the base branch is optional, and private repos on GitHub's free pla
 
 ### Approval required
 
-The app opens the pull request of an agent and reviews it itself, and GitHub lets nobody approve their own pull request. A ruleset that requires an approval (`required_approving_review_count` 1 or more) blocks the merge of werkbuch for good. Then put the app in the bypass list of the ruleset, for pull requests only:
+The app opens the pull request of an agent and writes the verdict of its review itself, and GitHub lets nobody approve their own pull request. A ruleset that requires an approval (`required_approving_review_count` 1 or more) blocks the merge of werkbuch for good. Then put the app in the bypass list of the ruleset, for pull requests only:
 
 - **On GitHub:** **Settings → Rules → Rulesets →** the ruleset of the base branch **→ Bypass list → Add bypass**, pick the app and choose **For pull requests only**.
-- **With `gh`:** with the owner and name of the repo, the name of the ruleset (here `main`) and the ID of the app, shown per app under **Settings → GitHub** (over MCP `agents:get-github`, `app_id`):
+- **With `gh`:** with the owner and name of the repo, the name of the ruleset (here `main`) and the ID of the app: `app_id` in `GET /api/v1/github` or over MCP `agents:get-github`, or on GitHub in the settings of the app under **App ID**:
 
 ```sh
-id=$(gh api repos/OWNER/REPO/rulesets --jq '.[] | select(.name=="main") | .id')
+id=$(gh api repos/OWNER/REPO/rulesets --jq '.[] | select(.name=="main" and .source_type=="Repository") | .id')
 gh api repos/OWNER/REPO/rulesets/$id > ruleset.json
-jq '{name, target, enforcement, conditions, rules, bypass_actors: (.bypass_actors + [{"actor_id": APP_ID, "actor_type": "Integration", "bypass_mode": "pull_request"}])}' ruleset.json \
+jq --argjson app APP_ID '{name, target, enforcement, conditions, rules, bypass_actors: ((.bypass_actors // []) + [{actor_id: $app, actor_type: "Integration", bypass_mode: "pull_request"}] | unique)}' ruleset.json \
   | gh api -X PUT repos/OWNER/REPO/rulesets/$id --input -
 ```
 
-The bypass also covers **Require branches to be up to date before merging**. The price: the app could merge a pull request without an approval. werkbuch merges only after green CI and a review without findings; people still need the approval.
+The bypass also covers **Require branches to be up to date before merging**. The price: through a pull request the app could merge past every rule of this ruleset, without an approval, with red CI or with a branch that is behind. Pushing to the base branch directly it cannot. werkbuch merges only after green CI and a review without findings; people still need the approval.
 
 With or without a ruleset, werkbuch watches the base branch, see [unauthorized merge](#unauthorized-merge).
 
@@ -127,4 +127,4 @@ GitHub keeps the recent deliveries of the app with their answers: **Settings →
 - **A repo is missing in the list:** add it under **Change repos on GitHub**, then **Read again**.
 - **Pull requests do not link:** the key belongs to another project, stands only in code, or the delivery did not arrive (see the recent deliveries).
 - **CI is not seen:** werkbuch reads check runs, workflow runs of GitHub Actions and commit statuses of the head commit. CI that sets none of the three stays invisible, and a missing permission (see [permissions](#permissions)) hides what it covers.
-- **The merge fails:** a ruleset asks for an approval, or the base branch moved and the pull request has a conflict (werkbuch then starts a conflict run).
+- **The merge fails:** a ruleset asks for an approval and the app is not in its bypass list ([approval required](#approval-required)), or the base branch moved and the pull request has a conflict (werkbuch then starts a conflict run).

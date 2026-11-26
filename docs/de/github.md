@@ -63,19 +63,19 @@ Ein Ruleset auf dem Basis-Branch ist optional, und private Repos haben im kosten
 
 ### Freigabe verlangt
 
-Die App öffnet den Pull Request eines Agenten und reviewt ihn selbst, und GitHub lässt niemanden den eigenen Pull Request freigeben. Ein Ruleset, das eine Freigabe verlangt (`required_approving_review_count` 1 oder mehr), blockiert den Merge von werkbuch dauerhaft. Trag dann die App in die Bypass-Liste des Rulesets ein, nur für Pull Requests:
+Die App öffnet den Pull Request eines Agenten und schreibt das Urteil ihres Reviews selbst, und GitHub lässt niemanden den eigenen Pull Request freigeben. Ein Ruleset, das eine Freigabe verlangt (`required_approving_review_count` 1 oder mehr), blockiert den Merge von werkbuch dauerhaft. Trag dann die App in die Bypass-Liste des Rulesets ein, nur für Pull Requests:
 
 - **Auf GitHub:** **Settings → Rules → Rulesets →** das Ruleset des Basis-Branchs **→ Bypass list → Add bypass**, die App wählen und **For pull requests only** einstellen.
-- **Mit `gh`:** mit Besitzer und Name des Repos, dem Namen des Rulesets (hier `main`) und der ID der App, je App unter **Einstellungen → GitHub** zu sehen (über MCP `agents:get-github`, `app_id`):
+- **Mit `gh`:** mit Besitzer und Name des Repos, dem Namen des Rulesets (hier `main`) und der ID der App: `app_id` in `GET /api/v1/github` oder über MCP `agents:get-github`, oder bei GitHub in den Einstellungen der App unter **App ID**:
 
 ```sh
-id=$(gh api repos/OWNER/REPO/rulesets --jq '.[] | select(.name=="main") | .id')
+id=$(gh api repos/OWNER/REPO/rulesets --jq '.[] | select(.name=="main" and .source_type=="Repository") | .id')
 gh api repos/OWNER/REPO/rulesets/$id > ruleset.json
-jq '{name, target, enforcement, conditions, rules, bypass_actors: (.bypass_actors + [{"actor_id": APP_ID, "actor_type": "Integration", "bypass_mode": "pull_request"}])}' ruleset.json \
+jq --argjson app APP_ID '{name, target, enforcement, conditions, rules, bypass_actors: ((.bypass_actors // []) + [{actor_id: $app, actor_type: "Integration", bypass_mode: "pull_request"}] | unique)}' ruleset.json \
   | gh api -X PUT repos/OWNER/REPO/rulesets/$id --input -
 ```
 
-Der Bypass deckt auch **Require branches to be up to date before merging** ab. Der Preis: Die App könnte einen Pull Request ohne Freigabe mergen. werkbuch mergt nur nach grüner CI und einem Review ohne Befunde; Personen brauchen die Freigabe weiterhin.
+Der Bypass deckt auch **Require branches to be up to date before merging** ab. Der Preis: Über einen Pull Request könnte die App an allen Regeln dieses Rulesets vorbei mergen, ohne Freigabe, mit roter CI oder mit einem veralteten Branch. Direkt auf den Basis-Branch pushen kann sie nicht. werkbuch mergt nur nach grüner CI und einem Review ohne Befunde; Personen brauchen die Freigabe weiterhin.
 
 Mit oder ohne Ruleset beobachtet werkbuch den Basis-Branch, siehe [eigenmächtiger Merge](#eigenmachtiger-merge).
 
@@ -127,4 +127,4 @@ GitHub hält die letzten Zustellungen der App mit ihren Antworten: **Settings �
 - **Ein Repo fehlt in der Liste:** Unter **Repos bei GitHub ändern** hinzufügen, dann **Neu einlesen**.
 - **Pull Requests verknüpfen sich nicht:** Der Key gehört zu einem anderen Projekt, steht nur in Code, oder die Zustellung kam nicht an (siehe die letzten Zustellungen).
 - **CI wird nicht gesehen:** werkbuch liest Check-Runs, Workflow-Läufe von GitHub Actions und Commit-Status des Head-Commits. Eine CI, die keins der drei setzt, bleibt unsichtbar, und eine fehlende Berechtigung (siehe [Berechtigungen](#berechtigungen)) verbirgt, was sie abdeckt.
-- **Der Merge scheitert:** Ein Ruleset verlangt eine Freigabe, oder der Basis-Branch ist weitergegangen und der Pull Request hat einen Konflikt (werkbuch startet dann einen Konflikt-Auftrag).
+- **Der Merge scheitert:** Ein Ruleset verlangt eine Freigabe, und die App steht nicht in seiner Bypass-Liste ([Freigabe verlangt](#freigabe-verlangt)), oder der Basis-Branch ist weitergegangen und der Pull Request hat einen Konflikt (werkbuch startet dann einen Konflikt-Auftrag).

@@ -8,7 +8,7 @@ Alles, was je Instanz eingerichtet wird (Namen, Plätze, welcher Bot wo arbeitet
 
 - macOS (Apple Silicon oder Intel) oder Linux, `arm64` oder `amd64`. Windows geht nicht.
 - `git` und Claude Code (`claude`) oder Codex (`codex`), installiert und angemeldet für den Benutzer, unter dem der Runner läuft.
-- Für Aufträge, die Code ändern: was die Projekte zum Bauen und Testen brauchen, für werkbuch selbst Colima, DDEV und Node. Der Setup-Befehl eines Projekts startet es je Worktree (siehe [Einstellungen in werkbuch](#einstellungen-in-werkbuch)).
+- Für Aufträge, die Code ändern: was die Projekte zum Bauen und Testen brauchen, für werkbuch selbst Colima, DDEV und Node. Der Setup-Befehl eines Projekts startet es je Worktree (siehe [Setup und Teardown](#setup-und-teardown)).
 - Ausgehendes HTTPS zu deiner Instanz und, für Projekte mit Repo, zu `github.com`.
 
 ## Ein eigener Benutzer
@@ -116,7 +116,7 @@ Der Runner bekommt die Plätze mit jeder Antwort; eine Änderung gilt ohne Neust
 
 Setup- und Teardown-Befehl der Worktrees gehören zum Projekt (**Projekteinstellungen → Agenten**): Der Runner führt sie mit `sh -c` im Worktree aus, nachdem er ihn angelegt hat und bevor er ihn entfernt. Beide sehen zwei Variablen: `WERKBUCH_WORKTREE`, den absoluten Pfad des Worktrees, und `WERKBUCH_STRAND`, den Namen des Strangs als Projektname (Kleinbuchstaben, Ziffern und `-`).
 
-Ohne Setup-Befehl bekommt der Agent einen nackten Checkout: keine Abhängigkeiten, keine Datenbank, nichts, womit er testen kann. Setz ihn vor dem ersten Auftrag des Projekts: Der Runner richtet einen Worktree ein, wenn er ihn anlegt, ein schon vorhandener wird nicht noch einmal eingerichtet. Schreib ihn so, dass er zweimal auf demselben Worktree laufen darf.
+Ohne Setup-Befehl bekommt der Agent einen nackten Checkout: keine Abhängigkeiten, keine Datenbank, nichts, womit er testen kann. Setz ihn vor dem ersten Auftrag des Projekts: Der Runner richtet einen Worktree ein, wenn er ihn anlegt, ein schon vorhandener wird nicht noch einmal eingerichtet. Ein gescheitertes Setup wird auch nicht wiederholt: Entferne den Worktree (sein Pfad steht im Protokoll des Auftrags unter `working in …`) oder hol das Setup dort von Hand nach. Schreib ihn so, dass er zweimal auf demselben Worktree laufen darf. Ein Review und eine Antwort auf eine Erwähnung an einem Item ohne Strang bekommen je Auftrag einen frischen Worktree und durchlaufen jedes Mal Setup und Teardown (jeder Befehl darf bis zu 15 Minuten dauern): Ein schweres Setup macht jedes Review so langsam.
 
 Mit DDEV braucht jeder Worktree einen eigenen Projektnamen, gesetzt in der von git ignorierten `.ddev/config.local.yaml` (nie mit `ddev config --project-name`, das die versionierte `.ddev/config.yaml` ändert). Der Setup-Befehl für werkbuch selbst, der auch Reverb den Host des Worktrees gibt:
 
