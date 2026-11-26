@@ -461,11 +461,11 @@ it('says no phase in the status of the landing page', function () use ($section,
 
         expect($namesPhase($status))->toBeNull("the status of docs/{$page}.md names a phase")
             ->and($status)->toContain('v0.3.2')
-            ->and($status)->toContain('v0.4.0-rc.3');
+            ->and($status)->toContain('v0.4.0-rc.4');
     }
 
     preg_match('/^> \*\*Status:\*\*(.*)$/m', RepoFiles::text('README.md'), $readme);
     expect($readme[1] ?? '')->toContain('v0.3.2')
-        ->and($readme[1] ?? '')->toContain('v0.4.0-rc.3')
+        ->and($readme[1] ?? '')->toContain('v0.4.0-rc.4')
         ->and($namesPhase($readme[1] ?? ''))->toBeNull();
 });
