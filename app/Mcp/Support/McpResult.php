@@ -20,7 +20,18 @@ use stdClass;
  */
 final readonly class McpResult
 {
-    private function __construct(private stdClass $body, private bool $list = false) {}
+    /**
+     * @param  list<Response>  $parts  the content of a result that is no JSON body (an image, A771)
+     */
+    private function __construct(private stdClass $body, private bool $list = false, private array $parts = []) {}
+
+    /**
+     * A result in parts of content of its own (text, an image) instead of a body; no REST twin answers it (A771).
+     */
+    public static function content(Response ...$parts): self
+    {
+        return new self(new stdClass, parts: array_values($parts));
+    }
 
     /**
      * A single resource, `{data: …}` as REST sends it (with what the resource adds), resolved against the request.
@@ -83,6 +94,10 @@ final readonly class McpResult
 
     public function toResponse(): ResponseFactory
     {
+        if ($this->parts !== []) {
+            return Response::make($this->parts);
+        }
+
         return Response::structured((array) Output::markdown($this->body));
     }
 

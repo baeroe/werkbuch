@@ -76,7 +76,7 @@ Darüber hinaus sieht ein Tool genau, was sein Konto über REST sieht. Was das K
 
 ## Tools
 
-Ein Tool mit mehreren Aktionen nimmt das Argument `action`. Ein Tool mit einer Aktion (`whoami`, `search`, `get-upload-url`, `automations`, `manage-automations`, `relations`, `attachments`, `manage-attachments`) nimmt keins; die Tabelle nennt seine Aktion trotzdem (`call` bei den ersten dreien). Die Doku schreibt eine Aktion als `tool:aktion`, etwa `work-items:get`. **Pflicht** nennt die Argumente, die eine Aktion außer `action` braucht; **REST-Zwilling** ist die Operation unter `/api/v1`, der die Aktion folgt, mit Parametern, Body und Antwort in der Referenz unter `/api/docs`.
+Ein Tool mit mehreren Aktionen nimmt das Argument `action`. Ein Tool mit einer Aktion (`whoami`, `search`, `get-upload-url`, `automations`, `manage-automations`, `relations`, `manage-attachments`) nimmt keins; die Tabelle nennt seine Aktion trotzdem (`call` bei den ersten dreien). `attachments` hatte nur `get`, bis `content` dazukam: Ein Aufruf ohne `action` liest weiter `get`. Die Doku schreibt eine Aktion als `tool:aktion`, etwa `work-items:get`. **Pflicht** nennt die Argumente, die eine Aktion außer `action` braucht; **REST-Zwilling** ist die Operation unter `/api/v1`, der die Aktion folgt, mit Parametern, Body und Antwort in der Referenz unter `/api/docs`.
 
 <!-- tools:start -->
 
@@ -295,11 +295,12 @@ Schreibt Kommentare. Bearbeiten darf nur, wer ihn schrieb; löschen dazu die Pro
 
 ### `attachments`
 
-Die Daten eines Bilds oder einer Datei. Die Datei selbst liefert `url` mit demselben Bearer-Token (`?download=1` zum Herunterladen). (Braucht `read`.)
+Die Daten und der Inhalt eines Bilds oder einer Datei. `content` gibt ein PNG, JPEG, GIF oder WebP als Bild (die Vorschau, wenn es eine gibt, höchstens 3,75 MB, base64-kodiert unter den 5 MB, die ein Modell nimmt), eine Textdatei als Text (die ersten 200 KB), alles andere (auch ein AVIF) nur mit Name, Typ und Größe; so sieht ein Agent die Bilder eines Items. Die Datei selbst liefert `url` mit demselben Bearer-Token (`?download=1` zum Herunterladen). (Braucht `read`.)
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
 | `get` | Die Daten eines Anhangs. | `attachment` | `GET /attachments/{attachment}` |
+| `content` | Der Inhalt: ein Bild als Bild, ein Text als Text. | `attachment` | – |
 
 ### `manage-attachments`
 
