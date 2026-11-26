@@ -422,6 +422,10 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 		"GIT_AUTHOR_NAME="+run.CommitIdentity.Name, "GIT_AUTHOR_EMAIL="+run.CommitIdentity.Email,
 		"GIT_COMMITTER_NAME="+run.CommitIdentity.Name, "GIT_COMMITTER_EMAIL="+run.CommitIdentity.Email,
 	)
+	if run.CLI == "claude" {
+		// no background tasks (Bash in the background, Monitor): they wake the session after its result (WEBU-55)
+		cmd.Env = append(cmd.Env, "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1")
+	}
 	if job.TokenEnv != "" {
 		cmd.Env = append(cmd.Env, job.TokenEnv+"="+run.Werkbuch.Token)
 	}
@@ -522,7 +526,7 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 	procs.Stop(pid, GroupGrace, func() bool { return syscall.Kill(-pid, 0) != nil })
 	exitErr := <-waited
 	if endedByResult {
-		exitErr = nil // the signal that ended the CLI after its result is no failure
+		exitErr = nil // also if the CLI had exited with a code by itself: a final result decides (outcome.IsError still fails the run); the signal that ended the CLI after its result is no failure
 	}
 	if l.reason() == replaced {
 		stoppedBy = replaced
