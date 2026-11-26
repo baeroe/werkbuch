@@ -675,7 +675,7 @@ func (t *tail) String() string {
 func withoutGitAuth(env []string) []string {
 	var out []string
 	for _, kv := range env {
-		if strings.HasPrefix(kv, git.TokenFileEnv+"=") || strings.HasPrefix(kv, "GIT_CONFIG_COUNT=") ||
+		if strings.HasPrefix(kv, git.TokenFileEnv+"=") || strings.HasPrefix(kv, "GIT_CONFIG_COUNT=") || strings.HasPrefix(kv, "GIT_CONFIG_PARAMETERS=") ||
 			strings.HasPrefix(kv, "GIT_CONFIG_KEY_") || strings.HasPrefix(kv, "GIT_CONFIG_VALUE_") {
 			continue
 		}
