@@ -48,6 +48,11 @@ final class StartTask
                 [, $thread] = AgentFlow::lockStrand($thread);
             }
 
+            // a new task waits until a person moves the item out of Backlog (WEBU-44); FollowEvent::setBack starts it then
+            if ($thread === null && $locked->state->category === StateCategory::Backlog) {
+                return null;
+            }
+
             if ($thread !== null && $thread->bot_id === $bot->id) {
                 return StartCorrection::run($actor, $thread, 'comments', AgentFlow::commentsSince($thread, $locked), null, true);
             }

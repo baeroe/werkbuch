@@ -22,7 +22,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * The triggers of the flow of the agents among the events of werkbuch (spec 7.1, 7.2), for AgentConsumer:
- * - `bot.assigned`: a task (StartTask), when a person or werkbuch (a template) assigned;
+ * - `bot.assigned`: a task (StartTask), when a person or werkbuch (a template) assigned; an item in Backlog waits until
+ *   a person moves it out of Backlog (WEBU-44);
  * - `bot.mentioned` from a new comment of a person: a comment run (never from a description, a value, an edit);
  * - `work_item.assigned` of a person to someone else than the bot of the strand: the strand pauses; a child of an
  *   epic the agent works through given to someone else ends its task, the epic goes on (A599);
@@ -141,6 +142,12 @@ final class FollowEvent
             $epic = self::epicOf($item);
 
             return $epic !== null ? self::leaveChild($actor, $item, $epic) : ($own !== null && $to->category === StateCategory::Canceled ? 'paused' : 'ignored');
+        }
+
+        // out of Backlog at an item given to an agent that has not started: the task starts now (WEBU-44)
+        if ($to !== null && $to->category !== StateCategory::Backlog && $item->assignee_id !== null && AgentThread::query()->where('work_item_id', $item->id)->where('status', AgentThread::OPEN)->doesntExist()
+            && ($bot = User::query()->find($item->assignee_id)) !== null && $bot->isBot() && StartTask::run($actor, $item, $bot, $event->id) !== null) {
+            return 'task';
         }
 
         $thread = AgentThread::query()->where('work_item_id', $item->id)->where('status', AgentThread::OPEN)->whereNotNull('pr_number')->orderByDesc('id')->first();
