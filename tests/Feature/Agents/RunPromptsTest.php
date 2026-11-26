@@ -2,11 +2,13 @@
 
 use App\Domain\Agents\Contract;
 use App\Domain\Agents\RunType;
+use App\Enums\Locale;
 use App\Models\AgentRun;
 use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Project;
 use App\Models\WorkItem;
+use App\Support\AgentRules;
 use App\Support\RunPrompts;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\AgentWorld;
@@ -88,3 +90,12 @@ it('names calls the tools of werkbuch-run answer with the token of the run', fun
     }
     expect($cursor)->toBeString();
 });
+
+it('leaves reading the item to the job in every standard of the rules', function (RunType $type, Locale $locale) use ($prompt) {
+    $rules = AgentRules::standard($type, $locale);
+
+    // one way to read the item: the calls of the job, never calls of their own (A770; `get` has no `lean`)
+    expect($rules)->toMatch('/[„“]Before any work[“”]/u')
+        ->and($rules)->not->toContain('lean')->not->toContain('werkbuch-run')->not->toContain('action `get`');
+    expect($prompt(WorkItem::factory()->for($this->project)->create(), $type, ['pr_number' => 3, 'head_sha' => str_repeat('a', 40)]))->toContain('Before any work, read the item');
+})->with(RunType::cases())->with(Locale::cases());
