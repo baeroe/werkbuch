@@ -14,11 +14,11 @@
  * is the element of the cursor (`data-nav-target`), Enter opens the page (`onOpen`), and the link leaves the tab order.
  */
 
-import { CopyKey } from '@/components/items/CopyKey';
 import { Archive, Ban, ChevronRight } from 'lucide-react';
 import type { ComponentProps, KeyboardEvent, MouseEvent } from 'react';
 import { DayValue, useOverdue } from '@/components/fields/DateField';
 import { useToday, useUserMap } from '@/components/fields/itemData';
+import { CopyKey } from '@/components/items/CopyKey';
 import { Avatar, UnassignedAvatar } from '@/components/ui/Avatar';
 import { ToneDot } from '@/components/ui/Chip';
 import { cx } from '@/components/ui/cx';
