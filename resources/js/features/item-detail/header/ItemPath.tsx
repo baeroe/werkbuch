@@ -48,7 +48,7 @@ export function ItemPath({ item, project }: { item: WorkItem; project: Project |
           </li>
         )}
         <li aria-current="page" className="shrink-0 text-ink">
-          <CopyKey itemKey={item.key} className="flex min-h-11 items-center md:min-h-6">
+          <CopyKey itemKey={item.key} className="relative flex min-h-11 items-center md:min-h-6">
             <ItemKey value={item.key} />
           </CopyKey>
         </li>
