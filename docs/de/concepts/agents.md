@@ -46,7 +46,7 @@ Erledigt erst nach dem Merge: Erledigt setzt die Resolution, schließt über [Au
 
 Ein **Konflikt** mit dem Basis-Branch geht vor CI und Review: werkbuch prüft die offenen Pull Requests der Agenten nach jedem Push auf ihre Basis und vor jedem Merge und startet einen **Konflikt**-Auftrag. Der Agent mergt die Basis in den Branch (kein Rebase, kein Force-Push), löst die Konflikte, lässt die betroffenen Tests laufen und pusht.
 
-Solange ein Auftrag, der Code ändert, wartet oder läuft, entscheiden CI und Review nichts; ihre Befunde warten am Strang. Endet der Auftrag ohne neuen Commit, werden wartende Befunde eine Korrektur, sonst pausiert der Strang (keine Änderung). Mit neuem Commit fallen sie weg.
+Solange ein Auftrag, der Code ändert, wartet oder läuft, entscheiden CI und Review nichts; ihre Befunde warten am Strang. Endet der Auftrag ohne neuen Commit, werden wartende Befunde eine Korrektur, sonst pausiert der Strang (keine Änderung), außer eine Korrektur setzte nur den Nachweis des Items (`resolution_proof`): dann wird derselbe Head-Commit erneut reviewt. Mit neuem Commit fallen sie weg.
 
 ## Auftragstypen
 
