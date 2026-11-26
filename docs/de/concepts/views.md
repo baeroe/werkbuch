@@ -153,6 +153,7 @@ Ein Filter hat bis zu 50 Bedingungen, eine Liste bis zu 100 Werte, ein Text bis 
 | Wert | Bedeutung |
 |---|---|
 | `"me"` | Die Person, die die Liste liest. Nur bei `assignee`, `created_by` und Personen-Properties. |
+| `"none"` | Kein Wert: niemand, kein Label, kein Eltern-Item, keine Option oder Person. Nur bei Feldern, die ein Item leer lassen kann (`assignee`, `parent`, `label`, Dropdown- und Personen-Properties). `in ["none", "<ULID>"]` heißt „niemand oder diese“, `not_in ["none", …]` „jemand, aber nicht diese“. |
 | `"2026-11-02"` | Ein Tag. |
 | `"today"`, `"this_week"`, `"this_month"` | Heute, die laufende Woche, der laufende Monat. |
 | `{ "relative": "+7d" }` | Tage oder Wochen ab heute: `-3d`, `+2w`, bis zu fünf Ziffern. |
@@ -281,8 +282,9 @@ Die Kurzform nimmt diese Schlüssel; mehrere Werte stehen durch Kommas getrennt 
 | `project` | Kennung, frühere Kennung oder ULID; unbekannt oder verborgen ist `404` |
 | `parent` | Key oder ULID eines Items; unbekannt oder verborgen ist `404` |
 | `q` | Ein Key (`WEB-47`) findet dieses Item, jeder andere Text sucht im Titel |
-| `assignee`, `created_by` | ULIDs oder `me`; `none` allein für „niemand“ |
-| `type`, `state`, `label` | ULIDs |
+| `assignee`, `created_by` | ULIDs oder `me`; bei `assignee` auch `none` für „niemand“, allein oder unter anderen (`none,me`) |
+| `type`, `state` | ULIDs |
+| `label` | ULIDs oder `none` für „kein Label“ (auch unter anderen) |
 | `state_category` | `backlog`, `unstarted`, `started`, `completed`, `canceled` |
 | `priority` | `urgent`, `high`, `medium`, `low`, `none` |
 | `archived` | `true` oder `false` |

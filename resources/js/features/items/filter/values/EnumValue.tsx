@@ -10,8 +10,6 @@ import { valuesOf, withValues } from '../fieldOps';
 import { useValueOptions } from '../useValueOptions';
 import type { ValueEditorProps } from './shared';
 
-const EMPTY = '__empty__';
-
 /** How chosen values read in the chip: the first name, then "+N". */
 function chosenDisplay(options: PickerOption[], values: string[], nameOf: (value: string) => string): ReactNode {
   if (values.length === 0) return <span className="text-muted">{t('items.filter.value.choose')}</span>;
@@ -35,9 +33,7 @@ export function EnumValue({ condition, def, label, onChange, open, onOpenChange,
   const { options, loading, error, retry, nameOf } = useValueOptions(def, project, { open, values: valuesOf(condition) });
   const values = valuesOf(condition).map(String);
   // a value the reader does not know stays a choice of its own, so it can be taken away (or stays when others change)
-  // "no value" is a choice of its own (stored as `is_empty`), so nobody has to find it in the operator menu
-  const emptyOption: PickerOption[] = def.nullable ? [{ value: EMPTY, label: t(def.field === 'assignee' ? 'items.filter.value.empty_assignee' : 'items.filter.value.empty_value') }] : [];
-  const shown = loading ? [...emptyOption, ...options] : [...emptyOption, ...options, ...values.filter((value) => !options.some((option) => option.value === value)).map((value) => ({ value, label: nameOf(value) }))];
+  const shown = loading ? options : [...options, ...values.filter((value) => !options.some((option) => option.value === value)).map((value) => ({ value, label: nameOf(value) }))];
   return (
     <Picker
       look="bare"
@@ -48,7 +44,7 @@ export function EnumValue({ condition, def, label, onChange, open, onOpenChange,
       multiple
       options={shown}
       value={values}
-      onValueChange={(next) => onChange(next.includes(EMPTY) ? { field: condition.field, op: 'is_empty' } : withValues(condition, next))}
+      onValueChange={(next) => onChange(withValues(condition, next))}
       placeholder={t('items.filter.value.search', { field: label })}
       emptyText={t('items.filter.value.empty')}
       load={{ isLoading: loading, error, retry, retrying: false }}

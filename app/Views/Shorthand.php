@@ -19,8 +19,8 @@ use Illuminate\Validation\ValidationException;
  *
  * - `project`, `parent`: a reference as in Phase 4 (ULID in any case, identifier or key, also a former one); unknown or
  *   unseen is 404, as before. They become `project is <id>` and `parent is <id>`.
- * - `assignee`, `created_by`: `me`, `none` (`is_empty`) or ULIDs separated by commas (`in`).
- * - `type`, `state`, `label`: ULIDs separated by commas (`in`); `state_category`, `priority`: their words (`in`).
+ * - `assignee`, `created_by`: `me`, `none` or ULIDs separated by commas (`in`); `none` alone is `is_empty`, with others "nobody or …".
+ * - `type`, `state`: ULIDs separated by commas (`in`); `label`: ULIDs or `none`; `state_category`, `priority`: their words (`in`).
  * - `archived`: `true` or `false`.
  * - `q`: the search of Phase 4 (ItemQuery::search), no condition.
  *

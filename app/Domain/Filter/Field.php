@@ -13,6 +13,9 @@ final readonly class Field
     /** How a condition names a property: `property:<key>`. */
     public const PROPERTY_PREFIX = 'property:';
 
+    /** The value that stands for "no value" in a choice that can be empty (`assignee in [none, <id>]`). */
+    public const NONE = 'none';
+
     private function __construct(
         public string $name,
         public FieldKind $kind,
@@ -64,6 +67,12 @@ final readonly class Field
         $shape = $catalog->shape($key);
 
         return $shape === null ? null : self::property($key, $shape);
+    }
+
+    /** Whether `none` is a value of the field: a choice of ids that an item can leave empty. */
+    public function takesNone(): bool
+    {
+        return $this->nullable && in_array($this->kind, [FieldKind::Id, FieldKind::List], true);
     }
 
     /**

@@ -153,6 +153,7 @@ A filter holds up to 50 conditions, a list up to 100 values, a text up to 255 ch
 | Value | Meaning |
 |---|---|
 | `"me"` | The person reading the list. Only for `assignee`, `created_by` and person properties. |
+| `"none"` | No value: nobody, no label, no parent, no option or person. Only for fields an item can leave empty (`assignee`, `parent`, `label`, dropdown and person properties). `in ["none", "<ULID>"]` is "nobody or this one", `not_in ["none", …]` "somebody, but not these". |
 | `"2026-11-02"` | A day. |
 | `"today"`, `"this_week"`, `"this_month"` | Today, the current week, the current month. |
 | `{ "relative": "+7d" }` | Days or weeks from today: `-3d`, `+2w`, up to five digits. |
@@ -281,8 +282,9 @@ The short form takes these keys; several values are separated by commas and mean
 | `project` | Identifier, former identifier or ULID; unknown or hidden is a `404` |
 | `parent` | Key or ULID of an item; unknown or hidden is a `404` |
 | `q` | A key (`WEB-47`) finds this item, any other text searches the title |
-| `assignee`, `created_by` | ULIDs or `me`; `none` alone for "nobody" |
-| `type`, `state`, `label` | ULIDs |
+| `assignee`, `created_by` | ULIDs or `me`; for `assignee` also `none` for "nobody", alone or among others (`none,me`) |
+| `type`, `state` | ULIDs |
+| `label` | ULIDs, or `none` for "no label" (also among others) |
 | `state_category` | `backlog`, `unstarted`, `started`, `completed`, `canceled` |
 | `priority` | `urgent`, `high`, `medium`, `low`, `none` |
 | `archived` | `true` or `false` |

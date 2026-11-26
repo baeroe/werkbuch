@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { allEntries, arrowTo, createE2eProject, createItem, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
+import { allEntries, api, arrowTo, createE2eProject, createItem, removeE2eProject, runId, tabTo, tr, variant } from '../helpers';
 
 // The filter bar of an item list with the keyboard only, signed in as the e2e person (playwright.config.ts), in English.
 // Every test only reads: they share one project (`E2E …`, removed after them) with a few items over the API, named per
@@ -25,6 +25,9 @@ test.beforeAll(async ({ browser }, workerInfo) => {
     { title: 'Rework the start page', priority: 'low' },
   ];
   for (const item of items) await createItem(page, { project_id: shared.id, ...item });
+  // the one item with an assignee: the e2e person
+  const me = (await (await api(page, 'GET', '/api/v1/me')).json()) as { data: { id: string } };
+  await createItem(page, { project_id: shared.id, title: 'Already mine', priority: 'none', assignee_id: me.data.id });
   await page.close();
 });
 
@@ -94,6 +97,29 @@ test('filters by a property of the project', async ({ page }) => {
   await expect(page.getByRole('group', { name: `Filter: ${effort} greater than 5` })).toBeVisible();
   await expectRows(page, ['Login breaks'], ['Swap the logo', 'Check the footer', 'Form sends twice', 'Rework the start page']);
   await expect(announcer(page)).toHaveText(tr('en', 'items.announce.result.count.one'));
+});
+
+test('filters by unassigned from the list of values, alone and with a person', async ({ page }) => {
+  await openList(page);
+  await page.keyboard.press('f');
+  await typeInList(page, tr('en', 'items.filter.add.search'), 'assignee');
+  await page.keyboard.press('Enter');
+  await typeInList(page, tr('en', 'items.filter.value.search', { field: tr('en', 'items.filter.field.assignee') }), '');
+  // "Unassigned" is the first value of the list
+  await expect(page.getByRole('option', { name: tr('en', 'items.filter.value.empty_assignee') })).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('group', { name: 'Filter: Assignee: Unassigned' })).toBeVisible();
+  await expectRows(page, ['Login breaks', 'Check the footer'], ['Already mine']);
+  // the person next to it: "Unassigned or me"
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expectRows(page, ['Login breaks', 'Check the footer', 'Already mine'], []);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('group', { name: /^Filter: Assignee is one of/ })).toBeVisible();
+  // the address keeps it: the saved form of the condition is `none` among the values
+  const filter = new URL(page.url()).searchParams.get('filter');
+  expect(JSON.parse(filter!)).toEqual([{ field: 'assignee', op: 'in', value: ['none', 'me'] }]);
 });
 
 test('filters by title with /', async ({ page }) => {

@@ -115,6 +115,12 @@ export const VALUELESS = new Set<ConditionOp>(['is_empty', 'is_not_empty', 'over
 /** Fields with values to choose from a list: one, a word, or several. */
 export const isChoice = (kind: FieldKind): boolean => kind === 'id' || kind === 'enum' || kind === 'list';
 
+/** The value that stands for "no value" in a choice an item can leave empty ("Nicht zugewiesen", "Ohne Label"). */
+export const NONE = 'none';
+
+/** Whether `none` is a value of the field: a choice of ids that an item can leave empty (`Field::takesNone`). */
+export const takesNone = (def: FieldDef): boolean => def.nullable && (def.kind === 'id' || def.kind === 'list');
+
 const CHOICES: ConditionOp[] = ['is', 'is_not', 'in', 'not_in'];
 const EMPTIES: ConditionOp[] = ['is_empty', 'is_not_empty'];
 const DAYS: ConditionOp[] = ['is', 'before', 'after', 'between'];

@@ -19,7 +19,7 @@ import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '@
 import { t } from '@/lib/i18n';
 import type { Condition, ConditionOp, Project } from '@/types';
 import { ConditionEditor, useConditionText } from './ConditionEditor';
-import { fieldLabel, isComplete, menuOperators, operatorFamily, operatorLabelKey, PROPERTY_PREFIX, valuesOf, withOperator, type FieldDef } from './fieldOps';
+import { fieldLabel, isComplete, menuOperators, NONE, operatorFamily, operatorLabelKey, PROPERTY_PREFIX, valuesOf, withOperator, type FieldDef } from './fieldOps';
 import { chipPart } from './values/shared';
 
 type ConditionChipProps = {
@@ -123,7 +123,9 @@ export function ConditionChip({ condition, def, onChange, onRemove, onLeave, fre
 
   const label = fieldLabel(def);
   const operator = t(operatorLabelKey(condition.op, valuesOf(condition).length));
-  const name = [label, operator, text].filter(Boolean).join(' ');
+  // "Assignee: Nicht zugewiesen": nobody alone reads as the state, not as "ist Nicht zugewiesen"
+  const nobody = def.nullable && (condition.op === 'is' || condition.op === 'in') && valuesOf(condition).length === 1 && valuesOf(condition)[0] === NONE;
+  const name = nobody ? `${label}: ${text}` : [label, operator, text].filter(Boolean).join(' ');
   const ops = menuOperators(def);
 
   /** After the operator menu: the value editor of a condition that still needs one. */
@@ -162,7 +164,7 @@ export function ConditionChip({ condition, def, onChange, onRemove, onLeave, fre
           <MenuTrigger
             render={<button type="button" aria-label={t('items.filter.chip.operator', { operator })} onFocus={() => requestAnimationFrame(openValue)} className={cx(chipPart, 'text-muted hover:text-ink')} />}
           >
-            {operator}
+            {nobody ? ':' : operator}
           </MenuTrigger>
           <MenuContent className="min-w-44">
             <MenuRadioGroup
@@ -182,7 +184,7 @@ export function ConditionChip({ condition, def, onChange, onRemove, onLeave, fre
           </MenuContent>
         </Menu>
       ) : (
-        <span className="shrink-0 px-1.5 text-muted">{operator}</span>
+        <span className="shrink-0 px-1.5 text-muted">{nobody ? ':' : operator}</span>
       )}
       <ConditionEditor condition={condition} def={def} label={label} onChange={onChange} open={open} onOpenChange={setOpen} project={project} />
       {/* a press keeps the focus where it is: a field of the chip would keep its typed text as it lost the focus, and the
