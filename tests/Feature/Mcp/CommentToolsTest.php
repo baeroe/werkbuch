@@ -133,7 +133,7 @@ it('reads and removes a file of the list as a member and is refused for a pictur
     $picture = Attachment::factory()->stored('Bild', 'text/plain', 'bild.txt')->forItem($item)->create(['uploaded_by' => $theo->id]);
     $plain = apiToken($theo, ['read', 'write', 'mcp']);
 
-    $read = McpClient::for($this, $plain)->call('attachments', ['attachment' => strtoupper($file->id)]);
+    $read = McpClient::for($this, $plain)->call('attachments', ['action' => 'get', 'attachment' => strtoupper($file->id)]);
     expect($read['isError'])->toBeFalse((string) json_encode($read))
         ->and($read['structuredContent']['data']['filename'])->toBe('plan.txt')
         ->and($read['structuredContent']['data']['url'])->toBe("/attachments/{$file->id}");
