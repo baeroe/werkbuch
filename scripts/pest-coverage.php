@@ -17,6 +17,9 @@ use SebastianBergmann\CodeCoverage\Serialization\Merger;
 
 require dirname(__DIR__).'/vendor/autoload.php';
 
+// the merged coverage of eight shards takes more than the 128 MB of a plain PHP
+ini_set('memory_limit', '2G');
+
 [$folder, $shards] = [$argv[1] ?? '', (int) ($argv[2] ?? 0)];
 
 if ($folder === '' || ! is_dir($folder) || $shards < 1) {
@@ -75,7 +78,7 @@ $missing = function (File $file): array {
 
 foreach ($report->getIterator() as $node) {
     if ($node instanceof File && $node->numberOfExecutedLines() < $node->numberOfExecutableLines()) {
-        echo sprintf("%s: %s\n", $node->pathAsString(), implode(', ', $missing($node)));
+        echo sprintf("%s: %s\n", $node->id(), implode(', ', $missing($node)));
     }
 }
 
