@@ -173,6 +173,17 @@ afterEach(() => {
 /* ------------------------------------------------------------------------ the page */
 
 describe('ItemPage', () => {
+  it('copies the key when it is clicked in the path', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    await heading();
+    const path = screen.getByRole('navigation', { name: 'Pfad' });
+    await userEvent.click(await within(path).findByRole('button', { name: 'WEB-47' }));
+    expect(writeText).toHaveBeenCalledWith('WEB-47');
+    await waitFor(() => expect(currentToasts().some((toast) => toast.title === 'Kopiert')).toBe(true));
+  });
+
   it('shows key, title, type tab and fields of an item', async () => {
     renderWith(<ItemPage itemKey="WEB-47" />);
 

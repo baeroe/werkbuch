@@ -9,6 +9,8 @@ import { Link } from '@inertiajs/react';
 import { ChevronRight } from 'lucide-react';
 import { ItemKey } from '@/components/items/ItemKey';
 import { cx } from '@/components/ui/cx';
+import { copyOrSelect } from '@/features/settings/tokens/CopyButton';
+import { toast } from '@/components/ui/toast';
 import { ProjectBadge } from '@/components/ui/ProjectBadge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { t } from '@/lib/i18n';
@@ -47,7 +49,19 @@ export function ItemPath({ item, project }: { item: WorkItem; project: Project |
           </li>
         )}
         <li aria-current="page" className="shrink-0 text-ink">
-          <ItemKey value={item.key} />
+          <button
+            type="button"
+            title={t('common.copy')}
+            className="flex min-h-11 cursor-copy items-center rounded-chip hover:text-ink md:min-h-6"
+            onClick={(event) => {
+              const target = event.currentTarget;
+              void copyOrSelect(item.key, target).then((result) => {
+                if (result === 'copied') toast({ title: t('common.copied'), tone: 'success' });
+              });
+            }}
+          >
+            <ItemKey value={item.key} />
+          </button>
         </li>
       </ol>
     </nav>
