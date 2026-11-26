@@ -505,29 +505,37 @@ func TestANaturalEndKeepsItsStatusAndEndsTheGroup(t *testing.T) {
 	}
 }
 
-func TestSetupRunsInEveryCodeRunAndNotInALightOne(t *testing.T) {
-	// a setup command names its own project after the strand (A670); it runs again in a worktree that exists, a light run gets none
+func TestSetupRunsInEveryCodeRunOfAStrandAndTeardownStaysForLightOnes(t *testing.T) {
 	w := newWorld(t)
-	setup := func(id string, typ string, more func(*protocol.Run)) string {
-		run := w.run(id, typ, "answer", func(r *protocol.Run) {
-			r.SetupCommand = str(`echo "project werkbuch-$WERKBUCH_STRAND in $WERKBUCH_WORKTREE"`)
-			if more != nil {
-				more(r)
-			}
-		})
-		w.execute(run)
-		return w.texts(run.ID)
+	counter := filepath.Join(t.TempDir(), "setups")
+	torn := filepath.Join(t.TempDir(), "torn")
+	same := func(r *protocol.Run) {
+		r.Thread.ID = "strand"
+		r.SetupCommand = str("echo x >> " + counter)
+		r.TeardownCommand = str("touch " + torn)
 	}
-	first := setup("01code1", protocol.Task, nil)
-	if !strings.Contains(first, "setup: project werkbuch-") {
-		t.Fatal(first)
+	w.execute(w.run("01a", protocol.Task, "answer", same))
+	e, _ := w.execute(w.run("01b", protocol.Correction, "answer", same))
+	dir := e.Summary().Dir
+	// a light run in the worktree of the strand: no setup, and it does not erase the teardown
+	w.execute(w.run("01c", protocol.Comment, "answer", same))
+	if data, _ := os.ReadFile(counter); strings.Count(string(data), "x") != 2 {
+		t.Fatalf("setup ran %q times for task, correction and comment", data)
 	}
-	again := setup("01code2", protocol.Correction, func(r *protocol.Run) { r.Thread.ID = "thread-01code1" })
-	if !strings.Contains(again, "setup: ") {
-		t.Fatal(again)
+	if err := w.x.Git.Remove(context.Background(), dir, w.x.Teardown); err != nil {
+		t.Fatal(err)
 	}
-	light := setup("01light", protocol.Comment, nil)
-	if strings.Contains(light, "setup: ") {
-		t.Fatal(light)
+	if _, err := os.Stat(torn); err != nil {
+		t.Fatal("the teardown did not run when the worktree of the strand went")
+	}
+}
+
+func TestAFailedSetupEndsTheRunWithItsMessage(t *testing.T) {
+	w := newWorld(t)
+	run := w.run("01bad", protocol.Task, "answer", func(r *protocol.Run) { r.SetupCommand = str("echo broken; exit 3") })
+	w.execute(run)
+	res := w.fake.State(run.ID).Result
+	if res.Status != protocol.Failed || !strings.Contains(w.texts(run.ID), "setup: broken") {
+		t.Fatalf("%+v\n%s", res, w.texts(run.ID))
 	}
 }

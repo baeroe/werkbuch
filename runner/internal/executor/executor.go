@@ -201,8 +201,9 @@ func (x *Executor) repo(run protocol.Run) string {
 // spec says where a run works: the strand's worktree (its name or ID), else a folder of the run.
 func (x *Executor) spec(run protocol.Run) git.Spec {
 	spec := git.Spec{Repo: x.repo(run), Name: "run-" + run.ID}
-	// a light run has no shell and gets neither setup nor teardown
-	if run.TeardownCommand != nil && !protocol.Light(run.Type) {
+	// the teardown is written to the meta of a worktree at every run and read when it goes: a light run in a strand's
+	// worktree must keep it; only the throwaway folder of a light run (no setup ran there) has none
+	if run.TeardownCommand != nil && !(protocol.Light(run.Type) && spec.Name == "run-"+run.ID) {
 		spec.Teardown = *run.TeardownCommand
 	}
 	if run.HeadSHA != nil {
@@ -210,6 +211,9 @@ func (x *Executor) spec(run protocol.Run) git.Spec {
 	}
 	if run.Thread != nil && run.Type != protocol.Review {
 		spec.Name = run.Thread.ID
+		if run.TeardownCommand != nil {
+			spec.Teardown = *run.TeardownCommand
+		}
 		if run.Thread.Worktree != nil && *run.Thread.Worktree != "" {
 			spec.Name = *run.Thread.Worktree
 		}
