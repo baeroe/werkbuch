@@ -110,7 +110,36 @@ Jeder Runner ist eine Karte unter **Einstellungen → Runner**: online (ein Kont
 | je Repo | 1 | davon je Repo (zwei Aufträge eines Repos teilen sich die Test-Datenbank von DDEV) |
 | leicht | 2 | Reviews und Antworten, in einem eigenen Topf |
 
-Der Runner bekommt die Plätze mit jeder Antwort; eine Änderung gilt ohne Neustart. Welchen Runner ein Bot nimmt, ist sein **Runner-Pool** (**Einstellungen → Bots → Agent einrichten**; keiner angehakt: alle Runner). Setup- und Teardown-Befehl der Worktrees gehören zum Projekt (**Projekteinstellungen → Agenten**): Der Runner führt sie mit `sh -c` im Worktree aus, nachdem er ihn angelegt hat und bevor er ihn entfernt. Beide sehen zwei Variablen: `WERKBUCH_WORKTREE`, den absoluten Pfad des Worktrees, und `WERKBUCH_STRAND`, den Namen des Strangs als Projektname (Kleinbuchstaben, Ziffern und `-`). Für werkbuch braucht jeder Worktree einen eigenen DDEV-Projektnamen, gesetzt in der von git ignorierten `.ddev/config.local.yaml` (nie mit `ddev config --project-name`, das die versionierte `.ddev/config.yaml` ändert): etwa `printf 'name: werkbuch-%s\n' "$WERKBUCH_STRAND" > .ddev/config.local.yaml && ddev start` und `ddev delete -Oy`.
+Der Runner bekommt die Plätze mit jeder Antwort; eine Änderung gilt ohne Neustart. Welchen Runner ein Bot nimmt, ist sein **Runner-Pool** (**Einstellungen → Bots → Agent einrichten**; keiner angehakt: alle Runner).
+
+### Setup und Teardown
+
+Setup- und Teardown-Befehl der Worktrees gehören zum Projekt (**Projekteinstellungen → Agenten**): Der Runner führt sie mit `sh -c` im Worktree aus, nachdem er ihn angelegt hat und bevor er ihn entfernt. Beide sehen zwei Variablen: `WERKBUCH_WORKTREE`, den absoluten Pfad des Worktrees, und `WERKBUCH_STRAND`, den Namen des Strangs als Projektname (Kleinbuchstaben, Ziffern und `-`).
+
+Ohne Setup-Befehl bekommt der Agent einen nackten Checkout: keine Abhängigkeiten, keine Datenbank, nichts, womit er testen kann. Setz ihn vor dem ersten Auftrag des Projekts: Der Runner richtet einen Worktree ein, wenn er ihn anlegt, ein schon vorhandener wird nicht noch einmal eingerichtet. Schreib ihn so, dass er zweimal auf demselben Worktree laufen darf.
+
+Mit DDEV braucht jeder Worktree einen eigenen Projektnamen, gesetzt in der von git ignorierten `.ddev/config.local.yaml` (nie mit `ddev config --project-name`, das die versionierte `.ddev/config.yaml` ändert). Der Setup-Befehl für werkbuch selbst, der auch Reverb den Host des Worktrees gibt:
+
+```sh
+set -e
+cd "$WERKBUCH_WORKTREE"
+n="wb-$WERKBUCH_STRAND"
+printf 'name: %s\n' "$n" > .ddev/config.local.yaml
+[ -f .env ] || cp .env.example .env
+sed -i.bak "s/^REVERB_HOST=.*/REVERB_HOST=$n.ddev.site/" .env && rm .env.bak
+ddev start -y
+ddev composer install --no-interaction
+ddev exec pnpm install --frozen-lockfile
+grep -q '^APP_KEY=base64' .env || ddev artisan key:generate
+ddev artisan migrate --force
+ddev artisan app:search-sync
+```
+
+Für eine Laravel-App ohne Reverb dasselbe ohne die Zeile `REVERB_HOST` und ohne `app:search-sync`. Der Teardown-Befehl entfernt das DDEV-Projekt samt Datenbank:
+
+```sh
+cd "$WERKBUCH_WORKTREE" && ddev delete -Oy
+```
 
 ## Ein Auftrag auf der Maschine
 

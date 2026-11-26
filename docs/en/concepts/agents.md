@@ -15,8 +15,10 @@ An item an agent works on looks like any other: the same history, the same notif
 
 1. **A runner:** connect one under **Settings → Runners** ([Runner](/en/runner)).
 2. **GitHub**, for projects with code: connect the app under **Settings → GitHub** and pick the repo of the project under **Project settings → Agents** ([GitHub](/en/github)). A project without a repo works too, see [without a repo](#without-a-repo).
-3. **A bot as agent:** **Settings → Bots → Set up agent**: on, the runner pool (none ticked: every runner), the CLI, the default model and a model per kind of run. The bot needs a responsible person, has to be active and a member of the project with the right to edit items. The default bot cannot be an agent.
-4. **The steps of the workflow:** the workflow of the project names a state for each of the four [steps of the agents](/en/concepts/workflows#steps-of-the-agents): In progress, In review, Correction, Merged. Without all four, agents work on no item in its projects, and assigning a bot stays a plain assignment; they still answer mentions (an answer moves no item).
+3. **The setup command**, for projects with code: under **Project settings → Agents**, so that each worktree gets its dependencies and its own test environment, with DDEV a project name of its own per strand ([setup and teardown](/en/runner#setup-and-teardown)). Set it before the first run: a worktree that already exists is not set up again.
+4. **The ruleset of the base branch:** if it requires an approval, put the app in its bypass list, for pull requests only; otherwise werkbuch cannot merge ([approval required](/en/github#approval-required)).
+5. **A bot as agent:** **Settings → Bots → Set up agent**: on, the runner pool (none ticked: every runner), the CLI, the default model and a model per kind of run. The bot needs a responsible person, has to be active and a member of the project with the right to edit items. The default bot cannot be an agent.
+6. **The steps of the workflow:** the workflow of the project names a state for each of the four [steps of the agents](/en/concepts/workflows#steps-of-the-agents): In progress, In review, Correction, Merged. Without all four, agents work on no item in its projects, and assigning a bot stays a plain assignment; they still answer mentions (an answer moves no item).
 
 Where something is missing, the item says why under its title, and **Project settings → Agents** says it for the project.
 

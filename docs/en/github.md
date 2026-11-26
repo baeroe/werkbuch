@@ -59,7 +59,23 @@ Without a repo, agents work in a folder of their own and end with a summary as a
 
 ## Rulesets
 
-A ruleset on the base branch is optional, and private repos on GitHub's free plan have none. Where you can, set one: pull request required, the CI check green, no bypass. werkbuch merges through the pull request and needs no bypass. Do **not** require an approval: the app cannot approve its own pull request, and its merge would fail. The page of the instance shows per repo whether a ruleset protects the base branch, as a hint only.
+A ruleset on the base branch is optional, and private repos on GitHub's free plan have none. Where you can, set one: pull request required, the CI check green. werkbuch merges through the pull request and needs no bypass, as long as the ruleset requires no approval. The page of the instance shows per repo whether a ruleset protects the base branch, as a hint only.
+
+### Approval required
+
+The app opens the pull request of an agent and reviews it itself, and GitHub lets nobody approve their own pull request. A ruleset that requires an approval (`required_approving_review_count` 1 or more) blocks the merge of werkbuch for good. Then put the app in the bypass list of the ruleset, for pull requests only:
+
+- **On GitHub:** **Settings → Rules → Rulesets →** the ruleset of the base branch **→ Bypass list → Add bypass**, pick the app and choose **For pull requests only**.
+- **With `gh`:** with the owner and name of the repo, the name of the ruleset (here `main`) and the ID of the app, shown per app under **Settings → GitHub** (over MCP `agents:get-github`, `app_id`):
+
+```sh
+id=$(gh api repos/OWNER/REPO/rulesets --jq '.[] | select(.name=="main") | .id')
+gh api repos/OWNER/REPO/rulesets/$id > ruleset.json
+jq '{name, target, enforcement, conditions, rules, bypass_actors: (.bypass_actors + [{"actor_id": APP_ID, "actor_type": "Integration", "bypass_mode": "pull_request"}])}' ruleset.json \
+  | gh api -X PUT repos/OWNER/REPO/rulesets/$id --input -
+```
+
+The bypass also covers **Require branches to be up to date before merging**. The price: the app could merge a pull request without an approval. werkbuch merges only after green CI and a review without findings; people still need the approval.
 
 With or without a ruleset, werkbuch watches the base branch, see [unauthorized merge](#unauthorized-merge).
 

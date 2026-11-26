@@ -59,7 +59,23 @@ Ohne Repo arbeiten Agenten in einem eigenen Ordner und enden mit einer Zusammenf
 
 ## Rulesets
 
-Ein Ruleset auf dem Basis-Branch ist optional, und private Repos haben im kostenlosen Plan von GitHub keins. Wo du kannst, setz eins: Pull Request nötig, der CI-Check grün, ohne Bypass. werkbuch mergt über den Pull Request und braucht keinen Bypass. Verlange **keine** Freigabe: Die App kann ihren eigenen Pull Request nicht freigeben, und ihr Merge scheiterte. Die Seite der Instanz zeigt je Repo, ob ein Ruleset den Basis-Branch schützt, nur als Hinweis.
+Ein Ruleset auf dem Basis-Branch ist optional, und private Repos haben im kostenlosen Plan von GitHub keins. Wo du kannst, setz eins: Pull Request nötig, der CI-Check grün. werkbuch mergt über den Pull Request und braucht keinen Bypass, solange das Ruleset keine Freigabe verlangt. Die Seite der Instanz zeigt je Repo, ob ein Ruleset den Basis-Branch schützt, nur als Hinweis.
+
+### Freigabe verlangt
+
+Die App öffnet den Pull Request eines Agenten und reviewt ihn selbst, und GitHub lässt niemanden den eigenen Pull Request freigeben. Ein Ruleset, das eine Freigabe verlangt (`required_approving_review_count` 1 oder mehr), blockiert den Merge von werkbuch dauerhaft. Trag dann die App in die Bypass-Liste des Rulesets ein, nur für Pull Requests:
+
+- **Auf GitHub:** **Settings → Rules → Rulesets →** das Ruleset des Basis-Branchs **→ Bypass list → Add bypass**, die App wählen und **For pull requests only** einstellen.
+- **Mit `gh`:** mit Besitzer und Name des Repos, dem Namen des Rulesets (hier `main`) und der ID der App, je App unter **Einstellungen → GitHub** zu sehen (über MCP `agents:get-github`, `app_id`):
+
+```sh
+id=$(gh api repos/OWNER/REPO/rulesets --jq '.[] | select(.name=="main") | .id')
+gh api repos/OWNER/REPO/rulesets/$id > ruleset.json
+jq '{name, target, enforcement, conditions, rules, bypass_actors: (.bypass_actors + [{"actor_id": APP_ID, "actor_type": "Integration", "bypass_mode": "pull_request"}])}' ruleset.json \
+  | gh api -X PUT repos/OWNER/REPO/rulesets/$id --input -
+```
+
+Der Bypass deckt auch **Require branches to be up to date before merging** ab. Der Preis: Die App könnte einen Pull Request ohne Freigabe mergen. werkbuch mergt nur nach grüner CI und einem Review ohne Befunde; Personen brauchen die Freigabe weiterhin.
 
 Mit oder ohne Ruleset beobachtet werkbuch den Basis-Branch, siehe [eigenmächtiger Merge](#eigenmachtiger-merge).
 
