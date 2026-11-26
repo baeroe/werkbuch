@@ -539,3 +539,13 @@ func TestAFailedSetupEndsTheRunWithItsMessage(t *testing.T) {
 		t.Fatalf("%+v\n%s", res, w.texts(run.ID))
 	}
 }
+
+func TestTheRunEndsWithTheFirstResult(t *testing.T) {
+	w := newWorld(t)
+	start := time.Now()
+	res, status := w.execute(w.run("01lr", protocol.Task, "lateresult", func(*protocol.Run) {}))
+	if status != protocol.Succeeded || time.Since(start) > 20*time.Second {
+		t.Fatalf("%q after %s", status, time.Since(start))
+	}
+	_ = res
+}

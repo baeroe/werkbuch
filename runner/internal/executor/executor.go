@@ -460,6 +460,8 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 	log.Info("cli started", "cli", run.CLI, "model", run.Model, "dir", ws.Dir, "resume", run.SessionID() != "")
 
 	stream := adapter.Stream()
+	var finished sync.Once
+	finishedCh := make(chan struct{}) // the first result of the CLI is in: the run ends there
 	read := make(chan struct{})
 	readErr := make(chan struct{})
 	go func() {
@@ -468,6 +470,9 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 		sc.Buffer(make([]byte, 64*1024), 16*1024*1024)
 		for sc.Scan() {
 			s.add(stream.Feed(sc.Bytes())...)
+			if d, ok := stream.(interface{ Done() bool }); ok && d.Done() {
+				finished.Do(func() { close(finishedCh) })
+			}
 		}
 	}()
 	go func() {
@@ -496,8 +501,11 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 	// the reason is fixed when the CLI ends: a cancel or time limit after its own end changes nothing, only a run
 	// werkbuch gave away stays unreported
 	stoppedBy := ""
+	endedByResult := false
 	select {
 	case <-exited:
+	case <-finishedCh:
+		endedByResult = true
 	case <-l.decided:
 		stoppedBy = l.reason()
 		e.set("stopping")
@@ -513,6 +521,9 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 	// what the CLI left running in its group (a dev server started with &) goes with it
 	procs.Stop(pid, GroupGrace, func() bool { return syscall.Kill(-pid, 0) != nil })
 	exitErr := <-waited
+	if endedByResult {
+		exitErr = nil // the signal that ended the CLI after its result is no failure
+	}
 	if l.reason() == replaced {
 		stoppedBy = replaced
 	}
