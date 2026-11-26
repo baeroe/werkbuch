@@ -192,3 +192,12 @@ it('wants two states for in progress and in review, sent or kept', function () u
 
     expect($errorsOf(fn () => SaveWorkflow::run($actor, $workflow, $input)))->toBe(['agent_states.review' => [__('field.agent_states.same')]]);
 });
+
+it('refuses the optional step blocked on the state of working or review', function () use ($errorsOf, $steps) {
+    $actor = actor(User::factory()->admin()->create());
+    $base = $steps('std_progress', 'std_review', 'std_backlog', 'std_done');
+    $input = [...WorkflowFixtures::standardInput('Blockiert'), 'agent_states' => $base];
+
+    expect($errorsOf(fn () => SaveWorkflow::run($actor, null, [...$input, 'agent_states' => [...$base, 'blocked' => 'std_progress']])))
+        ->toBe(['agent_states.blocked' => [__('field.agent_states.same_blocked')]]);
+});
