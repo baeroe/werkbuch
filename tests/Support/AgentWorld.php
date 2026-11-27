@@ -4,13 +4,17 @@ namespace Tests\Support;
 
 use App\Access\ProjectRole;
 use App\Access\RoleAssignments;
+use App\Actions\Agents\StartTask;
 use App\Domain\Agents\RunType;
 use App\Models\AgentConfig;
 use App\Models\AgentRun;
+use App\Models\AgentThread;
 use App\Models\Project;
 use App\Models\Runner;
 use App\Models\User;
 use App\Models\WorkItem;
+use App\Support\Actor;
+use App\Support\AgentFlow;
 use App\Support\RunTokens;
 
 /**
@@ -59,6 +63,27 @@ final class AgentWorld
         $item = $at instanceof WorkItem ? $at : WorkItem::factory()->create(['project_id' => $at->id]);
 
         return AgentRun::factory()->type($type)->create(['bot_id' => $agent->id, 'work_item_id' => $item->id, 'project_id' => $item->project_id, ...$attributes]);
+    }
+
+    /**
+     * An epic the bot works through by rule A, as a strand of before WEBU-71 began it (one strand, one branch, one PR
+     * for all children; such strands run to their end): the epic is the bot's, the strand at it, the task of its first
+     * child queued. Without events: the assignment was long ago.
+     */
+    public static function ruleAEpic(User $bot, WorkItem $epic): AgentThread
+    {
+        $epic->forceFill(['assignee_id' => $bot->id])->save();
+        $repo = AgentFlow::repositoryOf($epic->project_id);
+        $thread = AgentThread::factory()->create([
+            'bot_id' => $bot->id, 'work_item_id' => $epic->id, 'repository_github_id' => $repo?->repository->github_id,
+            'base_branch' => $repo?->base_branch, 'branch' => AgentThread::branchFor($epic),
+        ]);
+        $first = StartTask::nextChild($thread, $epic, $bot);
+        if ($first !== null) {
+            StartTask::enqueue(Actor::system($bot, 'test'), $bot, $thread, $first, null);
+        }
+
+        return $thread;
     }
 
     /** The plain text of a new token of the run. */

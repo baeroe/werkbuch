@@ -396,7 +396,10 @@ final class WorkItemSchemas
                     'description' => '`brake`: too many corrections or conflicts; `no_change`: a run pushed nothing; `reassigned`, `canceled`: by a person; `guard`: an unauthorized merge; `github`: GitHub was disconnected (resume with `POST /work-items/{item}/agent/resume`).'],
                 'corrections' => ['type' => 'integer'], 'conflicts' => ['type' => 'integer'],
                 'pr_number' => ['type' => ['integer', 'null']], 'branch' => $nullable, 'runner_id' => $nullable,
-            ], ['id', 'bot_id', 'status', 'pause_reason', 'corrections', 'conflicts', 'pr_number', 'branch', 'runner_id'], false), ['type' => 'null']]],
+                'child' => ['anyOf' => [self::object('Of an epic on its own branch: the child whose strand is at work now.', [
+                    'id' => ['type' => 'string'], 'key' => ['type' => 'string'],
+                ], ['id', 'key'], false), ['type' => 'null']]],
+            ], ['id', 'bot_id', 'status', 'pause_reason', 'corrections', 'conflicts', 'pr_number', 'branch', 'runner_id', 'child'], false), ['type' => 'null']]],
             'runs' => ['type' => 'integer', 'description' => 'How many runs of agents the item had, in any status (`GET /runs?filter[work_item_id]=` lists them).'],
             'refusal' => ['type' => ['string', 'null'], 'enum' => [...AgentFlow::REFUSALS, null],
                 'description' => 'Why the bot the item is assigned to does not work on it as an agent; `null` for a person or an agent that does.'],

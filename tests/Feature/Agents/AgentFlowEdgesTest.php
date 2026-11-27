@@ -406,6 +406,18 @@ it('lets the CI of an old head or a draft of an agent pass', function () use ($s
     expect(HandleCheckResult::run($this->system, 700_000_001, str_repeat('b', 40)))->toBe('nothing');
 });
 
+it('asks for no conflict of an epic on its own branch before its end, but of an epic of rule A', function () use ($strand) {
+    $github = FakeGitHub::connected();
+    FakeGitHub::link($this->project);
+    $epic = WorkItem::factory()->for($this->project)->epic()->create();
+    WorkItem::factory()->for($this->project)->childOf($epic)->create();
+    $github->pulls[12] = ['mergeable' => true];
+
+    expect(CheckThreadMergeability::run($this->system, $strand(['repository_github_id' => 700_000_001, 'pr_number' => 12, 'per_child' => true], $epic)->id))->toBe('stale');
+    AgentThread::query()->update(['status' => AgentThread::CLOSED]);
+    expect(CheckThreadMergeability::run($this->system, $strand(['repository_github_id' => 700_000_001, 'pr_number' => 12, 'per_child' => false], $epic)->id))->toBe('clean');
+});
+
 it('asks GitHub whether the PR of a strand merges and runs a conflict when it does not', function () use ($strand) {
     $github = FakeGitHub::connected();
     FakeGitHub::link($this->project);

@@ -66,8 +66,7 @@ it('works only the children of an epic that stand in Todo and takes up one that 
     $todo = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo']]);
     $later = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Backlog']]);
 
-    UpdateWorkItem::run(actor($this->mara), $epic, ['assignee_id' => $this->kira->id]);
-    $thread = AgentThread::query()->sole();
+    $thread = AgentWorld::ruleAEpic($this->kira, $epic);
 
     expect(AgentRun::query()->sole()->work_item_id)->toBe($todo->id)
         ->and(StartTask::nextChild($thread, $epic, $this->kira)?->id)->toBeNull()
@@ -129,8 +128,7 @@ it('takes up a child of an epic in Reopened and does not wait for a child that i
     WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Backlog'], 'assignee_id' => $this->mara->id]);
     $started = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['In Progress']]);
 
-    UpdateWorkItem::run(actor($this->mara), $epic, ['assignee_id' => $this->kira->id]);
-    $thread = AgentThread::query()->sole();
+    $thread = AgentWorld::ruleAEpic($this->kira, $epic);
 
     expect(AgentRun::query()->sole()->work_item_id)->toBe($reopened->id)
         ->and(StartTask::waitsForReady($thread, $epic->fresh(), $this->kira))->toBeFalse();

@@ -93,15 +93,17 @@ Ein Item, das ein offenes Item **blockiert** (Relation „blockiert“), wird eb
 
 ## Epics
 
-Ist ein Epic dem Bot zugewiesen, arbeitet er das ganze Epic auf einem Branch mit einem Pull Request ab:
+Ein Epic hat einen eigenen Branch; jedes Kind wird ein eigener Pull Request auf diesen Branch:
 
-- Ein Strang am Epic, Branch `agent/<KEY>-<slug>` vom Basis-Branch. Die offenen Kinder, die niemandem oder dem Bot gehören (mit dem Schritt `ready` nur die in Todo; ein Kind, das später dorthin kommt, wird eingereiht, und das Epic wird nicht bereit, solange offene Kinder im Backlog warten), werden nacheinander Aufträge Umsetzen, in ihrer manuellen Reihenfolge; der Bot weist sich jedes Kind beim Start selbst zu.
-- Nach dem ersten Kind öffnet der Agent einen **Entwurfs**-Pull-Request. Kinder des Bots warten auf **In Review**.
-- Kinder, die einer Person gehören, bleiben ihre; sie pusht ihre Arbeit selbst auf den Epic-Branch.
-- Ist kein Kind mehr offen, stellt werkbuch den Pull Request bereit; erst dann laufen CI und Review.
-- Beim Merge gehen das Epic und die Kinder des Bots auf **Gemergt**; schon geschlossene Kinder bleiben.
+- Ist ein Epic dem Bot zugewiesen, legt werkbuch einen Strang am Epic an mit Branch `agent/<KEY>-<slug>` vom Basis-Branch. Die offenen Kinder, die niemandem oder dem Bot gehören und nicht blockiert sind (mit dem Schritt `ready` nur die in Todo), kommen nacheinander dran, in ihrer manuellen Reihenfolge, eines zur Zeit; der Bot weist sich jedes Kind beim Start selbst zu.
+- Jedes Kind bekommt einen eigenen Strang: Branch `agent/<KIND-KEY>-<slug>` vom Epic-Branch, Pull Request auf den **Epic-Branch**. Umsetzen, CI, Review, Korrektur und Bremsen laufen wie bei jedem Task. Öffnet der Agent den Pull Request auf einen anderen Branch, stellt werkbuch ihn vor dem Merge auf den Epic-Branch um.
+- Nach Approve und grüner CI merged werkbuch den Pull Request des Kindes in den Epic-Branch; das Kind geht auf **Gemergt**. So lösen sich „blockiert“-Relationen unter Geschwistern, und das nächste Kind beginnt.
+- Nach dem ersten gemergten Kind öffnet werkbuch den **Entwurfs**-Pull-Request des Epics (Epic-Branch → Basis-Branch).
+- Ein Kind, das dem Bot einzeln zugewiesen ist, geht ebenfalls auf den Epic-Branch, nie direkt auf den Basis-Branch; gibt es den Epic-Branch noch nicht, legt werkbuch ihn samt Strang am Epic vorher an.
+- Kinder, die einer Person gehören, bleiben ihre. Kann kein offenes Kind beginnen (ein Blocker, der Backlog, eine Person), sagt der Bot einmal am Epic, worauf es wartet.
+- Ist kein Kind mehr offen, stellt werkbuch den Pull Request des Epics bereit; erst dann laufen CI und ein Review des ganzen Epics. Einen Konflikt mit dem Basis-Branch löst ein Konflikt-Auftrag am Epic erst jetzt. Nach Approve und grüner CI merged werkbuch das Epic in den Basis-Branch; es geht auf **Gemergt**.
 
-Ein Task, der dem Bot einzeln zugewiesen ist, ist ein normaler Task mit eigenem Branch und Pull Request, auch in einem Epic. Ein Kind, das eine Person dem Bot zuweist, während er an dessen Epic arbeitet, hängt sich an den Strang des Epics.
+Ein Task ohne Epic ist ein normaler Task mit eigenem Branch und Pull Request. Ohne Repository und für Epics, die vor dieser Änderung begonnen wurden, gilt der frühere Ablauf: ein Strang, ein Branch, ein Pull Request für alle Kinder.
 
 ## Erwähnungen
 

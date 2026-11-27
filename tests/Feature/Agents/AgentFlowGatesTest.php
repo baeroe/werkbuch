@@ -142,7 +142,7 @@ it('takes no findings of CI or review while a run of the strand that changes cod
     $epic = WorkItem::factory()->for($this->project)->epic()->create(['state_id' => $this->states['Todo']]);
     $child = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo']]);
     $this->postJson("/api/runner/runs/{$task['id']}/result", ['attempt' => 1, 'status' => 'succeeded'], AgentWorld::headers($this->token))->assertOk();
-    $assign($this, $epic, $this->kira);
+    AgentWorld::ruleAEpic($this->kira, $epic);
     $run = AgentRun::query()->where('work_item_id', $child->id)->sole();
     $run->forceFill(['status' => RunStatus::Canceled, 'finished_at' => now()])->save();
     expect(HandleRunResult::run($this->system, $run))->toBe('nothing')->and(AgentRun::query()->where('work_item_id', $child->id)->count())->toBe(1);
@@ -210,13 +210,13 @@ it('never merges on a CI that GitHub does not have green, whatever reached werkb
         ->and($heads('correction'))->toBe([$a])->and(AgentRun::query()->where('type', 'correction')->sole()->context['findings'])->toContain('lint: failure');
 });
 
-it('reviews and merges the PR of an epic only once werkbuch made it ready, also when the agent opened it as no draft', function () use ($claim, $finish, $assign, $pr, $ci, $heads) {
+it('reviews and merges the PR of an epic only once werkbuch made it ready, also when the agent opened it as no draft', function () use ($claim, $finish, $pr, $ci, $heads) {
     $epic = WorkItem::factory()->for($this->project)->epic()->create(['state_id' => $this->states['Todo']]);
     WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo']]);
     WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo']]);
     $a = str_repeat('a', 40);
 
-    $assign($this, $epic, $this->kira);
+    AgentWorld::ruleAEpic($this->kira, $epic);
     $first = $claim($this);
     $pr($this, 'opened', $a);
     $finish($this, $first, ['commit' => $a]);
@@ -380,7 +380,7 @@ it('cancels the task of a child a person takes from the agent and goes on with t
     $form = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo'], 'rank' => 'a0']);
     $map = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo'], 'rank' => 'a1']);
 
-    $assign($this, $epic, $this->kira);
+    AgentWorld::ruleAEpic($this->kira, $epic);
     $first = $claim($this);
     expect($first['item']['key'])->toBe($form->key);
 
@@ -434,12 +434,11 @@ it('sets an item back to „Korrektur“ when the review of an agent PR fails, a
     expect(HandleRunResult::run($this->system, $correction))->toBe('review')->and($item->fresh()->state_id)->toBe($this->states['Todo']);
 });
 
-it('starts the next child only once and answers only who may edit items', function () use ($assign) {
+it('starts the next child only once and answers only who may edit items', function () {
     $epic = WorkItem::factory()->for($this->project)->epic()->create(['state_id' => $this->states['Todo']]);
     $form = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo'], 'rank' => 'a0']);
     $map = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo'], 'rank' => 'a1']);
-    $assign($this, $epic, $this->kira);
-    $thread = AgentThread::query()->sole();
+    $thread = AgentWorld::ruleAEpic($this->kira, $epic);
     expect(StartTask::nextChild($thread, $epic, $this->kira)?->id)->toBe($map->id);
 
     // a reader of a public project asks the agent nothing
@@ -681,7 +680,7 @@ it('marks an epic ready again when the correction after giving up on it has noth
     $form = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo']]);
     $a = str_repeat('a', 40);
 
-    $assign($this, $epic, $this->kira);
+    AgentWorld::ruleAEpic($this->kira, $epic);
     $task = $claim($this);
     $pr($this, 'opened', $a, ['draft' => true]);
     $finish($this, $task, ['commit' => $a]);

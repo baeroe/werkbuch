@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Domain\Workflow\AgentStep;
 use App\Models\AgentProjectSettings;
 use App\Models\AgentRun;
+use App\Models\AgentThread;
 use App\Models\ProjectRepository;
 use App\Models\User;
 use App\Models\Workflow;
@@ -13,7 +14,7 @@ use App\Models\WorkItem;
 
 /**
  * What the agents do at an item (`include=agent`, WEBU-28, A640), for whoever sees the item: the open or paused strand
- * with its counters and PR, how many runs the item had (any status, so the browser asks for them only when it had
+ * with its counters and PR (of an epic on its own branch also the child at work, WEBU-71), how many runs the item had (any status, so the browser asks for them only when it had
  * some), why the bot the item is assigned to is no agent here (`AgentFlow::refusal`, only a reason
  * code, never the configuration of the bot), the brakes of the project, whether it has a repo, and the guard against
  * an unauthorized merge (`here`: a run of this item came before it). A fixed number of queries, whatever the strand ran.
@@ -22,7 +23,7 @@ final class ItemAgentState
 {
     /**
      * @return array{
-     *     thread: array{id: string, bot_id: string, status: string, pause_reason: string|null, corrections: int, conflicts: int, pr_number: int|null, branch: string|null, runner_id: string|null}|null,
+     *     thread: array{id: string, bot_id: string, status: string, pause_reason: string|null, corrections: int, conflicts: int, pr_number: int|null, branch: string|null, runner_id: string|null, child: array{id: string, key: string}|null}|null,
      *     runs: int,
      *     refusal: string|null,
      *     ready_state: string|null,
@@ -52,6 +53,7 @@ final class ItemAgentState
                 'pr_number' => $thread->pr_number,
                 'branch' => $thread->branch,
                 'runner_id' => $thread->runner_id,
+                'child' => self::child($thread),
             ],
             'runs' => AgentRun::query()->where('work_item_id', $item->id)->count(),
             'refusal' => $refusal,
@@ -66,5 +68,18 @@ final class ItemAgentState
                 'here' => collect($repository->guard_runs ?? [])->contains(fn (array $run) => ($run['item_id'] ?? null) === $item->id),
             ],
         ];
+    }
+
+    /**
+     * The child of an epic on its own branch whose strand is open now (WEBU-71): one at a time.
+     *
+     * @return array{id: string, key: string}|null
+     */
+    private static function child(AgentThread $thread): ?array
+    {
+        $child = ! $thread->per_child ? null : WorkItem::query()->whereIn('id', AgentThread::query()->select('work_item_id')
+            ->where('parent_thread_id', $thread->id)->where('status', AgentThread::OPEN))->orderBy('rank')->orderBy('id')->first();
+
+        return $child === null ? null : ['id' => $child->id, 'key' => $child->key];
     }
 }

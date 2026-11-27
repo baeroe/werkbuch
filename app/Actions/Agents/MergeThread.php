@@ -27,7 +27,8 @@ use RuntimeException;
  * green (its check runs read again, A591) stops it. The merge goes at the head commit decided on (GitHub refuses
  * when the head moved); werkbuch notes it as its own before it asks (OwnMerges, so the push of the merge never wakes the
  * guard) and its commit after. Then the strand is merged (CompleteThread) and the branch goes. A merge GitHub refuses
- * otherwise (a ruleset that wants an approval) is a comment and „Korrektur“. When the answer to a merge got lost, the
+ * otherwise (a ruleset that wants an approval) is a comment and „Korrektur“. The PR of a child of an epic opened into
+ * another base than the branch of the epic goes there before it merges (WEBU-71). When the answer to a merge got lost, the
  * next attempt finds the PR merged at that head and finishes (A600). No HTTP under a lock.
  */
 final class MergeThread
@@ -71,6 +72,15 @@ final class MergeThread
             self::forget($thread, $sha);
 
             return 'moved';
+        }
+
+        // a child of an epic merges only into the branch of the epic (WEBU-71): a PR opened into another base goes there
+        // first, and the job looks again once GitHub computed it anew
+        $base = is_array($pr['base'] ?? null) ? ($pr['base']['ref'] ?? null) : null;
+        if ($thread->parent_thread_id !== null && is_string($base) && $base !== $thread->base_branch) {
+            GitHubApi::retarget($token, $repository, (int) $thread->pr_number, (string) $thread->base_branch);
+
+            return 'pending';
         }
 
         if (! array_key_exists('mergeable', $pr) || $pr['mergeable'] === null) {
