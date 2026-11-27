@@ -76,13 +76,18 @@ final class LoadChecks
         }, 3)];
         ChecksChanged::tell($changed);
 
-        return CiState::of([
+        return CiState::of(CiState::latest([
             ...array_map(fn (array $run) => [
+                'kind' => 'check',
+                'app' => is_array($run['app'] ?? null) && is_string($run['app']['name'] ?? null) ? $run['app']['name'] : null,
+                'name' => is_string($run['name'] ?? null) ? $run['name'] : '',
+                'id' => is_int($run['id'] ?? null) ? $run['id'] : 0,
                 'status' => is_string($run['status'] ?? null) ? $run['status'] : 'queued',
                 'conclusion' => is_string($run['conclusion'] ?? null) ? $run['conclusion'] : null,
             ], $runs),
-            ...array_map(fn (array $row) => ['status' => $row['status'], 'conclusion' => $row['conclusion']], [...$workflows, ...$statuses]),
-        ]);
+            ...array_map(fn (array $row) => ['kind' => $row['kind'], 'app' => $row['app'], 'name' => $row['name'], 'id' => $row['check_run_id'],
+                'status' => $row['status'], 'conclusion' => $row['conclusion']], [...$workflows, ...$statuses]),
+        ]));
     }
 
     /**

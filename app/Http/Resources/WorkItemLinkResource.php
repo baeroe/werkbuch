@@ -43,7 +43,7 @@ final class WorkItemLinkResource extends JsonResource
             'thread_id' => $link->thread_id,
             'review' => $link->review,
             'ci' => $link->ci(),
-            'checks' => $link->checks->where('head_sha', $link->head_sha)->map(fn (WorkItemLinkCheck $check) => [
+            'checks' => collect($link->headChecks())->map(fn (WorkItemLinkCheck $check) => [
                 'name' => $check->name,
                 'app' => $check->app,
                 'status' => $check->status,

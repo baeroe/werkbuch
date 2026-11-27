@@ -46,3 +46,19 @@ it('keeps a run that ended ended when a late delivery says it runs, and passes o
         ->and(GitHubDelivery::query()->where('delivery_id', 'c-other')->value('outcome'))->toBe('ignored')
         ->and(SyncChecks::run(Actor::system(User::defaultBot(), 'test'), ['check_run' => ['id' => 1]]))->toBe('ignored');
 });
+
+it('counts only the newest attempt of a check started again, and shows only it at the item (WEBU-62)', function () {
+    FakeGitHub::deliver($this, 'check_run', FakeGitHub::checkRun($this->sha, 'completed', 'failure', 3_000_010, 'e2e'))->assertStatus(202);
+    FakeGitHub::deliver($this, 'check_run', FakeGitHub::checkRun($this->sha, 'completed', 'success', 3_000_011, 'lint'))->assertStatus(202);
+    expect($this->link->load('checks')->ci())->toBe('failure');
+
+    // the job started again: same name, a higher id, green; the red attempt before no longer counts
+    FakeGitHub::deliver($this, 'check_run', FakeGitHub::checkRun($this->sha, 'completed', 'success', 3_000_020, 'e2e'))->assertStatus(202);
+    $link = $this->link->load('checks');
+    expect($link->ci())->toBe('success')
+        ->and(array_map(fn ($check) => [$check->name, $check->check_run_id], $link->headChecks()))->toBe([['e2e', 3_000_020], ['lint', 3_000_011]]);
+
+    // and the other way round: a new attempt that fails is red again
+    FakeGitHub::deliver($this, 'check_run', FakeGitHub::checkRun($this->sha, 'completed', 'failure', 3_000_030, 'lint'))->assertStatus(202);
+    expect($this->link->load('checks')->ci())->toBe('failure');
+});
