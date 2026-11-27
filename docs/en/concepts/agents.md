@@ -93,15 +93,17 @@ An item that an open item **blocks** (relation "blocks") is not begun either: th
 
 ## Epics
 
-When an epic is assigned to the bot, it works the whole epic on one branch with one pull request:
+An epic has a branch of its own; every child becomes a pull request of its own into that branch:
 
-- One strand at the epic, branch `agent/<KEY>-<slug>` from the base branch. The open children that belong to nobody or to the bot (with the step `ready` only those in Todo; a child moved there later joins the queue, and the epic is not marked ready while open children wait in the backlog) become implement runs one after the other, in their manual order; the bot assigns each child to itself when it starts.
-- After the first child the agent opens a **draft** pull request. Children of the bot wait in **In review**.
-- Children that belong to a person stay hers; she pushes her work to the epic branch herself.
-- When no child is open any more, werkbuch marks the pull request ready; only then CI and review run.
-- On merge the epic and the children of the bot go to **Merged**; children already closed stay.
+- When an epic is assigned to the bot, werkbuch makes a strand at the epic with the branch `agent/<KEY>-<slug>` from the base branch. The open children that belong to nobody or to the bot and are not blocked (with the step `ready` only those in Todo) take their turn in their manual order, one at a time; the bot assigns each child to itself when it starts.
+- Every child gets a strand of its own: the branch `agent/<CHILD-KEY>-<slug>` from the epic branch, a pull request into the **epic branch**. Implementing, CI, review, correction and brakes work as for any task.
+- After an approve and green CI werkbuch merges the pull request of the child into the epic branch; the child goes to **Merged**. So "blocks" relations between siblings resolve, and the next child begins.
+- After the first merged child werkbuch opens the **draft** pull request of the epic (epic branch → base branch).
+- A child assigned to the bot on its own goes to the epic branch too, never straight to the base branch; without an epic branch yet, werkbuch makes it, with the strand at the epic, first.
+- Children that belong to a person stay hers. When no open child can begin (a blocker, the backlog, a person), the bot says once at the epic what it waits for.
+- When no child is open any more, werkbuch marks the pull request of the epic ready; only then do CI and a review of the whole epic run. A conflict with the base branch is resolved by a conflict run at the epic only now. After an approve and green CI werkbuch merges the epic into the base branch; it goes to **Merged**.
 
-A task assigned to the bot on its own is a plain task with its own branch and pull request, also inside an epic. A child that a person assigns to the bot while the bot works on its epic joins the epic's strand.
+A task outside an epic is a plain task with its own branch and pull request. Without a repository, and for epics begun before this change, the former flow applies: one strand, one branch, one pull request for all children.
 
 ## Mentions
 

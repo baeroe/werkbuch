@@ -8,6 +8,7 @@ use App\GitHub\InstallationTokens;
 use App\Models\AgentThread;
 use App\Models\ProjectRepository;
 use App\Support\Actor;
+use App\Support\AgentFlow;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
@@ -28,7 +29,8 @@ final class CheckThreadMergeability
     {
         $thread = AgentThread::query()->find($threadId);
         $link = $thread === null ? null : ProjectRepository::query()->with('repository.installation.app')->where('project_id', $thread->project_id)->first();
-        if ($thread === null || $link === null || $thread->status !== AgentThread::OPEN || $thread->pr_number === null) {
+        // an epic meets a new base only at its end (WEBU-71): no conflict run while it works through its children
+        if ($thread === null || $link === null || $thread->status !== AgentThread::OPEN || $thread->pr_number === null || AgentFlow::epicPending($thread)) {
             return 'stale';
         }
 

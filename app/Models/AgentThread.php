@@ -12,7 +12,9 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
- * A strand (spec 5, 7.5): the work of an agent on one item or epic: runner, branch, worktree, session, PR. Its runs go to
+ * A strand (spec 5, 7.5): the work of an agent on one item or epic: runner, branch, worktree, session, PR. An epic
+ * strand with `per_child` holds the branch and PR of the epic, each child has a strand of its own into it
+ * (`parent_thread_id`, WEBU-71). Its runs go to
  * its runner; after 30 minutes offline another one takes it over with a fresh session (spec 9).
  *
  * @property string $id
@@ -40,11 +42,14 @@ use Illuminate\Support\Str;
  * @property string|null $pause_reason
  * @property int $corrections
  * @property int $conflicts
+ * @property bool $per_child
+ * @property string|null $parent_thread_id
+ * @property string|null $epic_waiting
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Runner|null $runner
  */
-#[Fillable(['bot_id', 'project_id', 'work_item_id', 'runner_id', 'repository_github_id', 'branch', 'base_branch', 'worktree', 'session_id', 'pr_number', 'head_sha', 'pr_draft', 'review_sha', 'review_verdict', 'merge_sha', 'awaiting_pr_since', 'ready_requested_at', 'pending_findings', 'pushed_sha', 'pushed_at', 'status', 'pause_reason', 'corrections', 'conflicts'])]
+#[Fillable(['bot_id', 'project_id', 'work_item_id', 'runner_id', 'repository_github_id', 'branch', 'base_branch', 'worktree', 'session_id', 'pr_number', 'head_sha', 'pr_draft', 'review_sha', 'review_verdict', 'merge_sha', 'awaiting_pr_since', 'ready_requested_at', 'pending_findings', 'pushed_sha', 'pushed_at', 'status', 'pause_reason', 'corrections', 'conflicts', 'per_child', 'parent_thread_id', 'epic_waiting'])]
 final class AgentThread extends Model
 {
     /** @use HasFactory<AgentThreadFactory> */
@@ -62,7 +67,7 @@ final class AgentThread extends Model
 
     protected function casts(): array
     {
-        return ['repository_github_id' => 'integer', 'pr_number' => 'integer', 'pr_draft' => 'boolean', 'awaiting_pr_since' => 'datetime', 'ready_requested_at' => 'datetime', 'pending_findings' => 'array', 'pushed_at' => 'datetime', 'corrections' => 'integer', 'conflicts' => 'integer'];
+        return ['repository_github_id' => 'integer', 'pr_number' => 'integer', 'pr_draft' => 'boolean', 'awaiting_pr_since' => 'datetime', 'ready_requested_at' => 'datetime', 'pending_findings' => 'array', 'pushed_at' => 'datetime', 'corrections' => 'integer', 'conflicts' => 'integer', 'per_child' => 'boolean'];
     }
 
     /** The branch of a strand of an item: `agent/<KEY>-<slug of the title>` (spec 7.6). */

@@ -88,6 +88,15 @@ final class FakeGitHub
     /** @var list<string> the node IDs of the PRs werkbuch marked ready */
     public array $ready = [];
 
+    /** @var array<string, string> branch → head commit as GET /git/ref/heads/{branch} answers it (others are 404) */
+    public array $branches = ['main' => 'ba5e000000000000000000000000000000000001'];
+
+    /** @var list<array{branch: string, sha: string}> the branches werkbuch created */
+    public array $createdBranches = [];
+
+    /** @var list<array{number: int, head: string, base: string, title: string, body: string, draft: bool}> the PRs werkbuch opened */
+    public array $openedPulls = [];
+
     /** @var list<string> the branches werkbuch deleted */
     public array $deletedBranches = [];
 
@@ -212,6 +221,9 @@ final class FakeGitHub
             Str::is('/repos/*/*/pulls/*', $path) && $request->method() === 'GET' => $this->pull((int) last(explode('/', $path))),
             $path === '/graphql' => $this->graphql($request),
             Str::is('/repos/*/*/git/refs/heads/*', $path) && $request->method() === 'DELETE' => $this->deleteBranch($path),
+            Str::is('/repos/*/*/git/ref/heads/*', $path) && $request->method() === 'GET' => $this->branch($path),
+            Str::is('/repos/*/*/git/refs', $path) && $request->method() === 'POST' => $this->createBranch($request),
+            Str::is('/repos/*/*/pulls', $path) && $request->method() === 'POST' => $this->openPull($request),
             default => Http::response(['message' => 'Not Found'], 404),
         };
     }
@@ -300,6 +312,37 @@ final class FakeGitHub
         $this->ready[] = (string) ($request->data()['variables']['id'] ?? '');
 
         return Http::response(['data' => ['markPullRequestReadyForReview' => ['pullRequest' => ['isDraft' => false]]]], 200);
+    }
+
+    private function branch(string $path): mixed
+    {
+        $branch = rawurldecode(implode('/', array_slice(explode('/', $path), 7)));
+
+        return isset($this->branches[$branch]) ? Http::response(['ref' => "refs/heads/{$branch}", 'object' => ['sha' => $this->branches[$branch], 'type' => 'commit']], 200)
+            : Http::response(['message' => 'Not Found'], 404);
+    }
+
+    private function createBranch(Request $request): mixed
+    {
+        $branch = Str::after((string) ($request->data()['ref'] ?? ''), 'refs/heads/');
+        if (isset($this->branches[$branch])) {
+            return Http::response(['message' => 'Reference already exists'], 422);
+        }
+        $this->branches[$branch] = (string) ($request->data()['sha'] ?? '');
+        $this->createdBranches[] = ['branch' => $branch, 'sha' => $this->branches[$branch]];
+
+        return Http::response(['ref' => "refs/heads/{$branch}", 'object' => ['sha' => $this->branches[$branch]]], 201);
+    }
+
+    private function openPull(Request $request): mixed
+    {
+        $data = $request->data();
+        $number = 100 + count($this->openedPulls);
+        $this->openedPulls[] = ['number' => $number, 'head' => (string) $data['head'], 'base' => (string) $data['base'], 'title' => (string) $data['title'], 'body' => (string) $data['body'], 'draft' => (bool) $data['draft']];
+        $sha = $this->branches[(string) $data['head']] ?? str_repeat('e', 40);
+        $this->pulls[$number] = ['draft' => (bool) $data['draft'], 'head' => ['sha' => $sha, 'ref' => $data['head']]];
+
+        return Http::response(['number' => $number, 'node_id' => 'PR_fake'.$number, 'draft' => (bool) $data['draft'], 'head' => ['sha' => $sha, 'ref' => $data['head']]], 201);
     }
 
     private function deleteBranch(string $path): mixed

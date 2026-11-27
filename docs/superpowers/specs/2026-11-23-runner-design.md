@@ -212,6 +212,17 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 
 ### 7.6 Epics (Regel A)
 
+**Änderungen vom 2026-11-27 (WEBU-71, A795):** Ein Epic in einem Projekt mit Repo hat einen eigenen Branch, jedes Kind einen eigenen Strang mit PR auf den Epic-Branch. Die Punkte unten gelten nur noch für Epics ohne Repo und für Epic-Stränge, die vorher begonnen wurden (sie laufen nach altem Ablauf zu Ende).
+
+1. Epic dem Agenten zuweisen: Strang am Epic (`per_child`), Branch `agent/<EPIC-KEY>-…` von der Basis. Den Epic-PR (Epic-Branch → Basis) legt werkbuch als Draft an, sobald ein Kind in den Epic-Branch gemergt ist.
+2. Je Kind ein Strang (`parent_thread_id`): Branch `agent/<KIND-KEY>-…` vom Epic-Branch, PR gegen den Epic-Branch; Task, Review, Korrektur, Bremsen, CI wie bei jedem Task. Den Epic-Branch legt werkbuch beim Claim des ersten Kind-Auftrags an, wenn GitHub ihn nicht hat.
+3. Ein Kind geht immer auf den Epic-Branch, auch einzeln zugewiesen; ohne Epic-Strang legt werkbuch ihn vorher an. Ein eigener Strang eines Kindes von vorher (auf die Basis) endet.
+4. Approve und grüne Checks: werkbuch merged den Kind-PR in den Epic-Branch (Merge-Methode des Projekts), das Kind geht auf `merged`. Ist das Epic beim Agenten, beginnt danach das nächste offene, nicht blockierte Kind in Todo (Rang). Ein Kind zur Zeit.
+5. Die Basis wird nicht laufend in den Epic-Branch geholt; einen Konflikt des Epic-PRs mit der Basis löst ein `conflict` am Epic-Strang erst am Ende.
+6. Alle Kinder Completed oder Canceled: Epic-PR bereit, dann CI und ein volles Review des Epic-PRs; Korrekturen am Epic-Strang; Approve und grüne Checks: Merge in die Basis, Epic `merged`.
+7. Nie zu früh bereit: kein Kind offen, kein Kind-Strang offen. Kann kein offenes Kind beginnen, sagt der Agent einmal je Menge wartender Kinder am Epic, worauf es wartet; der Sweep sieht jede Minute nach.
+
+
 - Ist ein Epic dem Bot zugewiesen, entsteht ein Strang am Epic mit Branch `agent/<KEY>-<slug>` vom Standard-Branch. Die offenen Kinder (nicht Completed/Canceled), die niemandem oder dem Bot gehören, werden in Rang-Reihenfolge nacheinander je ein `task` desselben Strangs; der Bot weist sich jedes Kind beim Start selbst zu (Actor `agent`, löst keinen eigenen Auftrag aus). Weist eine Person ein Kind eines laufenden Bot-Epics dem Bot zu, hängt es sich an den Strang (kein eigener Branch).
 - Kinder, die einer Person gehören, bleiben ihre; diese Person pusht ihre Arbeit selbst auf den Epic-Branch. Der PR wird bereit, wenn kein Kind mehr offen ist: Kinder des Bots stehen dann auf „In Review“, Kinder von Personen sind Completed oder Canceled. Weil die Kinder des Bots bis zum Merge auf „In Review“ (Started) stehen, schließt „Eltern schließen“ das Epic nicht vor dem Merge.
 - Je Kind darf der Agent einen Teil-Branch nutzen, der lokal in den Epic-Branch gemergt wird; gepusht wird nur der Epic-Branch *(Rafael)*. Nach dem ersten Kind öffnet der Agent einen **Entwurfs-PR** auf den Standard-Branch.

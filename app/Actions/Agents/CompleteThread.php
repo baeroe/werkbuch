@@ -5,6 +5,7 @@ namespace App\Actions\Agents;
 use App\Actions\AgentRuns\CancelRun;
 use App\Domain\Agents\RunType;
 use App\Domain\Workflow\AgentStep;
+use App\Jobs\AdvanceAgentEpic;
 use App\Models\AgentRun;
 use App\Models\AgentThread;
 use App\Models\User;
@@ -17,8 +18,9 @@ use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
  * The end of a strand (spec 7.2, 7.6). `merged` (werkbuch merged its PR, a person merged it on GitHub, or a strand
- * without a repo finished): the strand is `merged`, its item goes to „Gemergt“, of an epic also the children the agent
- * did (children that are closed stay, children of persons are theirs). `closed` (a person closed the PR without a
+ * without a repo finished): the strand is `merged`, its item goes to „Gemergt“, of an epic by rule A also the children
+ * the agent did (children that are closed stay, children of persons are theirs); a child merged into the branch of its
+ * epic (WEBU-71) has the epic go on after the commit (AdvanceEpic). `closed` (a person closed the PR without a
  * merge): the strand ends, the item goes to „Korrektur“ with a comment. What of the strand still waits or runs is
  * canceled. A strand that ended already stays as it is.
  */
@@ -42,6 +44,10 @@ final class CompleteThread
             }
 
             $locked->forceFill(['status' => $outcome === 'merged' ? AgentThread::MERGED : AgentThread::CLOSED, 'awaiting_pr_since' => null])->save();
+            // a child merged into the branch of its epic (WEBU-71): the epic goes on
+            if ($outcome === 'merged' && $locked->parent_thread_id !== null) {
+                AdvanceAgentEpic::dispatch($locked->parent_thread_id)->afterCommit();
+            }
             $bot = User::query()->findOrFail($locked->bot_id);
             $item = WorkItem::query()->findOrFail($locked->work_item_id);
 

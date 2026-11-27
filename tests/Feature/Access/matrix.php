@@ -20,9 +20,11 @@ use App\Actions\AgentRuns\RecordHeartbeat;
 use App\Actions\AgentRuns\RecordRunEvents;
 use App\Actions\AgentRuns\RenewGitToken;
 use App\Actions\AgentRuns\RetryRun;
+use App\Actions\Agents\AdvanceEpic;
 use App\Actions\Agents\ApproveAndMerge;
 use App\Actions\Agents\CheckThreadMergeability;
 use App\Actions\Agents\CompleteThread;
+use App\Actions\Agents\EnsureEpicBranch;
 use App\Actions\Agents\FollowEvent;
 use App\Actions\Agents\GetAgentConfig;
 use App\Actions\Agents\GetProjectAgents;
@@ -1836,6 +1838,16 @@ return [
     'PostReviewVerdict' => [
         'action' => PostReviewVerdict::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => PostReviewVerdict::run($a, $w->run('project_admin')->id),
+        'system' => true,
+    ],
+    'AdvanceEpic' => [
+        'action' => AdvanceEpic::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => AdvanceEpic::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::OPEN, 'per_child' => true])->id),
+        'system' => true,
+    ],
+    'EnsureEpicBranch' => [
+        'action' => EnsureEpicBranch::class,
+        'run' => fn (Actor $a, MatrixWorld $w, string $column) => EnsureEpicBranch::run($a, AgentThread::factory()->create(['bot_id' => $w->account('run_token')->id, 'work_item_id' => $w->item('project_admin')->id, 'status' => AgentThread::OPEN])),
         'system' => true,
     ],
     'MarkThreadReady' => [

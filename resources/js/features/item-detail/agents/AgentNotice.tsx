@@ -9,7 +9,8 @@
  *   merge in the project (only project admins confirm it), GitHub disconnected ("Weitermachen" once the project has its
  *   repo again), or somebody else has the item; the way back is to give it to the bot again;
  * - the last run failed, ran out of time, was canceled or lost its runner: why, and "Erneut starten";
- * - the assignee is a bot that does not work as an agent here: why, and where to change it.
+ * - the assignee is a bot that does not work as an agent here: why, and where to change it;
+ * - an epic on its own branch: the child whose strand is at work now.
  */
 
 import { Bot, CircleDot, Hourglass, OctagonPause, Play, RotateCw, TriangleAlert, UserRound } from 'lucide-react';
@@ -98,6 +99,18 @@ export function AgentNotice({ item, runs, agent }: { item: WorkItem; runs: reado
         <span className="truncate">{words}</span>
         {active.started_at && <span className="shrink-0 font-normal tabular-nums">{t('items.agents.chip.since', { time: clockTime(active.started_at, zone) })}</span>}
       </button>,
+    );
+  }
+
+  // an epic on its own branch: the child at work now (WEBU-71)
+  if (!active && thread?.child) {
+    parts.push(
+      <p key="child" data-agent-child="" className="text-sm text-muted">
+        {t('items.agents.chip.child', { bot: botName })}{' '}
+        <Link href={paths.item(thread.child.key)} className={linkClass}>
+          {thread.child.key}
+        </Link>
+      </p>,
     );
   }
 

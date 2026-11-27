@@ -215,12 +215,55 @@ final class GitHubApi
         }
     }
 
+    /** The head commit of a branch, null when the repo has no such branch (404). */
+    public static function branchSha(string $token, string $fullName, string $branch): ?string
+    {
+        try {
+            $answer = self::json(self::send(fn (PendingRequest $http) => $http->withToken($token)
+                ->get('/repos/'.self::repoPath($fullName).'/git/ref/heads/'.self::branchPath($branch)), 'git/ref'));
+        } catch (GitHubUnavailable $e) {
+            if ($e->status === 404) {
+                return null;
+            }
+            throw $e;
+        }
+
+        $sha = is_array($answer['object'] ?? null) ? ($answer['object']['sha'] ?? null) : null;
+
+        return is_string($sha) ? $sha : throw new GitHubUnavailable(GitHubUnavailable::GITHUB, 'GitHub answered git/ref without a sha.', GitHubUnavailable::MALFORMED);
+    }
+
+    /** Creates a branch at a commit (GitHub answers 422 when it exists). */
+    public static function createBranch(string $token, string $fullName, string $branch, string $sha): void
+    {
+        self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->post('/repos/'.self::repoPath($fullName).'/git/refs', ['ref' => 'refs/heads/'.$branch, 'sha' => $sha]), 'git/refs');
+    }
+
+    /**
+     * Opens a pull request (as a draft or not) and answers it; GitHub refuses with 422 when the head has no commit
+     * the base lacks, or a PR of that head is open already.
+     *
+     * @return array<array-key, mixed>
+     */
+    public static function createPullRequest(string $token, string $fullName, string $head, string $base, string $title, string $body, bool $draft): array
+    {
+        return self::json(self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->post('/repos/'.self::repoPath($fullName).'/pulls', ['head' => $head, 'base' => $base, 'title' => $title, 'body' => $body, 'draft' => $draft]), 'pulls'));
+    }
+
     /** Deletes a branch (after a merge). */
     public static function deleteBranch(string $token, string $fullName, string $branch): void
     {
-        $path = '/repos/'.self::repoPath($fullName).'/git/refs/heads/'.implode('/', array_map('rawurlencode', explode('/', $branch)));
+        $path = '/repos/'.self::repoPath($fullName).'/git/refs/heads/'.self::branchPath($branch);
         // `send` with the method by name: ArchTest reads a call of the HTTP helper named after DELETE as a write of a model
         self::send(fn (PendingRequest $http) => $http->withToken($token)->send('DELETE', $path), 'git/refs');
+    }
+
+    /** A branch as a path: each part encoded, the slashes kept. */
+    private static function branchPath(string $branch): string
+    {
+        return implode('/', array_map('rawurlencode', explode('/', $branch)));
     }
 
     /** `owner/name` with both parts encoded, never a path of its own. */
