@@ -946,7 +946,7 @@ describe('the steps of the agents in the workflow editor', () => {
 
     await user.click(save());
     await waitFor(() => expect(callsTo('PUT', '/api/v1/workflows/wf_standard')).toHaveLength(1));
-    expect(sent('/api/v1/workflows/wf_standard').agent_states).toEqual({ working: 'std_progress', review: 'std_pending', correction: 'std_backlog', merged: 'std_done', ready: null, blocked: null });
+    expect(sent('/api/v1/workflows/wf_standard').agent_states).toEqual({ working: 'std_progress', review: 'std_pending', correction: 'std_backlog', merged: 'std_done', ready: null, blocked: 'std_pending' });
   });
 
   it('keeps In Arbeit and In Review apart', async () => {
