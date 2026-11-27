@@ -79,7 +79,7 @@ const UNREAD = UNREAD_COUNT_ARGS;
 const UNREAD_MENTIONS = { unread_only: true, mentions_only: true, per_page: 1 } as const;
 
 /** The preview beside the inbox (`PeekHost`). */
-const PREVIEW = 'aside[data-peek-panel]';
+const PREVIEW = '[data-peek-panel]';
 
 /** A popup that gives the focus back when it closes: the palette, the menu of a row. */
 const inPopup = (element: Element | null) => Boolean(element?.closest('[role="dialog"], [role="menu"]'));
@@ -578,7 +578,7 @@ export function InboxScreen() {
 
   return (
     // beside the open preview the list gives up the room the panel takes
-    <div className={cx('max-w-3xl', previewId !== null && 'md:mr-[calc(var(--panel-w)+0.5rem)]')}>
+    <div className="max-w-3xl">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex min-h-8 min-w-0 items-baseline gap-3">
           <h1 className="font-display text-lg font-bold tracking-title text-ink">{t('inbox.title')}</h1>

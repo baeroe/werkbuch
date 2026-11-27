@@ -82,11 +82,13 @@ test('moves through the list with j and k, opens the preview with space and the 
   await expect(row(page, `${identifier}-2`)).toBeFocused();
 
   await page.keyboard.press(' ');
-  const preview = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+  const preview = page.getByRole('dialog', { name: tr('en', 'items.peek.label') });
   await expect(preview.getByRole('heading', { name: 'Item 2' })).toBeVisible();
-  await page.keyboard.press('Escape');
-  if (isPhone(page)) await page.keyboard.press('Escape');
-  await expect(preview).toBeHidden();
+  // the modal takes the focus (WEBU-67); a tooltip it shows may take the first Escape
+  await expect(async () => {
+    await page.keyboard.press('Escape');
+    await expect(preview).toBeHidden({ timeout: 500 });
+  }).toPass();
   await expect(row(page, `${identifier}-2`)).toBeFocused();
 
   await page.keyboard.press('Enter');

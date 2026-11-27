@@ -207,8 +207,11 @@ test('opening the notification reads it, and the other tab of the same person fo
     const row = cardOf(first.page, item.key).getByRole('listitem');
     await expect(row).toHaveAttribute('data-unread', 'true');
     await row.getByRole('link').click();
-    await expect(first.page.getByRole('complementary', { name: tr('en', 'items.peek.label') }).getByText('E2E Accept Newsletter').first()).toBeVisible();
+    await expect(first.page.getByRole('dialog', { name: tr('en', 'items.peek.label') }).getByText('E2E Accept Newsletter').first()).toBeVisible();
     await expect.poll(async () => (await waitForNotification(first.page, (entry) => entry.id === mention.id)).read_at).not.toBeNull();
+    // the preview is modal (WEBU-67): the sidebar with the badge waits behind it
+    await first.page.keyboard.press('Escape');
+    await expect(first.page.getByRole('dialog', { name: tr('en', 'items.peek.label') })).toHaveCount(0);
     await expectBadge(first.page, count - 1);
 
     // the other tab hears it on her own channel and follows without a reload

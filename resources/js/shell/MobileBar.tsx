@@ -33,7 +33,7 @@ export function MobileBar() {
   }, [paletteOpen]);
 
   return (
-    <header className="tracing sticky top-0 z-30 flex h-14 items-center gap-1 rounded-none border-x-0 border-t-0 px-2 [--glass-shadow:var(--elev-1)] md:hidden">
+    <header data-shell-chrome="" className="tracing sticky top-0 z-30 flex h-14 items-center gap-1 rounded-none border-x-0 border-t-0 px-2 [--glass-shadow:var(--elev-1)] md:hidden">
       <BaseDialog.Root open={open} onOpenChange={setOpen}>
         <BaseDialog.Trigger render={<IconButton icon={Menu} label={t('shell.mobile.open_navigation')} tooltip={false} />} />
         <BaseDialog.Portal>

@@ -905,20 +905,6 @@ describe('ItemPeek', () => {
 
 /* -------------------------------------------------------------------------------- the host */
 
-/** A phone (below md) or a wider screen: what `matchMedia('(min-width: 48rem)')` answers. */
-function screenWidth(wide: boolean) {
-  window.matchMedia = vi.fn((media: string) => ({
-    matches: wide,
-    media,
-    onchange: null,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  }));
-}
-
 /** The page with a filter field in its main region, and the host beside it. */
 function renderHost() {
   return renderWith(
@@ -932,26 +918,30 @@ function renderHost() {
 }
 
 describe('PeekHost', () => {
-  it('opens and closes the preview, escape leaves a field first', async () => {
-    screenWidth(true);
+  it('opens a modal, escape leaves a field first, then closes and gives the focus back', async () => {
     const user = userEvent.setup();
     renderHost();
     const filter = screen.getByRole('textbox', { name: 'Filter' });
     act(() => filter.focus());
 
     act(() => useUiStore.getState().openPeek('wi_web_47'));
-    const panel = await screen.findByRole('complementary', { name: 'Vorschau' });
+    const panel = await screen.findByRole('dialog', { name: 'Vorschau' });
     await screen.findByRole('heading', { level: 2, name: 'Kontaktformular sendet doppelt' });
-    // from md on the page beside it stays usable and keeps the focus
-    expect(document.getElementById('main')!.hasAttribute('inert')).toBe(false);
-    expect(document.activeElement).toBe(filter);
-
-    // in a field the first Escape leaves the field for the panel, the second closes the preview
-    fireEvent.keyDown(filter, { key: 'Escape' });
-    expect(useUiStore.getState().peekItemId).toBe('wi_web_47');
+    // modal at every width (WEBU-67): the page behind it waits, the dialog has the focus
+    expect(panel.getAttribute('aria-modal')).toBe('true');
+    expect(document.getElementById('main')!.hasAttribute('inert')).toBe(true);
     expect(document.activeElement).toBe(panel);
 
-    // e in the panel edits the previewed item's title; its own Escape keeps the preview open
+    // in a field the first Escape leaves the field for the dialog, the second closes the preview
+    const field = document.createElement('input');
+    panel.append(field);
+    act(() => field.focus());
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(useUiStore.getState().peekItemId).toBe('wi_web_47');
+    expect(document.activeElement).toBe(panel);
+    field.remove();
+
+    // e in the dialog edits the previewed item's title; its own Escape keeps the preview open
     press('e', {}, panel);
     const title = await screen.findByRole('textbox', { name: 'Titel' });
     await waitFor(() => expect(document.activeElement).toBe(title));
@@ -965,43 +955,39 @@ describe('PeekHost', () => {
     expect(useUiStore.getState().peekItemId).toBe('wi_web_47');
     fireEvent.keyDown(panel, { key: 'Escape' });
     expect(useUiStore.getState().peekItemId).toBeNull();
-    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Vorschau' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Vorschau' })).toBeNull());
+    expect(document.getElementById('main')!.hasAttribute('inert')).toBe(false);
+    expect(document.activeElement).toBe(filter);
   });
 
-  it('leaves e to the page beside it while the focus is there', async () => {
-    screenWidth(true);
+  it('closes on a click beside it, makes the chrome inert too and keeps the focus in the dialog when the item changes', async () => {
     renderHost();
-    act(() => useUiStore.getState().openPeek('wi_web_47'));
-    await screen.findByRole('heading', { level: 2, name: 'Kontaktformular sendet doppelt' });
-    const button = document.createElement('button');
-    document.getElementById('main')!.append(button);
-    act(() => button.focus());
-    press('e', {}, button);
-    expect(screen.queryByRole('textbox', { name: 'Titel' })).toBeNull();
-    button.remove();
-  });
-
-  it('below md the preview is modal: the page behind it is inert and the panel has the focus, given back on close', async () => {
-    screenWidth(false);
-    renderHost();
-    const main = document.getElementById('main')!;
+    const chrome = document.createElement('nav');
+    chrome.setAttribute('data-shell-chrome', '');
+    document.body.append(chrome);
     const filter = screen.getByRole('textbox', { name: 'Filter' });
     act(() => filter.focus());
 
     act(() => useUiStore.getState().openPeek('wi_web_47'));
-    const panel = await screen.findByRole('complementary', { name: 'Vorschau' });
-    expect(main.hasAttribute('inert')).toBe(true);
+    const panel = await screen.findByRole('dialog', { name: 'Vorschau' });
+    expect(chrome.hasAttribute('inert')).toBe(true);
+
+    // j/k move the list behind it: the preview shows the next item, a focus lost with the old content comes back
+    act(() => (document.activeElement as HTMLElement).blur());
+    act(() => useUiStore.getState().openPeek('wi_web_30'));
     expect(document.activeElement).toBe(panel);
 
-    act(() => useUiStore.getState().openPeek(null));
-    expect(main.hasAttribute('inert')).toBe(false);
+    fireEvent.click(document.querySelector('[data-peek-backdrop]')!);
+    expect(useUiStore.getState().peekItemId).toBeNull();
+    expect(chrome.hasAttribute('inert')).toBe(false);
     expect(document.activeElement).toBe(filter);
+    chrome.remove();
   });
 
   it('closes on a visit to another page, not on one that stays on the same path', async () => {
     renderHost();
     act(() => useUiStore.getState().openPeek('wi_web_47'));
-    await screen.findByRole('complementary', { name: 'Vorschau' });
+    await screen.findByRole('dialog', { name: 'Vorschau' });
     const arrive = (type: string, url: string) =>
       act(() => inertia.listeners.forEach((event, listener) => event === type && listener({ detail: { page: { url } } })));
 

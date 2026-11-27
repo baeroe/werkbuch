@@ -215,7 +215,7 @@ test('opens a reference of a wiki page from its editor with the arrows and Enter
     const plan = await createE2ePage(page, id, { title: 'E2E Bauplan' });
     const notes = await createE2ePage(page, id, { title: 'E2E Notizen', content_json: { type: 'doc', content: [referring(target.id, 'item', ' is open')] } });
     const links = await createE2ePage(page, id, { title: 'E2E Links', content_json: { type: 'doc', content: [referring(plan.id, 'page', ' to read')] } });
-    const preview = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+    const preview = page.getByRole('dialog', { name: tr('en', 'items.peek.label') });
     const text = page.getByRole('textbox', { name: tr('en', 'editor.label.page') });
 
     /** Opens a page and puts the cursor at the start of its text: from the title, Enter goes on into it. */
@@ -267,7 +267,7 @@ test('opens a reference in a description with a click, in a new tab with a modif
 
     // a plain click opens the item in the preview, the page stays
     await link.click();
-    const preview = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+    const preview = page.getByRole('dialog', { name: tr('en', 'items.peek.label') });
     await expect(preview.getByRole('heading', { name: 'E2E Leitung verlegen' })).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`/items/${item.key}$`));
     await preview.getByRole('button', { name: tr('en', 'items.peek.close') }).click();

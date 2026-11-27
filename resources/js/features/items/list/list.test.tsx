@@ -463,6 +463,19 @@ describe('ListLayout', () => {
     expect(rowOf('b1')!.closest('li')!.getAttribute('aria-setsize')).toBe('3');
   });
 
+  it('gives the focus to the cursor row when the preview closes after j moved the cursor in it (WEBU-67)', async () => {
+    renderList({ groups: [group('a', items('a', 3))] });
+    press('j');
+    await waitFor(() => expect(document.activeElement).toBe(rowOf('a1')));
+    act(() => useUiStore.getState().openPeek('wi_a1'));
+    press('j');
+    expect(cursor()).toBe('wi_a2');
+    // the preview gives the focus back to the row that opened it; the list moves it on to the cursor
+    act(() => rowOf('a1')!.focus());
+    act(() => useUiStore.getState().openPeek(null));
+    await waitFor(() => expect(document.activeElement).toBe(rowOf('a2')));
+  });
+
   it('opens with Enter and previews with space', async () => {
     const onOpen = vi.fn();
     const onPeek = vi.fn();

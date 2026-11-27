@@ -147,7 +147,7 @@ test('works the inbox with the keyboard only', async ({ page, browser }) => {
     // Enter opens the item in the preview and reads the notification
     await expect(secondLink).toBeFocused();
     await inboxPage.keyboard.press('Enter');
-    const preview = inboxPage.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+    const preview = inboxPage.getByRole('dialog', { name: tr('en', 'items.peek.label') });
     await expect(preview.getByText('E2E Inbox Tasten Angebot').first()).toBeVisible();
     await expect.poll(() => readAt(assignedSecond.id)).not.toBeNull();
     await inboxPage.keyboard.press('Escape');
@@ -205,7 +205,7 @@ test('reads and deletes from the menu of a row on the phone, without opening it'
     await expect(row).not.toHaveAttribute('data-unread');
     // the menu closes with its item; on a slow machine its popup animates out a while longer, still with its items
     await expect(inboxPage.getByRole('menu')).toHaveCount(0);
-    await expect(inboxPage.getByRole('complementary', { name: tr('en', 'items.peek.label') })).toHaveCount(0);
+    await expect(inboxPage.getByRole('dialog', { name: tr('en', 'items.peek.label') })).toHaveCount(0);
     await expect(inboxPage).toHaveURL(/\/inbox$/);
     await expect.poll(async () => (await find((entry) => entry.id === assigned.id))?.read_at ?? null).not.toBeNull();
 

@@ -321,12 +321,11 @@ function ItemsList({ preset, project, view }: { preset: ItemsPreset; project?: P
     );
   }
 
-  const peekOpen = useUiStore((ui) => ui.peekItemId !== null);
   const screen = useRef<HTMLDivElement>(null);
   useFocusRescue(screen, state.display.layout);
 
   return (
-    <div ref={screen} className={cx('min-w-0', peekOpen && 'lg:pr-[calc(var(--panel-w)+0.5rem)]')}>
+    <div ref={screen} className="min-w-0">
       <ListAnnouncer
         selection={selection}
         items={data.items}

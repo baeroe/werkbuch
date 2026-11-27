@@ -1,6 +1,6 @@
 /*
- * The preview panel (spec 5.2): an item beside the page, on tracing paper over it, while `useUiStore.peekItemId` is
- * set. The host places the panel and decides when it closes; `ItemPeek` fills it.
+ * The preview (spec 5.2, WEBU-67): an item in a modal over the page, on tracing paper, while `useUiStore.peekItemId` is
+ * set. The host places the dialog and decides when it closes; `ItemPeek` fills it.
  *
  * - Escape: the first Escape in a field (`isTyping`) only moves the focus out of the field to the panel, so a draft
  *   survives; the next Escape closes the preview (R14). A field that handles Escape itself calls `preventDefault()` in
@@ -9,8 +9,10 @@
  *   page is on screen, and `success`, the only event of a visit that replaces the page; a visit that stays on the same
  *   path, such as a reload, keeps it). To show an item on another
  *   page, open the preview once that page is there.
- * - From md on the page beside the panel stays usable: the panel takes no focus when it opens. Below md it covers the
- *   page and is modal: <main> turns inert and the panel takes the focus.
+ * - It is modal at every width (WEBU-67): the page, the sidebar and the mobile bar turn inert (not the toasts, whose
+ *   "Rückgängig" stays in reach), the dialog takes the focus, a click on the backdrop closes it.
+ * - j/k (and ↓/↑ of a list) go on working in the modal (ruling of WEBU-67): they move the cursor of the list behind, and
+ *   the preview follows it to the next or previous item; the focus stays in the dialog.
  * - When it closes while the focus was inside (or lost), the focus goes back to where it came from.
  * - The item commands (s, a, i, p, l, t, d, shift+d, shift+p, mod+backspace) are mounted here for the preview: with the
  *   focus inside the panel they act on the previewed item (`PreviewItemCommands`). `ItemPeek` mounts none.
@@ -21,7 +23,6 @@ import { router } from '@inertiajs/react';
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import { Skeleton, SkeletonGroup } from '@/components/ui/Skeleton';
 import { t } from '@/lib/i18n';
-import { useIsWide } from '@/lib/media';
 import { isTyping } from '@/lib/shortcuts/registry';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { useUiStore } from '@/store/ui';
@@ -58,9 +59,7 @@ function CloseOnEscape({ panel }: { panel: RefObject<HTMLElement | null> }) {
 
 export function PeekHost() {
   const itemId = useUiStore((state) => state.peekItemId);
-  // from md on the panel stands beside the page; below it covers the page
-  const wide = useIsWide();
-  const panel = useRef<HTMLElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const open = itemId !== null;
 
   useEffect(() => closePeekOnNavigation(), []);
@@ -69,29 +68,37 @@ export function PeekHost() {
     if (!open) return;
     const opener = document.activeElement;
     const element = panel.current;
-    // below md the panel covers the page: the page behind it waits, the panel takes the focus
-    const main = wide ? null : document.getElementById('main');
-    if (main) {
-      main.setAttribute('inert', '');
-      element?.focus();
-    }
+    // the page behind the modal waits; only what was not inert already is given back
+    const behind = [...document.querySelectorAll<HTMLElement>('#main, [data-shell-chrome]')].filter((node) => !node.hasAttribute('inert'));
+    behind.forEach((node) => node.setAttribute('inert', ''));
+    element?.focus();
     return () => {
-      main?.removeAttribute('inert');
+      behind.forEach((node) => node.removeAttribute('inert'));
       const focus = document.activeElement;
       const lost = !focus || focus === document.body || Boolean(element?.contains(focus));
       if (lost && opener instanceof HTMLElement && opener.isConnected) opener.focus();
     };
-  }, [open, wide]);
+  }, [open]);
+
+  // another item (j/k behind the modal): a focus that went with the old item's content comes back to the dialog
+  useLayoutEffect(() => {
+    const focus = document.activeElement;
+    if (itemId && (!focus || focus === document.body)) panel.current?.focus();
+  }, [itemId]);
 
   if (!itemId) return null;
   return (
-    <aside
-      ref={panel}
-      tabIndex={-1}
-      data-peek-panel=""
-      aria-label={t('items.peek.label')}
-      className="tracing fixed inset-x-2 top-16 bottom-2 z-30 flex animate-peek-in flex-col rounded-card md:top-8 md:right-2 md:left-auto md:w-[var(--panel-w)]"
-    >
+    <>
+      <div className="fixed inset-0 z-30 bg-ink/20" aria-hidden="true" data-peek-backdrop="" onClick={() => useUiStore.getState().openPeek(null)} />
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        data-peek-panel=""
+        aria-label={t('items.peek.label')}
+        className="tracing fixed inset-x-2 top-16 bottom-2 z-30 flex animate-peek-in flex-col rounded-card md:inset-x-auto md:top-8 md:bottom-8 md:left-1/2 md:w-[min(56rem,calc(100vw-4rem))] md:-translate-x-1/2"
+      >
       <CloseOnEscape panel={panel} />
       <Suspense fallback={null}>
         <PreviewItemCommands panel={panel} />
@@ -106,6 +113,7 @@ export function PeekHost() {
       >
         <ItemPeek itemId={itemId} panel={panel} />
       </Suspense>
-    </aside>
+      </div>
+    </>
   );
 }
