@@ -85,9 +85,23 @@ final class WorkItemLink extends Model
     /** The CI state of the head commit (CiState), from the loaded checks. */
     public function ci(): string
     {
-        return CiState::of($this->checks->where('head_sha', $this->head_sha)->map(
-            fn (WorkItemLinkCheck $check) => ['status' => $check->status, 'conclusion' => $check->conclusion],
-        ));
+        return CiState::of(array_map(fn (WorkItemLinkCheck $check) => ['status' => $check->status, 'conclusion' => $check->conclusion], $this->headChecks()));
+    }
+
+    /**
+     * The checks of the head commit, only the newest attempt of each (a job started again replaces the one before,
+     * WEBU-62), in the order of `checks`.
+     *
+     * @return list<WorkItemLinkCheck>
+     */
+    public function headChecks(): array
+    {
+        $checks = $this->checks->where('head_sha', $this->head_sha)->values()->all();
+        $kept = array_column(CiState::latest(array_map(fn (WorkItemLinkCheck $check, int $index) => [
+            'kind' => $check->kind, 'app' => $check->app, 'name' => $check->name, 'id' => $check->check_run_id, 'index' => $index,
+        ], $checks, array_keys($checks))), 'index');
+
+        return array_map(fn (int $index) => $checks[$index], $kept);
     }
 
     /** @return BelongsTo<WorkItem, $this> */
