@@ -491,10 +491,24 @@ it('posts nothing and marks nothing ready for what is gone, and only a draft', f
     expect($github->comments[0]['body'])->toContain('Important: x');
 });
 
-it('refuses a ready mark GitHub answers with errors', function () {
-    Http::fake(['*/graphql' => Http::response(['errors' => [['message' => 'no']]])]);
+it('refuses a ready mark GitHub answers with errors and names their types, never their text', function () {
+    Http::fake(['*/graphql' => Http::sequence()
+        ->push(['errors' => [['type' => 'FORBIDDEN', 'message' => 'Resource not accessible by integration'], ['type' => 'FORBIDDEN'], ['type' => 'lower case'], 'x']])
+        ->push(['errors' => 'x'])]);
 
-    expect(fn () => GitHubApi::markReady('t', 'PR_x'))->toThrow(GitHubUnavailable::class);
+    expect(fn () => GitHubApi::markReady('t', 'PR_x'))->toThrow(GitHubUnavailable::class, 'GitHub refused markPullRequestReadyForReview: FORBIDDEN.')
+        ->and(fn () => GitHubApi::markReady('t', 'PR_x'))->toThrow(GitHubUnavailable::class, 'GitHub refused markPullRequestReadyForReview.');
+});
+
+it('marks an epic ready with a token that may write contents (GraphQL refuses it without)', function () use ($strand) {
+    $github = FakeGitHub::connected();
+    FakeGitHub::link($this->project);
+    $thread = $strand(['repository_github_id' => 700_000_001, 'pr_number' => 12, 'pr_draft' => true]);
+    $github->pulls[12] = ['draft' => true];
+
+    expect(MarkThreadReady::run($this->system, $thread->id))->toBe('marked');
+    Http::assertSent(fn ($request) => str_ends_with($request->url(), '/access_tokens')
+        && ($request->data()['permissions'] ?? null) === ['contents' => 'write', 'pull_requests' => 'write']);
 });
 
 it('makes an epic ready only when no child is open and says when there is no PR', function () use ($strand) {

@@ -208,7 +208,10 @@ final class GitHubApi
         ]), 'graphql'));
 
         if (isset($answer['errors'])) {
-            throw new GitHubUnavailable(GitHubUnavailable::GITHUB, 'GitHub refused markPullRequestReadyForReview.', GitHubUnavailable::MALFORMED);
+            // only the types of the errors (FORBIDDEN, NOT_FOUND …), never their text: the message names no body
+            $types = is_array($answer['errors']) ? array_filter(array_map(fn ($error) => is_array($error) && is_string($error['type'] ?? null)
+                && preg_match('/^[A-Z_]{1,40}$/', $error['type']) === 1 ? $error['type'] : null, $answer['errors'])) : [];
+            throw new GitHubUnavailable(GitHubUnavailable::GITHUB, 'GitHub refused markPullRequestReadyForReview'.($types === [] ? '' : ': '.implode(', ', array_unique($types))).'.', GitHubUnavailable::MALFORMED);
         }
     }
 
