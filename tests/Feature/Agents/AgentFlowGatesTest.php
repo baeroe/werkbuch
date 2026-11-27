@@ -6,6 +6,7 @@ use App\Actions\Agents\HandleRunResult;
 use App\Actions\Agents\MergeThread;
 use App\Actions\Agents\PostReviewVerdict;
 use App\Actions\Agents\StartComment;
+use App\Actions\Agents\StartConflict;
 use App\Actions\Agents\StartCorrection;
 use App\Actions\Agents\StartTask;
 use App\Actions\Agents\SweepAgentThreads;
@@ -702,4 +703,54 @@ it('marks an epic ready again when the correction after giving up on it has noth
         ->and(AgentThread::query()->sole()->only(['status', 'pause_reason']))->toBe(['status' => 'open', 'pause_reason' => null])
         ->and(AgentThread::query()->sole()->ready_requested_at)->not->toBeNull()
         ->and($epic->fresh()->state_id)->toBe($this->states['Pending']);
+});
+
+it('goes on with the next child after a conflict at the epic that ran while a child was at work (WEBU-72)', function () use ($claim, $finish, $pr) {
+    $epic = WorkItem::factory()->for($this->project)->epic()->create(['state_id' => $this->states['Todo']]);
+    WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo'], 'rank' => 'a0']);
+    $second = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo'], 'rank' => 'a1']);
+    [$a, $b] = [str_repeat('a', 40), str_repeat('b', 40)];
+    $thread = AgentWorld::ruleAEpic($this->kira, $epic);
+
+    // the task of the first child runs; the PR of the epic gets a conflict with the base meanwhile
+    $task = $claim($this);
+    $pr($this, 'opened', $a);
+    expect(StartConflict::run($this->system, $thread->fresh(), $a))->not->toBeNull();
+
+    // the task ends while the conflict waits: nothing starts yet
+    $finish($this, $task, ['commit' => $a]);
+    expect(AgentRun::query()->where('work_item_id', $second->id)->exists())->toBeFalse();
+
+    // the conflict at the epic ends with a commit: the next child starts, the epic does not go to review
+    $conflict = $claim($this);
+    expect($conflict['type'])->toBe('conflict');
+    $finish($this, $conflict, ['commit' => $b]);
+    expect(AgentRun::query()->where('work_item_id', $second->id)->where('type', 'task')->count())->toBe(1)
+        ->and($epic->fresh()->state_id)->not->toBe($this->states['Pending'])
+        ->and($thread->fresh()->ready_requested_at)->toBeNull();
+});
+
+it('lets the sweep go on with an epic that stands without a run while a free child waits (WEBU-72)', function () {
+    $epic = WorkItem::factory()->for($this->project)->epic()->create(['state_id' => $this->states['Todo']]);
+    $first = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo'], 'rank' => 'a0']);
+    $second = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo'], 'rank' => 'a1']);
+    $thread = AgentWorld::ruleAEpic($this->kira, $epic);
+
+    // the first task ended, but nothing went on (the strand stands)
+    AgentRun::query()->where('work_item_id', $first->id)->sole()->forceFill(['status' => RunStatus::Succeeded, 'finished_at' => now()])->save();
+
+    // just after the run the sweep leaves the strand to the end of the run
+    expect(SweepAgentThreads::run($this->system))->toBe(0);
+
+    $this->travel(3)->minutes();
+    expect(SweepAgentThreads::run($this->system))->toBe(1)
+        ->and(AgentRun::query()->where('work_item_id', $second->id)->where('type', 'task')->count())->toBe(1)
+        ->and(SweepAgentThreads::run($this->system))->toBe(0);
+
+    // the second task failed: the sweep starts no child again that the strand tried
+    AgentRun::query()->where('work_item_id', $second->id)->sole()->forceFill(['status' => RunStatus::Failed, 'finished_at' => now()])->save();
+    $this->travel(3)->minutes();
+    expect(SweepAgentThreads::run($this->system))->toBe(0)
+        ->and(AgentRun::query()->where('work_item_id', $second->id)->count())->toBe(1)
+        ->and($thread->fresh()->status)->toBe(AgentThread::OPEN);
 });

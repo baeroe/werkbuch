@@ -350,7 +350,8 @@ final class HandleRunResult
             ItemLock::take($item);
             [, $locked] = AgentFlow::lockStrand($thread);
             if ($locked->pr_number !== null) {
-                if ($mine($item) && $locked->status === AgentThread::OPEN) {
+                // an epic with children before it is ready stays where it is: ReadyEpic moves it once it is (WEBU-72)
+                if ($mine($item) && $locked->status === AgentThread::OPEN && ! AgentFlow::epicPending($locked)) {
                     AgentFlow::move($run->bot, $item, AgentStep::Review);
                 }
 
@@ -362,7 +363,12 @@ final class HandleRunResult
             return 'awaiting_pr';
         }, 3);
 
-        // a correction at an epic whose PR werkbuch could not make ready (A601) makes it ready again
-        return $outcome === 'review' && AgentFlow::epicPending($thread) ? ReadyEpic::run($actor, $thread) : $outcome;
+        if ($outcome !== 'review' || ! AgentFlow::epicPending($thread)) {
+            return $outcome;
+        }
+
+        // a run at an epic by rule A while children are open (a conflict, a correction): the next child or ready
+        // (WEBU-72); a correction at an epic whose PR werkbuch could not make ready (A601) makes it ready again
+        return $thread->per_child ? ReadyEpic::run($actor, $thread) : (self::continueEpic($actor, $thread) ?? 'waiting');
     }
 }
