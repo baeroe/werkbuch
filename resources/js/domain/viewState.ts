@@ -205,8 +205,8 @@ export function presetState(preset: Exclude<ItemsPreset, 'view'>): ViewState {
     case 'my':
       return {
         filter: { version: 1, conditions: [{ field: 'state_category', op: 'in', value: [...OPEN_CATEGORIES] }] },
-        // every item is mine: no assignee chip
-        display: listDisplay('category', { field: 'priority', direction: 'asc' }, DEFAULT_FIELDS.filter((field) => field !== 'assignee')),
+        // every item is mine: no assignee chip; a board of the categories (WEBU-47)
+        display: { ...listDisplay('category', { field: 'priority', direction: 'asc' }, DEFAULT_FIELDS.filter((field) => field !== 'assignee')), layout: 'board' },
       };
     case 'created':
       return { filter: noFilter(), display: listDisplay('category', { field: 'created_at', direction: 'desc' }) };

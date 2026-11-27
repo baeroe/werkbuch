@@ -223,8 +223,8 @@ describe('rows of the list', () => {
     expect(layouts.list).toBe(ListLayout);
     expect(new Set([layouts.list, layouts.board, layouts.table, layouts.timeline]).size).toBe(4);
     expect(LAYOUT_OPTIONS.map((option) => [option.value, SHORTCUTS[option.shortcut].keys])).toEqual([
-      ['list', '1'],
-      ['board', '2'],
+      ['board', '1'],
+      ['list', '2'],
       ['table', '3'],
       ['timeline', '4'],
     ]);

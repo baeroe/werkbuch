@@ -319,8 +319,8 @@ describe('the timeline', () => {
     renderTimeline();
     await focusRow('WEB-30');
     press('ArrowRight', { shiftKey: true });
-    // 1: the list
-    press('1');
+    // 2: the list
+    press('2');
     await waitFor(() => expect(patches('wi_web_30')).toEqual([{ start_date: '2026-10-08', due_date: '2026-11-22' }]));
   });
 
@@ -561,7 +561,8 @@ describe('"Ohne Datum" with many epics', () => {
 
 describe('the keys and the palette', () => {
   it('takes the focus from the row of the list to the epic of the cursor with 4', async () => {
-    renderTimeline('/my-items');
+    // the list, not the board of my items (WEBU-47)
+    renderTimeline('/my-items?layout=list');
     const listRow = await waitFor(() => {
       const element = document.querySelector<HTMLElement>('[data-row-id="wi_web_30"]');
       expect(element).toBeTruthy();

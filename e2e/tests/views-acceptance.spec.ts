@@ -122,14 +122,14 @@ test('shows the items of a view on a property as list, board and table as REST d
     // Login form, Relaunch and its done child Header; not the other customer, not the items without one
     expect(keys).toEqual([`${shared.identifier}-1`, `${shared.identifier}-4`, `${shared.identifier}-5`]);
 
-    // 1: the list of the view
+    // the list of the view
     await page.goto(`/views/${view.id}`);
     await expect(page.getByRole('heading', { level: 1, name: viewName('nordlicht') })).toBeVisible();
     await expect(layoutButton(page, 'list')).toHaveAttribute('aria-pressed', 'true');
     expect(await shownKeys(page, '[data-row-id]', 'data-row-id', keys.length, keyOf)).toEqual(keys);
 
-    // 2: the board
-    await page.keyboard.press('2');
+    // 1: the board
+    await page.keyboard.press('1');
     await expect(layoutButton(page, 'board')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('article', { name: new RegExp(`^${shared.login.key} `) })).toBeVisible();
     expect(await shownKeys(page, '[data-card-id]', 'data-card-id', keys.length, keyOf)).toEqual(keys);
@@ -218,7 +218,7 @@ test('moves a card on the board and an epic on the timeline only with the keyboa
     await expect(page.locator(`[data-row-id="${project.login.id}"]`)).toBeVisible();
 
     // the board: from Backlog one column to the right, the card keeps the focus
-    await page.keyboard.press('2');
+    await page.keyboard.press('1');
     const column = (state: string) => page.getByRole('region', { name: state, exact: true });
     const card = (state: string) => column(state).getByRole('article', { name: new RegExp(`^${project.login.key} `) });
     await expect(card('Backlog')).toBeVisible();

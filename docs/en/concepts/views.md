@@ -10,7 +10,7 @@ Four lists are built in and cannot be deleted:
 
 | List | Address | Holds | Starts with |
 |---|---|---|---|
-| My items: Assigned | `/my-items` | Open items assigned to you | Grouped by category, sorted by priority |
+| My items: Assigned | `/my-items` | Open items assigned to you | Board grouped by category, sorted by priority |
 | My items: Created | `/created` | Items you created | Grouped by category, newest first |
 | My items: Watching | `/subscribed` | Items you watch | Grouped by category, last changed first |
 | Project | `/projects/WEB` | The items of the project | Grouped by status, manual order |

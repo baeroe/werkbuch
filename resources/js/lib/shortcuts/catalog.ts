@@ -72,8 +72,8 @@ export const SHORTCUTS = {
   'list.filter': { keys: 'f', scope: 'list', label: 'shortcuts.list.filter', group: 'shortcuts.group.list' },
   'list.search': { keys: '/', scope: 'list', label: 'shortcuts.list.search', group: 'shortcuts.group.list' },
   // the layout of an item list (`features/items/ListHeader.tsx`), as the switch in its header offers them
-  'list.layout.list': { keys: '1', scope: 'list', label: 'shortcuts.list.layout.list', group: 'shortcuts.group.view' },
-  'list.layout.board': { keys: '2', scope: 'list', label: 'shortcuts.list.layout.board', group: 'shortcuts.group.view' },
+  'list.layout.board': { keys: '1', scope: 'list', label: 'shortcuts.list.layout.board', group: 'shortcuts.group.view' },
+  'list.layout.list': { keys: '2', scope: 'list', label: 'shortcuts.list.layout.list', group: 'shortcuts.group.view' },
   'list.layout.table': { keys: '3', scope: 'list', label: 'shortcuts.list.layout.table', group: 'shortcuts.group.view' },
   'list.layout.timeline': { keys: '4', scope: 'list', label: 'shortcuts.list.layout.timeline', group: 'shortcuts.group.view' },
   // the board's columns (`features/items/board/useBoardKeys.ts`): ←/→ go to the neighbouring column
