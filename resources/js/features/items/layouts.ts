@@ -139,8 +139,8 @@ export const layouts: Record<Display['layout'], ComponentType<LayoutProps>> = {
 
 /** The layouts by name, with the shortcut of the catalog (1–4) for the switcher in the header of the list. */
 export const LAYOUT_OPTIONS: readonly { value: Display['layout']; label: TranslationKey; shortcut: ShortcutId }[] = [
-  { value: 'list', label: 'items.layout.list', shortcut: 'list.layout.list' },
   { value: 'board', label: 'items.layout.board', shortcut: 'list.layout.board' },
+  { value: 'list', label: 'items.layout.list', shortcut: 'list.layout.list' },
   { value: 'table', label: 'items.layout.table', shortcut: 'list.layout.table' },
   { value: 'timeline', label: 'items.layout.timeline', shortcut: 'list.layout.timeline' },
 ];

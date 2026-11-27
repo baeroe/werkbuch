@@ -427,7 +427,7 @@ describe('the item list screen', () => {
     await waitFor(() => expect(rowOf(1)?.tabIndex).toBe(0));
     act(() => rowOf(1)!.focus());
 
-    press('2');
+    press('1');
     expect(inertia.get).toHaveBeenLastCalledWith('/projects/WEB?layout=board', {}, expect.objectContaining({ preserveState: true, replace: true }));
     const switches = screen.getAllByRole('group', { name: 'Layout' });
     await waitFor(() => expect(within(switches[0]!).getByRole('button', { name: /Board/ }).getAttribute('aria-pressed')).toBe('true'));
@@ -441,7 +441,7 @@ describe('the item list screen', () => {
     press('4');
     expect(inertia.url).toBe('/projects/WEB?layout=timeline');
     // back to the base: nothing left in the address
-    press('1');
+    press('2');
     expect(inertia.url).toBe('/projects/WEB');
     await waitFor(() => expect(document.activeElement?.closest('[data-row-id]')).toBe(rowOf(1)));
 
@@ -554,10 +554,10 @@ describe('the item list screen', () => {
     await screen.findByText('Kontaktformular sendet doppelt');
     expect(groupBodies()[0]).toMatchObject({ group_by: 'priority', sort: { field: 'rank', direction: 'asc' } });
 
-    press('2');
+    press('1');
     // what is not the view state stays; the grouping that differs stays; the layout joins it
     expect(inertia.url).toBe('/projects/WEB?create=1&layout=board&group=priority');
-    press('1');
+    press('2');
     expect(inertia.url).toBe('/projects/WEB?create=1&group=priority');
     // an unreadable part is left out: the base shows
     act(() => inertia.go('/projects/WEB?group=nonsense&layout=board'));
@@ -573,7 +573,7 @@ describe('the item list screen', () => {
     const visits: [string, { onSuccess?: () => void; onFinish?: () => void }][] = [];
     inertia.answer = (url, options) => void visits.push([url, options]);
     try {
-      press('2');
+      press('1');
       await waitFor(() => expect(board().getAttribute('aria-pressed')).toBe('true'));
       expect(inertia.url).toBe('/projects/WEB');
       // a second change builds on the first
@@ -586,7 +586,7 @@ describe('the item list screen', () => {
       act(() => visits[1]![1].onFinish?.());
       await waitFor(() => expect(within(screen.getAllByRole('group', { name: 'Layout' })[0]!).getByRole('button', { name: /Liste/ }).getAttribute('aria-pressed')).toBe('true'));
       // and once one gets through, the address is the state
-      press('2');
+      press('1');
       act(() => {
         inertia.go(visits[2]![0]);
         visits[2]![1].onSuccess?.();
@@ -606,7 +606,7 @@ describe('the item list screen', () => {
     // the server answers the board with the table
     inertia.answer = (url, options) => answer(url.replace('layout=board', 'layout=table'), options);
     try {
-      press('2');
+      press('1');
       expect(inertia.url).toBe('/projects/WEB?layout=table');
       await waitFor(() => expect(layout(/Tabelle/).getAttribute('aria-pressed')).toBe('true'));
       expect(layout(/Board/).getAttribute('aria-pressed')).toBe('false');

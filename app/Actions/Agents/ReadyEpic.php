@@ -91,7 +91,7 @@ final class ReadyEpic
      * the epic or closed by a person) and no child strand is open; by rule A the agent did its children in this strand,
      * the others are closed.
      */
-    private static function done(AgentThread $thread, WorkItem $epic): bool
+    public static function done(AgentThread $thread, WorkItem $epic): bool
     {
         if ($thread->per_child) {
             return ! self::openChildren($epic)->exists()

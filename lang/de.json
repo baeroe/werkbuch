@@ -5,7 +5,7 @@
     "agents.comment.epic_waiting": "Das Epic wartet: :children sind noch offen, und keines davon kann gerade beginnen (ein Blocker, der Backlog oder eine Person). Es geht weiter, sobald eines kann.",
     "agents.comment.failed": "Der Auftrag `:type` ist nicht gelungen: :reason. Starte ihn in der Aktivität erneut oder weise mich wieder zu.",
     "agents.comment.gave_up.merge": "werkbuch konnte den Pull Request :pr nicht mergen: GitHub hat abgelehnt oder nicht geantwortet (der Grund steht im Log der Instanz). Schau ihn auf GitHub an oder setz das Item zurück, dann macht der Agent weiter.",
-    "agents.comment.gave_up.ready": "werkbuch konnte den Pull Request :pr nicht als bereit markieren: GitHub hat abgelehnt oder nicht geantwortet (der Grund steht im Log der Instanz). Markier ihn auf GitHub als bereit oder setz das Item zurück, dann versucht es werkbuch erneut.",
+    "agents.comment.gave_up.ready": "werkbuch konnte den Pull Request :pr nicht als bereit markieren: GitHub hat abgelehnt oder nicht geantwortet (der Grund steht im Log der Instanz). Markier ihn auf GitHub als bereit oder weise das Item dem Bot erneut zu: werkbuch markiert ihn dann bereit, auch ohne neuen Commit.",
     "agents.comment.merge_refused": "GitHub hat den Merge abgelehnt (:status). Vielleicht verlangt ein Ruleset eine Freigabe; merge selbst oder passe das Ruleset an.",
     "agents.comment.needs_person": "Ich konnte nicht alles umsetzen: es fehlt etwas. Was ich brauche:",
     "agents.comment.no_answer": "Darauf habe ich keine Antwort.",

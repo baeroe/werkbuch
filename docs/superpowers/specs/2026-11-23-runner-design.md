@@ -212,7 +212,7 @@ Im Workflow-Editor (Organisation → Workflows, Abschnitt „Agenten“) stellt 
 
 ### 7.6 Epics (Regel A)
 
-**Änderungen vom 2026-11-27 (WEBU-71, A795):** Ein Epic in einem Projekt mit Repo hat einen eigenen Branch, jedes Kind einen eigenen Strang mit PR auf den Epic-Branch. Die Punkte unten gelten nur noch für Epics ohne Repo und für Epic-Stränge, die vorher begonnen wurden (sie laufen nach altem Ablauf zu Ende).
+**Änderungen vom 2026-11-27 (WEBU-71, A796):** Ein Epic in einem Projekt mit Repo hat einen eigenen Branch, jedes Kind einen eigenen Strang mit PR auf den Epic-Branch. Die Punkte unten gelten nur noch für Epics ohne Repo und für Epic-Stränge, die vorher begonnen wurden (sie laufen nach altem Ablauf zu Ende).
 
 1. Epic dem Agenten zuweisen: Strang am Epic (`per_child`), Branch `agent/<EPIC-KEY>-…` von der Basis. Den Epic-PR (Epic-Branch → Basis) legt werkbuch als Draft an, sobald ein Kind in den Epic-Branch gemergt ist.
 2. Je Kind ein Strang (`parent_thread_id`): Branch `agent/<KIND-KEY>-…` vom Epic-Branch, PR gegen den Epic-Branch; Task, Review, Korrektur, Bremsen, CI wie bei jedem Task. Den Epic-Branch legt werkbuch beim Claim des ersten Kind-Auftrags an, wenn GitHub ihn nicht hat.

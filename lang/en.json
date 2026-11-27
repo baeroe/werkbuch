@@ -5,7 +5,7 @@
     "agents.comment.epic_waiting": "The epic waits: :children are still open and none of them can begin now (a blocker, the backlog or a person). It goes on once one can.",
     "agents.comment.failed": "The run `:type` did not succeed: :reason. Start it again from the activity, or assign me again.",
     "agents.comment.gave_up.merge": "werkbuch could not merge the pull request :pr: GitHub refused or did not answer (the reason is in the log of the instance). Look at it on GitHub, or set the item back to have the agent go on.",
-    "agents.comment.gave_up.ready": "werkbuch could not mark the pull request :pr ready for review: GitHub refused or did not answer (the reason is in the log of the instance). Mark it ready on GitHub, or set the item back to try again.",
+    "agents.comment.gave_up.ready": "werkbuch could not mark the pull request :pr ready for review: GitHub refused or did not answer (the reason is in the log of the instance). Mark it ready on GitHub, or assign the item to the bot again: werkbuch then marks it ready, also without a new commit.",
     "agents.comment.merge_refused": "GitHub refused the merge (:status). A ruleset may ask for an approval; merge it yourself or adjust the ruleset.",
     "agents.comment.needs_person": "I could not do all of it: something is missing. What I need:",
     "agents.comment.no_answer": "I have no answer to that.",

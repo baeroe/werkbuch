@@ -208,6 +208,10 @@ final class HandleRunResult
         $recheck = false;
         if ($unmoved && $commit === null) {
             $outcome = self::unchanged($actor, $run, $thread, $item);
+            // an epic whose PR werkbuch gave up making ready (A601) is made ready again, the strand does not pause (WEBU-70)
+            if ($outcome === 'ready_epic') {
+                return ReadyEpic::run($actor, $thread);
+            }
             if ($outcome !== 'recheck') {
                 return $outcome;
             }
@@ -293,6 +297,11 @@ final class HandleRunResult
                 $locked->forceFill(['review_sha' => null, 'review_verdict' => null])->save();
 
                 return 'recheck';
+            }
+
+            // an epic whose PR werkbuch gave up making ready: nothing to push, ReadyEpic tries again (WEBU-70)
+            if ($locked->pr_number !== null && AgentFlow::epicPending($locked) && ReadyEpic::done($locked, $item)) {
+                return 'ready_epic';
             }
 
             PauseThread::run($actor, $locked, 'no_change', isset($run->result['summary']) ? (string) $run->result['summary'] : null, $run->id);
