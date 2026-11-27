@@ -16,6 +16,11 @@ return new class extends Migration
 
     public function down(): void
     {
+        // InnoDB dropped the index the foreign key made for itself once this one could carry it: bring it back first
+        if (! Schema::hasIndex('agent_threads', ['runner_id'])) {
+            Schema::table('agent_threads', fn (Blueprint $table) => $table->index('runner_id', 'agent_threads_runner_id_foreign'));
+        }
+
         Schema::table('agent_threads', function (Blueprint $table) {
             $table->dropIndex(['runner_id', 'status', 'updated_at']);
         });
