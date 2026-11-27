@@ -8,6 +8,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Psr\Http\Message\RequestInterface;
 
 /**
@@ -250,6 +251,23 @@ final class GitHubApi
     {
         return self::json(self::send(fn (PendingRequest $http) => $http->withToken($token)
             ->post('/repos/'.self::repoPath($fullName).'/pulls', ['head' => $head, 'base' => $base, 'title' => $title, 'body' => $body, 'draft' => $draft]), 'pulls'));
+    }
+
+    /** Changes the base branch of a pull request (a child PR of an epic opened into the wrong one, WEBU-71). */
+    public static function retarget(string $token, string $fullName, int $number, string $base): void
+    {
+        self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->patch('/repos/'.self::repoPath($fullName).'/pulls/'.$number, ['base' => $base]), 'pulls');
+    }
+
+    /** The number of the open pull request of a branch of the repo, null when none is open. */
+    public static function openPullOf(string $token, string $fullName, string $branch): ?int
+    {
+        $rows = self::json(self::send(fn (PendingRequest $http) => $http->withToken($token)
+            ->get('/repos/'.self::repoPath($fullName).'/pulls', ['head' => Str::before($fullName, '/').':'.$branch, 'state' => 'open', 'per_page' => 1]), 'pulls'));
+        $first = $rows[0] ?? null;
+
+        return is_array($first) && is_int($first['number'] ?? null) ? $first['number'] : null;
     }
 
     /** Deletes a branch (after a merge). */

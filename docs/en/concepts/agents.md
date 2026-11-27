@@ -96,7 +96,7 @@ An item that an open item **blocks** (relation "blocks") is not begun either: th
 An epic has a branch of its own; every child becomes a pull request of its own into that branch:
 
 - When an epic is assigned to the bot, werkbuch makes a strand at the epic with the branch `agent/<KEY>-<slug>` from the base branch. The open children that belong to nobody or to the bot and are not blocked (with the step `ready` only those in Todo) take their turn in their manual order, one at a time; the bot assigns each child to itself when it starts.
-- Every child gets a strand of its own: the branch `agent/<CHILD-KEY>-<slug>` from the epic branch, a pull request into the **epic branch**. Implementing, CI, review, correction and brakes work as for any task.
+- Every child gets a strand of its own: the branch `agent/<CHILD-KEY>-<slug>` from the epic branch, a pull request into the **epic branch**. Implementing, CI, review, correction and brakes work as for any task. Should the agent open the pull request into another branch, werkbuch moves it to the epic branch before the merge.
 - After an approve and green CI werkbuch merges the pull request of the child into the epic branch; the child goes to **Merged**. So "blocks" relations between siblings resolve, and the next child begins.
 - After the first merged child werkbuch opens the **draft** pull request of the epic (epic branch → base branch).
 - A child assigned to the bot on its own goes to the epic branch too, never straight to the base branch; without an epic branch yet, werkbuch makes it, with the strand at the epic, first.

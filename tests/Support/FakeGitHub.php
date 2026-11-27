@@ -97,6 +97,12 @@ final class FakeGitHub
     /** @var list<array{number: int, head: string, base: string, title: string, body: string, draft: bool}> the PRs werkbuch opened */
     public array $openedPulls = [];
 
+    /** Whether a new PR has no commit its base lacks (GitHub refuses it with 422). */
+    public bool $nothingToCompare = false;
+
+    /** @var list<array{number: int, base: string}> the PRs werkbuch sent to another base */
+    public array $retargets = [];
+
     /** @var list<string> the branches werkbuch deleted */
     public array $deletedBranches = [];
 
@@ -218,12 +224,14 @@ final class FakeGitHub
                 'workflow_runs' => $page === 1 ? ($this->workflowRuns[(string) ($request->data()['head_sha'] ?? '')] ?? []) : []], 200),
             Str::is('/repos/*/*/commits/*/status', $path) => Http::response(['state' => 'pending', 'total_count' => count($this->statuses[explode('/', $path)[5]] ?? []),
                 'statuses' => $page === 1 ? ($this->statuses[explode('/', $path)[5]] ?? []) : []], 200),
+            Str::is('/repos/*/*/pulls/*', $path) && $request->method() === 'PATCH' => $this->retarget($path, $request),
             Str::is('/repos/*/*/pulls/*', $path) && $request->method() === 'GET' => $this->pull((int) last(explode('/', $path))),
             $path === '/graphql' => $this->graphql($request),
             Str::is('/repos/*/*/git/refs/heads/*', $path) && $request->method() === 'DELETE' => $this->deleteBranch($path),
             Str::is('/repos/*/*/git/ref/heads/*', $path) && $request->method() === 'GET' => $this->branch($path),
             Str::is('/repos/*/*/git/refs', $path) && $request->method() === 'POST' => $this->createBranch($request),
             Str::is('/repos/*/*/pulls', $path) && $request->method() === 'POST' => $this->openPull($request),
+            Str::is('/repos/*/*/pulls', $path) && $request->method() === 'GET' => Http::response($this->openPullsOf((string) ($request->data()['head'] ?? '')), 200),
             default => Http::response(['message' => 'Not Found'], 404),
         };
     }
@@ -337,12 +345,38 @@ final class FakeGitHub
     private function openPull(Request $request): mixed
     {
         $data = $request->data();
+        // like GitHub: no PR without a commit the base lacks, and one open PR of a head at a time
+        if ($this->nothingToCompare || $this->openPullsOf('feldwerk:'.$data['head']) !== []) {
+            return Http::response(['message' => 'Validation Failed'], 422);
+        }
         $number = 100 + count($this->openedPulls);
         $this->openedPulls[] = ['number' => $number, 'head' => (string) $data['head'], 'base' => (string) $data['base'], 'title' => (string) $data['title'], 'body' => (string) $data['body'], 'draft' => (bool) $data['draft']];
         $sha = $this->branches[(string) $data['head']] ?? str_repeat('e', 40);
         $this->pulls[$number] = ['draft' => (bool) $data['draft'], 'head' => ['sha' => $sha, 'ref' => $data['head']]];
 
         return Http::response(['number' => $number, 'node_id' => 'PR_fake'.$number, 'draft' => (bool) $data['draft'], 'head' => ['sha' => $sha, 'ref' => $data['head']]], 201);
+    }
+
+    /**
+     * The open PRs of a head (`owner:branch`) as GET /pulls?head= lists them.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function openPullsOf(string $head): array
+    {
+        $open = array_filter($this->pulls, fn (array $pr) => ($pr['state'] ?? 'open') === 'open' && 'feldwerk:'.($pr['head']['ref'] ?? '') === $head);
+
+        return array_map(fn (int $number) => ['number' => $number], array_keys($open));
+    }
+
+    private function retarget(string $path, Request $request): mixed
+    {
+        $number = (int) last(explode('/', $path));
+        $base = (string) ($request->data()['base'] ?? '');
+        $this->retargets[] = ['number' => $number, 'base' => $base];
+        $this->pulls[$number] = [...$this->pulls[$number] ?? [], 'base' => ['ref' => $base], 'mergeable' => null];
+
+        return Http::response(['number' => $number, 'base' => ['ref' => $base]], 200);
     }
 
     private function deleteBranch(string $path): mixed

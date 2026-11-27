@@ -96,7 +96,7 @@ Ein Item, das ein offenes Item **blockiert** (Relation „blockiert“), wird eb
 Ein Epic hat einen eigenen Branch; jedes Kind wird ein eigener Pull Request auf diesen Branch:
 
 - Ist ein Epic dem Bot zugewiesen, legt werkbuch einen Strang am Epic an mit Branch `agent/<KEY>-<slug>` vom Basis-Branch. Die offenen Kinder, die niemandem oder dem Bot gehören und nicht blockiert sind (mit dem Schritt `ready` nur die in Todo), kommen nacheinander dran, in ihrer manuellen Reihenfolge, eines zur Zeit; der Bot weist sich jedes Kind beim Start selbst zu.
-- Jedes Kind bekommt einen eigenen Strang: Branch `agent/<KIND-KEY>-<slug>` vom Epic-Branch, Pull Request auf den **Epic-Branch**. Umsetzen, CI, Review, Korrektur und Bremsen laufen wie bei jedem Task.
+- Jedes Kind bekommt einen eigenen Strang: Branch `agent/<KIND-KEY>-<slug>` vom Epic-Branch, Pull Request auf den **Epic-Branch**. Umsetzen, CI, Review, Korrektur und Bremsen laufen wie bei jedem Task. Öffnet der Agent den Pull Request auf einen anderen Branch, stellt werkbuch ihn vor dem Merge auf den Epic-Branch um.
 - Nach Approve und grüner CI merged werkbuch den Pull Request des Kindes in den Epic-Branch; das Kind geht auf **Gemergt**. So lösen sich „blockiert“-Relationen unter Geschwistern, und das nächste Kind beginnt.
 - Nach dem ersten gemergten Kind öffnet werkbuch den **Entwurfs**-Pull-Request des Epics (Epic-Branch → Basis-Branch).
 - Ein Kind, das dem Bot einzeln zugewiesen ist, geht ebenfalls auf den Epic-Branch, nie direkt auf den Basis-Branch; gibt es den Epic-Branch noch nicht, legt werkbuch ihn samt Strang am Epic vorher an.

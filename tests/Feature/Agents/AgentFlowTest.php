@@ -2,6 +2,7 @@
 
 use App\Actions\Agents\AdvanceEpic;
 use App\Actions\Agents\HandleRunResult;
+use App\Actions\Agents\MergeThread;
 use App\Actions\Agents\SweepAgentThreads;
 use App\Actions\Comments\AddComment;
 use App\Actions\Comments\EditComment;
@@ -374,6 +375,32 @@ it('works an epic on its own branch: a PR per child into it, Done at its merge, 
         ->and($epic->fresh()->state_id)->toBe($this->states['Done'])
         ->and($epicStrand->fresh()->status)->toBe(AgentThread::MERGED)
         ->and(AgentRun::query()->where('type', 'conflict')->exists())->toBeFalse();
+});
+
+it('never merges a child PR opened into main: werkbuch sends it to the branch of the epic first', function () use ($claim, $finish, $assign, $pr, $ci) {
+    $epic = WorkItem::factory()->for($this->project)->epic()->create(['title' => 'Contact page', 'state_id' => $this->states['Todo']]);
+    $form = WorkItem::factory()->for($this->project)->childOf($epic)->create(['title' => 'Form', 'state_id' => $this->states['Todo']]);
+    $assign($this, $epic, $this->kira);
+    $task = $claim($this);
+    $strand = AgentThread::query()->where('work_item_id', $form->id)->sole();
+    $sha = str_repeat('a', 40);
+
+    // the agent ignored its prompt and opened the PR into main
+    $pr($this, 'opened', $sha, ['base' => ['ref' => 'main', 'sha' => str_repeat('c', 40)]]);
+    $this->github->pulls[12] = ['base' => ['ref' => 'main'], 'head' => ['sha' => $sha, 'ref' => $strand->branch]];
+    $finish($this, $task, ['commit' => $sha]);
+    $ci($this, $sha, 'success');
+    $finish($this, $claim($this), ['verdict' => 'approve', 'text' => 'Verdict: approve']);
+
+    expect($this->github->retargets)->toBe([['number' => 12, 'base' => $strand->base_branch]])
+        ->and($this->github->merges)->toBe([])
+        ->and($form->fresh()->state_id)->not->toBe($this->states['Done']);
+
+    // GitHub computed the PR anew: the job looks again and merges into the branch of the epic
+    $this->github->pulls[12]['mergeable'] = true;
+    expect(MergeThread::run(Actor::system($this->kira, 'test'), $strand->id, $sha))->toBe('merged')
+        ->and($this->github->merges)->toBe([['number' => 12, 'sha' => $sha, 'method' => 'squash']])
+        ->and($form->fresh()->state_id)->toBe($this->states['Done']);
 });
 
 it('puts a child assigned alone on the branch of its epic and makes the epic strand first', function () use ($claim, $assign) {

@@ -12,6 +12,7 @@ use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\AgentFlow;
 use App\Support\ItemLock;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 use RuntimeException;
@@ -33,6 +34,9 @@ final class AdvanceEpic
 
     public const PERMISSIONS = ['contents' => 'write', 'pull_requests' => 'write'];
 
+    /** How long the sweep leaves a PR of the epic GitHub refused (422) without an open one of its branch. */
+    public const RETRY_HOURS = 1;
+
     public function handle(Actor $actor, string $threadId): string
     {
         $thread = AgentThread::query()->find($threadId);
@@ -46,7 +50,13 @@ final class AdvanceEpic
         }
 
         $outcome = DB::transaction(function () use ($actor, $thread): string {
-            $epic = ItemLock::take(WorkItem::query()->findOrFail($thread->work_item_id));
+            $epic = WorkItem::query()->findOrFail($thread->work_item_id);
+            // the child before its epic (A592): the child that would begin is locked first, as a child assigned alone does
+            $next = StartTask::nextCandidate($epic, User::query()->findOrFail($thread->bot_id));
+            if ($next !== null) {
+                ItemLock::take($next);
+            }
+            $epic = ItemLock::take($epic);
             [, $locked] = AgentFlow::lockStrand($thread);
             if ($locked->status !== AgentThread::OPEN || $locked->ready_requested_at !== null) {
                 return 'stale';
@@ -80,24 +90,35 @@ final class AdvanceEpic
 
     /**
      * Opens the draft PR of the epic and notes it at the strand; the delivery `opened` that follows links it. A PR
-     * GitHub refuses (no difference yet, one open already) or GitHub without an answer: the sweep tries again.
+     * GitHub refuses (422): an open PR of the branch (a person opened it) becomes the PR of the epic, else (no
+     * difference, the branch merged into the base already) the sweep asks again only after `RETRY_HOURS`. GitHub
+     * without an answer: the sweep tries again.
      */
     private static function openPr(AgentThread $thread): void
     {
         $link = ProjectRepository::query()->with('repository.installation.app')->where('project_id', $thread->project_id)->first();
         $epic = WorkItem::query()->find($thread->work_item_id);
-        if ($link === null || $epic === null) {
+        $refused = "epic-pr-refused:{$thread->id}";
+        if ($link === null || $epic === null || Cache::has($refused)) {
             return;
         }
 
         try {
             $token = InstallationTokens::forLink($link, self::PERMISSIONS)['token'];
-            $pr = GitHubApi::createPullRequest($token, $link->repository->full_name, (string) $thread->branch, (string) $thread->base_branch,
-                "{$epic->key}: {$epic->title}", "Fixes {$epic->key}", true);
-        } catch (GitHubUnavailable $e) {
-            if ($e->status !== 422) {
-                report(new RuntimeException("The PR of the epic strand {$thread->id} could not be opened.", 0, $e));
+            try {
+                $pr = GitHubApi::createPullRequest($token, $link->repository->full_name, (string) $thread->branch, (string) $thread->base_branch,
+                    "{$epic->key}: {$epic->title}", "Fixes {$epic->key}", true);
+            } catch (GitHubUnavailable $e) {
+                if ($e->status !== 422) {
+                    throw $e;
+                }
+                $pr = ['number' => GitHubApi::openPullOf($token, $link->repository->full_name, (string) $thread->branch)];
+                if ($pr['number'] === null) {
+                    Cache::put($refused, true, now()->addHours(self::RETRY_HOURS));
+                }
             }
+        } catch (GitHubUnavailable $e) {
+            report(new RuntimeException("The PR of the epic strand {$thread->id} could not be opened.", 0, $e));
 
             return;
         }

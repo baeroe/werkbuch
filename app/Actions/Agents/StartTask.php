@@ -177,11 +177,17 @@ final class StartTask
             return null;
         }
 
-        $child = self::childCandidates($epic, $bot)
-            ->when(self::readyStates($epic) !== null, fn ($query) => $query->whereIn('state_id', self::readyStates($epic)))
-            ->orderBy('rank')->orderBy('id')->first();
+        $child = self::nextCandidate($epic, $bot);
 
         return $child === null ? null : self::childStrand($actor, $epicThread, ItemLock::take($child), $bot, $triggerId);
+    }
+
+    /** The child of an epic on its own branch that would begin next (nextOfEpic), read without a lock. */
+    public static function nextCandidate(WorkItem $epic, User $bot): ?WorkItem
+    {
+        return self::childCandidates($epic, $bot)
+            ->when(self::readyStates($epic) !== null, fn ($query) => $query->whereIn('state_id', self::readyStates($epic)))
+            ->orderBy('rank')->orderBy('id')->first();
     }
 
     /**

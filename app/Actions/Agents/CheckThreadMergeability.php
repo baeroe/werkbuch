@@ -29,8 +29,8 @@ final class CheckThreadMergeability
     {
         $thread = AgentThread::query()->find($threadId);
         $link = $thread === null ? null : ProjectRepository::query()->with('repository.installation.app')->where('project_id', $thread->project_id)->first();
-        // an epic meets a new base only at its end (WEBU-71): no conflict run while it works through its children
-        if ($thread === null || $link === null || $thread->status !== AgentThread::OPEN || $thread->pr_number === null || AgentFlow::epicPending($thread)) {
+        // an epic on its own branch meets a new base only at its end (WEBU-71); an epic of rule A keeps its conflict runs
+        if ($thread === null || $link === null || $thread->status !== AgentThread::OPEN || $thread->pr_number === null || ($thread->per_child && AgentFlow::epicPending($thread))) {
             return 'stale';
         }
 

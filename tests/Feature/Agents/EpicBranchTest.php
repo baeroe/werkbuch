@@ -56,6 +56,21 @@ it('leaves a strand alone that is no open epic strand, also when it ends while i
     expect(AdvanceEpic::run($this->system, $strand->id))->toBe('stale');
 });
 
+it('locks the child that begins before its epic, as a child assigned alone does (A592)', function () {
+    $this->epic->forceFill(['assignee_id' => $this->kira->id])->save();
+    $child = WorkItem::factory()->for($this->project)->childOf($this->epic)->create(['state_id' => $this->states['Todo']]);
+    $strand = ($this->strand)();
+    $locked = [];
+    DB::listen(function ($query) use (&$locked): void {
+        if (str_starts_with($query->sql, 'select * from `work_items`') && str_ends_with($query->sql, 'for update')) {
+            $locked[] = $query->bindings[0];
+        }
+    });
+
+    expect(AdvanceEpic::run($this->system, $strand->id))->toBe('next_child')
+        ->and(array_values(array_unique($locked)))->toBe([$child->id, $this->epic->id]);
+});
+
 it('waits while a child strand is open', function () {
     $strand = ($this->strand)();
     $child = WorkItem::factory()->for($this->project)->childOf($this->epic)->create(['state_id' => $this->states['Todo']]);
@@ -70,10 +85,15 @@ it('opens no epic PR without a repo link and retries a PR GitHub refused', funct
     AgentThread::factory()->create(['bot_id' => $this->kira->id, 'work_item_id' => $child->id, 'parent_thread_id' => $strand->id, 'status' => AgentThread::MERGED]);
     Exceptions::fake();
 
-    // GitHub says there is no difference yet (422): silent; a 500 is reported; either way no PR, and the sweep tries again
-    $this->github->refuse = ['/repos/*/*/pulls' => 422];
+    // GitHub says there is no difference (422) and the branch has no open PR: silent, and the sweep asks again only after an hour
+    $this->github->nothingToCompare = true;
+    AdvanceEpic::run($this->system, $strand->id);
+    $strand->forceFill(['status' => AgentThread::OPEN, 'ready_requested_at' => null])->save();
     AdvanceEpic::run($this->system, $strand->id);
     Exceptions::assertNothingReported();
+    expect($strand->fresh()->pr_number)->toBeNull();
+    $this->travel(AdvanceEpic::RETRY_HOURS * 60 + 1)->minutes();
+    $this->github->nothingToCompare = false;
     $strand->forceFill(['status' => AgentThread::OPEN, 'ready_requested_at' => null])->save();
     $this->github->refuse = ['/repos/*/*/pulls' => 500];
     AdvanceEpic::run($this->system, $strand->id);
@@ -86,6 +106,17 @@ it('opens no epic PR without a repo link and retries a PR GitHub refused', funct
     $this->github->refuse = [];
     AdvanceEpic::run($this->system, $strand->id);
     expect($this->github->openedPulls)->toBe([]);
+});
+
+it('takes the open PR of the branch of the epic that a person opened', function () {
+    $child = WorkItem::factory()->for($this->project)->childOf($this->epic)->create(['state_id' => $this->states['Done']]);
+    $strand = ($this->strand)();
+    AgentThread::factory()->create(['bot_id' => $this->kira->id, 'work_item_id' => $child->id, 'parent_thread_id' => $strand->id, 'status' => AgentThread::MERGED]);
+    $this->github->pulls[55] = ['head' => ['ref' => 'agent/epic', 'sha' => str_repeat('7', 40)]];
+
+    AdvanceEpic::run($this->system, $strand->id);
+
+    expect($strand->fresh()->pr_number)->toBe(55)->and($this->github->openedPulls)->toBe([]);
 });
 
 it('makes the branch of an epic once, from its base, and gives up without a base', function () {
