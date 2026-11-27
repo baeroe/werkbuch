@@ -89,6 +89,8 @@ If the agent cannot do an item, or only part of it, because something is missing
 
 With the optional step `ready` (usually **Todo**, [steps of the agents](/en/concepts/workflows#steps-of-the-agents)) the bot begins an item only when it is its own **and** stands in that state. Assigned in the backlog, nothing starts: the item says "Bob begins as soon as the item is in Todo". Assign it in Todo, or move an item of the bot to Todo, and the implement run starts. An item of the bot that a person puts into **Correction** without a strand begins like one from Todo; with a strand it corrects as before. Mentions, reviews, red CI and conflicts do not depend on the state. Without the step `ready` an agent begins at once, as before.
 
+An item that an open item **blocks** (relation "blocks") is not begun either: the item says "Bob begins as soon as WEBU-44 is done". A blocker counts as done when it is Completed (merged) or Canceled, so the new strand builds on the finished code; it branches from the current base branch, never from the branch of the blocker. When the last blocker closes or the relation is removed, the agent begins by itself. At an epic a blocked child is skipped and the next free one runs. Moving a blocked item to Todo does not release it; only the end of the last blocker or removing the relation does. Corrections, conflicts and reviews of a running strand are not affected.
+
 ## Epics
 
 When an epic is assigned to the bot, it works the whole epic on one branch with one pull request:

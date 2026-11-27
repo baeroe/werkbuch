@@ -774,6 +774,8 @@
     "items.activity.unknown.values.other": ":count values",
     "items.activity.when.today": "today :time",
     "items.activity.when.yesterday": "yesterday :time",
+    "items.agents.blocked_by.text": ":bot has the item. :keys blocks it; it begins as soon as that is done (Completed or Canceled). Until then nothing starts.",
+    "items.agents.blocked_by.title": ":bot begins when :keys is done",
     "items.agents.cancel.confirm": "Cancel run",
     "items.agents.cancel.done": ":key: the run is being canceled",
     "items.agents.cancel.done_description": "The runner stops the CLI. What is not pushed stays in the worktree.",

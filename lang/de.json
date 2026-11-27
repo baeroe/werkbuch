@@ -774,6 +774,8 @@
     "items.activity.unknown.values.other": ":count Werte",
     "items.activity.when.today": "heute :time",
     "items.activity.when.yesterday": "gestern :time",
+    "items.agents.blocked_by.text": ":bot hat das Item. :keys blockiert es; es beginnt, sobald das erledigt ist (Completed oder Canceled). Bis dahin startet nichts.",
+    "items.agents.blocked_by.title": ":bot beginnt, sobald :keys erledigt ist",
     "items.agents.cancel.confirm": "Auftrag abbrechen",
     "items.agents.cancel.done": ":key: Auftrag wird abgebrochen",
     "items.agents.cancel.done_description": "Der Runner beendet das CLI. Was nicht gepusht ist, bleibt im Worktree.",

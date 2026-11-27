@@ -23,6 +23,7 @@ use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemLink;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -80,6 +81,27 @@ final class AgentFlow
         }
 
         return in_array($item->state_id, [$steps['ready'], $steps['correction']], true);
+    }
+
+    /**
+     * The keys of the open items that block this one (relation `blocks`, a hidden one counts too, WEBU-51): a blocker
+     * counts as done once it is Completed or Canceled, so the item builds on merged code.
+     *
+     * @return list<string>
+     */
+    public static function blockers(WorkItem $item): array
+    {
+        return array_values(self::blockersQuery($item->id)->with('project')->get()->map(fn (WorkItem $blocker) => $blocker->key)->all());
+    }
+
+    /** @return Builder<WorkItem> */
+    private static function blockersQuery(string $itemId)
+    {
+        return WorkItem::query()
+            ->whereIn('id', fn ($q) => $q->select('blocks.source_id')->from('work_item_relations as blocks')
+                ->join('relation_types as block_types', 'block_types.id', '=', 'blocks.type_id')
+                ->where('block_types.built_in', 'blocks')->where('blocks.target_id', $itemId))
+            ->whereHas('state', fn ($q) => $q->whereNotIn('category', ['completed', 'canceled']));
     }
 
     /** The open or paused strand of an item (or epic), when it has one: not locked, lock it with `lockStrand`. */

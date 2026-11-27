@@ -89,6 +89,8 @@ Kann der Agent ein Item oder einen Teil davon nicht umsetzen, weil etwas fehlt (
 
 Mit dem optionalen Schritt `ready` (meist **Todo**, [Schritte der Agenten](/de/concepts/workflows#schritte-der-agenten)) beginnt der Bot ein Item erst, wenn es ihm gehört **und** in diesem Status steht. Im Backlog zugewiesen, startet nichts: das Item sagt „Bob beginnt, sobald das Item auf Todo steht“. Weise es in Todo zu oder stelle ein Item des Bots auf Todo, dann startet der Auftrag Umsetzen. Ein Item des Bots, das eine Person ohne Strang auf **Korrektur** stellt, beginnt wie aus Todo; mit Strang korrigiert es wie bisher. Erwähnungen, Reviews, rote CI und Konflikte hängen nicht vom Status ab. Ohne den Schritt `ready` beginnt ein Agent sofort, wie bisher.
 
+Ein Item, das ein offenes Item **blockiert** (Relation „blockiert“), wird ebenfalls nicht begonnen: das Item sagt „Bob beginnt, sobald WEBU-44 erledigt ist“. Ein Blocker gilt als erledigt, wenn er Completed (gemergt) oder Canceled ist; der neue Strang baut so auf dem fertigen Code auf und zweigt vom aktuellen Basis-Branch ab, nie vom Branch des Blockers. Schließt der letzte Blocker oder fällt die Relation, beginnt der Agent von selbst. Bei einem Epic wird ein blockiertes Kind übersprungen und das nächste freie läuft. Ein Zug nach Todo gibt ein blockiertes Item nicht frei; nur das Ende des letzten Blockers oder das Entfernen der Relation tut das. Korrekturen, Konflikte und Reviews eines laufenden Strangs sind davon nicht betroffen.
+
 ## Epics
 
 Ist ein Epic dem Bot zugewiesen, arbeitet er das ganze Epic auf einem Branch mit einem Pull Request ab:

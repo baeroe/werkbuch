@@ -42,6 +42,7 @@ it('says nothing of agents at an item of a person', function () use ($agent) {
         'runs' => 0,
         'refusal' => null,
         'ready_state' => null,
+        'blocked_by' => [],
         'brakes' => ['max_corrections' => 3, 'max_conflicts' => 2],
         'repository' => false,
         'guard' => null,
