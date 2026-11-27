@@ -4,6 +4,7 @@ namespace App\Actions\Agents;
 
 use App\Domain\Workflow\AgentStep;
 use App\Jobs\LoadPullRequestChecks;
+use App\Models\AgentRun;
 use App\Models\AgentThread;
 use App\Models\Project;
 use App\Models\User;
@@ -51,6 +52,18 @@ final class SweepAgentThreads
             $count += in_array(AdvanceEpic::run($actor, $epic), ['stale', 'working', 'waiting'], true) ? 0 : 1;
         }
 
+        // an epic by rule A that stands with no run while a child it never tried waits (WEBU-72): the next child
+        foreach (AgentThread::query()->where('status', AgentThread::OPEN)->where('per_child', false)->whereNull('ready_requested_at')
+            ->whereIn('project_id', Project::query()->whereNull('deleting_at')->select('id'))
+            ->whereExists(fn ($epic) => $epic->selectRaw('1')->from('work_items')->join('work_item_types', 'work_item_types.id', '=', 'work_items.type_id')
+                ->whereColumn('work_items.id', 'agent_threads.work_item_id')->whereColumn('work_items.assignee_id', 'agent_threads.bot_id')->where('work_item_types.is_epic', true))
+            ->whereExists(fn ($runs) => $runs->selectRaw('1')->from('agent_runs')->whereColumn('agent_runs.thread_id', 'agent_threads.id'))
+            ->whereNotExists(fn ($runs) => $runs->selectRaw('1')->from('agent_runs')->whereColumn('agent_runs.thread_id', 'agent_threads.id')
+                ->where(fn ($recent) => $recent->whereNull('agent_runs.finished_at')->orWhere('agent_runs.finished_at', '>', $settled)))
+            ->orderBy('id')->limit(200)->get() as $thread) {
+            $count += self::stalledEpic($actor, $thread);
+        }
+
         // a head without any check: GitHub is asked once more after it settled (A591), only that may count it green
         $quiet = WorkItemLink::query()->selectRaw('repository_github_id, head_sha, min(head_seen_at) as seen')->where('state', WorkItemLink::OPEN)->where('draft', false)
             ->whereBetween('head_seen_at', [now()->subDay(), $settled])
@@ -76,6 +89,18 @@ final class SweepAgentThreads
         }
 
         return $count;
+    }
+
+    /** The next child of an epic by rule A that stands, only one the strand never tried (a failed one waits for a person). */
+    public static function stalledEpic(Actor $actor, AgentThread $thread): int
+    {
+        $epic = WorkItem::query()->findOrFail($thread->work_item_id);
+        $next = StartTask::nextChild($thread, $epic, User::query()->findOrFail($thread->bot_id));
+        if ($next === null || AgentRun::query()->where('thread_id', $thread->id)->where('work_item_id', $next->id)->exists()) {
+            return 0;
+        }
+
+        return HandleRunResult::continueEpic($actor, $thread) === 'next_child' ? 1 : 0;
     }
 
     /** How long a commit a run reported may take to reach the PR. */
