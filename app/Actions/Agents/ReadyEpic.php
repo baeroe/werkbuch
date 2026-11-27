@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * An epic the agent works through is ready (spec 7.6) when no child is open any more: the children the agent did stand
+ * An epic the agent works through is ready (spec 7.6) when no child is open or waits for a person (WEBU-50) any more: the children the agent did stand
  * in „In Review“, every other child is Completed or Canceled. Then werkbuch notes it (`ready_requested_at`: CI and review
  * count from there, A594), marks a draft PR ready and the epic goes to „In Review“; a PR the agent opened as no draft
  * has its CI looked at at once. Without a repo the epic is done
@@ -78,6 +78,18 @@ final class ReadyEpic
     private static function done(AgentThread $thread, WorkItem $epic): bool
     {
         $did = AgentRun::query()->where('thread_id', $thread->id)->where('type', RunType::Task->value)->where('status', 'succeeded')->pluck('work_item_id')->all();
+
+        // a child whose last run said `Outcome: blocked` waits for a person (WEBU-50) and keeps the epic from being ready,
+        // with or without the step blocked at the workflow; closed by a person, it no longer waits
+        $last = [];
+        foreach (AgentRun::query()->where('thread_id', $thread->id)->whereIn('type', [RunType::Task->value, RunType::Correction->value])->where('status', 'succeeded')->orderBy('id')->get(['work_item_id', 'result']) as $run) {
+            $last[$run->work_item_id] = ($run->result['outcome'] ?? null) === 'blocked';
+        }
+        $waiting = array_keys(array_filter($last));
+        if ($waiting !== [] && WorkItem::query()->where('parent_id', $epic->id)->whereNull('archived_at')->whereIn('id', $waiting)
+            ->whereHas('state', fn ($query) => $query->whereNotIn('category', [StateCategory::Completed->value, StateCategory::Canceled->value]))->exists()) {
+            return false;
+        }
 
         return ! WorkItem::query()->where('parent_id', $epic->id)->whereNull('archived_at')->whereNotIn('id', $did)
             ->whereHas('state', fn ($query) => $query->whereNotIn('category', [StateCategory::Completed->value, StateCategory::Canceled->value]))->exists();

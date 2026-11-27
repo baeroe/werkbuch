@@ -15,8 +15,10 @@ enum AgentStep: string
     case Merged = 'merged';
     /** Optional (WEBU-44, A772): where an item waits for its agent; without it an agent starts at once. */
     case Ready = 'ready';
+    /** Optional (WEBU-50): where an item waits for a person when its agent could not do what it asks; without it the item keeps its state. */
+    case Blocked = 'blocked';
 
-    /** The steps the agents need in the order of the flow (the keys of `workflows.agent_states`); `ready` is optional. */
+    /** The steps the agents need in the order of the flow (the keys of `workflows.agent_states`); `ready` and `blocked` are optional. */
     public const KEYS = ['working', 'review', 'correction', 'merged'];
 
     /**
@@ -27,7 +29,7 @@ enum AgentStep: string
     public function categories(): array
     {
         return match ($this) {
-            self::Working, self::Review => [StateCategory::Started],
+            self::Working, self::Review, self::Blocked => [StateCategory::Started],
             self::Correction => [StateCategory::Backlog, StateCategory::Unstarted],
             self::Ready => [StateCategory::Unstarted],
             self::Merged => [StateCategory::Completed],
@@ -43,6 +45,7 @@ enum AgentStep: string
             self::Correction => __('catalog.agent_step.correction'),
             self::Merged => __('catalog.agent_step.merged'),
             self::Ready => __('catalog.agent_step.ready'),
+            self::Blocked => __('catalog.agent_step.blocked'),
         };
     }
 
@@ -60,11 +63,11 @@ enum AgentStep: string
     /**
      * Stored steps as they are to be read: every step once, in order, a state id or null (anything else falls away).
      *
-     * @return array{working: ?string, review: ?string, correction: ?string, merged: ?string, ready: ?string}
+     * @return array{working: ?string, review: ?string, correction: ?string, merged: ?string, ready: ?string, blocked: ?string}
      */
     public static function read(mixed $stored): array
     {
-        $steps = ['working' => null, 'review' => null, 'correction' => null, 'merged' => null, 'ready' => null];
+        $steps = ['working' => null, 'review' => null, 'correction' => null, 'merged' => null, 'ready' => null, 'blocked' => null];
 
         foreach (array_keys($steps) as $key) {
             $value = is_array($stored) ? ($stored[$key] ?? null) : null;
@@ -75,7 +78,7 @@ enum AgentStep: string
     }
 
     /**
-     * Whether every step the agents need names a state (`ready` is optional).
+     * Whether every step the agents need names a state (`ready` and `blocked` are optional).
      *
      * @param  array<string, ?string>  $steps
      */

@@ -540,6 +540,21 @@ func TestAFailedSetupEndsTheRunWithItsMessage(t *testing.T) {
 	}
 }
 
+func TestOutcome(t *testing.T) {
+	for answer, want := range map[string]string{
+		"Outcome: blocked\n\nWhat I need": "blocked",
+		"**Outcome:** Blocked":            "blocked",
+		"Outcome: done":                   "done",
+		"no line at all":                  "done",
+		"Summary\nOutcome: blocked":       "done",
+		"\n\nOutcome: blocked":            "blocked",
+	} {
+		if got := Outcome(answer); got != want {
+			t.Errorf("Outcome(%q) = %s, want %s", answer, got, want)
+		}
+	}
+}
+
 func TestTheRunEndsWithTheFirstResult(t *testing.T) {
 	w := newWorld(t)
 	envFile := filepath.Join(t.TempDir(), "env")

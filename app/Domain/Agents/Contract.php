@@ -6,7 +6,7 @@ namespace App\Domain\Agents;
  * The contract per kind of run (spec 7.3, layer 1): fixed in code, in English or German (the language of the
  * organization, like the rules; A790), first in every system prompt and shown read
  * only above the working rules of the organization. It says what the kind is for, what never to do and the form of the
- * answer werkbuch reads (the runner takes the verdict of a review from its `Verdict:` line, A498). Where it and a later
+ * answer werkbuch reads (the runner takes the verdict of a review from its `Verdict:` line, A498, and a task its `Outcome:` line, WEBU-50). Where it and a later
  * layer disagree, the contract wins; what it forbids, werkbuch and GitHub refuse besides (spec 11.2, 11.3).
  */
 final class Contract
@@ -21,8 +21,10 @@ final class Contract
 
     private const PER_TYPE = [
         'task' => "Your job: implement the item in the worktree you are given, on its branch. Follow the rules of the repository, test what you change, commit, push the branch and open a pull request into the base branch whose title starts with the key and whose body says `Fixes <KEY>`.\n\n"
+            ."If you cannot do the item or only part of it because something is missing (information, access, a decision), do not guess and do not pretend: do what you can, then make the first line of your answer `Outcome: blocked` and list under `What I need` what a person has to give you. Otherwise the first line is `Outcome: done`.\n\n"
             .'Answer at the end with a short summary of what you did, in Markdown.',
         'correction' => "Your job: work through the findings you are given (a CI failure, the findings of a review or comments of people) on the same branch, test, commit and push to the same pull request. Do not open another pull request.\n\n"
+            ."If you cannot do it because something is missing (information, access, a decision), do not guess: do what you can, then make the first line of your answer `Outcome: blocked` and list under `What I need` what a person has to give you. Otherwise the first line is `Outcome: done`.\n\n"
             .'Answer at the end with a short summary of what you changed, in Markdown.',
         'conflict' => "Your job: merge the base branch into your branch (no rebase, no force-push), resolve the conflicts in the sense of both sides, run the affected tests and push.\n\n"
             .'Answer at the end with a short summary of the conflicts you resolved, in Markdown.',
@@ -43,8 +45,10 @@ final class Contract
 
     private const DE_PER_TYPE = [
         'task' => "Deine Aufgabe: Setze das Item im Worktree um, den du bekommst, auf seinem Branch. Befolge die Regeln des Repositories, teste, was du änderst, committe, pushe den Branch und öffne einen Pull Request in den Basis-Branch, dessen Titel mit dem Key beginnt und dessen Beschreibung `Fixes <KEY>` sagt.\n\n"
+            ."Kannst du das Item nicht oder nur zum Teil umsetzen, weil etwas fehlt (Information, Zugang, eine Entscheidung), rate nicht und tu nicht so als ob: tu, was du kannst, und schreibe dann `Outcome: blocked` als erste Zeile deiner Antwort und unter `What I need`, was eine Person dir geben muss. Sonst ist die erste Zeile `Outcome: done`.\n\n"
             .'Antworte am Ende mit einer kurzen Zusammenfassung, was du getan hast, in Markdown.',
         'correction' => "Deine Aufgabe: Arbeite die Befunde ab, die du bekommst (ein CI-Fehler, die Befunde eines Reviews oder Kommentare von Personen), auf demselben Branch, teste, committe und pushe in denselben Pull Request. Öffne keinen weiteren Pull Request.\n\n"
+            ."Kannst du es nicht umsetzen, weil etwas fehlt (Information, Zugang, eine Entscheidung), rate nicht: tu, was du kannst, und schreibe dann `Outcome: blocked` als erste Zeile deiner Antwort und unter `What I need`, was eine Person dir geben muss. Sonst ist die erste Zeile `Outcome: done`.\n\n"
             .'Antworte am Ende mit einer kurzen Zusammenfassung, was du geändert hast, in Markdown.',
         'conflict' => "Deine Aufgabe: Merge den Basis-Branch in deinen Branch (kein Rebase, kein Force-Push), löse die Konflikte im Sinn beider Seiten, führe die betroffenen Tests aus und pushe.\n\n"
             .'Antworte am Ende mit einer kurzen Zusammenfassung der gelösten Konflikte in Markdown.',

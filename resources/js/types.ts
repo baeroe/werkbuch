@@ -120,11 +120,11 @@ export interface Workflow {
   states: State[];
   transitions: Transition[];
   /** The status werkbuch sets in each step of an agent (spec 7.4, WEBU-25); always all four keys, `null` for none. */
-  agent_states: Record<Exclude<AgentStep, 'ready'>, string | null> & { ready?: string | null };
+  agent_states: Record<Exclude<AgentStep, 'ready' | 'blocked'>, string | null> & { ready?: string | null; blocked?: string | null };
 }
 
 /** The steps of an agent's work that set a status (spec 7.4). */
-export type AgentStep = 'working' | 'review' | 'correction' | 'merged' | 'ready';
+export type AgentStep = 'working' | 'review' | 'correction' | 'merged' | 'ready' | 'blocked';
 
 /* ------------------------------------------------------------- types and properties */
 
@@ -1124,7 +1124,7 @@ export interface WorkItemLink {
 export type AgentRefusal = 'agent_off' | 'default_bot' | 'disabled' | 'no_owner' | 'archived' | 'no_steps' | 'not_member';
 
 /** Why a strand pauses (spec 7.2, 11.3). */
-export type PauseReason = 'brake' | 'no_change' | 'reassigned' | 'canceled' | 'guard' | 'github';
+export type PauseReason = 'brake' | 'no_change' | 'needs_person' | 'reassigned' | 'canceled' | 'guard' | 'github';
 
 /** What an agent does at an item (`include=agent`): its strand, why the assigned bot is no agent here, brakes, repo, guard. */
 export interface ItemAgentState {

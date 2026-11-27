@@ -81,6 +81,10 @@ A run that fails, times out or is lost twice leaves a comment with the reason, a
 - **Cancel** a run at the item; whoever may edit the item may.
 - **Ask:** mention the bot in a comment (see [mentions](#mentions)). A question never changes code; to get a change, move the item back or assign it again.
 
+## When the agent is stuck
+
+If the agent cannot do an item, or only part of it, because something is missing (information, access, a decision), it ends its answer with `Outcome: blocked` and lists what it needs. werkbuch then writes that as a comment of the bot, moves the item to the optional step `blocked` (usually **Pending**, [steps of the agents](/en/concepts/workflows#steps-of-the-agents)) and gives it to the responsible person of the bot. The strand pauses: no review, no merge. Answer in the comments and assign the item to the bot again; a correction begins with the comments since the last run. A part that was pushed stays on the branch. At a child of an epic the strand keeps running with the next child; the epic is not marked ready while a child waits for a person. Without the step `blocked` the item keeps its state; comment, assignment and pause stay.
+
 ## Begin in Todo
 
 With the optional step `ready` (usually **Todo**, [steps of the agents](/en/concepts/workflows#steps-of-the-agents)) the bot begins an item only when it is its own **and** stands in that state. Assigned in the backlog, nothing starts: the item says "Bob begins as soon as the item is in Todo". Assign it in Todo, or move an item of the bot to Todo, and the implement run starts. An item of the bot that a person puts into **Correction** without a strand begins like one from Todo; with a strand it corrects as before. Mentions, reviews, red CI and conflicts do not depend on the state. Without the step `ready` an agent begins at once, as before.

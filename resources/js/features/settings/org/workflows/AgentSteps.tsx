@@ -24,6 +24,7 @@ export const STEP_NAMES: Record<AgentStep, TranslationKey> = {
   correction: 'catalog.agent_step.correction',
   merged: 'catalog.agent_step.merged',
   ready: 'catalog.agent_step.ready',
+  blocked: 'catalog.agent_step.blocked',
 };
 
 const STEP_HINTS: Record<AgentStep, TranslationKey> = {
@@ -32,6 +33,7 @@ const STEP_HINTS: Record<AgentStep, TranslationKey> = {
   correction: 'settings.workflows.agents.hint.correction',
   merged: 'settings.workflows.agents.hint.merged',
   ready: 'settings.workflows.agents.hint.ready',
+  blocked: 'settings.workflows.agents.hint.blocked',
 };
 
 /** "Started", "Unstarted oder Backlog": the categories a step accepts, in words. */
@@ -50,7 +52,12 @@ export const sameStatus = (steps: Steps): boolean => steps.working !== null && s
  */
 export function proposalOf(draft: Draft): Steps {
   const raw = suggestSteps(draft.states.map((state) => ({ ...state, name: state.name.trim() })));
-  return { ...raw, review: raw.review !== null && raw.review === (draft.agent_states.working ?? raw.working) ? null : raw.review };
+  const working = draft.agent_states.working ?? raw.working;
+  return {
+    ...raw,
+    review: raw.review !== null && raw.review === working ? null : raw.review,
+    blocked: raw.blocked !== null && raw.blocked === working ? null : raw.blocked,
+  };
 }
 
 type AgentStepsProps = {
@@ -76,7 +83,9 @@ export function AgentSteps({ draft, saved, readOnly, errorOf, onChange }: AgentS
   const quoted = (text: string) => t('settings.agents.quoted', { text });
 
   function take() {
-    onChange({ ...draft.agent_states, ...Object.fromEntries(proposed.map((step) => [step, proposal[step]])) });
+    // the optional step blocked comes with the proposal when it is empty and fits (WEBU-50)
+    const optional = draft.agent_states.blocked === null && proposal.blocked !== null ? { blocked: proposal.blocked } : {};
+    onChange({ ...draft.agent_states, ...Object.fromEntries(proposed.map((step) => [step, proposal[step]])), ...optional });
     // the button goes with the proposal taken: the focus moves to the first step
     requestAnimationFrame(() => document.getElementById(agentStepId('working'))?.focus());
   }
@@ -105,7 +114,7 @@ export function AgentSteps({ draft, saved, readOnly, errorOf, onChange }: AgentS
           const hint =
             removedName !== null
               ? t('settings.workflows.agents.removed_note', { name: removedName })
-              : value !== null || step === 'ready'
+              : value !== null || step === 'ready' || step === 'blocked'
                 ? undefined
                 : suggested !== null
                   ? t('settings.workflows.agents.proposal', { name: nameOf(suggested) })

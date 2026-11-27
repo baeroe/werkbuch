@@ -159,7 +159,7 @@ final class WorkflowInput
      * when it was kept. In progress and in review (both Started) need two states.
      *
      * @param  array{states: list<array{index: array-key, key: string, existing: ?string, category: StateCategory}>, state_mapping: array<array-key, mixed>, agent_states: ?array<array-key, mixed>}  $valid
-     * @return array{working: ?string, review: ?string, correction: ?string, merged: ?string, ready: ?string}
+     * @return array{working: ?string, review: ?string, correction: ?string, merged: ?string, ready: ?string, blocked: ?string}
      *
      * @throws Problem 422 with the errors at their steps or states
      */
@@ -216,6 +216,10 @@ final class WorkflowInput
 
         if ($errors === [] && $steps['ready'] !== null && $steps['ready'] === $steps['correction']) {
             $errors['agent_states.ready'] = [__('field.agent_states.same_ready')];
+        }
+
+        if ($errors === [] && $steps['blocked'] !== null && $steps['blocked'] === $steps['working']) {
+            $errors['agent_states.blocked'] = [__('field.agent_states.same_blocked')];
         }
 
         if ($errors !== []) {

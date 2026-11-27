@@ -17,14 +17,15 @@ use Lorisleiva\Actions\Concerns\AsAction;
  * Pauses a strand (spec 7.2): its PR, branch, worktree and session stay, what of it waits or runs is canceled. At the
  * brake (`brake`) the item goes to „Korrektur“ and to the responsible person of the bot, with the last finding in a
  * comment of the agent (that assignment ends nothing: its actor is the agent); so too when a run that should change
- * code pushed nothing (`no_change`, A606). A person who gives the item to someone
+ * code pushed nothing (`no_change`, A606), and when the run could not do what the item asks (`needs_person`, WEBU-50: the
+ * item goes to „Pending“ with a comment of what is needed). A person who gives the item to someone
  * else pauses it too (`reassigned`), and one who cancels the item (`canceled`, A595).
  */
 final class PauseThread
 {
     use AsAction;
 
-    public const REASONS = ['brake', 'no_change', 'reassigned', 'canceled'];
+    public const REASONS = ['brake', 'no_change', 'needs_person', 'reassigned', 'canceled'];
 
     /** @param  string|null  $runId  the run that ended without a change (`no_change`): its comment names it (A643) */
     public function handle(Actor $actor, AgentThread $thread, string $reason, ?string $finding = null, ?string $runId = null): AgentThread
@@ -44,14 +45,14 @@ final class PauseThread
 
             $locked->forceFill(['status' => AgentThread::PAUSED, 'pause_reason' => $reason])->save();
 
-            if ($reason === 'brake' || $reason === 'no_change') {
+            if (in_array($reason, ['brake', 'no_change', 'needs_person'], true)) {
                 $bot = User::query()->findOrFail($locked->bot_id);
                 $item = WorkItem::query()->findOrFail($locked->work_item_id);
-                AgentFlow::move($bot, $item, AgentStep::Correction);
+                AgentFlow::move($bot, $item, $reason === 'needs_person' ? AgentStep::Blocked : AgentStep::Correction);
                 if ($bot->owner_id !== null) {
                     AgentFlow::assign($bot, $item, $bot->owner_id);
                 }
-                $said = $reason === 'brake' ? __('agents.comment.brake', [], AgentFlow::locale()) : __('agents.comment.no_change', [], AgentFlow::locale());
+                $said = __('agents.comment.'.$reason, [], AgentFlow::locale());
                 AgentFlow::comment($bot, $item, rtrim($said."\n\n".($finding ?? '')), $runId);
             }
 
