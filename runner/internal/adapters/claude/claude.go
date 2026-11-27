@@ -35,7 +35,8 @@ func Args(job adapters.Job) []string {
 			args = append(args, "--add-dir", job.Private)
 		}
 	} else {
-		args = append(args, "--permission-mode", "bypassPermissions")
+		// background tasks wake the session after its result and would overwrite it (WEBU-55)
+		args = append(args, "--permission-mode", "bypassPermissions", "--disallowedTools", "Monitor")
 	}
 	if job.Run.Model != "" {
 		args = append(args, "--model", job.Run.Model)
@@ -64,7 +65,13 @@ func (a Adapter) Command(job adapters.Job) *exec.Cmd {
 
 func (Adapter) Stream() adapters.Stream { return &stream{} }
 
-type stream struct{ out adapters.Outcome }
+type stream struct {
+	out  adapters.Outcome
+	done bool
+}
+
+// Done tells the first result is in: later ones (a background task waking the session) change nothing and the run ends.
+func (s *stream) Done() bool { return s.done }
 
 type block struct {
 	Type    string          `json:"type"`
@@ -156,6 +163,11 @@ func (s *stream) Feed(raw []byte) []protocol.Event {
 			}
 		}
 	case "result":
+		if s.done {
+			return nil
+		}
+		// the first result with content (or an error) is the final one
+		s.done = l.IsError || strings.TrimSpace(l.Result) != ""
 		if l.Usage != nil {
 			s.out.Usage = &protocol.Usage{Input: l.Usage.Input + l.Usage.CacheRead + l.Usage.CacheCreation, Output: l.Usage.Output}
 		}

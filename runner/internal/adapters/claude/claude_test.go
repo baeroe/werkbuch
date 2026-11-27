@@ -126,3 +126,17 @@ func TestStreamError(t *testing.T) {
 		t.Fatalf("%+v", o)
 	}
 }
+
+func TestFirstResultWins(t *testing.T) {
+	s := &stream{}
+	s.Feed([]byte(`{"type":"result","subtype":"success","result":"first"}`))
+	if !s.Done() {
+		t.Fatal("not done after the first result")
+	}
+	if ev := s.Feed([]byte(`{"type":"result","subtype":"success","result":"late"}`)); ev != nil || s.Outcome().Answer != "first" {
+		t.Fatalf("a later result changed the outcome: %v %q", ev, s.Outcome().Answer)
+	}
+	if a := Args(job("task", nil)); a[slices.Index(a, "--disallowedTools")+1] != "Monitor" {
+		t.Fatalf("Monitor not disallowed: %v", a)
+	}
+}

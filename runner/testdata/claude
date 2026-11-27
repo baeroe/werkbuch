@@ -122,4 +122,11 @@ case "$prompt" in
 	printf '{"type":"result","subtype":"success","is_error":false,"result":"Done: the change is pushed.","session_id":"%s","usage":{"input_tokens":1200,"cache_read_input_tokens":300,"output_tokens":450}}\n' "$session"
 	;;
 esac
+case "$prompt" in
+*lateresult*)
+	# a background task wakes the session after its result
+	printf '{"type":"result","subtype":"success","is_error":false,"result":"late wake-up","session_id":"%s"}\n' "$session"
+	sleep 600
+	;;
+esac
 exit 0
