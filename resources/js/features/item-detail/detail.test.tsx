@@ -173,6 +173,22 @@ afterEach(() => {
 /* ------------------------------------------------------------------------ the page */
 
 describe('ItemPage', () => {
+  it('copies the key when its tab is clicked', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderWith(<ItemPage itemKey="WEB-47" />);
+    await heading();
+    const button = await screen.findByRole('button', { name: 'WEB-47 kopieren' });
+    await userEvent.click(button);
+    expect(writeText).toHaveBeenCalledWith('WEB-47');
+    await waitFor(() => expect(currentToasts().some((toast) => toast.title === 'Kopiert')).toBe(true));
+    expect(document.activeElement).toBe(button);
+    // the clipboard refuses: the toast says so
+    writeText.mockRejectedValueOnce(new Error('no'));
+    await userEvent.click(button);
+    await waitFor(() => expect(currentToasts().some((toast) => toast.tone === 'error')).toBe(true));
+  });
+
   it('shows key, title, type tab and fields of an item', async () => {
     renderWith(<ItemPage itemKey="WEB-47" />);
 
@@ -631,6 +647,14 @@ describe('properties in the detail', () => {
     fail = false;
     await user.click(within(props).getByRole('button', { name: 'Erneut versuchen' }));
     expect(await within(await screen.findByRole('region', { name: 'Properties' })).findByText('Umgebung')).toBeTruthy();
+  });
+
+  it('copies the key from the tab of the preview', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderWith(<ItemPeek itemId="wi_web_47" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'WEB-47 kopieren' }));
+    expect(writeText).toHaveBeenCalledWith('WEB-47');
   });
 
   it('shows no properties section for a type without properties', async () => {

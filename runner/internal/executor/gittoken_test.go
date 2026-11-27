@@ -286,6 +286,15 @@ func TestALightRunGetsNeitherTheGitTokenNorGh(t *testing.T) {
 	// gh of the machine is logged in as someone else
 	t.Setenv("GH_TOKEN", "gho_machinetokenmachinetoken0001")
 	t.Setenv("GITHUB_TOKEN", "gho_machinetokenmachinetoken0002")
+	// the daemon (or a run it sits in) has git's credential setup in its environment
+	t.Setenv("WERKBUCH_GIT_TOKEN_FILE", "/some/file")
+	t.Setenv("GIT_CONFIG_COUNT", "2")
+	t.Setenv("GIT_CONFIG_KEY_0", "core.pager") // GIT_CONFIG_COUNT counts from 0: git refuses a missing key
+	t.Setenv("GIT_CONFIG_VALUE_0", "cat")
+	t.Setenv("GIT_CONFIG_KEY_1", "credential.https://github.com.helper")
+	t.Setenv("GIT_CONFIG_VALUE_1", "!f")
+	t.Setenv("GIT_CONFIG_PARAMETERS", "'credential.helper=!f'")
+	t.Setenv("GH_CONFIG_DIR", "/some/dir")
 	expires := time.Now().Add(time.Hour)
 	w.remote.Accept(firstToken, expires)
 	run := w.run("01look", protocol.Review, "review", func(r *protocol.Run) {
@@ -301,7 +310,7 @@ func TestALightRunGetsNeitherTheGitTokenNorGh(t *testing.T) {
 	}
 	env, _ := os.ReadFile(w.env)
 	files, _ := os.ReadFile(listing)
-	if !fetched || strings.Contains(string(env), "WERKBUCH_GIT_TOKEN_FILE") || strings.Contains(string(env), "credential.http") {
+	if !fetched || strings.Contains(string(env), "WERKBUCH_GIT_TOKEN_FILE") || strings.Contains(string(env), "credential.http") || strings.Contains(string(env), "GIT_CONFIG_PARAMETERS") || strings.Contains(string(env), "/some/") {
 		t.Fatalf("fetched %v, env of the light run:\n%s", fetched, env)
 	}
 	// closed: no helper, an empty gh, no token variable of the machine

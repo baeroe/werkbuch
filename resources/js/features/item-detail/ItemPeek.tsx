@@ -20,6 +20,7 @@
 
 import { FileQuestionMark } from 'lucide-react';
 import type { RefObject } from 'react';
+import { CopyKey } from '@/components/items/CopyKey';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -45,7 +46,9 @@ export function ItemPeek({ itemId, panel }: { itemId: string; panel?: RefObject<
       // a new detail for each item: drafts and edits never carry over to the next one
       <ItemDetailProvider key={data.item.id} surface="peek" panel={panel} itemId={data.item.id}>
         <span className="absolute bottom-full left-4 hidden md:block">
-          <TypeTab tone={data.type.tone} icon={data.type.icon} label={data.item.key} />
+          <CopyKey itemKey={data.item.key}>
+            <TypeTab tone={data.type.tone} icon={data.type.icon} label={data.item.key} />
+          </CopyKey>
         </span>
         <ItemHeader detail={data} surface="peek" onClose={close} />
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">

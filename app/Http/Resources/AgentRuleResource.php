@@ -24,6 +24,6 @@ final class AgentRuleResource extends JsonResource
         /** @var array{type: RunType, body: string, standard: bool} $rule */
         $rule = $this->resource;
 
-        return ['type' => $rule['type']->value, 'body' => $rule['body'], 'standard' => $rule['standard'], 'contract' => Contract::for($rule['type']), 'standard_body' => AgentRules::standard($rule['type'], Locale::default())];
+        return ['type' => $rule['type']->value, 'body' => $rule['body'], 'standard' => $rule['standard'], 'contract' => Contract::for($rule['type'], Locale::default()->value), 'standard_body' => AgentRules::standard($rule['type'], Locale::default())];
     }
 }

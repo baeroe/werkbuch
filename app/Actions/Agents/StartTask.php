@@ -74,7 +74,7 @@ final class StartTask
             $thread = AgentThread::query()->create([
                 'bot_id' => $bot->id, 'project_id' => $locked->project_id, 'work_item_id' => $locked->id, 'status' => AgentThread::OPEN,
                 'repository_github_id' => $repo?->repository->github_id, 'base_branch' => $repo?->base_branch,
-                'branch' => AgentThread::branchFor($locked), 'corrections' => 0, 'conflicts' => 0,
+                'branch' => AgentThread::freshBranchFor($locked), 'corrections' => 0, 'conflicts' => 0,
             ]);
 
             $hasChildren = $locked->type->is_epic && WorkItem::query()->where('parent_id', $locked->id)->exists();

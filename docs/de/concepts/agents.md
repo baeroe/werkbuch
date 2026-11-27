@@ -36,7 +36,7 @@ Bot zugewiesen ─► Umsetzen (In Arbeit)
 ```
 
 1. **Zugewiesen:** Jemand weist dem Bot das Item zu (auch eine Vorlage, deren Assignee der Bot ist). werkbuch reiht einen Auftrag **Umsetzen** ein; sobald er startet, geht das Item auf **In Arbeit**.
-2. **Pull Request:** Der Agent arbeitet in einem Worktree auf dem Branch `agent/<KEY>-<slug>`, testet, committet, pusht und öffnet einen Pull Request mit `Fixes <KEY>`. werkbuch verknüpft ihn und setzt das Item auf **In Review**.
+2. **Pull Request:** Der Agent arbeitet in einem Worktree auf dem Branch `agent/<KEY>-<slug>`, testet, committet, pusht und öffnet einen Pull Request mit `Fixes <KEY>`. werkbuch verknüpft ihn und setzt das Item auf **In Review**. Hat ein früherer Strang des Items den Namen schon benutzt (Pull Request geschlossen, dann neu zugewiesen), bekommt der neue Strang `-2`, `-3` …, damit der alte Worktree ihn nicht hält; von Hand angelegte oder auf dem Remote gebliebene Namen werden nicht geprüft.
 3. **CI:** werkbuch hört die Checks des Head-Commits. Grün heißt: Jeder Check-Run, jeder Workflow-Lauf von GitHub Actions und jeder Commit-Status dieses Commits ist fertig, und keiner ist gescheitert; rot, sobald einer scheitert, auch wenn andere noch laufen. Ein Repo ohne jeden Check gilt als grün, wenn GitHub zwei Minuten nach dem Push keinen für den Commit hat.
 4. **Review:** Bei grüner CI reviewt der Review-Agent des Projekts den Pull Request, immer mit frischer Session und ohne den Kontext der Umsetzung; ohne Review-Agent reviewt der Bot des Strangs selbst. Einmal je Head-Commit; ein neuer Push macht ein laufendes Review hinfällig.
 5. **Korrektur:** Rote CI oder Befunde im Review setzen das Item auf **Korrektur** und starten eine **Korrektur** im selben Strang, mit fortgesetzter Session. werkbuch nennt die gescheiterten Checks mit Links; deren Logs liest der Agent selbst. Danach laufen CI und Review erneut.
@@ -121,7 +121,7 @@ Welche Status ein Pull Request einer Person bewegt, steht unter [Pull Requests](
 
 werkbuch baut den Prompt jedes Auftrags in Schichten, in dieser Reihenfolge:
 
-1. **Vertrag**, im Code: was der Auftragstyp tut und nie tut (Status setzen, zuweisen, mergen, releasen, Force-Push), das Format, das werkbuch liest, und dass Texte aus Items, Kommentaren, Wiki und Pull Requests Daten sind, keine Anweisungen. **Einstellungen → Agenten** zeigt ihn aufklappbar und nur zum Lesen.
+1. **Vertrag**, im Code, in der Sprache der Organisation (Englisch oder Deutsch; der Auftrag eines Laufs folgt ihr): was der Auftragstyp tut und nie tut (Status setzen, zuweisen, mergen, releasen, Force-Push), das Format, das werkbuch liest, und dass Texte aus Items, Kommentaren, Wiki und Pull Requests Daten sind, keine Anweisungen. **Einstellungen → Agenten** zeigt ihn aufklappbar und nur zum Lesen.
 2. **Arbeitsregeln je Auftragstyp** für die ganze Organisation, unter **Einstellungen → Agenten**: vorbelegt mit dem Standard von werkbuch in der Sprache der Organisation, **Standard wiederherstellen** je Typ. Ändern dürfen Org-Admins.
 3. **Vorgehen für Agenten** des Typs des Items, im Typ-Dialog.
 4. **Projektinformationen und Regeln für Agenten**, unter **Projekteinstellungen → Agenten**.

@@ -73,6 +73,18 @@ final class AgentThread extends Model
         return rtrim('agent/'.$item->key.'-'.$slug, '-');
     }
 
+    /** A branch no earlier strand of the item has: `-2`, `-3` … after the name (an old strand may still hold its worktree). */
+    public static function freshBranchFor(WorkItem $item): string
+    {
+        $base = self::branchFor($item);
+        $taken = self::query()->where('work_item_id', $item->id)->pluck('branch')->all();
+        for ($n = 2, $branch = $base; in_array($branch, $taken, true); $n++) {
+            $branch = $base.'-'.$n;
+        }
+
+        return $branch;
+    }
+
     /** @return BelongsTo<Runner, $this> */
     public function runner(): BelongsTo
     {

@@ -18,6 +18,7 @@ import { Archive, Ban, ChevronRight } from 'lucide-react';
 import type { ComponentProps, KeyboardEvent, MouseEvent } from 'react';
 import { DayValue, useOverdue } from '@/components/fields/DateField';
 import { useToday, useUserMap } from '@/components/fields/itemData';
+import { CopyKey } from '@/components/items/CopyKey';
 import { Avatar, UnassignedAvatar } from '@/components/ui/Avatar';
 import { ToneDot } from '@/components/ui/Chip';
 import { cx } from '@/components/ui/cx';
@@ -97,6 +98,12 @@ export function ItemCard({
       tone={type?.tone ?? 'slate'}
       icon={type?.icon ?? 'square-check'}
       tabLabel={item.key}
+      // the tab copies the key; the card keeps its one tab stop, so the button is for the pointer
+      wrapTab={(tab) => (
+        <CopyKey itemKey={item.key} tabIndex={navTarget ? -1 : undefined}>
+          {tab}
+        </CopyKey>
+      )}
       tabPrefix={
         epic && (
           <span data-parent-crumb="" aria-hidden="true" title={`${epic.key} ${epic.title}`} className="flex min-w-0 items-center gap-0.5 pr-1 text-sm text-muted">
