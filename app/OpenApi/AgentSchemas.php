@@ -66,11 +66,12 @@ final class AgentSchemas
     {
         $slot = ['type' => 'integer', 'minimum' => 1, 'maximum' => Runner::MAX_SLOTS];
 
-        return self::object('Only the keys that are sent change (`'.implode('`, `', UpdateRunner::FIELDS).'`). Org admins and the default bot may write; every error comes in one 422.', [
+        return self::object('Only the keys sent change (`'.implode('`, `', UpdateRunner::FIELDS).'`); every error in one 422.', [
             'name' => ['type' => 'string', 'minLength' => 1, 'maxLength' => Runner::NAME_MAX, 'description' => 'Trimmed; no other active runner may have it (in any case).'],
-            'slots' => self::object('The places as a whole: code runs in all and per repo (at most as many as in all), light runs (`review`, `comment`) in a pot of their own.', [
+            'slots' => self::object('The places as a whole: code runs in all and per repo (at most all), light runs (`review`, `comment`) apart.', [
                 'total' => $slot, 'per_repo' => $slot, 'light' => $slot,
             ], ['total', 'per_repo', 'light'], false),
+            'usage_limit' => ['type' => ['integer', 'null'], 'minimum' => 1, 'maximum' => 100, 'description' => 'From this percent of the Claude subscription (session or week) no new `claude` runs; `null` none.'],
         ]);
     }
 
@@ -207,6 +208,9 @@ final class AgentSchemas
         $time = ['type' => 'string', 'format' => 'date-time'];
         $nullTime = ['type' => ['string', 'null'], 'format' => 'date-time'];
         $names = ['type' => 'array', 'items' => ['type' => 'string']];
+        $window = ['anyOf' => [self::object('A window: used in percent and when it resets.', [
+            'percent' => ['type' => 'number', 'minimum' => 0, 'maximum' => 100], 'resets_at' => $nullTime,
+        ], ['percent', 'resets_at'], false), ['type' => 'null']]];
 
         return [
             'RunnerResource' => [
@@ -229,6 +233,11 @@ final class AgentSchemas
                     'mcp_servers' => $names, 'skills' => $names, 'plugins' => $names,
                     'werkbuch_access' => [...$names, 'description' => 'MCP servers of the machine that reach werkbuch with a token of their own: a way past the run token.'],
                 ], ['mcp_servers', 'skills', 'plugins', 'werkbuch_access'], false), ['type' => 'null']]],
+                'usage' => ['anyOf' => [self::object('The used share of the Claude subscription, as the runner last read it from the sign-in of Claude Code.', [
+                    'session' => $window, 'week' => $window,
+                ], ['session', 'week'], false), ['type' => 'null']], 'description' => '`null` before a runner that reads it reported.'],
+                'usage_limit' => ['type' => ['integer', 'null'], 'description' => 'The percent from which it takes no new runs of `claude`; `null` for none.'],
+                'over_usage_limit' => ['type' => 'boolean', 'description' => 'The limit holds back new runs of `claude` now.'],
                 'created_at' => $nullTime, 'updated_at' => $nullTime,
             ],
             'RunnerPairingResource' => [
@@ -240,7 +249,7 @@ final class AgentSchemas
             'AgentRunResource' => [
                 'type' => ['type' => 'string', 'enum' => RunType::VALUES],
                 'status' => ['type' => 'string', 'enum' => RunStatus::VALUES],
-                'waiting_reason' => ['type' => ['string', 'null'], 'enum' => [...AgentRun::WAITING_REASONS, null], 'description' => '`agent_off`: the agent is switched off; `no_cli`: no runner of the pool has the CLI; `runner_offline`: the runner of its strand is offline (30 minutes, then another takes over).'],
+                'waiting_reason' => ['type' => ['string', 'null'], 'enum' => [...AgentRun::WAITING_REASONS, null], 'description' => '`agent_off`: the agent is switched off; `no_cli`: no runner of the pool has the CLI; `runner_offline`: the runner of its strand is offline (30 minutes, then another takes over); `usage_limit`: the runner it waits for reached its usage limit of the Claude subscription.'],
                 'cli' => ['type' => 'string', 'enum' => AgentCli::VALUES],
                 'model_source' => ['type' => 'string', 'enum' => AgentRun::MODEL_SOURCES],
                 'runner_last_seen_at' => [...$nullTime, 'description' => 'The last contact of the runner: how long a run waits for a runner that is offline.'],

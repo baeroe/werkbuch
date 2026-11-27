@@ -113,7 +113,7 @@ final class AgentsTool extends ReadTool
             ),
             new McpAction(
                 name: 'get-repository',
-                summary: 'The repo of a project with its base branch, the ruleset hint and the guard against an unauthorized merge; `data` null without one.',
+                summary: 'The repo of a project with base branch, ruleset hint and merge guard; `data` null without one.',
                 run: fn (Actor $actor, McpArguments $args): McpResult => self::repository(GetProjectRepository::run($actor, References::project($args->reference('project')))),
                 parameters: ['project' => ToolSchema::reference('project')],
                 required: ['project'],

@@ -493,6 +493,7 @@ describe('a run that waits', () => {
     expect(waitingText({ ...run, waiting_reason: 'agent_off' })).toBe('Wartet: der Agent ist ausgeschaltet.');
     expect(waitingText({ ...run, waiting_reason: 'merge_guard' })).toMatch(/eigenmächtiger Merge/);
     expect(waitingText({ ...run, waiting_reason: 'github_unavailable' })).toMatch(/GitHub hat eben kein Token/);
+    expect(waitingText({ ...run, waiting_reason: 'usage_limit' })).toMatch(/Limit für das Claude-Abo erreicht/);
     expect(waitingText({ ...run, waiting_reason: 'runner_offline' })).toMatch(/Wartet auf den Runner seines Strangs/);
     expect(waitingText({ ...run, waiting_reason: null })).toBe('Wartet auf einen freien Platz auf einem Runner des Pools.');
   });

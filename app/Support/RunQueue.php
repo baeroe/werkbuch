@@ -20,10 +20,13 @@ use Illuminate\Support\Collection;
  */
 final class RunQueue
 {
+    /** The waiting reason of a run the usage limit of the Claude subscription holds back (WEBU-65). */
+    public const USAGE_LIMIT = 'usage_limit';
+
     /** Whether the runner may take the run as far as pool, CLI and strand go (the places are the claim's). */
     public static function eligible(AgentRun $run, ?AgentConfig $config, Runner $runner): bool
     {
-        if ($config === null || ! $config->enabled || ! $config->pools($runner) || ! $runner->hasCli($run->cli)) {
+        if ($config === null || ! $config->enabled || ! $config->pools($runner) || ! $runner->takesCli($run->cli)) {
             return false;
         }
 
@@ -44,8 +47,10 @@ final class RunQueue
     }
 
     /**
-     * Why a run cannot start now: its agent is off (`agent_off`), the guard holds its project (`merge_guard`), GitHub gave no token a moment ago (`github_unavailable`), no runner of the pool has its CLI (`no_cli`), or the
-     * runner of its strand is offline (`runner_offline`); null when a runner could take it.
+     * Why a run cannot start now: its agent is off (`agent_off`), the guard holds its project (`merge_guard`), GitHub gave no token a moment ago (`github_unavailable`), no runner of the pool has its CLI (`no_cli`), the
+     * runner of its strand is offline (`runner_offline`), or the runner it waits for (its strand's, else every one of the
+     * pool with its CLI) reached its usage limit of the Claude subscription (`usage_limit`, WEBU-65); null when a runner
+     * could take it.
      *
      * @param  Collection<int, Runner>  $runners  every runner that is not revoked
      * @param  list<string>  $guarded  the projects the guard against an unauthorized merge holds (`merge_guard`, spec 11.3)
@@ -66,13 +71,19 @@ final class RunQueue
 
         $pool = $runners->filter(fn (Runner $runner) => $config->pools($runner));
 
-        if (! $pool->contains(fn (Runner $runner) => $runner->hasCli($run->cli))) {
+        $ready = $pool->filter(fn (Runner $runner) => $runner->hasCli($run->cli));
+        if ($ready->isEmpty()) {
             return 'no_cli';
         }
 
         $bound = self::boundTo($run);
+        if ($bound !== null && ! $bound->isOnline()) {
+            return 'runner_offline';
+        }
 
-        return $bound !== null && ! $bound->isOnline() ? 'runner_offline' : null;
+        $takers = $bound !== null ? collect([$bound]) : $ready;
+
+        return $takers->contains(fn (Runner $runner) => $runner->takesCli($run->cli)) ? null : self::USAGE_LIMIT;
     }
 
     /**

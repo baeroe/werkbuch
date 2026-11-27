@@ -48,6 +48,9 @@ function makeRunner(id: string, changes: Partial<Runner> = {}): Runner {
       { cli: 'codex', installed: true, version: null, logged_in: false, path: '/usr/local/bin/codex' },
     ],
     equipment: { mcp_servers: ['context7'], skills: ['tdd', 'review'], plugins: ['superpowers'], werkbuch_access: [] },
+    usage: null,
+    usage_limit: null,
+    over_usage_limit: false,
     created_by: 'u_mara',
     created_at: '2026-10-20T08:00:00Z',
     updated_at: '2026-10-20T08:00:00Z',
@@ -449,7 +452,7 @@ describe('Places, name and revoking', () => {
     await user.clear(light);
     await user.type(light, 'viele');
     await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
-    expect(calls('PATCH', '/api/v1/runners/r1')[0].body).toEqual({ slots: { total: 2, per_repo: 3, light: null } });
+    expect(calls('PATCH', '/api/v1/runners/r1')[0].body).toEqual({ slots: { total: 2, per_repo: 3, light: null }, usage_limit: null });
     expect(await within(dialog).findByText('Je Repo höchstens so viele wie gesamt.')).toBeTruthy();
     expect(perRepo.getAttribute('aria-invalid')).toBe('true');
     // the field the server refused takes the focus
@@ -472,8 +475,47 @@ describe('Places, name and revoking', () => {
     act(() => runToastAction(toastNamed('Plätze von „mac-r1“ nicht gespeichert')!.id));
     await waitFor(() => expect(toastNamed('Plätze von „mac-r1“ gespeichert')).toBeTruthy());
     expect(toastNamed('Plätze von „mac-r1“ gespeichert')!.description).toBe('2 gesamt, 1 je Repo, 4 für Reviews und Antworten.');
-    expect(calls('PATCH', '/api/v1/runners/r1').at(-1)!.body).toEqual({ slots: { total: 2, per_repo: 1, light: 4 } });
+    expect(calls('PATCH', '/api/v1/runners/r1').at(-1)!.body).toEqual({ slots: { total: 2, per_repo: 1, light: 4 }, usage_limit: null });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('shows the usage of the Claude subscription with its limit, and sets the limit with the places (WEBU-65)', async () => {
+    const user = userEvent.setup();
+    renderRunners({
+      runners: [
+        makeRunner('r1', { usage: { session: { percent: 85, resets_at: null }, week: null }, usage_limit: 80, over_usage_limit: true }),
+        makeRunner('r2'),
+      ],
+      runs: [],
+      routes: {
+        'PATCH /api/v1/runners/r2': (body) => {
+          const { usage_limit } = body as { usage_limit: unknown };
+          if (typeof usage_limit !== 'number') return problem(422, 'validation_failed', 'Nicht gespeichert', { usage_limit: ['Das Limit ist eine ganze Zahl von 1 bis 100 Prozent, leer für keins.'] });
+          return { body: { data: makeRunner('r2', { usage_limit }) } };
+        },
+      },
+    });
+    const held = await cardOf('mac-r1');
+    expect(within(held).getByText('85 %')).toBeTruthy();
+    expect(within(held).getByText('keine Angabe')).toBeTruthy();
+    expect(within(held).getByText(/Limit von 80 % erreicht/)).toBeTruthy();
+    const free = await cardOf('mac-r2');
+    expect(within(free).getByText(/Noch keine Angabe/)).toBeTruthy();
+    expect(within(free).getByText('Kein Limit.')).toBeTruthy();
+
+    await user.click(within(free).getByRole('button', { name: 'Plätze von „mac-r2“' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Plätze von „mac-r2“' });
+    const limit = within(dialog).getByRole('textbox', { name: 'Limit für das Claude-Abo (%)' });
+    expect((limit as HTMLInputElement).value).toBe('');
+    await user.type(limit, 'fast');
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    expect(calls('PATCH', '/api/v1/runners/r2')[0].body).toEqual({ slots: { total: 2, per_repo: 1, light: 2 }, usage_limit: 'fast' });
+    expect(await within(dialog).findByText('Das Limit ist eine ganze Zahl von 1 bis 100 Prozent, leer für keins.')).toBeTruthy();
+    await user.clear(limit);
+    await user.type(limit, '90');
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(calls('PATCH', '/api/v1/runners/r2').at(-1)!.body).toEqual({ slots: { total: 2, per_repo: 1, light: 2 }, usage_limit: 90 });
   });
 
   it('renames a runner; an empty name and a name taken stay in the dialog', async () => {

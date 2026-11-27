@@ -37,6 +37,8 @@ use Illuminate\Support\Str;
  * @property array<string, mixed>|null $load
  * @property list<array<string, mixed>> $clis
  * @property array<string, mixed>|null $equipment
+ * @property array{session: array{percent: float|int, resets_at: string|null}|null, week: array{percent: float|int, resets_at: string|null}|null}|null $usage
+ * @property int|null $usage_limit
  * @property CarbonImmutable|null $last_seen_at
  * @property CarbonImmutable|null $revoked_at
  * @property string $created_by
@@ -45,7 +47,7 @@ use Illuminate\Support\Str;
  * @property-read User $creator
  * @property-read Collection<int, AgentRun> $busyRuns
  */
-#[Fillable(['name', 'token_hash', 'os', 'arch', 'version', 'protocol', 'slots_total', 'slots_per_repo', 'slots_light', 'load', 'clis', 'equipment', 'last_seen_at', 'revoked_at', 'created_by'])]
+#[Fillable(['name', 'token_hash', 'os', 'arch', 'version', 'protocol', 'slots_total', 'slots_per_repo', 'slots_light', 'usage_limit', 'load', 'clis', 'equipment', 'usage', 'last_seen_at', 'revoked_at', 'created_by'])]
 #[Hidden(['token_hash'])]
 final class Runner extends Model
 {
@@ -76,6 +78,8 @@ final class Runner extends Model
             'load' => 'array',
             'clis' => 'array',
             'equipment' => 'array',
+            'usage' => 'array',
+            'usage_limit' => 'integer',
             'last_seen_at' => 'immutable_datetime',
             'revoked_at' => 'immutable_datetime',
         ];
@@ -138,6 +142,32 @@ final class Runner extends Model
     public function isGone(): bool
     {
         return $this->revoked_at !== null || $this->last_seen_at === null || $this->last_seen_at->isBefore(now()->subMinutes(Protocol::TAKEOVER_MINUTES));
+    }
+
+    /**
+     * Whether the runner holds back new runs of `claude` (WEBU-65): a limit is set and the last reported usage of the
+     * Claude subscription reached it in the session or the week. Without a known usage no limit holds.
+     */
+    public function overUsageLimit(): bool
+    {
+        if ($this->usage_limit === null) {
+            return false;
+        }
+
+        foreach (['session', 'week'] as $window) {
+            $percent = $this->usage[$window]['percent'] ?? null;
+            if (is_numeric($percent) && $percent >= $this->usage_limit) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Whether it may take a new run of the CLI as far as the CLI goes: reported ready, and below the usage limit for `claude`. */
+    public function takesCli(AgentCli $cli): bool
+    {
+        return $this->hasCli($cli) && ! ($cli === AgentCli::Claude && $this->overUsageLimit());
     }
 
     /** Whether the last report names the CLI installed and signed in (spec 8.8). */

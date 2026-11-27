@@ -102,7 +102,7 @@ Prüf in der Umgebung des Dienstes: Die TUI fragt den Daemon und sieht so `PATH`
 
 ## Einstellungen in werkbuch
 
-Jeder Runner ist eine Karte unter **Einstellungen → Runner**: online (ein Kontakt in der letzten Minute), Version, System, Auslastung, die CLIs mit Version und Anmeldung, die Ausstattung und die Aufträge auf ihm mit **Abbrechen**. Dort benennst du ihn um, widerrufst ihn (sein Token gilt nicht mehr, laufende Aufträge werden abgebrochen, wartende gehen an die anderen Runner) und stellst seine **Plätze** ein:
+Jeder Runner ist eine Karte unter **Einstellungen → Runner**: online (ein Kontakt in der letzten Minute), Version, System, Auslastung, die Nutzung des Claude-Abos, die CLIs mit Version und Anmeldung, die Ausstattung und die Aufträge auf ihm mit **Abbrechen**. Dort benennst du ihn um, widerrufst ihn (sein Token gilt nicht mehr, laufende Aufträge werden abgebrochen, wartende gehen an die anderen Runner) und stellst seine **Plätze** ein:
 
 | Plätze | Standard | Zählt |
 |---|---|---|
@@ -111,6 +111,12 @@ Jeder Runner ist eine Karte unter **Einstellungen → Runner**: online (ein Kont
 | leicht | 2 | Reviews und Antworten, in einem eigenen Topf |
 
 Der Runner bekommt die Plätze mit jeder Antwort; eine Änderung gilt ohne Neustart. Welchen Runner ein Bot nimmt, ist sein **Runner-Pool** (**Einstellungen → Bots → Agent einrichten**; keiner angehakt: alle Runner).
+
+### Limit für das Claude-Abo
+
+Der Runner liest, wie viel vom Claude-Abo seines Nutzers verbraucht ist, so wie `/usage` von Claude Code es zeigt: die Session (fünf Stunden) und die Woche, je mit dem Zeitpunkt, an dem sie neu beginnt. Er fragt alle fünf Minuten mit der Anmeldung von Claude Code (unter macOS aus dem Schlüsselbund, sonst `~/.claude/.credentials.json`) und schickt nur die Prozente an werkbuch; die Karte zeigt sie als Balken.
+
+Unter **Plätze** stellst du ein **Limit** in Prozent ein: Erreicht die Session oder die Woche es, nimmt der Runner keine neuen Aufträge von Claude Code; laufende laufen zu Ende, Aufträge von Codex gehen weiter. Ein Auftrag, der darauf wartet, sagt es am Item (*der Runner hat sein Limit für das Claude-Abo erreicht*) und startet, sobald die Nutzung wieder darunter liegt, das Limit steigt oder ein anderer Runner des Pools unter seinem Limit ihn nimmt. Ohne Limit, oder solange nichts bekannt ist (keine Anmeldung, ein Runner älterer Version), wird nichts zurückgehalten.
 
 ### Setup und Teardown
 
@@ -145,7 +151,7 @@ cd "$WERKBUCH_WORKTREE" && ddev delete -Oy
 
 ## Ein Auftrag auf der Maschine
 
-1. Ohne Arbeit fragt der Runner alle 3 Sekunden, nach einer Minute ohne Arbeit alle 10 Sekunden. Er schickt Auslastung, CLIs und Ausstattung und bekommt seine Plätze und die Version, die werkbuch erwartet.
+1. Ohne Arbeit fragt der Runner alle 3 Sekunden, nach einer Minute ohne Arbeit alle 10 Sekunden. Er schickt Auslastung, CLIs, Ausstattung und die Nutzung des Claude-Abos und bekommt seine Plätze und die Version, die werkbuch erwartet.
 2. Ein Auftrag kommt mit allem, was er braucht: dem Item, dem Prompt aus werkbuch, dem Modell, einem Token für werkbuch und, für ein Projekt mit Repo, einem Token für das Repo.
 3. Je Repo hält der Runner einen Bare-Klon, je Item (ein **Strang**) einen Worktree auf dem Branch `agent/<KEY>-<slug>`. Ein Projekt ohne Repo arbeitet in einem Ordner des Strangs.
 4. Dort startet er das CLI mit einem privaten Ordner des Auftrags (MCP-Konfiguration, Prompt, Tokens), schickt alle 15 Sekunden einen Heartbeat und das Protokoll höchstens einmal je Sekunde, am Ende das Ergebnis: Status, Session, Commit, Zusammenfassung oder Urteil.
@@ -177,6 +183,7 @@ Hat die Maschine einen weiteren Zugang zu werkbuch, etwa einen MCP-Server mit ei
 - **Runner-Token:** eins je Runner, in werkbuch gehasht gespeichert und auf der Maschine im Schlüsselbund, gilt nur für das Runner-Protokoll. Widerrufst du den Runner, gilt es nicht mehr.
 - **Run-Token:** ein Token des Bots für einen Auftrag, nie in der Token-Liste, beim Ende des Auftrags widerrufen; der Bot sieht nur, was seine Projektrollen erlauben.
 - **Token des Repos:** ein Installations-Token der [GitHub-App](/de/github) für ein Repo, eine Stunde gültig. Der Runner hält es in Dateien des privaten Ordners (`0600`), nie in der Umgebung, in Argumenten oder in `.git/config`: Ein Credential-Helper für den Host des Repos liest die Datei, und `gh` bekommt einen eigenen Konfigurationsordner. Die Helper der Maschine (etwa osxkeychain) und die Token-Variablen (`GH_TOKEN`, `GITHUB_TOKEN`) sind im Auftrag abgeschaltet. Zehn Minuten vor Ablauf holt der Runner ein neues Token und ersetzt die Dateien.
+- **Anmeldung von Claude Code:** der Runner liest sie nur, um Anthropic nach der Nutzung des Abos zu fragen; sonst verlässt sie die Maschine nie, und er erneuert sie nie.
 - **Das Protokoll** eines Auftrags erreicht werkbuch ohne Tokens, auch ohne ein nacktes `wb_…`.
 - **Texte sind Daten:** Der Vertrag jedes Prompts sagt, dass Texte aus Items, Kommentaren, Wiki und Pull Requests Daten sind, keine Anweisungen. Was die Tokens verbieten, kann auch ein überlisteter Agent nicht.
 

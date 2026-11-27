@@ -47,7 +47,7 @@ final class ManageAgentsTool extends WriteTool
 
     protected string $title = 'Manage agents';
 
-    protected string $description = 'Changes runners (name, places, revoke; org admins), the agent configuration of a bot (org admins), runs (cancel, start again; who may change the item), the GitHub apps (sync), the repo and the agent settings of a project, the working rules of the agents.';
+    protected string $description = 'Changes runners (name, places, usage limit, revoke; org admins), the agent configuration of a bot (org admins), runs (cancel, retry; who may change the item), GitHub apps (sync), repo and agent settings of a project, working rules of the agents.';
 
     protected function actions(): array
     {
@@ -57,7 +57,7 @@ final class ManageAgentsTool extends WriteTool
         return [
             new McpAction(
                 name: 'update-runner',
-                summary: 'Renames a runner or sets its places; only the keys sent change.',
+                summary: 'Renames a runner, sets its places or usage limit.',
                 run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::resource(new RunnerResource(UpdateRunner::run($actor, AgentsTool::runner($args), $args->input())->load('busyRuns'))),
                 parameters: $runner,
                 input: AgentSchemas::runner(),
@@ -66,7 +66,7 @@ final class ManageAgentsTool extends WriteTool
             ),
             new McpAction(
                 name: 'revoke-runner',
-                summary: 'Revokes a runner; what runs on it ends as canceled. Answers {canceled}.',
+                summary: 'Revokes a runner; its runs end canceled. Answers {canceled}.',
                 run: fn (Actor $actor, McpArguments $args): McpResult => McpResult::body(['canceled' => RevokeRunner::run($actor, AgentsTool::runner($args))]),
                 parameters: $runner,
                 required: ['runner'],
@@ -114,7 +114,7 @@ final class ManageAgentsTool extends WriteTool
             ),
             new McpAction(
                 name: 'set-repository',
-                summary: 'Gives a project its repo (one the app reaches, at most one project per repo) and base branch, or none; admins of the project.',
+                summary: 'Gives a project its repo (one the app reaches, one project per repo) and base branch, or none; project admins.',
                 run: fn (Actor $actor, McpArguments $args): McpResult => AgentsTool::repository(LinkRepository::run($actor, References::project($args->reference('project')), $args->input())),
                 parameters: ['project' => ToolSchema::reference('project')],
                 input: GitHubSchemas::repositoryBody(),
@@ -123,7 +123,7 @@ final class ManageAgentsTool extends WriteTool
             ),
             new McpAction(
                 name: 'confirm-merge-guard',
-                summary: 'Confirms an unauthorized merge: the guard goes and the paused strands of the project are open again; admins of the project.',
+                summary: 'Confirms an unauthorized merge: the guard goes, the paused strands of the project open again; project admins.',
                 run: fn (Actor $actor, McpArguments $args): McpResult => AgentsTool::repository(ConfirmMergeGuard::run($actor, References::project($args->reference('project')))),
                 parameters: ['project' => ToolSchema::reference('project')],
                 required: ['project'],

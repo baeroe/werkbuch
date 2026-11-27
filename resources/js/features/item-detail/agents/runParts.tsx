@@ -94,6 +94,8 @@ export function waitingText(run: Pick<AgentRun, 'waiting_reason' | 'cli' | 'runn
       return t('items.agents.waiting.merge_guard');
     case 'github_unavailable':
       return t('items.agents.waiting.github_unavailable');
+    case 'usage_limit':
+      return t('items.agents.waiting.usage_limit');
     default:
       return t('items.agents.waiting.place');
   }

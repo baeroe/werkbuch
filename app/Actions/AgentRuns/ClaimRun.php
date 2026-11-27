@@ -2,6 +2,7 @@
 
 namespace App\Actions\AgentRuns;
 
+use App\Domain\Agents\AgentCli;
 use App\Domain\Agents\Protocol;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
@@ -145,7 +146,8 @@ final class ClaimRun
     /** The first run of the queue the runner may take now, started on it. */
     private function take(Runner $runner): ?AgentRun
     {
-        $clis = $runner->readyClis();
+        // over its usage limit it takes no new run of `claude` (WEBU-65): those stay out of the candidates in SQL
+        $clis = array_values(array_filter($runner->readyClis(), fn (string $cli) => $runner->takesCli(AgentCli::from($cli))));
         if ($clis === []) {
             return null;
         }

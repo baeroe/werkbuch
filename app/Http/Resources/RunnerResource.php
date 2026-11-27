@@ -10,8 +10,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * A runner (spec 10.1) as `Runner` of the clickdummy: never its token. Online means a contact within the last minute;
- * the places as set in werkbuch and as used now (the busy runs are loaded with it); load, CLIs and equipment as the
- * last report has them.
+ * the places as set in werkbuch and as used now (the busy runs are loaded with it); load, CLIs, equipment and the usage of the
+ * Claude subscription as the last report has them, the usage limit and whether it holds back runs now (WEBU-65).
  *
  * @mixin Runner
  */
@@ -40,6 +40,9 @@ final class RunnerResource extends JsonResource
             'load' => $runner->load === null ? null : [...$runner->load, 'measured_at' => $runner->last_seen_at?->toJSON()],
             'clis' => $runner->clis,
             'equipment' => $runner->equipment,
+            'usage' => $runner->usage,
+            'usage_limit' => $runner->usage_limit,
+            'over_usage_limit' => $runner->overUsageLimit(),
             'created_by' => $runner->created_by,
             'created_at' => $runner->created_at?->toJSON(),
             'updated_at' => $runner->updated_at?->toJSON(),

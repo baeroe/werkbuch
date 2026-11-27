@@ -9,6 +9,7 @@ use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
 use App\Models\AgentRun;
 use App\Models\Runner;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -19,8 +20,8 @@ use Illuminate\Validation\ValidationException;
  *
  * The report: `load` {cpu, gpu (null without a GPU reading), ram_used, ram_total, disk_free, disk_total} in percent and
  * GB; `clis` [{cli, installed, version, logged_in, path}] (CLIs werkbuch does not know are kept out); `equipment`
- * {mcp_servers, skills, plugins, werkbuch_access} as lists of names. Each part is optional: a part left out keeps the
- * last one.
+ * {mcp_servers, skills, plugins, werkbuch_access} as lists of names; `usage` {session, week} of the Claude
+ * subscription (WEBU-65), each null or {percent, resets_at}. Each part is optional: a part left out keeps the last one.
  */
 final class RunnerProtocol
 {
@@ -32,7 +33,7 @@ final class RunnerProtocol
      * The report of a request, checked; the parts it does not send are missing.
      *
      * @param  array<array-key, mixed>  $input
-     * @return array{load?: array<string, int|float|null>, clis?: list<array<string, mixed>>, equipment?: array<string, list<string>>}
+     * @return array{load?: array<string, int|float|null>, clis?: list<array<string, mixed>>, equipment?: array<string, list<string>>, usage?: array{session: array{percent: float|int, resets_at: string|null}|null, week: array{percent: float|int, resets_at: string|null}|null}|null}
      *
      * @throws ValidationException
      */
@@ -66,6 +67,13 @@ final class RunnerProtocol
             'equipment.plugins.*' => $name,
             'equipment.werkbuch_access' => $names,
             'equipment.werkbuch_access.*' => $name,
+            'usage' => ['sometimes', 'nullable', 'array:session,week'],
+            'usage.session' => ['sometimes', 'nullable', 'array:percent,resets_at'],
+            'usage.session.percent' => ['required_with:usage.session', 'numeric', 'min:0', 'max:100'],
+            'usage.session.resets_at' => ['sometimes', 'nullable', 'date'],
+            'usage.week' => ['sometimes', 'nullable', 'array:percent,resets_at'],
+            'usage.week.percent' => ['required_with:usage.week', 'numeric', 'min:0', 'max:100'],
+            'usage.week.resets_at' => ['sometimes', 'nullable', 'date'],
         ], [], [])->setCustomMessages(['*' => __('field.runner.report')])->validate();
 
         $report = [];
@@ -89,13 +97,38 @@ final class RunnerProtocol
             ];
         }
 
+        if (array_key_exists('usage', $valid)) {
+            $report['usage'] = $valid['usage'] === null ? null : [
+                'session' => self::window($valid['usage']['session'] ?? null),
+                'week' => self::window($valid['usage']['week'] ?? null),
+            ];
+        }
+
         return $report;
+    }
+
+    /**
+     * A window of the usage as kept: the percent and the reset time in UTC (`toJSON`), or null.
+     *
+     * @param  array<string, mixed>|null  $window
+     * @return array{percent: float|int, resets_at: string|null}|null
+     */
+    private static function window(?array $window): ?array
+    {
+        if ($window === null) {
+            return null;
+        }
+        /** @var float|int $percent */
+        $percent = $window['percent'] + 0;
+        $resets = $window['resets_at'] ?? null;
+
+        return ['percent' => $percent, 'resets_at' => is_string($resets) ? CarbonImmutable::parse($resets)->utc()->toJSON() : null];
     }
 
     /**
      * Keeps the report as the last state of the runner, with its contact, version and protocol.
      *
-     * @param  array{load?: mixed, clis?: mixed, equipment?: mixed}  $report
+     * @param  array{load?: mixed, clis?: mixed, equipment?: mixed, usage?: mixed}  $report
      */
     public static function keep(Runner $runner, array $report, string $version, int $protocol): void
     {

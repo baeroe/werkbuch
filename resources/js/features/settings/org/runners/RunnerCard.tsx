@@ -1,6 +1,7 @@
 /*
  * One runner in the list (spec 6.2, 8.4, 8.6, 8.8, 10.1; port of the clickdummy): whether it is online, what it is, how
- * many of its places are taken in each pot, the last load it sent, its CLIs and what the harness of the machine offers
+ * many of its places are taken in each pot, the last load it sent, the used share of its Claude subscription with the
+ * limit from which it takes no new runs of Claude Code (WEBU-65), its CLIs and what the harness of the machine offers
  * (read-only), and the runs on it with "Abbrechen". A runner that has not reported yet says so instead of a load.
  */
 
@@ -70,14 +71,14 @@ function Places({ runner }: { runner: Runner }) {
   );
 }
 
-/** One measure of the load: a short bar and the value in words; a full one in red. */
-function Meter({ label, share, text }: { label: string; share: number | null; text: string }) {
+/** One measure of the load: a short bar and the value in words; a full one in red (from `full`, by default 90 %). */
+function Meter({ label, share, text, full = 0.9 }: { label: string; share: number | null; text: string; full?: number }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-2">
       <span className="w-16 shrink-0 text-muted">{label}</span>
       {share !== null && (
         <span className="h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-sunken ring-1 ring-line" aria-hidden="true">
-          <span className={cx('block h-full rounded-full', share >= 0.9 ? 'bg-danger' : 'bg-accent')} style={{ width: `${Math.max(2, Math.round(share * 100))}%` }} />
+          <span className={cx('block h-full rounded-full', share >= full ? 'bg-danger' : 'bg-accent')} style={{ width: `${Math.max(2, Math.round(share * 100))}%` }} />
         </span>
       )}
       <span className={cx('tabular-nums', share === null ? 'text-muted' : 'text-ink')}>{text}</span>
@@ -106,6 +107,46 @@ function Load({ runner }: { runner: Runner }) {
         />
       </span>
       {!runner.online && load.measured_at && <span className="text-sm text-muted">{t('settings.runners.load.measured', { when: formatDateTime(load.measured_at, zone) })}</span>}
+    </span>
+  );
+}
+
+/** The used share of the Claude subscription (WEBU-65): session and week, each with when it resets; red from the limit. */
+function Usage({ runner }: { runner: Runner }) {
+  const zone = useOrgZone();
+  const { usage, usage_limit: limit } = runner;
+  const known = usage !== null && (usage.session !== null || usage.week !== null);
+  const window = (label: string, entry: { percent: number; resets_at: string | null } | null) => (
+    <Meter
+      label={label}
+      share={entry === null ? null : entry.percent / 100}
+      full={limit === null ? 0.9 : limit / 100}
+      text={
+        entry === null
+          ? t('settings.runners.usage.unknown')
+          : entry.resets_at
+            ? t('settings.runners.usage.resets', { percent: percent(entry.percent), time: sinceText(entry.resets_at, zone) })
+            : percent(entry.percent)
+      }
+    />
+  );
+  return (
+    <span className="flex flex-col gap-1">
+      {known ? (
+        <span className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+          {window(t('settings.runners.usage.session'), usage.session)}
+          {window(t('settings.runners.usage.week'), usage.week)}
+        </span>
+      ) : (
+        <span className="text-muted">{t('settings.runners.usage.none')}</span>
+      )}
+      {!runner.over_usage_limit && <span className="text-sm text-muted">{limit === null ? t('settings.runners.usage.no_limit') : t('settings.runners.usage.limit', { limit })}</span>}
+      {runner.over_usage_limit && (
+        <span className="flex items-start gap-1.5 text-sm text-danger" data-usage-limit="">
+          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <span>{t('settings.runners.usage.held', { limit: limit ?? 0 })}</span>
+        </span>
+      )}
     </span>
   );
 }
@@ -274,6 +315,10 @@ export function RunnerCard({ runner, runs, onPlaces, onRename, onRevoke, onCance
         <dt className="text-muted">{t('settings.runners.field.load')}</dt>
         <dd className="text-ink">
           <Load runner={runner} />
+        </dd>
+        <dt className="text-muted">{t('settings.runners.field.usage')}</dt>
+        <dd className="text-ink">
+          <Usage runner={runner} />
         </dd>
         <dt className="text-muted">{t('settings.runners.field.clis')}</dt>
         <dd className="text-ink">

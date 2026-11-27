@@ -444,7 +444,7 @@ Liest Runner und die Agenten-Konfiguration von Bots (Org-Admins), die Aufträge 
 
 | Aktion | Zweck | Pflicht | REST-Zwilling |
 |---|---|---|---|
-| `update-runner` | Benennt einen Runner um oder setzt seine Plätze; nur gesendete Schlüssel ändern sich. | `runner`, `input` | `PATCH /runners/{runner}` |
+| `update-runner` | Benennt einen Runner um oder setzt seine Plätze oder sein Limit für das Claude-Abo; nur gesendete Schlüssel ändern sich. | `runner`, `input` | `PATCH /runners/{runner}` |
 | `revoke-runner` | Widerruft einen Runner; was darauf läuft, endet abgebrochen. Antwortet `{canceled}`. | `runner` | `DELETE /runners/{runner}` |
 | `cancel-run` | Bricht einen Auftrag ab; einer auf einem Runner endet, sobald der Runner ihn gestoppt hat. | `run` | `POST /runs/{run}/cancel` |
 | `retry-run` | Startet einen ohne Erfolg beendeten Auftrag erneut; antwortet den neuen Auftrag. | `run` | `POST /runs/{run}/retry` |

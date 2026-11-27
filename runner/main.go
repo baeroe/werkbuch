@@ -40,6 +40,7 @@ import (
 	"github.com/baeroe/werkbuch/runner/internal/sysexec"
 	"github.com/baeroe/werkbuch/runner/internal/tui"
 	"github.com/baeroe/werkbuch/runner/internal/update"
+	subscription "github.com/baeroe/werkbuch/runner/internal/usage"
 )
 
 // version is set at build time (-ldflags "-X main.version=…"); it is the version of werkbuch (spec 3).
@@ -284,6 +285,7 @@ func serve(stderr io.Writer) error {
 		},
 		Sampler: sampler, CLIs: &clis.Detector{Run: sysexec.Run},
 		Equipment: &equipment.Collector{Run: sysexec.Run, Host: cfg.Host()},
+		Usage:     &subscription.Reader{Run: sysexec.Run},
 		Updater:   upd, Log: log,
 		Checks: func(ctx context.Context) []socket.Check {
 			return checks(ctx)

@@ -936,6 +936,12 @@ export interface RunnerSlots {
   light: number;
 }
 
+/** One window of the Claude subscription: used in percent and when it resets. */
+export interface RunnerUsageWindow {
+  percent: number;
+  resets_at: string | null;
+}
+
 /** A machine that runs agents (spec 6.2, 8.6, 8.8, 10.1); org admins only. A revoked one is not listed. */
 export interface Runner {
   id: string;
@@ -955,6 +961,13 @@ export interface Runner {
   clis: { cli: AgentCli; installed: boolean; version: string | null; logged_in: boolean; path: string | null }[];
   /** What the harness of the machine offers, as the runner reports it; `null` before its first report. */
   equipment: { mcp_servers: string[]; skills: string[]; plugins: string[]; werkbuch_access: string[] } | null;
+  /** The used share of the Claude subscription as the runner last read it: the session (five hours) and the week, each
+   * `null` when unknown; `null` before a runner that reads it reported. */
+  usage: { session: RunnerUsageWindow | null; week: RunnerUsageWindow | null } | null;
+  /** The percent from which it takes no new runs of `claude`; `null` none. */
+  usage_limit: number | null;
+  /** The limit holds back new runs of `claude` now. */
+  over_usage_limit: boolean;
   created_by: string;
   created_at: string | null;
   updated_at: string | null;
@@ -1035,7 +1048,7 @@ export interface ProjectAgents {
 }
 
 /** Why a run waits (spec 7.5): its agent is off, the guard holds its project, GitHub gave no token, no CLI, runner offline. */
-export type RunWaitingReason = 'agent_off' | 'merge_guard' | 'github_unavailable' | 'no_cli' | 'runner_offline';
+export type RunWaitingReason = 'agent_off' | 'merge_guard' | 'github_unavailable' | 'no_cli' | 'runner_offline' | 'usage_limit';
 
 /** Where the model of a run came from (spec 7.7). */
 export type ModelSource = 'label' | 'project' | 'bot' | 'default';

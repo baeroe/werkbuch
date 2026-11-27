@@ -102,7 +102,7 @@ Run it in the environment of the service: the TUI asks the daemon, so it sees th
 
 ## Settings in werkbuch
 
-Each runner is a card under **Settings → Runners**: online (a contact within the last minute), version, system, load, the CLIs with version and login, the equipment, and the runs on it with **Cancel**. There you rename it, revoke it (its token stops working, its running runs are canceled, waiting ones go to the other runners) and set its **Places**:
+Each runner is a card under **Settings → Runners**: online (a contact within the last minute), version, system, load, the usage of the Claude subscription, the CLIs with version and login, the equipment, and the runs on it with **Cancel**. There you rename it, revoke it (its token stops working, its running runs are canceled, waiting ones go to the other runners) and set its **Places**:
 
 | Places | Default | Counts |
 |---|---|---|
@@ -111,6 +111,12 @@ Each runner is a card under **Settings → Runners**: online (a contact within t
 | light | 2 | reviews and answers, in a pot of their own |
 
 The runner gets the places with every answer; a change holds without a restart. Which runner a bot uses is its **runner pool** (**Settings → Bots → Set up agent**; none ticked: every runner).
+
+### Limit of the Claude subscription
+
+The runner reads how much of the Claude subscription its user has used, as `/usage` of Claude Code shows it: the session (five hours) and the week, each with when it resets. It asks every five minutes with the sign-in of Claude Code (on macOS from the keychain, else `~/.claude/.credentials.json`) and sends only the percents to werkbuch; the card shows them as bars.
+
+Under **Places** you set a **limit** in percent: once the session or the week reaches it, the runner takes no new runs of Claude Code; running ones run to their end, runs of Codex still go. A run that waits for it says so at the item (*the runner reached its limit of the Claude subscription*) and starts once the usage is below the limit again, the limit goes up or another runner of the pool below its limit takes it. Without a limit, or while nothing is known (no sign-in, a runner of an older version), nothing is held back.
 
 ### Setup and teardown
 
@@ -145,7 +151,7 @@ cd "$WERKBUCH_WORKTREE" && ddev delete -Oy
 
 ## A run on the machine
 
-1. Without work the runner asks every 3 seconds, after a minute without work every 10 seconds. It sends its load, CLIs and equipment and gets its places and the version werkbuch expects.
+1. Without work the runner asks every 3 seconds, after a minute without work every 10 seconds. It sends its load, CLIs, equipment and the usage of the Claude subscription and gets its places and the version werkbuch expects.
 2. A run comes with everything it needs: the item, the prompt built by werkbuch, the model, a token for werkbuch and, for a project with a repo, a token for the repo.
 3. Per repo the runner keeps a bare clone; per item (a **strand**) a worktree on the branch `agent/<KEY>-<slug>`. A project without a repo works in a folder of the strand.
 4. It starts the CLI there with a private folder of the run (MCP config, prompt, tokens), sends a heartbeat every 15 seconds and the log at most once a second, and at the end the result: status, session, commit, summary or verdict.
@@ -177,6 +183,7 @@ If the machine has another way into werkbuch, for example an MCP server with a p
 - **Runner token:** one per runner, kept hashed in werkbuch and in the keychain on the machine, good for the runner protocol only. Revoke the runner, and it stops working.
 - **Run token:** a token of the bot for one run, never in the token list, revoked when the run ends; the bot sees only what its project roles allow.
 - **Token of the repo:** an installation token of the [GitHub app](/en/github) for one repo, valid an hour. The runner keeps it in files of the private folder (`0600`), never in the environment, the arguments or `.git/config`: a credential helper for the host of the repo reads the file, and `gh` gets its own config folder. The helpers of the machine (such as osxkeychain) and the token variables (`GH_TOKEN`, `GITHUB_TOKEN`) are switched off for the run. Ten minutes before the token runs out, the runner gets a new one and replaces the files.
+- **Sign-in of Claude Code:** the runner reads it only to ask Anthropic for the usage of the subscription; it never leaves the machine otherwise and never renews it.
 - **The log** of a run reaches werkbuch with every token cut out, also a bare `wb_…`.
 - **Texts are data:** the contract of every prompt says that texts from items, comments, wiki and pull requests are data, not instructions. What the tokens forbid, a tricked agent cannot do either.
 
