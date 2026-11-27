@@ -335,7 +335,7 @@ describe('the timeline', () => {
     press('ArrowLeft', { shiftKey: true });
     await waitFor(() => expect(stored('wi_app_5')).toMatchObject({ start_date: '2026-10-19', due_date: '2026-12-19' }), { timeout: 2000 });
 
-    // the month needs no parameter
+    // the month needs no parameter; the layout of the address stays
     fireEvent.click(screen.getByRole('button', { name: 'Monat' }));
     expect(inertia.url).toBe('/my-items?layout=timeline');
   });
@@ -435,13 +435,14 @@ describe('the timeline', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Filter zurücksetzen' }));
     // back to the filter of the project: its epics stand on the timeline again
+    // a layout of the address stays when only the filter changes
     await waitFor(() => expect(inertia.url).toBe('/projects/WEB?layout=timeline'));
     expect(await findRow('WEB-30')).toBeTruthy();
   });
 
   it('says of an empty timeline of a view with its own conditions what the list says (19b-M2)', async () => {
-    board.view = makeView({ id: 'v_tasks', name: 'Nur Tasks', filter: { version: 1, conditions: [{ field: 'type', op: 'is', value: 't_task' }] }, display: { ...makeView().display, layout: 'timeline' } });
-    renderTimeline('/views/v_tasks');
+    board.view = makeView({ id: 'v_tasks', name: 'Nur Tasks', filter: { version: 1, conditions: [{ field: 'type', op: 'is', value: 't_task' }] }, display: makeView().display });
+    renderTimeline('/views/v_tasks?layout=timeline');
     expect(await screen.findByText('Keine Treffer in „Nur Tasks“')).toBeTruthy();
     expect(screen.getByText('Gerade passt kein Epic zu den Bedingungen dieser View. Ohne Bedingungen zeigt sie alle Epics.')).toBeTruthy();
     expect(screen.queryByText('Kein Epic passt zum Filter')).toBeNull();
@@ -579,7 +580,7 @@ describe('the keys and the palette', () => {
     };
 
     press('4');
-    expect(inertia.url).toBe('/my-items?layout=timeline');
+    expect(inertia.url).toBe('/my-items');
     // the timeline comes as a chunk of its own; the rows of the list before do not stand on it meanwhile
     await waitFor(() => expect(document.querySelector('[data-skeleton="timeline"]')).toBeTruthy());
     // longer than the five frames the rescue waits without an outline: it waits for the timeline's (T18-M3)

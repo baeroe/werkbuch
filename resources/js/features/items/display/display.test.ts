@@ -125,8 +125,10 @@ describe('what a display holds', () => {
 
   it('saves a display without what is gone', () => {
     const display: Display = { layout: 'list', group_by: 'none', sort: { field: 'property:gone', direction: 'desc' }, fields: ['key', 'title', 'nonsense', 'property:effort', 'property:gone'], show_sub_items: true };
-    expect(savableDisplay(display, properties)).toEqual({ ...display, sort: MANUAL_SORT, fields: ['key', 'title', 'property:effort'] });
+    // the layout is no part of a view (WEBU-68)
+    const { layout: _layout, ...saved } = display;
+    expect(savableDisplay(display, properties)).toEqual({ ...saved, sort: MANUAL_SORT, fields: ['key', 'title', 'property:effort'] });
     // without the properties, every property stays
-    expect(savableDisplay(display, undefined)).toEqual({ ...display, fields: ['key', 'title', 'property:effort', 'property:gone'] });
+    expect(savableDisplay(display, undefined)).toEqual({ ...saved, fields: ['key', 'title', 'property:effort', 'property:gone'] });
   });
 });

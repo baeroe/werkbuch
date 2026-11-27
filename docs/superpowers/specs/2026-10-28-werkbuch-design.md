@@ -565,7 +565,7 @@ Properties liegen zentral in der Organisation und werden Typen zugeordnet (abges
 **Rechte:** Anlegen dürfen Org-Admins und -Member. Ändern und löschen dürfen der Ersteller und Org-Admins. Alle können eine View als neue View speichern (Spec).
 
 **Bestandteile:** Name, Icon/Emoji, Filter und Darstellung:
-- **Layout:** Liste, Board, Tabelle oder Timeline
+- **Layout:** gehört seit 2026-11-27 nicht mehr zur View (A798): jede Liste (eingebaute Liste, Projekt, View) merkt sich je Person das zuletzt gewählte Layout (Liste, Board, Tabelle oder Timeline) im Browser; ein `?layout=` in einem Link gewinnt
 - **Gruppierung:** Status, Kategorie, Assignee, Priorität, Typ, Label, Projekt, Eltern-Item oder keine
 - **Sortierung:** manuell (Rang), Priorität, Due-Date, Start-Date, angelegt, geändert, Key oder eine Property vom Typ Number, Date oder Text
 - **Angezeigte Felder bzw. Spalten**, einschließlich Properties

@@ -20,6 +20,7 @@ import type { Condition, GroupBy, Project, View, WorkItem } from '@/types';
 import { resultMessage, selectionMessage } from './ListAnnouncer';
 import { ListSkeleton } from './ListStates';
 import { ItemsScreen, type ItemsScreenProps } from './ItemsScreen';
+import { layoutKey } from './layoutMemory';
 import { useListState } from './useListState';
 
 /* --------------------------------------------------------------------- fake Inertia */
@@ -428,26 +429,49 @@ describe('the item list screen', () => {
     act(() => rowOf(1)!.focus());
 
     press('1');
-    expect(inertia.get).toHaveBeenLastCalledWith('/projects/WEB?layout=board', {}, expect.objectContaining({ preserveState: true, replace: true }));
+    // the layout is remembered for the person and the project, never written into the address (WEBU-68)
+    expect(inertia.url).toBe('/projects/WEB');
+    expect(inertia.get).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(layoutKey(lene.id, 'project:p_web'))).toBe('board');
     const switches = screen.getAllByRole('group', { name: 'Layout' });
     await waitFor(() => expect(within(switches[0]!).getByRole('button', { name: /Board/ }).getAttribute('aria-pressed')).toBe('true'));
     // the board loads as a chunk of its own: the focus waits for it and goes to the card of the cursor
     await waitFor(() => expect(document.activeElement?.getAttribute('data-card-id')).toBe('wi_web_1'));
 
     press('3');
-    expect(inertia.url).toBe('/projects/WEB?layout=table');
+    expect(window.localStorage.getItem(layoutKey(lene.id, 'project:p_web'))).toBe('table');
     // the table is a chunk of its own too: the focus waits for it (not the toolbar) and goes to the cell of the cursor
     await waitFor(() => expect([document.activeElement?.getAttribute('data-item-id'), document.activeElement?.getAttribute('data-column')]).toEqual(['wi_web_1', '0']));
     press('4');
-    expect(inertia.url).toBe('/projects/WEB?layout=timeline');
-    // back to the base: nothing left in the address
+    expect(window.localStorage.getItem(layoutKey(lene.id, 'project:p_web'))).toBe('timeline');
     press('2');
+    expect(window.localStorage.getItem(layoutKey(lene.id, 'project:p_web'))).toBe('list');
     expect(inertia.url).toBe('/projects/WEB');
     await waitFor(() => expect(document.activeElement?.closest('[data-row-id]')).toBe(rowOf(1)));
 
     // the switch itself, by click
     fireEvent.click(within(screen.getAllByRole('group', { name: 'Layout' })[0]!).getByRole('button', { name: /Tabelle/ }));
-    expect(inertia.url).toBe('/projects/WEB?layout=table');
+    expect(window.localStorage.getItem(layoutKey(lene.id, 'project:p_web'))).toBe('table');
+    expect(inertia.get).not.toHaveBeenCalled();
+  });
+
+  it('shows a project again in the layout last chosen there, a link with ?layout= first (WEBU-68)', async () => {
+    window.localStorage.setItem(layoutKey(lene.id, 'project:p_web'), 'table');
+    const { unmount } = renderScreen();
+    const pressed = (name: RegExp) => within(screen.getAllByRole('group', { name: 'Layout' })[0]!).getByRole('button', { name }).getAttribute('aria-pressed');
+    await waitFor(() => expect(pressed(/Tabelle/)).toBe('true'));
+    // what another person chose is not this person's
+    expect(window.localStorage.getItem(layoutKey(mara.id, 'project:p_web'))).toBeNull();
+    unmount();
+
+    // a shared link names its layout: it wins, and switching drops it from the address
+    act(() => inertia.go('/projects/WEB?layout=board'));
+    renderScreen();
+    await waitFor(() => expect(pressed(/Board/)).toBe('true'));
+    press('2');
+    await waitFor(() => expect(inertia.url).toBe('/projects/WEB'));
+    expect(pressed(/Liste/)).toBe('true');
+    expect(window.localStorage.getItem(layoutKey(lene.id, 'project:p_web'))).toBe('list');
   });
 
   it('gives the focus back to the list when what had it goes away', async () => {
@@ -555,8 +579,8 @@ describe('the item list screen', () => {
     expect(groupBodies()[0]).toMatchObject({ group_by: 'priority', sort: { field: 'rank', direction: 'asc' } });
 
     press('1');
-    // what is not the view state stays; the grouping that differs stays; the layout joins it
-    expect(inertia.url).toBe('/projects/WEB?create=1&layout=board&group=priority');
+    // the layout is no part of the address: what is there stays as it is
+    expect(inertia.url).toBe('/projects/WEB?create=1&group=priority');
     press('2');
     expect(inertia.url).toBe('/projects/WEB?create=1&group=priority');
     // an unreadable part is left out: the base shows
@@ -565,34 +589,34 @@ describe('the item list screen', () => {
   });
 
   it('shows the change at once, before the address of the server is there', async () => {
+    // a shared link names the table: switching drops it from the address
+    inertia.go('/projects/WEB?layout=table');
     renderScreen();
     await screen.findByText('Kontaktformular sendet doppelt');
-    const board = () => within(screen.getAllByRole('group', { name: 'Layout' })[0]!).getByRole('button', { name: /Board/ });
+    const pressed = (name: RegExp) => within(screen.getAllByRole('group', { name: 'Layout' })[0]!).getByRole('button', { name }).getAttribute('aria-pressed');
     // the server takes its time
     const answer = inertia.answer;
     const visits: [string, { onSuccess?: () => void; onFinish?: () => void }][] = [];
     inertia.answer = (url, options) => void visits.push([url, options]);
     try {
       press('1');
-      await waitFor(() => expect(board().getAttribute('aria-pressed')).toBe('true'));
-      expect(inertia.url).toBe('/projects/WEB');
-      // a second change builds on the first
-      press('3');
-      expect(visits.map(([url]) => url)).toEqual(['/projects/WEB?layout=board', '/projects/WEB?layout=table']);
-      // the first visit is cancelled by the second: what shows stays the second
+      await waitFor(() => expect(pressed(/Board/)).toBe('true'));
+      expect(inertia.url).toBe('/projects/WEB?layout=table');
+      // a second change builds on the first: the address it asks for is the same, no second visit
+      press('2');
+      await waitFor(() => expect(pressed(/Liste/)).toBe('true'));
+      expect(visits.map(([url]) => url)).toEqual(['/projects/WEB']);
+      // the visit fails: the address shows again, its table first
       act(() => visits[0]![1].onFinish?.());
-      expect(within(screen.getAllByRole('group', { name: 'Layout' })[0]!).getByRole('button', { name: /Tabelle/ }).getAttribute('aria-pressed')).toBe('true');
-      // the second fails: the address shows again
-      act(() => visits[1]![1].onFinish?.());
-      await waitFor(() => expect(within(screen.getAllByRole('group', { name: 'Layout' })[0]!).getByRole('button', { name: /Liste/ }).getAttribute('aria-pressed')).toBe('true'));
-      // and once one gets through, the address is the state
+      await waitFor(() => expect(pressed(/Tabelle/)).toBe('true'));
+      // and once one gets through, the remembered layout shows
       press('1');
       act(() => {
-        inertia.go(visits[2]![0]);
-        visits[2]![1].onSuccess?.();
-        visits[2]![1].onFinish?.();
+        inertia.go(visits[1]![0]);
+        visits[1]![1].onSuccess?.();
+        visits[1]![1].onFinish?.();
       });
-      expect(board().getAttribute('aria-pressed')).toBe('true');
+      expect(pressed(/Board/)).toBe('true');
     } finally {
       inertia.answer = answer;
     }
@@ -603,8 +627,9 @@ describe('the item list screen', () => {
     await screen.findByText('Kontaktformular sendet doppelt');
     const layout = (name: RegExp) => within(screen.getAllByRole('group', { name: 'Layout' })[0]!).getByRole('button', { name });
     const answer = inertia.answer;
-    // the server answers the board with the table
-    inertia.answer = (url, options) => answer(url.replace('layout=board', 'layout=table'), options);
+    // the server answers the plain address with the table
+    inertia.answer = (url, options) => answer(`${url}?layout=table`, options);
+    act(() => inertia.go('/projects/WEB?layout=timeline'));
     try {
       press('1');
       expect(inertia.url).toBe('/projects/WEB?layout=table');
@@ -613,6 +638,14 @@ describe('the item list screen', () => {
     } finally {
       inertia.answer = answer;
     }
+  });
+
+  it('keeps a layout in the address while there is no list to remember it for', () => {
+    inertia.go('/projects/WEB');
+    const { result } = renderHook(() => useListState({ preset: 'project' }));
+    act(() => result.current.setState({ ...result.current.state, display: { ...result.current.state.display, layout: 'board' } }));
+    expect(inertia.url).toBe('/projects/WEB?layout=board');
+    expect(Object.keys(window.localStorage)).toEqual([]);
   });
 
   it('has no base for a view list without its view', () => {
@@ -1015,7 +1048,7 @@ describe('a view', () => {
   const dueWeek = () =>
     makeView({
       filter: { version: 1, conditions: [{ field: 'title', op: 'contains', value: 'Logo' }] },
-      display: { layout: 'list', group_by: 'state', sort: { field: 'rank', direction: 'asc' }, fields: ['key'], show_sub_items: true },
+      display: { group_by: 'state', sort: { field: 'rank', direction: 'asc' }, fields: ['key'], show_sub_items: true },
     });
 
   it('shows the items of a saved view under Views, with its star', async () => {
@@ -1027,6 +1060,17 @@ describe('a view', () => {
     expect(screen.getByRole('button', { name: /Fällig diese Woche/ })).toBeTruthy();
     expect(await screen.findByText('Logo austauschen')).toBeTruthy();
     expect(screen.queryByText('Kontaktformular sendet doppelt')).toBeNull();
+  });
+
+  it('remembers the layout of a view without making it unsaved (WEBU-68)', async () => {
+    views = [dueWeek()];
+    inertia.go('/views/v_due_week');
+    renderScreen({ preset: 'view', viewId: 'v_due_week' });
+    expect(await screen.findByText('Logo austauschen')).toBeTruthy();
+    press('1');
+    expect(window.localStorage.getItem(layoutKey(lene.id, 'view:v_due_week'))).toBe('board');
+    expect(inertia.url).toBe('/views/v_due_week');
+    expect(screen.queryByText(/Ungespeicherte Änderungen/)).toBeNull();
   });
 
   it('says a view without matches, and shows every item without its conditions', async () => {

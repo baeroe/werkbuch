@@ -4,15 +4,17 @@
  * Every list starts from a base: a saved view, or one of the built-in lists (`presetState`). What somebody changes on
  * top of it lives in the URL, so a link shows the same list (spec: "Der Stand steckt in der URL"):
  *
- *   ?filter=[{"field":"priority","op":"in","value":["urgent"]}]&layout=board&group=assignee&sort=due_date:desc
+ *   ?filter=[{"field":"priority","op":"in","value":["urgent"]}]&group=assignee&sort=due_date:desc
  *   &fields=key,state,property:customer&sub=0
  *
  * - `filter` is the JSON of the conditions (the filter JSON of the API without its version), `sort` is `field:dir`,
  *   `fields` a comma list, `sub` 1 or 0. Each part is written only when it differs from the base, so a plain link
- *   (`/projects/WEB`) is the base itself and `?layout=board` changes just the layout.
+ *   (`/projects/WEB`) is the base itself.
+ * - The layout is no part of a view and never written (WEBU-68): each list remembers its own (`layoutMemory.ts`). A
+ *   `?layout=board` someone shares is still read and wins over the remembered one.
  * - Reading never fails: a part that cannot be read is left out and the base shows instead.
- * - A difference from a saved view is an unsaved change (`hasUnsavedChanges`); on a built-in list only a different
- *   filter is (ItemsScreen), since layout and fields are just how one looks at it. Conditions are compared by meaning:
+ * - A difference from a saved view is an unsaved change (`hasUnsavedChanges`, never the layout); on a built-in list only
+ *   a different filter is (ItemsScreen), since grouping and fields are just how one looks at it. Conditions are compared by meaning:
  *   their order, the order of the values of "eines von", and `is x` against `in [x]` change nothing.
  *
  * The built-in lists also have a scope the filter bar does not show (`scopeConditions`): the project of the project
@@ -20,7 +22,7 @@
  * view saved from such a list takes the scope along.
  */
 
-import type { Condition, ConditionOp, Display, Filter, GroupBy, SortSpec, StateCategory, View } from '@/types';
+import type { Condition, ConditionOp, Display, Filter, GroupBy, SortSpec, StateCategory, View, ViewDisplay } from '@/types';
 
 export type ItemsPreset = 'my' | 'created' | 'subscribed' | 'view' | 'project';
 
@@ -87,8 +89,9 @@ export function sameFilter(a: Filter, b: Filter): boolean {
 const sameSort = (a: SortSpec, b: SortSpec) => a.field === b.field && a.direction === b.direction;
 const sameFields = (a: string[], b: string[]) => a.length === b.length && a.every((field, index) => field === b[index]);
 
-export function sameDisplay(a: Display, b: Display): boolean {
-  return a.layout === b.layout && a.group_by === b.group_by && sameSort(a.sort, b.sort) && sameFields(a.fields, b.fields) && a.show_sub_items === b.show_sub_items;
+/** Whether two displays show the same; the layout does not count, it is no part of a view (WEBU-68). */
+export function sameDisplay(a: ViewDisplay, b: ViewDisplay): boolean {
+  return a.group_by === b.group_by && sameSort(a.sort, b.sort) && sameFields(a.fields, b.fields) && a.show_sub_items === b.show_sub_items;
 }
 
 /** Whether what is shown differs from the base: the filter or any part of the display. */
@@ -108,7 +111,6 @@ export function encodeViewState(state: ViewStatePatch, base?: ViewState): string
   const differs = <K extends keyof Display>(key: K, same: (a: Display[K], b: Display[K]) => boolean) =>
     display[key] !== undefined && !(base && same(display[key] as Display[K], base.display[key]));
 
-  if (differs('layout', (a, b) => a === b)) params.set('layout', display.layout!);
   if (differs('group_by', (a, b) => a === b)) params.set('group', display.group_by!);
   if (differs('sort', sameSort)) params.set('sort', formatSort(display.sort!));
   if (differs('fields', sameFields)) params.set('fields', display.fields!.join(','));
@@ -179,9 +181,9 @@ export function applyViewState(base: ViewState, patch: ViewStatePatch): ViewStat
 
 /* ------------------------------------------------------------------------ the bases */
 
-/** The state a saved view starts from: what was saved (a copy). */
+/** The state a saved view starts from: what was saved (a copy), in the list layout until the list remembers one. */
 export function viewStateOf(view: Pick<View, 'filter' | 'display'>): ViewState {
-  return structuredClone({ filter: view.filter, display: view.display });
+  return structuredClone({ filter: view.filter, display: { ...view.display, layout: 'list' as const } });
 }
 
 /** Open means anything but Completed and Canceled. */

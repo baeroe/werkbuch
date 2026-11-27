@@ -7,11 +7,12 @@ use App\Domain\Filter\InvalidInput;
 use App\Domain\Filter\PropertyCatalog;
 
 /**
- * The schema of a display, `{layout, group_by, sort, fields, show_sub_items}`, all five required: `parse` checks input
- * strictly, `read` reads a stored display without ever refusing it.
+ * The schema of a display, `{group_by, sort, fields, show_sub_items}`, all four required: `parse` checks input
+ * strictly, `read` reads a stored display without ever refusing it. A `layout` of an older client is passed over, of
+ * any value (WEBU-68: the layout belongs to each list in the browser, no view stores one, A75).
  *
  * Codes, at paths relative to the display: `shape` (no object, or a key it does not know; at `''`), `invalid` (at
- * `layout`, `group_by`, `sort`, `fields`, `fields.<n>`, `show_sub_items`: missing or of the wrong form), `too_many`
+ * `group_by`, `sort`, `fields`, `fields.<n>`, `show_sub_items`: missing or of the wrong form), `too_many`
  * (more than `MAX_FIELDS` fields, at `fields`). A field is one of `FIELDS` or `property:<key>` of any property of the
  * catalog; doubles are dropped, the order stays.
  */
@@ -37,11 +38,6 @@ final class DisplaySchema
         }
 
         $errors = [];
-
-        $layout = is_string($raw['layout'] ?? null) ? Layout::tryFrom($raw['layout']) : null;
-        if ($layout === null) {
-            $errors['layout'] = 'invalid';
-        }
 
         $groupBy = is_string($raw['group_by'] ?? null) ? GroupBy::tryFrom($raw['group_by']) : null;
         if ($groupBy === null) {
@@ -73,29 +69,28 @@ final class DisplaySchema
             $errors['show_sub_items'] = 'invalid';
         }
 
-        if ($errors !== [] || $layout === null || $groupBy === null || $sort === null || ! is_array($fields) || ! is_bool($showSubItems)) {
+        if ($errors !== [] || $groupBy === null || $sort === null || ! is_array($fields) || ! is_bool($showSubItems)) {
             throw new InvalidInput($errors);
         }
 
-        return new Display($layout, $groupBy, $sort, self::fields($fields, $catalog), $showSubItems);
+        return new Display($groupBy, $sort, self::fields($fields, $catalog), $showSubItems);
     }
 
     /**
-     * A stored display: unknown fields and properties that are gone drop out; a layout, grouping, sort or switch
-     * that does not fit (any more) reads as the plain list (layout list, no grouping, the manual order, sub-items
-     * shown).
+     * A stored display: unknown fields and properties that are gone drop out; a grouping, sort or switch that does
+     * not fit (any more) reads as the plain list (no grouping, the manual order, sub-items shown); a `layout` stored
+     * before WEBU-68 is passed over.
      *
      * @param  array<mixed>  $stored
      */
     public static function read(array $stored, PropertyCatalog $catalog): Display
     {
-        $layout = is_string($stored['layout'] ?? null) ? Layout::tryFrom($stored['layout']) : null;
         $groupBy = is_string($stored['group_by'] ?? null) ? GroupBy::tryFrom($stored['group_by']) : null;
         $sort = is_array($stored['sort'] ?? null) ? SortSpec::read($stored['sort'], $catalog) : SortSpec::manual();
         $fields = is_array($stored['fields'] ?? null) && array_is_list($stored['fields']) ? self::fields($stored['fields'], $catalog) : self::DEFAULT_FIELDS;
         $showSubItems = $stored['show_sub_items'] ?? null;
 
-        return new Display($layout ?? Layout::List, $groupBy ?? GroupBy::None, $sort, $fields, is_bool($showSubItems) ? $showSubItems : true);
+        return new Display($groupBy ?? GroupBy::None, $sort, $fields, is_bool($showSubItems) ? $showSubItems : true);
     }
 
     /**

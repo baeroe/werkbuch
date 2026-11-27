@@ -1,23 +1,13 @@
 /*
  * What the overview and the dialog "Neue View" know about the make-up of a view (spec 4.11), ported from the
- * clickdummy: the four layouts with their names and icons, how a view is grouped in words, the display a new view
- * starts with, the name of a copy, and the projects its filter names. The icons a view can get are `ICON_OPTIONS` of
+ * clickdummy: how a view is grouped in words, the display a new view starts with, the name of a copy, and the projects
+ * its filter names. A view has no layout (WEBU-68): each list remembers its own. The icons a view can get are `ICON_OPTIONS` of
  * `components/ui/ViewIcon.tsx` (K23).
  */
 
-import { ChartGantt, List, SquareKanban, Table2, type LucideIcon } from 'lucide-react';
 import { VIEW_NAME_MAX } from '@/features/items/save/ViewFields';
 import { t, type TranslationKey } from '@/lib/i18n';
-import type { Display, Filter, GroupBy, ViewInput } from '@/types';
-
-export const LAYOUTS: Record<Display['layout'], { label: TranslationKey; icon: LucideIcon }> = {
-  list: { label: 'items.layout.list', icon: List },
-  board: { label: 'items.layout.board', icon: SquareKanban },
-  table: { label: 'items.layout.table', icon: Table2 },
-  timeline: { label: 'items.layout.timeline', icon: ChartGantt },
-};
-
-export const LAYOUT_ORDER: readonly Display['layout'][] = ['list', 'board', 'table', 'timeline'];
+import type { Filter, GroupBy, ViewInput } from '@/types';
 
 const GROUPING: Record<GroupBy, TranslationKey> = {
   none: 'views.grouping.none',
@@ -34,22 +24,16 @@ const GROUPING: Record<GroupBy, TranslationKey> = {
 /** "nach Projekt gruppiert", or "nicht gruppiert". */
 export const groupingText = (groupBy: GroupBy): string => t(GROUPING[groupBy]);
 
-/** The fields a new list shows; a timeline needs only key and title. */
+/** The fields a new list shows. */
 const FIELDS = ['key', 'title', 'state', 'assignee', 'priority', 'due_date'];
 
-/** A new view shows all items, grouped the way its layout suits (a timeline by project), in the manual order. */
-export function newView(name: string, icon: string, layout: Display['layout']): ViewInput {
+/** A new view shows all items, grouped by status, in the manual order. */
+export function newView(name: string, icon: string): ViewInput {
   return {
     name,
     icon,
     filter: { version: 1, conditions: [] },
-    display: {
-      layout,
-      group_by: layout === 'timeline' ? 'project' : 'state',
-      sort: { field: 'rank', direction: 'asc' },
-      fields: layout === 'timeline' ? ['key', 'title'] : [...FIELDS],
-      show_sub_items: true,
-    },
+    display: { group_by: 'state', sort: { field: 'rank', direction: 'asc' }, fields: [...FIELDS], show_sub_items: true },
   };
 }
 

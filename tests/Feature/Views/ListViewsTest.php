@@ -4,7 +4,6 @@ use App\Actions\Views\GetView;
 use App\Actions\Views\ListViews;
 use App\Actions\Views\SaveView;
 use App\Domain\Filter\FieldKind;
-use App\Domain\Views\Layout;
 use App\Models\Property;
 use App\Models\User;
 use App\Models\View;
@@ -27,7 +26,7 @@ it('reads a stored view whose property is gone', function () {
     $customer = Property::factory()->create(['key' => 'customer']);
     $ida = User::factory()->create();
     $filter = ['version' => 1, 'conditions' => [['field' => 'property:customer', 'op' => 'is_not_empty']]];
-    $display = ['layout' => 'table', 'group_by' => 'none', 'sort' => ['field' => 'property:customer', 'direction' => 'desc'], 'fields' => ['key', 'property:customer'], 'show_sub_items' => false];
+    $display = ['group_by' => 'none', 'sort' => ['field' => 'property:customer', 'direction' => 'desc'], 'fields' => ['key', 'property:customer'], 'show_sub_items' => false];
     $view = SaveView::run(actor($ida), ['name' => 'Kunden', 'icon' => 'users', 'filter' => $filter, 'display' => $display]);
 
     $customer->delete();
@@ -40,8 +39,7 @@ it('reads a stored view whose property is gone', function () {
     $read = GetView::run(actor($ida), $view->refresh());
     expect($read->filter()->conditions[0]->resolved)->toBeNull()
         ->and($read->display()->fields)->toBe(['key'])
-        ->and($read->display()->sort->field)->toBe('rank')
-        ->and($read->display()->layout)->toBe(Layout::Table);
+        ->and($read->display()->sort->field)->toBe('rank');
 });
 
 it('reads the filter and display of a view against the catalog', function () {

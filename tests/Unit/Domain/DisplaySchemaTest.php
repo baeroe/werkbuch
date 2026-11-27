@@ -4,13 +4,11 @@ use App\Domain\Filter\InvalidInput;
 use App\Domain\Views\Display;
 use App\Domain\Views\DisplaySchema;
 use App\Domain\Views\GroupBy;
-use App\Domain\Views\Layout;
 use App\Domain\Views\SortSpec;
 use Tests\Support\FixedPropertyCatalog;
 
 /** The display of the board "Sprint-Board" with the fields given. */
 $board = fn (array $fields = ['key', 'title', 'assignee', 'property:customer']): array => [
-    'layout' => 'board',
     'group_by' => 'state',
     'sort' => ['field' => 'priority', 'direction' => 'asc'],
     'fields' => $fields,
@@ -30,8 +28,7 @@ $refusal = function (mixed $raw): array {
 it('parses the display of a view', function () use ($board) {
     $display = DisplaySchema::parse($board(), new FixedPropertyCatalog);
 
-    expect($display->layout)->toBe(Layout::Board)
-        ->and($display->groupBy)->toBe(GroupBy::State)
+    expect($display->groupBy)->toBe(GroupBy::State)
         ->and($display->sort)->toEqual(new SortSpec('priority', false))
         ->and($display->fields)->toBe(['key', 'title', 'assignee', 'property:customer'])
         ->and($display->showSubItems)->toBeFalse()
@@ -52,10 +49,15 @@ it('takes thirty fields', function () use ($board) {
     expect(DisplaySchema::parse($board($fields), new FixedPropertyCatalog)->fields)->toBe(DisplaySchema::FIELDS);
 });
 
-it('refuses an unknown layout, grouping or field and too many fields', function (array $change, array $errors) use ($board, $refusal) {
+it('passes over a layout of an older client, of any value (WEBU-68)', function () use ($board) {
+    foreach (['board', 'gantt', 7] as $layout) {
+        expect(DisplaySchema::parse([...$board(), 'layout' => $layout], new FixedPropertyCatalog)->toArray())->toBe($board());
+    }
+});
+
+it('refuses an unknown grouping or field and too many fields', function (array $change, array $errors) use ($board, $refusal) {
     expect($refusal([...$board(), ...$change]))->toBe($errors);
 })->with([
-    'an unknown layout' => [['layout' => 'gantt'], ['layout' => 'invalid']],
     'an unknown grouping' => [['group_by' => 'milestone'], ['group_by' => 'invalid']],
     'a grouping that is no text' => [['group_by' => null], ['group_by' => 'invalid']],
     'an unknown sort' => [['sort' => ['field' => 'title', 'direction' => 'asc']], ['sort' => 'invalid']],
@@ -66,8 +68,8 @@ it('refuses an unknown layout, grouping or field and too many fields', function 
     'too many fields' => [['fields' => array_fill(0, 31, 'key')], ['fields' => 'too_many']],
     'sub items as text' => [['show_sub_items' => 'yes'], ['show_sub_items' => 'invalid']],
     'everything at once' => [
-        ['layout' => 'gantt', 'group_by' => 'milestone', 'sort' => 'rank', 'fields' => ['estimate'], 'show_sub_items' => 1],
-        ['layout' => 'invalid', 'group_by' => 'invalid', 'sort' => 'invalid', 'fields.0' => 'invalid', 'show_sub_items' => 'invalid'],
+        ['group_by' => 'milestone', 'sort' => 'rank', 'fields' => ['estimate'], 'show_sub_items' => 1],
+        ['group_by' => 'invalid', 'sort' => 'invalid', 'fields.0' => 'invalid', 'show_sub_items' => 'invalid'],
     ],
 ]);
 
@@ -77,7 +79,7 @@ it('refuses a display that misses a part or has more', function (mixed $raw, arr
     'no object' => ['board', ['' => 'shape']],
     'a list' => [['board', 'state'], ['' => 'shape']],
     'an unknown key' => [[...$board(), 'density' => 'compact'], ['' => 'shape']],
-    'nothing' => [[], ['layout' => 'invalid', 'group_by' => 'invalid', 'sort' => 'invalid', 'fields' => 'invalid', 'show_sub_items' => 'invalid']],
+    'nothing' => [[], ['group_by' => 'invalid', 'sort' => 'invalid', 'fields' => 'invalid', 'show_sub_items' => 'invalid']],
     'no fields' => [array_diff_key($board(), ['fields' => true]), ['fields' => 'invalid']],
 ]);
 
@@ -85,14 +87,14 @@ it('drops unknown fields of a stored display', function () use ($board) {
     $stored = $board(['key', 'estimate', 'property:gone', 7, 'property:customer', 'key']);
 
     expect(DisplaySchema::read($stored, new FixedPropertyCatalog))
-        ->toEqual(new Display(Layout::Board, GroupBy::State, new SortSpec('priority', false), ['key', 'property:customer'], false));
+        ->toEqual(new Display(GroupBy::State, new SortSpec('priority', false), ['key', 'property:customer'], false));
 });
 
 it('reads what it cannot use of a stored display as the plain list', function () {
-    expect(DisplaySchema::read(['layout' => 'gantt', 'group_by' => 'milestone', 'sort' => ['field' => 'property:gone', 'direction' => 'asc'], 'fields' => 'key', 'show_sub_items' => 'yes'], new FixedPropertyCatalog))
-        ->toEqual(new Display(Layout::List, GroupBy::None, SortSpec::manual(), DisplaySchema::DEFAULT_FIELDS, true))
+    expect(DisplaySchema::read(['layout' => 'board', 'group_by' => 'milestone', 'sort' => ['field' => 'property:gone', 'direction' => 'asc'], 'fields' => 'key', 'show_sub_items' => 'yes'], new FixedPropertyCatalog))
+        ->toEqual(new Display(GroupBy::None, SortSpec::manual(), DisplaySchema::DEFAULT_FIELDS, true))
         ->and(DisplaySchema::read([], new FixedPropertyCatalog))
-        ->toEqual(new Display(Layout::List, GroupBy::None, SortSpec::manual(), DisplaySchema::DEFAULT_FIELDS, true))
+        ->toEqual(new Display(GroupBy::None, SortSpec::manual(), DisplaySchema::DEFAULT_FIELDS, true))
         ->and(DisplaySchema::read(['fields' => ['a' => 'key']], new FixedPropertyCatalog)->fields)
         ->toBe(DisplaySchema::DEFAULT_FIELDS);
 });

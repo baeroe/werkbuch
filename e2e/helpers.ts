@@ -655,7 +655,7 @@ export async function createE2eView(
     name: `E2E ${variant()} ${runId()} ${input.name}`.slice(0, 60),
     icon: 'list-todo',
     filter: input.filter ?? { version: 1, conditions: [] },
-    display: input.display ?? { layout: 'list', group_by: 'state', sort: { field: 'rank', direction: 'asc' }, fields: ['key', 'state', 'priority'], show_sub_items: true },
+    display: input.display ?? { group_by: 'state', sort: { field: 'rank', direction: 'asc' }, fields: ['key', 'state', 'priority'], show_sub_items: true },
   });
   expect(response.status(), await response.text()).toBe(201);
   const { data } = (await response.json()) as { data: { id: string } };

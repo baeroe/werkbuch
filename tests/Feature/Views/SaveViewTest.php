@@ -14,7 +14,7 @@ $input = fn (array $overrides = []): array => [
     'icon' => 'bug',
     'filter' => ['version' => 1, 'conditions' => [['field' => 'priority', 'op' => 'is', 'value' => 'urgent']]],
     'display' => [
-        'layout' => 'board', 'group_by' => 'state', 'sort' => ['field' => 'rank', 'direction' => 'asc'],
+        'group_by' => 'state', 'sort' => ['field' => 'rank', 'direction' => 'asc'],
         'fields' => ['key', 'title', 'assignee'], 'show_sub_items' => true,
     ],
     ...$overrides,
@@ -30,7 +30,7 @@ it('creates a view for every member of the organisation', function (Closure $acc
         ->and($view->name)->toBe('Bugs in Produktion')
         ->and($view->icon)->toBe('bug')
         ->and($view->filter)->toBe(['version' => 1, 'conditions' => [['field' => 'priority', 'op' => 'is', 'value' => 'urgent']]])
-        ->and($view->display['layout'])->toBe('board');
+        ->and($view->display['group_by'])->toBe('state');
 
     $event = eventsOf(EventType::ViewCreated, $view)->sole();
     expect($event->actor_id)->toBe($user->id)
@@ -58,7 +58,7 @@ it('lets the creator and org admins change a view, nobody else, with the reason'
 it('replaces the whole view and records only what changed', function () use ($input) {
     $ida = User::factory()->create();
     $view = SaveView::run(actor($ida), $input());
-    $list = [...$input()['display'], 'layout' => 'list', 'group_by' => 'none'];
+    $list = [...$input()['display'], 'group_by' => 'none'];
 
     $saved = SaveView::run(actor($ida), $input(['display' => $list]), $view);
 
@@ -171,14 +171,14 @@ it('refuses an invalid filter at the path of the condition', function () use ($i
         ['field' => 'nonsense', 'op' => 'is', 'value' => 'x'],
         ['field' => 'due_date', 'op' => 'is', 'value' => 'tomorrow'],
     ]];
-    $display = [...$input()['display'], 'layout' => 'gallery', 'fields' => ['key', 'nonsense']];
+    $display = [...$input()['display'], 'group_by' => 'gallery', 'fields' => ['key', 'nonsense']];
 
     expect(invalidOf(fn () => SaveView::run(actor($ida), $input(['name' => '', 'filter' => $filter, 'display' => $display]))))->toBe([
         'name' => [__('field.name.required')],
         'filter.conditions.0.op' => [__('field.filter.operator')],
         'filter.conditions.1.field' => [__('field.filter.field')],
         'filter.conditions.2.value' => [__('field.filter.value')],
-        'display.layout' => [__('field.display.invalid')],
+        'display.group_by' => [__('field.display.invalid')],
         'display.fields.1' => [__('field.display.invalid')],
     ]);
 });

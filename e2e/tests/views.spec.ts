@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { api, arrowTo, createE2eView, openNavigation, pressMod, removeE2eView, runId, tabTo, tr, variant } from '../helpers';
+import { api, createE2eView, openNavigation, pressMod, removeE2eView, runId, tabTo, tr, variant } from '../helpers';
 
 // The views overview and the views of the sidebar, with the keyboard only, signed in as the e2e person (org admin,
 // English). Every test saves its own view over the API (`E2E <variant> <run> …`, removed in `finally`; the e2e seeder
@@ -34,11 +34,8 @@ test('creates a view from the overview with the keyboard and lands on it', async
     const field = dialog.getByRole('textbox', { name: tr('en', 'views.fields.name') });
     await expect(field).toBeFocused();
     await page.keyboard.type(name);
-    // the layout: the pressed segment is the tab stop, the arrows move to the others
-    await tabTo(page, dialog.getByRole('button', { name: tr('en', 'items.layout.list'), exact: true }));
-    await arrowTo(page, dialog.getByRole('button', { name: tr('en', 'items.layout.board'), exact: true }), 'ArrowRight');
-    await page.keyboard.press('Space');
-    await expect(dialog.getByRole('button', { name: tr('en', 'items.layout.board'), exact: true })).toHaveAttribute('aria-pressed', 'true');
+    // a view has no layout of its own (WEBU-68)
+    await expect(dialog.getByRole('button', { name: tr('en', 'items.layout.board'), exact: true })).toHaveCount(0);
     await pressMod(page, 'Enter');
 
     await expect(page).toHaveURL(/\/views\/[0-9a-z]{26}$/);
@@ -46,8 +43,9 @@ test('creates a view from the overview with the keyboard and lands on it', async
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
     const saved = await api(page, 'GET', `/api/v1/views/${id}`);
     expect(saved.status()).toBe(200);
-    const { data } = (await saved.json()) as { data: { name: string; display: { layout: string }; filter: unknown } };
-    expect(data).toMatchObject({ name, display: { layout: 'board' }, filter: { version: 1, conditions: [] } });
+    const { data } = (await saved.json()) as { data: { name: string; display: Record<string, unknown>; filter: unknown } };
+    expect(data).toMatchObject({ name, filter: { version: 1, conditions: [] } });
+    expect(data.display).not.toHaveProperty('layout');
   } finally {
     if (id) await removeE2eView(page, id);
   }
@@ -71,6 +69,46 @@ test('stars a view and opens it from the sidebar', async ({ page }) => {
     await expect(page).toHaveURL(new RegExp(`/views/${view.id}$`));
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
   } finally {
+    await removeE2eView(page, view.id);
+  }
+});
+
+test('shows a view and a project again in the layout last chosen there, without anything unsaved (WEBU-68)', async ({ page }) => {
+  const view = await createE2eView(page, { name: 'layout' });
+  const name = viewName('layout');
+  const layout = (which: 'board' | 'table') =>
+    page
+      .getByRole('group', { name: tr('en', 'items.screen.layout') })
+      .first()
+      .getByRole('button', { name: new RegExp(tr('en', `items.layout.${which}`)) });
+  try {
+    await page.goto(`/views/${view.id}`);
+    await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+    await page.keyboard.press('1');
+    await expect(layout('board')).toHaveAttribute('aria-pressed', 'true');
+    // the layout is no change of the view, and no part of the address
+    await expect(page.getByText(tr('en', 'items.save.unsaved'), { exact: true })).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`/views/${view.id}$`));
+
+    // elsewhere and back through the overview: the board again
+    await page.goto('/my-items');
+    const list = await openOverview(page);
+    await tabTo(page, list.getByRole('link', { name, exact: true }), { max: 250 });
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+    await expect(layout('board')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByText(tr('en', 'items.save.unsaved'), { exact: true })).toHaveCount(0);
+
+    // a project remembers its own: the table of WEB stays the table after a reload
+    await page.goto('/projects/WEB');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await page.keyboard.press('3');
+    await expect(layout('table')).toHaveAttribute('aria-pressed', 'true');
+    await page.goto('/my-items');
+    await page.goto('/projects/WEB');
+    await expect(layout('table')).toHaveAttribute('aria-pressed', 'true');
+  } finally {
+    // the remembered layouts live in the storage of this test's own browser context
     await removeE2eView(page, view.id);
   }
 });

@@ -391,6 +391,7 @@ export interface SortSpec {
 
 export type GroupBy = 'state' | 'category' | 'assignee' | 'priority' | 'type' | 'label' | 'project' | 'parent' | 'none';
 
+/** How a list shows its items; the layout is the list's own (remembered in the browser), the rest a view saves. */
 export interface Display {
   layout: 'list' | 'board' | 'table' | 'timeline';
   group_by: GroupBy;
@@ -399,13 +400,16 @@ export interface Display {
   show_sub_items: boolean;
 }
 
+/** What a view saves of its display: everything but the layout (WEBU-68). */
+export type ViewDisplay = Omit<Display, 'layout'>;
+
 export interface View {
   id: string;
   name: string;
   /** Lucide icon name or an emoji. */
   icon: string;
   filter: Filter;
-  display: Display;
+  display: ViewDisplay;
   created_by: string;
   created_at: string;
   updated_at: string;

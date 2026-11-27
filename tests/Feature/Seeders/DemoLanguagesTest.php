@@ -154,7 +154,7 @@ it('seeds the English demo in the shape of the German one', function () use ($in
                 $template($run->template), $run->scheduled_for?->format(DATE_ATOM), $run->status,
                 $keys[$run->work_item_id] ?? null, $handles[$run->triggered_by] ?? null,
             ])->sortBy(fn (array $row) => implode(' ', array_map('strval', $row)))->values()->all(),
-            'views' => View::query()->get()->map(fn (View $row) => [$view($row->name), $row->icon, $handles[$row->created_by], $row->display['layout']])
+            'views' => View::query()->get()->map(fn (View $row) => [$view($row->name), $row->icon, $handles[$row->created_by], $row->display['group_by']])
                 ->sortBy(fn (array $row) => $row[0])->values()->all(),
             'favorites' => Favorite::query()->get()->map(fn (Favorite $favorite) => [
                 $handles[$favorite->user_id], $favorite->favoritable_type,

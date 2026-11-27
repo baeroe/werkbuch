@@ -14,7 +14,7 @@ import { TooltipProvider } from '@/components/ui/Tooltip';
 import { mockApi, type MockApi } from '@/test/api';
 import { agency, labels, lene, list, makeView, mara, organization, project, properties, standard, types } from '@/test/fixtures';
 import { useUiStore } from '@/store/ui';
-import type { Condition, Display, View, ViewInput } from '@/types';
+import type { Condition, Display, View, ViewDisplay, ViewInput } from '@/types';
 import { DisplayMenu, fieldLabel } from '../display/DisplayMenu';
 import { ItemsScreen, type ItemsScreenProps } from '../ItemsScreen';
 
@@ -67,8 +67,7 @@ vi.mock('@inertiajs/react', async () => {
 
 /* --------------------------------------------------------------------- fake server */
 
-const display = (changes: Partial<Display> = {}): Display => ({
-  layout: 'list',
+const display = (changes: Partial<ViewDisplay> = {}): ViewDisplay => ({
   group_by: 'state',
   sort: { field: 'rank', direction: 'asc' },
   fields: ['key', 'state'],
@@ -482,11 +481,14 @@ describe('save as a new view', () => {
 });
 
 describe('the display menu', () => {
+  /** What the menu works on: a display of a list, with its layout. */
+  const shown = (changes: Partial<Display> = {}): Display => ({ ...display(), layout: 'list', ...changes });
+
   function renderMenu(props: Partial<Parameters<typeof DisplayMenu>[0]> = {}) {
     const onChange = vi.fn();
     render(
       <TooltipProvider>
-        <DisplayMenu display={display()} onChange={onChange} fellBack={false} properties={properties} {...props} />
+        <DisplayMenu display={shown()} onChange={onChange} fellBack={false} properties={properties} {...props} />
       </TooltipProvider>,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Anzeige' }));
@@ -509,7 +511,7 @@ describe('the display menu', () => {
     const { menu, onChange } = renderMenu();
     await user.click(within(menu).getByRole('combobox', { name: /^Gruppierung/ }));
     await user.click(await screen.findByRole('option', { name: 'Assignee' }));
-    expect(onChange).toHaveBeenLastCalledWith(display({ group_by: 'assignee' }));
+    expect(onChange).toHaveBeenLastCalledWith(shown({ group_by: 'assignee' }));
   });
 
   it('sorts by a number property', async () => {
@@ -519,13 +521,13 @@ describe('the display menu', () => {
     // number, date, text and URL sort; a dropdown does not
     expect(screen.queryByRole('option', { name: 'Kunde' })).toBeNull();
     await user.click(await screen.findByRole('option', { name: 'Aufwand (h)' }));
-    expect(onChange).toHaveBeenLastCalledWith(display({ sort: { field: 'property:effort', direction: 'asc' } }));
+    expect(onChange).toHaveBeenLastCalledWith(shown({ sort: { field: 'property:effort', direction: 'asc' } }));
     fireEvent.click(within(menu).getByRole('button', { name: /Absteigend/ }));
-    expect(onChange).toHaveBeenLastCalledWith(display({ sort: { field: 'rank', direction: 'desc' } }));
+    expect(onChange).toHaveBeenLastCalledWith(shown({ sort: { field: 'rank', direction: 'desc' } }));
   });
 
   it('shows a sort on a property that is gone as an unknown field', () => {
-    const { menu } = renderMenu({ display: display({ sort: { field: 'property:gone', direction: 'asc' } }) });
+    const { menu } = renderMenu({ display: shown({ sort: { field: 'property:gone', direction: 'asc' } }) });
     expect(within(menu).getByRole('combobox', { name: /^Sortierung/ }).textContent).toContain('Unbekanntes Feld');
     expect(within(menu).getByText('Das Feld gibt es nicht mehr. Bis du ein anderes wählst, ist die Liste manuell sortiert.')).toBeTruthy();
   });
@@ -570,18 +572,18 @@ describe('the display menu', () => {
   it('hides sub-items', () => {
     const { menu, onChange } = renderMenu();
     fireEvent.click(within(menu).getByRole('switch', { name: 'Kind-Items zeigen' }));
-    expect(onChange).toHaveBeenLastCalledWith(display({ show_sub_items: false }));
+    expect(onChange).toHaveBeenLastCalledWith(shown({ show_sub_items: false }));
   });
 
   it('shows and hides fields, properties included, and leaves the layout to the header', () => {
     const { menu, onChange } = renderMenu();
     expect(within(menu).getByText('Chips in der Liste, Spalten in der Tabelle. Karten im Board zeigen davon Labels, Priorität, Due-Date und Assignee.')).toBeTruthy();
     fireEvent.click(within(menu).getByRole('checkbox', { name: 'Assignee' }));
-    expect(onChange).toHaveBeenLastCalledWith(display({ fields: ['key', 'state', 'assignee'] }));
+    expect(onChange).toHaveBeenLastCalledWith(shown({ fields: ['key', 'state', 'assignee'] }));
     fireEvent.click(within(menu).getByRole('checkbox', { name: 'Status' }));
-    expect(onChange).toHaveBeenLastCalledWith(display({ fields: ['key'] }));
+    expect(onChange).toHaveBeenLastCalledWith(shown({ fields: ['key'] }));
     fireEvent.click(within(menu).getByRole('checkbox', { name: 'Aufwand (h)' }));
-    expect(onChange).toHaveBeenLastCalledWith(display({ fields: ['key', 'state', 'property:effort'] }));
+    expect(onChange).toHaveBeenLastCalledWith(shown({ fields: ['key', 'state', 'property:effort'] }));
     // the layout switches in the header of the list only, as in the clickdummy
     expect(within(menu).queryByRole('group', { name: 'Layout' })).toBeNull();
     expect(within(menu).queryByRole('button', { name: /Board/ })).toBeNull();

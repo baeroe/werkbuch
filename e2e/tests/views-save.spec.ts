@@ -34,7 +34,7 @@ const projectView = (what: string) =>
   ({
     name: what,
     filter: { version: 1 as const, conditions: [{ field: 'project', op: 'is', value: shared.id }] },
-    display: { layout: 'list', group_by: 'state', sort: { field: 'rank', direction: 'asc' }, fields: ['key', 'state'], show_sub_items: true },
+    display: { group_by: 'state', sort: { field: 'rank', direction: 'asc' }, fields: ['key', 'state'], show_sub_items: true },
   }) as const;
 
 /** The id of the view the address shows. */

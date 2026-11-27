@@ -46,7 +46,7 @@ const seedViews = (): View[] => [
     name: 'Bugs in Produktion',
     icon: 'bug',
     filter: { version: 1, conditions: [{ field: 'type', op: 'is', value: 't_bug' }] },
-    display: { layout: 'board', group_by: 'state', sort: { field: 'priority', direction: 'asc' }, fields: ['key', 'title'], show_sub_items: false },
+    display: { group_by: 'state', sort: { field: 'priority', direction: 'asc' }, fields: ['key', 'title'], show_sub_items: false },
     created_by: 'u_ida',
   }),
   makeView({ id: 'v_kira', name: 'Für Kira', icon: 'bot', filter: { version: 1, conditions: [{ field: 'assignee', op: 'is', value: 'u_kira' }] }, display: listByState() }),
@@ -55,7 +55,7 @@ const seedViews = (): View[] => [
     name: 'Studio Nordlicht',
     icon: 'building-2',
     filter: { version: 1, conditions: [] },
-    display: { layout: 'table', group_by: 'none', sort: { field: 'key', direction: 'asc' }, fields: ['key', 'title'], show_sub_items: true },
+    display: { group_by: 'none', sort: { field: 'key', direction: 'asc' }, fields: ['key', 'title'], show_sub_items: true },
     created_by: 'u_theo',
   }),
   makeView({
@@ -63,7 +63,7 @@ const seedViews = (): View[] => [
     name: 'Roadmap',
     icon: 'route',
     filter: { version: 1, conditions: [] },
-    display: { layout: 'timeline', group_by: 'project', sort: { field: 'start_date', direction: 'asc' }, fields: ['key', 'title'], show_sub_items: false },
+    display: { group_by: 'project', sort: { field: 'start_date', direction: 'asc' }, fields: ['key', 'title'], show_sub_items: false },
   }),
   makeView({ id: 'v_blocked', name: 'Blockiert', icon: 'octagon-alert', filter: { version: 1, conditions: [{ field: 'blocked', op: 'is', value: true }] }, display: listByState(), created_by: 'u_jonas' }),
 ];
@@ -188,7 +188,7 @@ const isStarred = (id: string) => favorites.some((favorite) => favorite.user_id 
 const rightsLoaded = () => waitFor(() => expect(screen.getAllByRole('button', { name: /Neue View/ })[0]!.getAttribute('aria-disabled')).toBeNull());
 
 describe('the list', () => {
-  it('shows every team view with its creator and layout', async () => {
+  it('shows every team view with its creator and grouping, without a layout (WEBU-68)', async () => {
     renderViews();
     await loaded();
 
@@ -197,12 +197,9 @@ describe('the list', () => {
     expect(within(screen.getByRole('list', { name: 'Alle Views' })).getAllByRole('listitem')).toHaveLength(6);
     const nordlicht = rowOf('Studio Nordlicht');
     expect(await within(nordlicht).findByText('Theo Okafor')).toBeTruthy();
-    expect(within(nordlicht).getByText('Tabelle')).toBeTruthy();
+    expect(within(nordlicht).queryByText('Tabelle')).toBeNull();
     expect(within(nordlicht).getByText('nicht gruppiert')).toBeTruthy();
-    expect(within(rowOf('Roadmap')).getByText('Timeline')).toBeTruthy();
     expect(within(rowOf('Roadmap')).getByText('nach Projekt gruppiert')).toBeTruthy();
-    expect(within(rowOf('Bugs in Produktion')).getByText('Board')).toBeTruthy();
-    expect(within(rowOf('Fällig diese Woche')).getByText('Liste')).toBeTruthy();
   });
 
   it('leads to the view on a click on its name', async () => {
@@ -529,13 +526,14 @@ describe('a new view', () => {
     await user.click(screen.getByRole('button', { name: /Neue View/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Neue View' });
     await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Kundenanfragen');
-    await user.click(within(dialog).getByRole('button', { name: 'Board' }));
+    // a view has no layout to choose (WEBU-68)
+    expect(within(dialog).queryByRole('button', { name: 'Board' })).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'View anlegen' }));
 
     await waitFor(() => expect(inertia.visit).toHaveBeenCalledWith('/views/v_new_1'));
     const made = views.find((view) => view.name === 'Kundenanfragen')!;
     expect(made.created_by).toBe('u_mara');
-    expect(made.display.layout).toBe('board');
+    expect(made.display).not.toHaveProperty('layout');
     expect(made.filter).toEqual({ version: 1, conditions: [] });
     expect(toastTitles()).toContain('„Kundenanfragen“ angelegt');
   });
@@ -649,7 +647,7 @@ describe('a new view', () => {
 });
 
 describe('editing', () => {
-  it('changes the name and the layout of a view and leaves its filter and its creator alone', async () => {
+  it('changes the name of a view and leaves its filter, display and creator alone', async () => {
     const user = userEvent.setup();
     renderViews();
     await loaded();
@@ -662,13 +660,13 @@ describe('editing', () => {
     expect(name.value).toBe('Blockiert');
     await user.clear(name);
     await user.type(name, 'Festgefahren');
-    await user.click(within(dialog).getByRole('button', { name: 'Board' }));
+    expect(within(dialog).queryByRole('group', { name: 'Darstellung' })).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
 
     expect(await screen.findByRole('link', { name: 'Festgefahren' })).toBeTruthy();
     const after = views.find((view) => view.id === 'v_blocked')!;
     expect(after.name).toBe('Festgefahren');
-    expect(after.display).toEqual({ ...before.display, layout: 'board' });
+    expect(after.display).toEqual(before.display);
     expect(after.filter).toEqual(before.filter);
     expect(after.created_by).toBe(before.created_by);
     expect(api.calls.find((call) => call.method === 'PUT')!.body).toEqual({ name: 'Festgefahren', icon: 'octagon-alert', filter: before.filter, display: after.display });
@@ -855,10 +853,9 @@ describe('toasts and the undo', () => {
 });
 
 describe('viewForm', () => {
-  it('starts a new timeline grouped by project with key and title, every other layout by status', () => {
-    expect(newView('Plan', 'route', 'timeline').display).toEqual({ layout: 'timeline', group_by: 'project', sort: { field: 'rank', direction: 'asc' }, fields: ['key', 'title'], show_sub_items: true });
-    expect(newView('Liste', 'layers', 'list').display.group_by).toBe('state');
-    expect(newView('Liste', 'layers', 'list').filter).toEqual({ version: 1, conditions: [] });
+  it('starts a new view grouped by status, without a layout (WEBU-68)', () => {
+    expect(newView('Plan', 'route').display).toEqual({ group_by: 'state', sort: { field: 'rank', direction: 'asc' }, fields: ['key', 'title', 'state', 'assignee', 'priority', 'due_date'], show_sub_items: true });
+    expect(newView('Liste', 'layers').filter).toEqual({ version: 1, conditions: [] });
   });
 
   it('reads the projects a filter names with is and in, each once, and nothing else', () => {

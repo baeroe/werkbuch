@@ -19,7 +19,7 @@ Eine eingebaute Liste ist eine View, die nie gespeichert wird. Du kannst sie fil
 
 Gespeicherte Views stehen unter **Views** (`/views`) und unter `/views/<id>`. Ein Stern legt eine View in die Seitenleiste, in deiner eigenen Reihenfolge; wird eine View gelöscht, verschwindet sie aus allen Seitenleisten.
 
-![Die Übersicht der Views des Teams, je mit Layout und Ersteller](/screenshots/de/views.png)
+![Die Übersicht der Views des Teams, je mit Gruppierung und Ersteller](/screenshots/de/views.png)
 
 ## Rechte
 
@@ -35,7 +35,7 @@ Ein Filter darf ein Projekt, eine Person oder ein Item nennen, das der Leser nic
 
 ## Layouts
 
-`1` bis `4` wechseln zwischen den Layouts; der Schalter steht auch im Kopf jeder Liste. Das Layout gehört zur Anzeige und zu einer gespeicherten View.
+`1` bis `4` wechseln zwischen den Layouts; der Schalter steht auch im Kopf jeder Liste. Jede Liste merkt sich das Layout, das du dort zuletzt gewählt hast, für dich und in diesem Browser: Meine Items, Erstellt, Beobachtet, jedes Projekt und jede View. Eine Liste, die du nie umgeschaltet hast, beginnt in ihrem Standard (das Board bei Meine Items, sonst die Liste). Das Layout gehört nicht zu einer gespeicherten View und macht eine Liste nie ungespeichert; ein Link mit `?layout=board` zeigt zuerst sein Layout.
 
 ### Liste
 
@@ -191,7 +191,7 @@ Archivierte Items bleiben aus jeder Liste draußen, außer eine Bedingung auf `a
 
 ## Zustand in der Adresse
 
-Alles, was du in einer Liste änderst, steht in ihrer Adresse, soweit es von der gespeicherten View oder der eingebauten Liste abweicht: `filter` (die Bedingungen als JSON), `layout`, `group`, `sort` (`due_date:desc`), `fields` (durch Kommas getrennt), `sub` (`0` blendet Kind-Items aus) und in der Timeline `zoom`. Ein Link zeigt jemand anderem dieselbe Liste, und Neuladen behält sie. **Verwerfen** kehrt zum gespeicherten Stand zurück.
+Alles, was du in einer Liste änderst, steht in ihrer Adresse, soweit es von der gespeicherten View oder der eingebauten Liste abweicht: `filter` (die Bedingungen als JSON), `group`, `sort` (`due_date:desc`), `fields` (durch Kommas getrennt), `sub` (`0` blendet Kind-Items aus) und in der Timeline `zoom`. Ein Link zeigt jemand anderem dieselbe Liste, und Neuladen behält sie. Das Layout wird stattdessen gemerkt (siehe Layouts); ein `layout` in einem Link, den du öffnest, wird gelesen und gewinnt. **Verwerfen** kehrt zum gespeicherten Stand zurück.
 
 ## Tastatur
 
@@ -398,7 +398,6 @@ curl -X POST https://werkbuch.example.com/api/v1/views \
       { "field": "due_date", "op": "overdue" }
     ] },
     "display": {
-      "layout": "table",
       "group_by": "assignee",
       "sort": { "field": "due_date", "direction": "asc" },
       "fields": ["key", "title", "state", "assignee", "due_date", "property:customer"],
@@ -407,4 +406,4 @@ curl -X POST https://werkbuch.example.com/api/v1/views \
   }'
 ```
 
-Alle vier Teile sind Pflicht, auch beim `PUT`, das die View ganz ersetzt; eine Antwort unverändert zurückgeschickt ändert nichts. `display` nimmt `layout` (`list`, `board`, `table`, `timeline`), `group_by` (`state`, `category`, `assignee`, `priority`, `type`, `label`, `project`, `parent`, `none`), `sort`, `fields` (bis zu 30: `key`, `title`, `state`, `assignee`, `priority`, `labels`, `start_date`, `due_date`, `project`, `created_at`, `updated_at` und `property:<key>`) und `show_sub_items`.
+Alle vier Teile sind Pflicht, auch beim `PUT`, das die View ganz ersetzt; eine Antwort unverändert zurückgeschickt ändert nichts. `display` nimmt `group_by` (`state`, `category`, `assignee`, `priority`, `type`, `label`, `project`, `parent`, `none`), `sort`, `fields` (bis zu 30: `key`, `title`, `state`, `assignee`, `priority`, `labels`, `start_date`, `due_date`, `project`, `created_at`, `updated_at` und `property:<key>`) und `show_sub_items`. Ein `layout`, wie ältere Clients es schicken, wird übergangen; Views haben keins.

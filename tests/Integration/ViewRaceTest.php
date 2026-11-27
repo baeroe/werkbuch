@@ -28,7 +28,7 @@ $input = fn (string $name, string $icon): array => [
     'name' => $name,
     'icon' => $icon,
     'filter' => ['version' => 1, 'conditions' => []],
-    'display' => ['layout' => 'list', 'group_by' => 'none', 'sort' => ['field' => 'rank', 'direction' => 'asc'], 'fields' => ['key', 'title'], 'show_sub_items' => true],
+    'display' => ['group_by' => 'none', 'sort' => ['field' => 'rank', 'direction' => 'asc'], 'fields' => ['key', 'title'], 'show_sub_items' => true],
 ];
 
 it('makes a change wait for a running deletion and answers 404', function () use ($input) {

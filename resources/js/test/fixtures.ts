@@ -11,7 +11,7 @@ import type {
   Attachment,
   Automation,
   Comment,
-  Display,
+  ViewDisplay,
   Filter,
   ItemEvent,
   ItemGroups,
@@ -529,7 +529,7 @@ const FIELDS = ['key', 'title', 'state', 'assignee', 'priority', 'due_date'];
 
 /** A view as the API answers it, after the clickdummy's "Fällig diese Woche"; override what the test is about. */
 export function makeView(overrides: Partial<View> = {}): View {
-  const display: Display = { layout: 'list', group_by: 'project', sort: { field: 'due_date', direction: 'asc' }, fields: [...FIELDS], show_sub_items: false };
+  const display: ViewDisplay = { group_by: 'project', sort: { field: 'due_date', direction: 'asc' }, fields: [...FIELDS], show_sub_items: false };
   return {
     id: 'v_due_week',
     name: 'Fällig diese Woche',
@@ -549,7 +549,7 @@ export const prodBugs: View = makeView({
   name: 'Produktions-Bugs',
   icon: 'bug',
   filter: conditions({ field: 'project', op: 'is', value: 'p_ops' }, { field: 'type', op: 'is', value: 't_bug' }),
-  display: { layout: 'board', group_by: 'state', sort: { field: 'priority', direction: 'asc' }, fields: [...FIELDS], show_sub_items: true },
+  display: { group_by: 'state', sort: { field: 'priority', direction: 'asc' }, fields: [...FIELDS], show_sub_items: true },
   created_by: 'u_ida',
 });
 

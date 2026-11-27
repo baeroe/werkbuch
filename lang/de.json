@@ -4132,7 +4132,6 @@
     "views.dialog.create_failed": "View nicht angelegt",
     "views.dialog.edit_description": "Name, Icon und Darstellung. Den Filter änderst du in der View selbst.",
     "views.dialog.edit_title": "View bearbeiten",
-    "views.dialog.layout": "Darstellung",
     "views.dialog.new_description": "Eine View gehört dem ganzen Team. Den Filter legst du danach in der View fest.",
     "views.dialog.new_title": "Neue View",
     "views.dialog.save": "Speichern",

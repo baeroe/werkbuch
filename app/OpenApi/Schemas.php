@@ -8,7 +8,6 @@ use App\Domain\Filter\FilterSchema;
 use App\Domain\Filter\Op;
 use App\Domain\Views\DisplaySchema;
 use App\Domain\Views\GroupBy;
-use App\Domain\Views\Layout;
 use App\Domain\Views\SortSpec;
 
 /**
@@ -260,9 +259,9 @@ final class Schemas
     {
         return [
             'type' => 'object',
-            'description' => 'How a list shows its items: the layout, the grouping, the order, the fields of a row and whether sub-items show.',
+            'description' => 'How a list shows its items: the grouping, the order, the fields of a row and whether sub-items show. The layout is each list\'s own in the browser.',
             'properties' => [
-                'layout' => ['type' => 'string', 'enum' => array_column(Layout::cases(), 'value')],
+                'layout' => ['type' => 'string', 'enum' => ['list', 'board', 'table', 'timeline'], 'deprecated' => true, 'description' => 'Passed over.'],
                 'group_by' => ['type' => 'string', 'enum' => array_column(GroupBy::cases(), 'value')],
                 'sort' => ['$ref' => '#/components/schemas/SortSpec'],
                 'fields' => [
@@ -275,7 +274,7 @@ final class Schemas
                 ],
                 'show_sub_items' => ['type' => 'boolean'],
             ],
-            'required' => ['layout', 'group_by', 'sort', 'fields', 'show_sub_items'],
+            'required' => ['group_by', 'sort', 'fields', 'show_sub_items'],
         ];
     }
 }
