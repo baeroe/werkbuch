@@ -508,6 +508,14 @@ describe('an item in the backlog of a bot that begins in Todo', () => {
   });
 });
 
+describe('an item that an open item blocks', () => {
+  it('says which blockers it waits for', async () => {
+    agent = state({ thread: null, blocked_by: ['WEB-44', 'WEB-45'] });
+    renderItem();
+    expect(await screen.findByText(/beginnt, sobald WEB-44, WEB-45 erledigt ist/)).toBeTruthy();
+  });
+});
+
 /* --------------------------------------------------------- a bot that is no agent */
 
 describe('a bot that does not work here as an agent', () => {

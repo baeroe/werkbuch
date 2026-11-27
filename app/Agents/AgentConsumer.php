@@ -21,7 +21,7 @@ final class AgentConsumer implements EventConsumer, RetriesConsumption
     /** The events the flow looks at. */
     public const TYPES = [
         EventType::BotAssigned, EventType::BotMentioned, EventType::WorkItemAssigned, EventType::WorkItemStateChanged,
-        EventType::AgentRunStarted, EventType::AgentRunFinished, EventType::ProjectMergeGuardConfirmed,
+        EventType::WorkItemRelationRemoved, EventType::AgentRunStarted, EventType::AgentRunFinished, EventType::ProjectMergeGuardConfirmed,
     ];
 
     public function key(): string

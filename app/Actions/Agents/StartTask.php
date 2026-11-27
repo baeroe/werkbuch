@@ -48,6 +48,9 @@ final class StartTask
             if ($thread === null && ! AgentFlow::readyToBegin($locked)) {
                 return null; // in the backlog the item waits for Todo (A772)
             }
+            if ($thread === null && AgentFlow::blockers($locked) !== []) {
+                return null; // it waits until its blockers are done (WEBU-51)
+            }
 
             if ($thread !== null) {
                 // the runs of the strand, then the strand (A592)
@@ -66,7 +69,7 @@ final class StartTask
             if ($epic !== null && $epic->bot_id === $bot->id) {
                 [$runs, $epic] = AgentFlow::lockStrand($epic);
                 if ($epic->status === AgentThread::OPEN) {
-                    return $runs->isEmpty() && AgentFlow::readyToBegin($locked) ? self::enqueue($actor, $bot, $epic, $locked, $triggerId) : null;
+                    return $runs->isEmpty() && AgentFlow::readyToBegin($locked) && AgentFlow::blockers($locked) === [] ? self::enqueue($actor, $bot, $epic, $locked, $triggerId) : null;
                 }
             }
 
@@ -114,6 +117,12 @@ final class StartTask
         return WorkItem::query()->where('parent_id', $epic->id)->whereNull('archived_at')
             ->where(fn ($query) => $query->whereNull('assignee_id')->orWhere('assignee_id', $bot->id))
             ->whereHas('state', fn ($query) => $query->whereNotIn('category', [StateCategory::Completed->value, StateCategory::Canceled->value]))
+            ->whereNotExists(fn ($blocked) => $blocked->selectRaw('1')->from('work_item_relations as blocks')
+                ->join('relation_types as block_types', 'block_types.id', '=', 'blocks.type_id')
+                ->join('work_items as blocker', 'blocker.id', '=', 'blocks.source_id')
+                ->join('workflow_states as blocker_states', 'blocker_states.id', '=', 'blocker.state_id')
+                ->where('block_types.built_in', 'blocks')->whereColumn('blocks.target_id', 'work_items.id')
+                ->whereNotIn('blocker_states.category', [StateCategory::Completed->value, StateCategory::Canceled->value]))
             ->whereNotExists(fn ($done) => $done->selectRaw('1')->from('agent_runs')->where('agent_runs.thread_id', $thread->id)
                 ->whereColumn('agent_runs.work_item_id', 'work_items.id')->where('agent_runs.type', RunType::Task->value)
                 ->whereIn('agent_runs.status', [RunStatus::Succeeded->value, RunStatus::Queued->value, RunStatus::Waiting->value, RunStatus::Running->value, RunStatus::Canceling->value]));

@@ -26,6 +26,7 @@ final class ItemAgentState
      *     runs: int,
      *     refusal: string|null,
      *     ready_state: string|null,
+     *     blocked_by: list<string>,
      *     brakes: array{max_corrections: int, max_conflicts: int},
      *     repository: bool,
      *     guard: array{branch: string|null, sha: string|null, here: bool}|null,
@@ -56,6 +57,7 @@ final class ItemAgentState
             'refusal' => $refusal,
             'ready_state' => $assignee !== null && $assignee->isBot() && $refusal === null && $thread === null && $item->archived_at === null && ! AgentFlow::readyToBegin($item)
                 ? WorkflowState::query()->whereKey(Workflow::query()->find($item->project->workflow_id)?->agentState(AgentStep::Ready))->value('name') : null,
+            'blocked_by' => $assignee !== null && $assignee->isBot() && $refusal === null && $thread === null && $item->archived_at === null ? AgentFlow::blockers($item) : [],
             'brakes' => ['max_corrections' => $settings->max_corrections, 'max_conflicts' => $settings->max_conflicts],
             'repository' => $repository !== null,
             'guard' => $repository === null || ! $repository->guarded() ? null : [

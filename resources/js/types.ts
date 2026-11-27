@@ -1142,6 +1142,8 @@ export interface ItemAgentState {
   refusal: AgentRefusal | null;
   /** The state the item must reach before its agent begins it (`ready` step), else null. */
   ready_state?: string | null;
+  /** Keys of the open items that block this one; the agent begins when they are done. */
+  blocked_by?: string[];
   brakes: { max_corrections: number; max_conflicts: number };
   repository: boolean;
   guard: { branch: string | null; sha: string | null; here: boolean } | null;

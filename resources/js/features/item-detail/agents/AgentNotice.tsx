@@ -263,6 +263,15 @@ export function AgentNotice({ item, runs, agent }: { item: WorkItem; runs: reado
     );
   }
 
+  if (agent?.blocked_by?.length && assignee) {
+    const keys = agent.blocked_by.join(', ');
+    parts.push(
+      <Banner key="blocked-by" tone="neutral" icon={Hourglass} title={t('items.agents.blocked_by.title', { bot: assignee.name, keys })}>
+        <span className="block max-w-[65ch]">{t('items.agents.blocked_by.text', { bot: assignee.name, keys })}</span>
+      </Banner>,
+    );
+  }
+
   if (parts.length === 0) return null;
   return (
     <div data-agent-notice="" className="mt-3 flex flex-col gap-2">

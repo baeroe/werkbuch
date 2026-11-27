@@ -45,8 +45,35 @@ final class FollowEvent
             EventType::AgentRunStarted => self::ofRun($event, fn (AgentRun $run) => HandleRunStarted::run($actor, $run)) ?? 'started',
             EventType::AgentRunFinished => self::ofRun($event, fn (AgentRun $run) => HandleRunResult::run($actor, $run)) ?? 'finished',
             EventType::ProjectMergeGuardConfirmed => (string) ResumeAfterGuard::run($actor, array_values((array) ($event->meta['thread_ids'] ?? []))),
-            default => self::byPeople($actor, $event),
+            default => self::wake($actor, $event) ?? self::byPeople($actor, $event),
         };
+    }
+
+    /**
+     * What a blocker leaving the way frees (WEBU-51): its Completed/Canceled state (whoever moved it, werkbuch's own merge
+     * too) frees the items it blocks, a removed relation frees the item of its event; each begins like after an
+     * assignment. Null for any other event.
+     */
+    private static function wake(Actor $actor, Event $event): ?string
+    {
+        $item = $event->subject_type === 'work_item' ? WorkItem::query()->find($event->subject_id) : null;
+        if ($item === null) {
+            return null;
+        }
+
+        if ($event->type === EventType::WorkItemRelationRemoved) {
+            $freed = collect([$item]);
+        } elseif ($event->type === EventType::WorkItemStateChanged && WorkflowState::query()->whereKey($event->changes['state_id']['new'] ?? null)->first()?->category->isClosed()) {
+            $freed = WorkItem::query()->whereIn('id', fn ($q) => $q->select('blocks.target_id')->from('work_item_relations as blocks')
+                ->join('relation_types as block_types', 'block_types.id', '=', 'blocks.type_id')
+                ->where('block_types.built_in', 'blocks')->where('blocks.source_id', $item->id))->get();
+        } else {
+            return null;
+        }
+
+        $started = $freed->filter(fn (WorkItem $blocked) => $blocked->archived_at === null && AgentFlow::blockers($blocked) === [] && self::begin($actor, $event, $blocked) === 'task');
+
+        return $started->isEmpty() ? null : 'task';
     }
 
     private static function byPeople(Actor $actor, Event $event): string
