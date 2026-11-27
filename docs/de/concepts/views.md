@@ -10,7 +10,7 @@ Vier Listen sind eingebaut und lassen sich nicht löschen:
 
 | Liste | Adresse | Enthält | Beginnt mit |
 |---|---|---|---|
-| Meine Items: Zugewiesen | `/my-items` | Offene Items, die dir zugewiesen sind | Nach Kategorie gruppiert, nach Priorität sortiert |
+| Meine Items: Zugewiesen | `/my-items` | Offene Items, die dir zugewiesen sind | Board nach Kategorie gruppiert, nach Priorität sortiert |
 | Meine Items: Erstellt | `/created` | Items, die du angelegt hast | Nach Kategorie gruppiert, neueste zuerst |
 | Meine Items: Beobachtet | `/subscribed` | Items, die du beobachtest | Nach Kategorie gruppiert, zuletzt geänderte zuerst |
 | Projekt | `/projects/WEB` | Die Items des Projekts | Nach Status gruppiert, manuelle Reihenfolge |

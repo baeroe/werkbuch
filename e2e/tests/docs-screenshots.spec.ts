@@ -139,7 +139,7 @@ const SHOTS: Shot[] = [
     // the palette with the search "WEB"
     name: 'palette',
     open: async (page, locale) => {
-      await page.goto('/my-items');
+      await page.goto('/my-items?layout=list');
       await expect(page.locator('[data-nav-target]').first()).toBeVisible();
       // the rail instead of the sidebar: its grain would carry the image over 400 KB, and the palette is the subject
       await page.getByRole('button', { name: tr(locale, 'shell.sidebar.collapse') }).click();
@@ -184,7 +184,8 @@ const SHOTS: Shot[] = [
     // my items as a list, grouped by status (by category: Mara's items run through two workflows)
     name: 'my-items',
     open: async (page) => {
-      await page.goto('/my-items');
+      // as a list: my items start as a board (WEBU-47)
+      await page.goto('/my-items?layout=list');
       await expect(page.locator('[data-nav-target]').filter({ hasText: 'APP-18' })).toBeVisible();
     },
   },

@@ -82,8 +82,8 @@ werkbuch geht ohne Maus. Mit <kbd>?</kbd> zeigt jeder Bildschirm die Kürzel, di
 
 | Taste | Aktion |
 | --- | --- |
-| <kbd>1</kbd> | Als Liste zeigen |
-| <kbd>2</kbd> | Als Board zeigen |
+| <kbd>1</kbd> | Als Board zeigen |
+| <kbd>2</kbd> | Als Liste zeigen |
 | <kbd>3</kbd> | Als Tabelle zeigen |
 | <kbd>4</kbd> | Als Timeline zeigen |
 

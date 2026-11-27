@@ -82,8 +82,8 @@ werkbuch works without a mouse. Press <kbd>?</kbd> on any screen to see the shor
 
 | Keys | Action |
 | --- | --- |
-| <kbd>1</kbd> | Show as list |
-| <kbd>2</kbd> | Show as board |
+| <kbd>1</kbd> | Show as board |
+| <kbd>2</kbd> | Show as list |
 | <kbd>3</kbd> | Show as table |
 | <kbd>4</kbd> | Show as timeline |
 

@@ -81,8 +81,8 @@ export const SHORTCUT_TESTS: Record<string, Proof | Proof[]> = {
   'list.peek': { file: 'items-list.spec.ts', test: 'moves through the list with j and k, opens the preview with space and the page with Enter', projects: EVERYWHERE },
   'list.filter': { file: 'filter.spec.ts', test: 'filters by priority with f' },
   'list.search': { file: 'filter.spec.ts', test: 'filters by title with /' },
-  'list.layout.list': { file: 'items-list.spec.ts', test: 'switches to the board with 2 and back with 1, also in the address' },
-  'list.layout.board': { file: 'items-list.spec.ts', test: 'switches to the board with 2 and back with 1, also in the address' },
+  'list.layout.list': { file: 'items-list.spec.ts', test: 'switches to the board with 1 and back with 2, also in the address' },
+  'list.layout.board': { file: 'items-list.spec.ts', test: 'switches to the board with 1 and back with 2, also in the address' },
   'list.layout.table': {
     file: 'views-acceptance.spec.ts',
     test: 'shows the items of a view on a property as list, board and table as REST does, and its epics with progress on the timeline',
