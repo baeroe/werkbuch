@@ -125,6 +125,19 @@ it('relates for a new item, a rich text value, a change of type, a new comment a
     expect($relations())->toBe([[$relates(), $source->id, $w['b']->id]]);
 })->with(['create', 'value', 'type change', 'comment', 'edited comment']);
 
+it('relates nothing for the comment of a bot, new or edited, but for the comment of a person', function () use ($world, $naming, $relations, $relates) {
+    $w = $world();
+    $bot = User::factory()->bot($w['mara'])->create();
+    app(RoleAssignments::class)->setProjectRole($bot, $w['web'], ProjectRole::Member);
+
+    $comment = AddComment::run(actor($bot), $w['a'], ['body_json' => $naming($w['b'])]);
+    EditComment::run(actor($bot), $comment, ['body' => 'Verdict: approve, siehe '.$w['b']->key]);
+    expect(WorkItemRelation::query()->count())->toBe(0);
+
+    AddComment::run(actor($w['mara']), $w['a'], ['body_json' => $naming($w['b'])]);
+    expect($relations())->toBe([[$relates(), $w['a']->id, $w['b']->id]]);
+});
+
 it('relates only references new against the text before', function () use ($world, $describe, $naming, $notes) {
     $w = $world();
     $notes();
