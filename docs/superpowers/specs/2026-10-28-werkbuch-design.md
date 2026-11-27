@@ -519,7 +519,7 @@ Properties liegen zentral in der Organisation und werden Typen zugeordnet (abges
 
 **Mehrfachbearbeitung** (Spec): Mehrere Items auswählen und gemeinsam Status, Assignee, Priorität, Labels oder Archiv ändern. Für jedes Item gelten seine Übergangsregeln. Was abgelehnt wurde, nennt ein Toast.
 
-**Ansichten eines Items:** als Seitenpanel (Vorschau) und als eigene Seite, die über den Key adressierbar ist.
+**Ansichten eines Items:** als Vorschau (seit 2026-11-27 ein Modal über der Seite, A799; vorher ein Seitenpanel) und als eigene Seite, die über den Key adressierbar ist.
 
 **Gleichzeitige Änderungen:**
 - Einzelne Felder (Status, Assignee …) überschreiben sich zuletzt-gewinnt, die History zeigt beide Stände.
@@ -565,7 +565,7 @@ Properties liegen zentral in der Organisation und werden Typen zugeordnet (abges
 **Rechte:** Anlegen dürfen Org-Admins und -Member. Ändern und löschen dürfen der Ersteller und Org-Admins. Alle können eine View als neue View speichern (Spec).
 
 **Bestandteile:** Name, Icon/Emoji, Filter und Darstellung:
-- **Layout:** Liste, Board, Tabelle oder Timeline
+- **Layout:** gehört seit 2026-11-27 nicht mehr zur View (A798): jede Liste (eingebaute Liste, Projekt, View) merkt sich je Person das zuletzt gewählte Layout (Liste, Board, Tabelle oder Timeline) im Browser; ein `?layout=` in einem Link gewinnt
 - **Gruppierung:** Status, Kategorie, Assignee, Priorität, Typ, Label, Projekt, Eltern-Item oder keine
 - **Sortierung:** manuell (Rang), Priorität, Due-Date, Start-Date, angelegt, geändert, Key oder eine Property vom Typ Number, Date oder Text
 - **Angezeigte Felder bzw. Spalten**, einschließlich Properties
@@ -790,7 +790,7 @@ Gemeinsam haben alle Stufen: `/`-Menü, Markdown-Kürzel beim Tippen, Code-Blöc
 
 - **Seitenleiste:** Inbox, Meine Items, Views (Favoriten, „Alle Views“), Projekte (Favoriten, „Alle Projekte“). Ein Projekt hat die Bereiche Items, Wiki, Vorlagen und Einstellungen. Dazu Einstellungen und Profil.
 - **Item-Listen:** Filterleiste, Anzeigeoptionen, Layoutwechsel.
-- **Item-Detail:** als Seitenpanel (Vorschau) und als eigene Seite; die URL läuft über den Key.
+- **Item-Detail:** als Vorschau (Modal, Änderungen vom 2026-11-27, A799: j/k blättern darin durch die Liste) und als eigene Seite; die URL läuft über den Key.
 - **Anlegen-Dialog** (C): Projekt, Typ, Titel, Beschreibung, Properties, Vorlage. Mit „weitere anlegen“ legt man mehrere nacheinander an.
 - **Wiki:** Baum links, Seite rechts.
 - **Einstellungen:**

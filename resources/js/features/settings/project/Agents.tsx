@@ -46,7 +46,7 @@ import { intlLocale, t, tx, type TranslationKey } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { usePermissions } from '@/lib/permissions';
 import type { AgentStep, GitHubStatus, Label, ListedItem, MergeGuard, MergeMethod, Project, ProjectAgents, ProjectRepository, RunType, StateCategory, Workflow } from '@/types';
-import { ModelChoice } from '../agents/ModelField';
+import { EffortField, ModelChoice } from '../agents/ModelField';
 import { runName } from '../agents/runTypes';
 import { SaveBar } from '../agents/SaveBar';
 import { fieldErrors, noticeOf, useDraft, useFieldErrors, useSaveShortcut } from '../frame/form';
@@ -96,6 +96,7 @@ interface Fields {
   max_corrections: string;
   max_conflicts: string;
   models: Record<RunType, string | null>;
+  efforts: Record<RunType, string | null>;
   instructions: string;
 }
 
@@ -115,6 +116,7 @@ const fieldsOf = (link: ProjectRepository | null, settings: ProjectAgents): Fiel
   max_corrections: String(settings.max_corrections),
   max_conflicts: String(settings.max_conflicts),
   models: Object.fromEntries(RUN_TYPES.map((type) => [type, settings.models[type] ?? null])) as Record<RunType, string | null>,
+  efforts: Object.fromEntries(RUN_TYPES.map((type) => [type, settings.efforts?.[type] ?? null])) as Record<RunType, string | null>,
   instructions: settings.instructions ?? '',
 });
 
@@ -359,6 +361,7 @@ function AgentsForm({ project, canManage, readOnlyReason, link, settings, github
               review_bot_id: value.review_bot_id === NO_BOT ? null : value.review_bot_id,
               instructions: textOrNull(value.instructions),
               models: Object.fromEntries(RUN_TYPES.flatMap((type) => (value.models[type] ? [[type, value.models[type]]] : []))),
+              efforts: Object.fromEntries(RUN_TYPES.flatMap((type) => (value.efforts[type] ? [[type, value.efforts[type]]] : []))),
               max_corrections: brakes.max_corrections!,
               max_conflicts: brakes.max_conflicts!,
               review_person_prs: value.review_person_prs,
@@ -373,7 +376,7 @@ function AgentsForm({ project, canManage, readOnlyReason, link, settings, github
           // what the repo call saved stays saved: its fields take the answer (equal to the repo read anew, so no
           // change any more), the others wait for the next try
           if (saved) draft.set(saved);
-          return refused(error, [...SETTINGS_PLACED, ...RUN_TYPES.map((type) => `models.${type}`)]);
+          return refused(error, [...SETTINGS_PLACED, ...RUN_TYPES.map((type) => `models.${type}`), ...RUN_TYPES.map((type) => `efforts.${type}`)]);
         }
       }
       draft.reset();
@@ -665,6 +668,23 @@ function AgentsForm({ project, canManage, readOnlyReason, link, settings, github
             ))}
           </div>
           {problems.errors.models && <p className="text-sm font-medium text-danger">{problems.errors.models}</p>}
+        </div>
+        <div className="flex flex-col gap-2 border-t border-line pt-4">
+          <p className={labelClass}>{t('settings.project.agents.efforts.per_type')}</p>
+          <p className="text-sm text-muted">{t('settings.project.agents.efforts.hint')}</p>
+          <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
+            {RUN_TYPES.map((type) => (
+              <EffortField
+                key={type}
+                label={t('settings.agents.effort.of_type', { type: runName(type) })}
+                readOnlyReason={readOnlyReason}
+                inherit={t('settings.project.agents.models.as_bot')}
+                value={value.efforts[type]}
+                error={problems.errors[`efforts.${type}`]}
+                onChange={(effort) => edit({ efforts: { ...value.efforts, [type]: effort } }, `efforts.${type}`)}
+              />
+            ))}
+          </div>
         </div>
       </SettingsCard>
 

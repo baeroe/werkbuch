@@ -23,7 +23,6 @@ class ViewFactory extends Factory
             'icon' => 'layers',
             'filter' => ['version' => 1, 'conditions' => []],
             'display' => [
-                'layout' => 'list',
                 'group_by' => 'none',
                 'sort' => ['field' => 'rank', 'direction' => 'asc'],
                 'fields' => ['key', 'title', 'state', 'assignee'],

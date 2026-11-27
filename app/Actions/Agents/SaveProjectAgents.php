@@ -3,6 +3,7 @@
 namespace App\Actions\Agents;
 
 use App\Access\Authorize;
+use App\Domain\Agents\AgentCli;
 use App\Domain\Agents\AgentModel;
 use App\Domain\Agents\Brakes;
 use App\Domain\Agents\RunType;
@@ -27,7 +28,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Sets the agent settings of a project as a whole (spec 10.3, A75: every key required, `null` where a key may be
  * empty): the review agent (an active bot with a responsible person, not the default bot, that may edit items of the
- * project), the text for agents, the model per kind of run (`cli:model`), the brakes (1–10), the review of PRs of
+ * project), the text for agents, the model per kind of run (`cli:model`), the effort of Claude Code per kind (left out:
+ * the saved ones, WEBU-66), the brakes (1–10), the review of PRs of
  * persons, the comment at PRs, the merge method and the commands of a worktree. `project.manage`; under the lock of the
  * project; `project.agent_settings_updated` with what changed.
  */
@@ -35,7 +37,7 @@ final class SaveProjectAgents
 {
     use AsAction;
 
-    public const FIELDS = ['review_bot_id', 'instructions', 'models', 'max_corrections', 'max_conflicts', 'review_person_prs', 'comment_on_pr', 'merge_method', 'setup_command', 'stop_command', 'teardown_command'];
+    public const FIELDS = ['review_bot_id', 'instructions', 'models', 'efforts', 'max_corrections', 'max_conflicts', 'review_person_prs', 'comment_on_pr', 'merge_method', 'setup_command', 'stop_command', 'teardown_command'];
 
     public const TEXT_MAX = 20_000;
 
@@ -58,6 +60,8 @@ final class SaveProjectAgents
             'instructions' => ['present', 'nullable', 'string', 'max:'.self::TEXT_MAX],
             'models' => ['present', 'array:'.implode(',', RunType::VALUES)],
             'models.*' => ['string', Rule::in(AgentModel::values())],
+            'efforts' => ['sometimes', 'nullable', 'array:'.implode(',', RunType::VALUES)],
+            'efforts.*' => ['string', Rule::in(AgentCli::Claude->efforts())],
             'max_corrections' => ['required', 'integer', 'between:1,'.Brakes::MAX],
             'max_conflicts' => ['required', 'integer', 'between:1,'.Brakes::MAX],
             'review_person_prs' => ['required', 'boolean'],
@@ -73,6 +77,8 @@ final class SaveProjectAgents
             'instructions' => __('field.instructions.max', ['max' => self::TEXT_MAX]),
             'models.array' => __('field.models.invalid', ['allowed' => implode(', ', RunType::VALUES)]),
             'models.*.*' => __('field.models.agent_model', ['allowed' => implode(', ', AgentModel::values())]),
+            'efforts' => __('field.models.invalid', ['allowed' => implode(', ', RunType::VALUES)]),
+            'efforts.*' => __('field.effort.invalid', ['allowed' => implode(', ', AgentCli::Claude->efforts())]),
             'max_corrections' => __('field.brake.invalid', ['max' => Brakes::MAX]),
             'max_conflicts' => __('field.brake.invalid', ['max' => Brakes::MAX]),
             'review_person_prs' => __('field.boolean'),
@@ -90,6 +96,7 @@ final class SaveProjectAgents
             'review_bot_id' => $valid['review_bot_id'],
             'instructions' => $text($valid['instructions']),
             'models' => $models,
+            'efforts' => null,
             'max_corrections' => (int) $valid['max_corrections'],
             'max_conflicts' => (int) $valid['max_conflicts'],
             'review_person_prs' => filter_var($valid['review_person_prs'], FILTER_VALIDATE_BOOLEAN),
@@ -100,10 +107,13 @@ final class SaveProjectAgents
             'teardown_command' => $text($valid['teardown_command']),
         ];
 
-        return DB::transaction(function () use ($actor, $project, $next): AgentProjectSettings {
+        return DB::transaction(function () use ($actor, $project, $next, $valid): AgentProjectSettings {
             CatalogLock::share();
             $locked = ProjectLock::lock($project);
             $settings = AgentProjectSettings::query()->lockForUpdate()->where('project_id', $locked->id)->first() ?? AgentProjectSettings::of($locked->id);
+            $efforts = array_key_exists('efforts', $valid) ? array_intersect_key($valid['efforts'] ?? [], array_flip(RunType::VALUES)) : ($settings->efforts ?? []);
+            ksort($efforts);
+            $next['efforts'] = $efforts;
 
             // a new review agent only: the saved one is read when it changes, never on every save
             if ($next['review_bot_id'] !== null && $next['review_bot_id'] !== $settings->review_bot_id) {
@@ -113,7 +123,7 @@ final class SaveProjectAgents
                 }
             }
 
-            $changes = CatalogInput::changes($settings->only(self::FIELDS), $next);
+            $changes = CatalogInput::changes([...$settings->only(self::FIELDS), 'efforts' => $settings->efforts ?? []], $next);
             if ($changes !== []) {
                 $settings->fill($next)->save();
                 EventRecorder::record(EventType::ProjectAgentSettingsUpdated, $actor, $locked, $locked, $changes);

@@ -178,6 +178,8 @@ export interface Label {
   color: TypeTone;
   /** A model for agents, `cli:model` (spec 7.7): an item with the label runs its agent on it. Null: a plain label. */
   agent_model: string | null;
+  /** An effort of Claude Code (WEBU-66) for runs at its items; null: none. */
+  agent_effort?: string | null;
 }
 
 export interface RelationType {
@@ -389,6 +391,7 @@ export interface SortSpec {
 
 export type GroupBy = 'state' | 'category' | 'assignee' | 'priority' | 'type' | 'label' | 'project' | 'parent' | 'none';
 
+/** How a list shows its items; the layout is the list's own (remembered in the browser), the rest a view saves. */
 export interface Display {
   layout: 'list' | 'board' | 'table' | 'timeline';
   group_by: GroupBy;
@@ -397,13 +400,16 @@ export interface Display {
   show_sub_items: boolean;
 }
 
+/** What a view saves of its display: everything but the layout (WEBU-68). */
+export type ViewDisplay = Omit<Display, 'layout'>;
+
 export interface View {
   id: string;
   name: string;
   /** Lucide icon name or an emoji. */
   icon: string;
   filter: Filter;
-  display: Display;
+  display: ViewDisplay;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -936,6 +942,12 @@ export interface RunnerSlots {
   light: number;
 }
 
+/** One window of the Claude subscription: used in percent and when it resets. */
+export interface RunnerUsageWindow {
+  percent: number;
+  resets_at: string | null;
+}
+
 /** A machine that runs agents (spec 6.2, 8.6, 8.8, 10.1); org admins only. A revoked one is not listed. */
 export interface Runner {
   id: string;
@@ -955,6 +967,13 @@ export interface Runner {
   clis: { cli: AgentCli; installed: boolean; version: string | null; logged_in: boolean; path: string | null }[];
   /** What the harness of the machine offers, as the runner reports it; `null` before its first report. */
   equipment: { mcp_servers: string[]; skills: string[]; plugins: string[]; werkbuch_access: string[] } | null;
+  /** The used share of the Claude subscription as the runner last read it: the session (five hours) and the week, each
+   * `null` when unknown; `null` before a runner that reads it reported. */
+  usage: { session: RunnerUsageWindow | null; week: RunnerUsageWindow | null } | null;
+  /** The percent from which it takes no new runs of `claude`; `null` none. */
+  usage_limit: number | null;
+  /** The limit holds back new runs of `claude` now. */
+  over_usage_limit: boolean;
   created_by: string;
   created_at: string | null;
   updated_at: string | null;
@@ -980,6 +999,9 @@ export interface AgentConfig {
   model: string;
   /** A model per kind of run (WEBU-32 edits them; sent back as they are). */
   models: Partial<Record<RunType, string>>;
+  /** The effort of Claude Code (WEBU-66): the default and per kind; null: the CLI's own. */
+  effort?: string | null;
+  efforts?: Partial<Record<RunType, string>>;
   updated_at: string | null;
 }
 
@@ -1020,6 +1042,8 @@ export interface ProjectAgents {
   instructions: string | null;
   /** A model per kind of run, `cli:model`. */
   models: Partial<Record<RunType, string>>;
+  /** The effort of Claude Code per kind of run (WEBU-66). */
+  efforts?: Partial<Record<RunType, string>>;
   max_corrections: number;
   max_conflicts: number;
   review_person_prs: boolean;
@@ -1035,7 +1059,7 @@ export interface ProjectAgents {
 }
 
 /** Why a run waits (spec 7.5): its agent is off, the guard holds its project, GitHub gave no token, no CLI, runner offline. */
-export type RunWaitingReason = 'agent_off' | 'merge_guard' | 'github_unavailable' | 'no_cli' | 'runner_offline';
+export type RunWaitingReason = 'agent_off' | 'merge_guard' | 'github_unavailable' | 'no_cli' | 'runner_offline' | 'usage_limit';
 
 /** Where the model of a run came from (spec 7.7). */
 export type ModelSource = 'label' | 'project' | 'bot' | 'default';
@@ -1051,6 +1075,9 @@ export interface AgentRun {
   model: string;
   model_source?: ModelSource | null;
   model_label_id?: string | null;
+  /** The effort Claude Code got (WEBU-66) and where it came from; null: the CLI's own. */
+  effort?: string | null;
+  effort_source?: ModelSource | null;
   runner_id: string | null;
   runner_name: string | null;
   runner_online: boolean;

@@ -208,6 +208,17 @@ export function useSelection(options: SelectionOptions): { clickSelect: (id: str
     if (current !== null && ids.includes(current) && focusIsNeutral()) latest.current.focus(current);
   }, []);
 
+  // the modal preview closed (WEBU-67): j/k may have moved the cursor in it, and the preview gave the focus back to the
+  // row that opened it; the focus goes to the cursor's row instead
+  const peeking = useUiStore((ui) => ui.peekItemId !== null);
+  const wasPeeking = useRef(peeking);
+  useEffect(() => {
+    const closed = wasPeeking.current && !peeking;
+    wasPeeking.current = peeking;
+    const { cursorId: current, order: ids, focus } = latest.current;
+    if (closed && current !== null && ids.includes(current) && document.activeElement?.hasAttribute('data-nav-target')) focus(current);
+  }, [peeking]);
+
   // a selection that was cleared elsewhere (Esc, a bulk change) starts the next range anew
   useEffect(() => {
     if (selection.length === 0) anchor.current = null;

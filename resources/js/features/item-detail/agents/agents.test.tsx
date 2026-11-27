@@ -20,7 +20,7 @@ import { ItemPage } from '../ItemPage';
 import { focusNewRun, showRun } from './runFocus';
 import { clearLiveGone, markLiveGone } from '@/lib/liveGone';
 import { ANNOUNCE_MS, RunLog } from './RunLog';
-import { canRetry, formatDuration, modelOrigin, needsGiveBack, offsetText, waitingText } from './runParts';
+import { canRetry, effortOrigin, formatDuration, modelOrigin, needsGiveBack, offsetText, waitingText } from './runParts';
 
 let signedIn: User = mara;
 let address = '/items/WEB-51';
@@ -211,13 +211,15 @@ afterEach(() => {
 
 describe('a run in the activity', () => {
   it('shows a running run with its facts, the chip and its log growing live', async () => {
-    runs = [makeRun({ status: 'running', finished_at: null, started_at: minutesAgo(4), model: 'opus', model_source: 'label', model_label_id: labels[0].id, attempt: 2 })];
+    runs = [makeRun({ status: 'running', finished_at: null, started_at: minutesAgo(4), model: 'opus', model_source: 'label', model_label_id: labels[0].id, effort: 'xhigh', effort_source: 'project', attempt: 2 })];
     events = { run_1: [line('l_1', 'system', 'Worktree angelegt', minutesAgo(4)), line('l_2', 'tool', 'Bash pnpm test', minutesAgo(3)), line('l_3', 'error', 'Boom', minutesAgo(3))] };
     renderItem();
 
     const card = await runCard('Auftrag „Umsetzen“ von Kira');
     expect(within(card).getByText('Läuft')).toBeTruthy();
     expect(within(card).getByText(`vom Label ${labels[0].name}`)).toBeTruthy();
+    expect(within(card).getByText('xhigh')).toBeTruthy();
+    expect(within(card).getByText('aus dem Projekt')).toBeTruthy();
     expect(within(card).getByText('mac-studio')).toBeTruthy();
     expect(within(card).getByText('Versuch')).toBeTruthy();
     const log = await within(card).findByRole('log', { name: 'Protokoll: Umsetzen' });
@@ -500,6 +502,7 @@ describe('a run that waits', () => {
     expect(waitingText({ ...run, waiting_reason: 'agent_off' })).toBe('Wartet: der Agent ist ausgeschaltet.');
     expect(waitingText({ ...run, waiting_reason: 'merge_guard' })).toMatch(/eigenmächtiger Merge/);
     expect(waitingText({ ...run, waiting_reason: 'github_unavailable' })).toMatch(/GitHub hat eben kein Token/);
+    expect(waitingText({ ...run, waiting_reason: 'usage_limit' })).toMatch(/Limit für das Claude-Abo erreicht/);
     expect(waitingText({ ...run, waiting_reason: 'runner_offline' })).toMatch(/Wartet auf den Runner seines Strangs/);
     expect(waitingText({ ...run, waiting_reason: null })).toBe('Wartet auf einen freien Platz auf einem Runner des Pools.');
   });
@@ -780,6 +783,12 @@ describe('the rules of the runs', () => {
     expect(modelOrigin({ model_source: 'bot', model_label_id: null }, undefined)).toBe('vom Bot');
     expect(modelOrigin({ model_source: 'label', model_label_id: 'x' }, undefined)).toBe('von einem gelöschten Label');
     expect(modelOrigin({ model_source: null, model_label_id: null }, labels)).toBe('Standard');
+    expect([effortOrigin({ effort_source: 'label' }), effortOrigin({ effort_source: 'bot' }), effortOrigin({ effort_source: 'project' }), effortOrigin({ effort_source: 'default' })]).toEqual([
+      'von einem Label',
+      'vom Bot',
+      'aus dem Projekt',
+      'Standard',
+    ]);
   });
 
   it('offers to start again only the newest run that ended badly, with the item at the bot on an open strand', () => {

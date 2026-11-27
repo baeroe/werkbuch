@@ -434,7 +434,7 @@ Reads runners and the agent configuration of bots (org admins), the runs of agen
 | `run-events` | The log of a run in the order it came. | `run` | `GET /runs/{run}/events` |
 | `get-config` | The agent configuration of a bot. | `bot` | `GET /bots/{user}/agent` |
 | `get-github` | The GitHub apps (one per account), installations and repos with their project; never a key. | – | `GET /github` |
-| `get-repository` | The repo of a project with its base branch, the ruleset hint and the guard against an unauthorized merge; `data` null without one. | `project` | `GET /projects/{project}/repository` |
+| `get-repository` | The repo of a project with base branch, ruleset hint and merge guard; `data` null without one. | `project` | `GET /projects/{project}/repository` |
 | `list-rules` | The working rules of the organization per kind of run, each with the contract of the kind. | – | `GET /agent-rules` |
 | `get-project-agents` | The agent settings of a project: review agent, text for agents, models, brakes, switches. | `project` | `GET /projects/{project}/agents` |
 
@@ -444,15 +444,15 @@ Changes runners and the agent configuration of bots (org admins), steers runs an
 
 | Action | Purpose | Required | REST twin |
 |---|---|---|---|
-| `update-runner` | Renames a runner or sets its places; only the keys sent change. | `runner`, `input` | `PATCH /runners/{runner}` |
-| `revoke-runner` | Revokes a runner; what runs on it ends as canceled. Answers {canceled}. | `runner` | `DELETE /runners/{runner}` |
+| `update-runner` | Renames a runner, sets its places or usage limit. | `runner`, `input` | `PATCH /runners/{runner}` |
+| `revoke-runner` | Revokes a runner; its runs end canceled. Answers {canceled}. | `runner` | `DELETE /runners/{runner}` |
 | `cancel-run` | Cancels a run; one on a runner ends once the runner stopped it. | `run` | `POST /runs/{run}/cancel` |
 | `retry-run` | Starts a run that ended without success again; answers the new run. | `run` | `POST /runs/{run}/retry` |
 | `resume-thread` | Resumes a strand paused by a GitHub disconnect; the brakes keep counting. Answers `{run, braked}`. | `item` | `POST /work-items/{item}/agent/resume` |
 | `save-config` | Sets the agent configuration of a bot as a whole. | `bot`, `input` | `PUT /bots/{user}/agent` |
 | `sync-github` | Reads the installations of the GitHub apps and their repos from GitHub again (org admins). | – | `POST /github/sync` |
-| `set-repository` | Gives a project its repo (one the app reaches, at most one project per repo) and base branch, or none; admins of the project. | `project`, `input` | `PUT /projects/{project}/repository` |
-| `confirm-merge-guard` | Confirms an unauthorized merge: the guard goes and the paused strands of the project are open again; admins of the project. | `project` | `POST /projects/{project}/repository/confirm-guard` |
+| `set-repository` | Gives a project its repo (one the app reaches, one project per repo) and base branch, or none; project admins. | `project`, `input` | `PUT /projects/{project}/repository` |
+| `confirm-merge-guard` | Confirms an unauthorized merge: the guard goes, the paused strands of the project open again; project admins. | `project` | `POST /projects/{project}/repository/confirm-guard` |
 | `save-rule` | Sets the working rules of a kind of run; `null` restores the standard (org admins). | `kind`, `input` | `PUT /agent-rules/{kind}` |
 | `save-project-agents` | Sets the agent settings of a project as a whole (admins of the project). | `project`, `input` | `PUT /projects/{project}/agents` |
 

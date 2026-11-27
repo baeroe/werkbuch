@@ -14,7 +14,6 @@ use App\Domain\Filter\CoreField;
 use App\Domain\Filter\Op;
 use App\Domain\Views\DisplaySchema;
 use App\Domain\Views\GroupBy;
-use App\Domain\Views\Layout;
 use App\Domain\Views\SortSpec;
 use App\Domain\WorkItems\Priority;
 use App\Models\Label;
@@ -180,8 +179,8 @@ it('describes the filter, the display and the sort with the values the server ta
         ->and($condition['properties']['op']['enum'])->toBe(array_column(Op::cases(), 'value'))
         ->and($fields[0]['enum'])->toBe(array_column(CoreField::cases(), 'value'))
         ->and($fields[1]['pattern'])->toBe('^property:')
-        ->and($display['required'])->toBe(['layout', 'group_by', 'sort', 'fields', 'show_sub_items'])
-        ->and($display['properties']['layout']['enum'])->toBe(array_column(Layout::cases(), 'value'))
+        ->and($display['required'])->toBe(['group_by', 'sort', 'fields', 'show_sub_items'])
+        ->and($display['properties']['layout']['deprecated'])->toBeTrue()
         ->and($display['properties']['group_by']['enum'])->toBe(array_column(GroupBy::cases(), 'value'))
         ->and($display['properties']['fields']['items']['anyOf'][0]['enum'])->toBe(DisplaySchema::FIELDS)
         ->and($display['properties']['sort']['$ref'])->toBe('#/components/schemas/SortSpec')

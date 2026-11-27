@@ -9,7 +9,7 @@ use Illuminate\Validation\Rule;
 /**
  * The rules of the name and the places of a runner (spec 8.4, 10.1): a name of 1–64 characters no other active runner
  * holds (in any case; a revoked one frees its name), places as whole numbers from 1 to 16 per pot, per repo at most as
- * many as in all. Callers check names under `CatalogLock`, so two pairings of one host never get the same name.
+ * many as in all, a usage limit of 1–100 percent or none. Callers check names under `CatalogLock`, so two pairings of one host never get the same name.
  */
 final class RunnerInput
 {
@@ -37,6 +37,16 @@ final class RunnerInput
     }
 
     /**
+     * The usage limit (WEBU-65): a whole percent from 1 to 100, or null for none.
+     *
+     * @return array<string, list<mixed>>
+     */
+    public static function usageLimit(): array
+    {
+        return ['usage_limit' => ['present', 'nullable', 'integer', 'min:1', 'max:100']];
+    }
+
+    /**
      * @return array<string, string>
      */
     public static function messages(): array
@@ -49,6 +59,7 @@ final class RunnerInput
             'slots' => __('field.slots.invalid', ['max' => Runner::MAX_SLOTS]),
             'slots.*' => __('field.slots.invalid', ['max' => Runner::MAX_SLOTS]),
             'slots.per_repo.lte' => __('field.slots.per_repo'),
+            'usage_limit' => __('field.usage_limit.invalid'),
         ];
     }
 

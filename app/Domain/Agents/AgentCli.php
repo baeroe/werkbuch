@@ -33,6 +33,21 @@ enum AgentCli: string
         };
     }
 
+    /**
+     * The effort levels the CLI takes (`claude --effort`, WEBU-66); none for Codex.
+     *
+     * shortcut: Codex gets no effort (its `model_reasoning_effort` would be a second list), add it once someone asks.
+     *
+     * @return list<string>
+     */
+    public function efforts(): array
+    {
+        return match ($this) {
+            self::Claude => ['low', 'medium', 'high', 'xhigh', 'max'],
+            self::Codex => [],
+        };
+    }
+
     public function knows(string $model): bool
     {
         return in_array($model, $this->models(), true);

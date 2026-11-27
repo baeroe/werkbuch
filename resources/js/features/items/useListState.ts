@@ -8,12 +8,16 @@
  * change asked for. Until it is there, the state of the change shows already (a layout switch with 2 shows the board at
  * once); a second change meanwhile builds on it. A visit that fails or is cancelled shows the address again.
  *
- * Unsaved: a saved view by any difference; a built-in list only by its filter (layout, grouping and fields are how one
- * looks at it). Those can still be saved as a view (13c).
+ * Unsaved: a saved view by any difference but the layout; a built-in list only by its filter (grouping and fields are
+ * how one looks at it). Those can still be saved as a view (13c).
+ *
+ * The layout is the list's own (WEBU-68): remembered per person and list (`layoutMemory.ts`) and part of the base, never
+ * of the address. A `?layout=` in the address wins (a shared link); a switch remembers the new one and drops it.
  */
 
 import { router, usePage } from '@inertiajs/react';
 import { useCallback, useMemo, useState } from 'react';
+import { useCurrentUser } from '@/hooks/users';
 import {
   applyViewState,
   decodeViewState,
@@ -27,6 +31,7 @@ import {
   type ViewState,
 } from '@/domain/viewState';
 import type { Project, View } from '@/types';
+import { layoutKey, useRememberedLayout, writeLayout } from './layoutMemory';
 
 export interface ListState {
   /** What the list shows without changes. */
@@ -39,15 +44,26 @@ export interface ListState {
   unsaved: boolean;
 }
 
-export function useListState({ preset, view }: { preset: ItemsPreset; project?: Project; view?: View }): ListState {
+/** Which list remembers a layout: the built-in one, the project or the view. */
+function listOf(preset: ItemsPreset, project: Project | undefined, view: View | undefined): string | null {
+  if (view) return `view:${view.id}`;
+  if (preset === 'project') return project ? `project:${project.id}` : null;
+  return preset === 'view' ? null : preset;
+}
+
+export function useListState({ preset, project, view }: { preset: ItemsPreset; project?: Project; view?: View }): ListState {
   const { url } = usePage();
+  const me = useCurrentUser();
   const address = new URL(url, window.location.origin);
+  const list = listOf(preset, project, view);
+  const key = me && list ? layoutKey(me.id, list) : null;
+  const remembered = useRememberedLayout(key);
   const base = useMemo<ViewState>(() => {
-    if (view) return viewStateOf(view);
     // the screen shows a view list once its view is there; without it there is no base to invent
-    if (preset === 'view') throw new Error('A view list needs its view.');
-    return presetState(preset);
-  }, [view, preset]);
+    if (!view && preset === 'view') throw new Error('A view list needs its view.');
+    const own = view ? viewStateOf(view) : presetState(preset as Exclude<ItemsPreset, 'view'>);
+    return remembered ? { ...own, display: { ...own.display, layout: remembered } } : own;
+  }, [view, preset, remembered]);
 
   // the change on its way to the server; it shows until the server answers (its address is the state then) or the visit
   // fails
@@ -72,19 +88,30 @@ export function useListState({ preset, view }: { preset: ItemsPreset; project?: 
     [address.pathname],
   );
 
+  // the state leaves the address; a `?layout=` of a link stays until the layout is switched
   const withoutState = useCallback(() => {
     const params = new URLSearchParams(search);
-    VIEW_STATE_PARAMS.forEach((key) => params.delete(key));
+    VIEW_STATE_PARAMS.filter((name) => name !== 'layout').forEach((name) => params.delete(name));
     return params;
   }, [search]);
 
   const setState = useCallback(
     (next: ViewState) => {
       const params = withoutState();
-      new URLSearchParams(encodeViewState(next, base)).forEach((value, key) => params.set(key, value));
+      const switched = next.display.layout !== state.display.layout;
+      // a new layout is remembered, and the address no longer names one
+      if (switched) {
+        params.delete('layout');
+        // without a person or list to remember it for, the address keeps it
+        if (key) writeLayout(key, next.display.layout);
+        else params.set('layout', next.display.layout);
+      }
+      new URLSearchParams(encodeViewState(next, base)).forEach((value, name) => params.set(name, value));
+      // a switch alone that leaves the address as it is needs no visit
+      if (switched && params.toString() === new URLSearchParams(search).toString()) return;
       visit(params);
     },
-    [base, visit, withoutState],
+    [base, key, search, state.display.layout, visit, withoutState],
   );
 
   const clearChanges = useCallback(() => visit(withoutState()), [visit, withoutState]);

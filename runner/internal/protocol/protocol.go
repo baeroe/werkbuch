@@ -76,11 +76,25 @@ type Equipment struct {
 	WerkbuchAccess []string `json:"werkbuch_access"`
 }
 
+// UsageWindow is one window of the Claude subscription: used in percent and when it resets (RFC 3339, nil unknown).
+type UsageWindow struct {
+	Percent  float64 `json:"percent"`
+	ResetsAt *string `json:"resets_at"`
+}
+
+// Subscription is how much of the Claude subscription is used (WEBU-65): the session (five hours) and the week, each
+// nil when unknown. An empty one says nothing is known.
+type Subscription struct {
+	Session *UsageWindow `json:"session"`
+	Week    *UsageWindow `json:"week"`
+}
+
 // Report goes with every claim and heartbeat; a part left out keeps werkbuch's last one.
 type Report struct {
-	Load      *Load      `json:"load,omitempty"`
-	CLIs      []CLI      `json:"clis,omitempty"`
-	Equipment *Equipment `json:"equipment,omitempty"`
+	Load      *Load         `json:"load,omitempty"`
+	CLIs      []CLI         `json:"clis,omitempty"`
+	Equipment *Equipment    `json:"equipment,omitempty"`
+	Usage     *Subscription `json:"usage,omitempty"`
 }
 
 // Places are the places of the runner as set in werkbuch and as used now (spec 9).
@@ -172,6 +186,7 @@ type Run struct {
 	CLI             string     `json:"cli"`
 	Model           string     `json:"model"`
 	ModelSource     string     `json:"model_source"`
+	Effort          *string    `json:"effort"` // the effort of Claude Code (WEBU-66); nil: the CLI's own
 	TimeoutMinutes  int        `json:"timeout_minutes"`
 	DeadlineAt      *time.Time `json:"deadline_at"`
 	LeaseExpiresAt  *time.Time `json:"lease_expires_at"`

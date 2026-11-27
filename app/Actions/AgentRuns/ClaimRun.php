@@ -3,6 +3,7 @@
 namespace App\Actions\AgentRuns;
 
 use App\Actions\Agents\EnsureEpicBranch;
+use App\Domain\Agents\AgentCli;
 use App\Domain\Agents\Protocol;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
@@ -150,7 +151,8 @@ final class ClaimRun
     /** The first run of the queue the runner may take now, started on it. */
     private function take(Runner $runner): ?AgentRun
     {
-        $clis = $runner->readyClis();
+        // over its usage limit it takes no new run of `claude` (WEBU-65): those stay out of the candidates in SQL
+        $clis = array_values(array_filter($runner->readyClis(), fn (string $cli) => $runner->takesCli(AgentCli::from($cli))));
         if ($clis === []) {
             return null;
         }
@@ -318,6 +320,7 @@ final class ClaimRun
             'cli' => $run->cli->value,
             'model' => $run->model,
             'model_source' => $run->model_source,
+            'effort' => $run->effort,
             'timeout_minutes' => $run->type->timeoutMinutes(),
             'deadline_at' => $run->deadline()?->toJSON(),
             'lease_expires_at' => $run->lease_expires_at?->toJSON(),

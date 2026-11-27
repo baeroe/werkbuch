@@ -21,6 +21,8 @@ beforeEach(() => initI18n({ locale: 'de', translations: de }));
 
 // Unsent text lives at module level for the visit (lib/drafts.ts): no test starts with the drafts of the one before.
 beforeEach(() => drafts.clear());
+// what the browser remembers per person (layouts of lists, the open pages of a wiki) starts empty in every test
+beforeEach(() => window.localStorage.clear());
 
 // So do the ids known to be deleted (lib/liveGone.ts): a template deleted in one test is no gone one in the next.
 beforeEach(() => clearLiveGone());

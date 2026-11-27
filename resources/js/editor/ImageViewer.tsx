@@ -119,16 +119,17 @@ export function ImageViewerHost() {
           <figure className="flex flex-col gap-2">
             {/* at actual size the box scrolls: a tab stop, so the keyboard scrolls it (Page Up/Down, Home/End, Space) */}
             <div
-              className={cx('flex max-h-[70vh] justify-center rounded-ctl bg-sunken', full ? 'overflow-auto' : 'overflow-hidden')}
+              className={cx('flex max-h-[70vh] rounded-ctl bg-sunken', full ? 'overflow-auto' : 'overflow-hidden')}
               tabIndex={full ? 0 : undefined}
               role={full ? 'region' : undefined}
               aria-label={full ? t('editor.image.viewer.scroll_region') : undefined}
             >
-              {/* a click switches the size too; the button in the footer does it for the keyboard */}
+              {/* a click switches the size too; the button in the footer does it for the keyboard. `m-auto` centers without
+                  stretching (a flex item would be stretched and shrunk out of its ratio) and keeps every edge scrollable */}
               <img
                 src={attachment.url}
                 alt={image?.alt ?? ''}
-                className={cx(full ? 'max-w-none cursor-zoom-out' : 'max-h-[70vh] max-w-full cursor-zoom-in object-contain')}
+                className={cx('m-auto shrink-0', full ? 'max-w-none cursor-zoom-out' : 'max-h-[70vh] max-w-full cursor-zoom-in object-contain')}
                 onClick={() => setFull((current) => !current)}
               />
             </div>

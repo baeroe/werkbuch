@@ -55,6 +55,9 @@ const runner = (id: string, name: string, changes: Partial<Runner> = {}): Runner
     { cli: 'codex', installed: true, version: '0.9.0', logged_in: false, path: '/usr/local/bin/codex' },
   ],
   equipment: null,
+  usage: null,
+  usage_limit: null,
+  over_usage_limit: false,
   created_by: 'u_mara',
   created_at: '2026-10-20T10:00:00.000Z',
   updated_at: '2026-10-20T10:00:00.000Z',
@@ -236,7 +239,7 @@ describe('BotAgent', () => {
     await user.click(save());
 
     await waitFor(() => expect(puts()).toHaveLength(1));
-    expect(puts()[0]!.body).toEqual({ enabled: true, runner_ids: ['r_box', 'r_studio'], cli: 'claude', model: 'sonnet', models: { review: 'haiku' } });
+    expect(puts()[0]!.body).toEqual({ enabled: true, runner_ids: ['r_box', 'r_studio'], cli: 'claude', model: 'sonnet', models: { review: 'haiku' }, effort: null, efforts: {} });
     await waitFor(() => expect(toastNamed('Kira: Agent gespeichert')).toBeTruthy());
     expect(toastNamed('Kira: Agent gespeichert')!.description).toBeUndefined();
   });
@@ -280,7 +283,7 @@ describe('BotAgent', () => {
     await user.click(screen.getByRole('button', { name: 'Codex' }));
     await user.click(save());
     await waitFor(() => expect(puts()).toHaveLength(1));
-    expect(puts()[0]!.body).toEqual({ enabled: false, runner_ids: ['r_studio'], cli: 'codex', model: 'gpt-5-codex', models: {} });
+    expect(puts()[0]!.body).toEqual({ enabled: false, runner_ids: ['r_studio'], cli: 'codex', model: 'gpt-5-codex', models: {}, effort: null, efforts: {} });
     await waitFor(() => expect(screen.queryByText('Modelle angepasst')).toBeNull());
   });
 
@@ -419,6 +422,31 @@ describe('BotAgent', () => {
 
     await waitFor(() => expect(puts()).toHaveLength(1));
     expect(puts()[0]!.body).toMatchObject({ models: { task: 'opus' } });
+  });
+
+  it('chooses the effort of Claude Code, the default and per kind, and leaves none for Codex (WEBU-66)', async () => {
+    const user = userEvent.setup();
+    renderAgent({ configs: { u_kira: config('u_kira', { effort: 'high', efforts: { review: 'low' } }) } });
+
+    const effort = await screen.findByRole('combobox', { name: /^Standard-Effort/ });
+    expect(effort.textContent).toContain('high');
+    expect(screen.getByRole('combobox', { name: /^Effort für Review/ }).textContent).toContain('low');
+    expect(screen.getByRole('combobox', { name: /^Effort für Umsetzen/ }).textContent).toContain('Wie Standard (high)');
+
+    await user.click(screen.getByRole('combobox', { name: /^Effort für Umsetzen/ }));
+    await user.click(await screen.findByRole('option', { name: 'max' }));
+    await user.click(effort);
+    await user.click(await screen.findByRole('option', { name: 'Standard der CLI' }));
+    await user.click(save());
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(puts()[0]!.body).toMatchObject({ effort: null, efforts: { review: 'low', task: 'max' } });
+
+    // Codex takes no effort: the fields go and none is sent
+    await user.click(screen.getByRole('button', { name: 'Codex' }));
+    expect(screen.queryByRole('combobox', { name: /^Standard-Effort/ })).toBeNull();
+    await user.click(save());
+    await waitFor(() => expect(puts()).toHaveLength(2));
+    expect(puts()[1]!.body).toMatchObject({ cli: 'codex', effort: null, efforts: {} });
   });
 
   it('keeps the models per kind in their order, so a model chosen and chosen back is no change', async () => {

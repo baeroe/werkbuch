@@ -32,6 +32,8 @@ use Illuminate\Support\Carbon;
  * @property string $model
  * @property string $model_source
  * @property string|null $model_label_id
+ * @property string|null $effort
+ * @property string|null $effort_source
  * @property string|null $runner_id
  * @property string $project_id
  * @property string|null $work_item_id
@@ -61,7 +63,7 @@ use Illuminate\Support\Carbon;
  * @property-read AgentThread|null $thread
  */
 #[Fillable([
-    'type', 'status', 'waiting_reason', 'bot_id', 'cli', 'model', 'model_source', 'model_label_id', 'runner_id', 'project_id',
+    'type', 'status', 'waiting_reason', 'bot_id', 'cli', 'model', 'model_source', 'model_label_id', 'effort', 'effort_source', 'runner_id', 'project_id',
     'work_item_id', 'thread_id', 'head_sha', 'repository_github_id', 'pr_number', 'trigger_event_id', 'context', 'attempt', 'lease_expires_at', 'retry_at', 'started_at',
     'finished_at', 'result', 'session_id', 'usage', 'error', 'canceled_by', 'events_dropped',
 ])]
@@ -81,7 +83,7 @@ final class AgentRun extends Model
     public const MODEL_SOURCES = ['label', 'project', 'bot', 'default'];
 
     /** Why a run waits (A486): no runner of the pool has the CLI, or the runner of its strand is offline. */
-    public const WAITING_REASONS = ['agent_off', 'no_cli', 'runner_offline'];
+    public const WAITING_REASONS = ['agent_off', 'no_cli', 'runner_offline', 'usage_limit'];
 
     /** What werkbuch writes into `error` itself; a runner's failure has its own sentence. */
     public const LOST = 'lost';

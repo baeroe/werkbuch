@@ -34,7 +34,7 @@ import { intlLocale, t, tn, type TranslationKey } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import type { AgentCli, AgentConfig, RunType, Runner, User } from '@/types';
-import { ModelField } from '../../agents/ModelField';
+import { EffortField, ModelField } from '../../agents/ModelField';
 import { runName } from '../../agents/runTypes';
 import { SaveBar } from '../../agents/SaveBar';
 import { AgentProjects } from './AgentProjects';
@@ -51,6 +51,9 @@ interface Form {
   model: string;
   /** The models per kind of run; a kind left out takes the default model. */
   models: AgentConfig['models'];
+  /** The effort of Claude Code (WEBU-66): the default and per kind; only for `claude`. */
+  effort: string | null;
+  efforts: AgentConfig['models'];
 }
 
 const formOf = (config: AgentConfig): Form => ({
@@ -59,6 +62,8 @@ const formOf = (config: AgentConfig): Form => ({
   cli: config.cli,
   model: config.model,
   models: modelsWith(config.models),
+  effort: config.effort ?? null,
+  efforts: modelsWith(config.efforts ?? {}),
 });
 
 const CLIS: { value: AgentCli; label: string }[] = [
@@ -73,7 +78,7 @@ const REASONS: Record<NotAgentReason, TranslationKey> = {
 };
 
 /** The fields a 422 is shown at; everything else is a toast. */
-const PLACED = ['enabled', 'runner_ids', 'cli', 'model'] as const;
+const PLACED = ['enabled', 'runner_ids', 'cli', 'model', 'effort'] as const;
 
 /**
  * The models per kind in the order of the kinds, one of them changed; `''` ("Wie Standard") leaves the kind out. The
@@ -169,7 +174,7 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
     if (save.isPending) return;
     if (!draft.dirty) return draft.tellNothingToSave();
     try {
-      await save.mutateAsync({ botId: bot.id, input: { enabled: value.enabled, runner_ids: value.runner_ids, cli: value.cli, model: value.model, models: value.models } });
+      await save.mutateAsync({ botId: bot.id, input: { enabled: value.enabled, runner_ids: value.runner_ids, cli: value.cli, model: value.model, models: value.models, effort: value.effort, efforts: value.efforts } });
       draft.reset();
       problems.clearAll();
       setCliNote(null);
@@ -182,8 +187,8 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
       // `runner_ids.2` (a runner revoked meanwhile) stands at the pool
       const fields = Object.entries(fieldErrors(error)).reduce<Record<string, string>>((found, [path, message]) => {
         // a model per kind stands at its field, `models` itself above them
-        const field = path.startsWith('models.') ? path : path.split('.')[0]!;
-        if (((PLACED as readonly string[]).includes(field) || field.startsWith('models.')) && !found[field]) found[field] = message;
+        const field = path.startsWith('models.') || path.startsWith('efforts.') ? path : path.split('.')[0]!;
+        if (((PLACED as readonly string[]).includes(field) || field.startsWith('models.') || field.startsWith('efforts.')) && !found[field]) found[field] = message;
         return found;
       }, {});
       if (Object.keys(fields).length > 0) problems.show(fields);
@@ -204,7 +209,8 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
   function chooseCli(cli: AgentCli) {
     if (cli === value.cli) return;
     const next = modelsFor(cli, value.model, value.models);
-    edit({ cli, model: next.model, models: next.models }, 'cli', 'model');
+    // Codex takes no effort: a change of CLI leaves none
+    edit({ cli, model: next.model, models: next.models, ...(cli === 'claude' ? {} : { effort: null, efforts: {} }) }, 'cli', 'model', 'effort');
     if (next.dropped.length === 0) return setCliNote(null);
     const lostTypes = Object.keys(next.models).length < Object.values(value.models).filter(Boolean).length;
     setCliNote(t(lostTypes ? 'settings.bot_agent.models_adjusted.text_types' : 'settings.bot_agent.models_adjusted.text', { models: quotedList(next.dropped), cli: CLI_NAMES[cli], model: next.model }));
@@ -365,6 +371,33 @@ function AgentForm({ bot, config }: { bot: User; config: AgentConfig }) {
             ))}
           </div>
         </FieldGroup>
+        {value.cli === 'claude' && (
+          <>
+            <EffortField
+              label={t('settings.bot_agent.effort')}
+              hint={t('settings.bot_agent.effort_hint')}
+              inherit={t('settings.agents.effort.cli_default')}
+              className="max-w-sm"
+              value={value.effort}
+              error={problems.errors.effort}
+              onChange={(effort) => edit({ effort }, 'effort')}
+            />
+            <FieldGroup legend={t('settings.bot_agent.efforts.legend')} hint={t('settings.bot_agent.efforts.hint')}>
+              <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
+                {RUN_TYPES.map((type) => (
+                  <EffortField
+                    key={type}
+                    label={t('settings.agents.effort.of_type', { type: runName(type) })}
+                    inherit={value.effort ? t('settings.bot_agent.models.as_default', { model: value.effort }) : t('settings.agents.effort.cli_default')}
+                    value={value.efforts[type] ?? null}
+                    error={problems.errors[`efforts.${type}`]}
+                    onChange={(effort) => edit({ efforts: modelsWith(value.efforts, type, effort ?? '') }, `efforts.${type}`)}
+                  />
+                ))}
+              </div>
+            </FieldGroup>
+          </>
+        )}
       </SettingsCard>
 
       <SaveBar

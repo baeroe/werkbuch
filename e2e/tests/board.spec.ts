@@ -59,7 +59,7 @@ test('copies the key from the tab of a card and leaves the card closed', async (
     await card(page, 'Todo', key).getByRole('button', { name: tr('en', 'items.key.copy', { key }) }).click();
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(key);
     // only the tab copies: no preview opened
-    await expect(page.getByRole('complementary', { name: 'Preview' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Preview' })).toHaveCount(0);
   } finally {
     await removeE2eProject(page, identifier);
   }

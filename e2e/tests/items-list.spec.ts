@@ -82,11 +82,13 @@ test('moves through the list with j and k, opens the preview with space and the 
   await expect(row(page, `${identifier}-2`)).toBeFocused();
 
   await page.keyboard.press(' ');
-  const preview = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+  const preview = page.getByRole('dialog', { name: tr('en', 'items.peek.label') });
   await expect(preview.getByRole('heading', { name: 'Item 2' })).toBeVisible();
-  await page.keyboard.press('Escape');
-  if (isPhone(page)) await page.keyboard.press('Escape');
-  await expect(preview).toBeHidden();
+  // the modal takes the focus (WEBU-67); a tooltip it shows may take the first Escape
+  await expect(async () => {
+    await page.keyboard.press('Escape');
+    await expect(preview).toBeHidden({ timeout: 500 });
+  }).toPass();
   await expect(row(page, `${identifier}-2`)).toBeFocused();
 
   await page.keyboard.press('Enter');
@@ -170,15 +172,15 @@ test('unfolds a group with → and goes from header to header with ↑ and ↓',
   await expect(row(page, `${identifier}-1`)).toBeFocused();
 });
 
-test('switches to the board with 1 and back with 2, also in the address', async ({ page }) => {
+test('switches to the board with 1 and back with 2, and remembers it for the list', async ({ page }) => {
   const { identifier } = shared;
   await openList(page, identifier);
   await page.keyboard.press('1');
-  await expect(page).toHaveURL(new RegExp(`/projects/${identifier}\\?layout=board$`));
   const layouts = page.getByRole('group', { name: tr('en', 'items.screen.layout') }).filter({ visible: true });
   await expect(layouts.getByRole('button', { name: new RegExp(tr('en', 'items.layout.board')) })).toHaveAttribute('aria-pressed', 'true');
 
-  // a reload keeps the layout of the address: the items stand as cards
+  // the layout is remembered for the person and the list, never written into the address (WEBU-68): a reload keeps it
+  await expect(page).toHaveURL(new RegExp(`/projects/${identifier}$`));
   await page.reload();
   await expect(layouts.getByRole('button', { name: new RegExp(tr('en', 'items.layout.board')) })).toHaveAttribute('aria-pressed', 'true');
   const card = page.getByRole('article', { name: new RegExp(`^${identifier}-1 `) });

@@ -19,7 +19,7 @@ A built-in list is a view that is never saved. You can filter and change its dis
 
 Saved views live under **Views** (`/views`) and at `/views/<id>`. A star puts a view into the sidebar, in your own order; deleting a view takes it out of everybody's sidebar.
 
-![The overview of the views of the team, with layout and creator of each](/screenshots/en/views.png)
+![The overview of the views of the team, with the grouping and creator of each](/screenshots/en/views.png)
 
 ## Permissions
 
@@ -35,7 +35,7 @@ A filter may name a project, person or item the reader does not see. werkbuch ke
 
 ## Layouts
 
-`1` to `4` switch between the layouts; the switch is also in the header of every list. The layout is part of the display and of a saved view.
+`1` to `4` switch between the layouts; the switch is also in the header of every list. Each list remembers the layout you last chose there, for you and in this browser: My items, Created, Subscribed, every project and every view. A list you have never switched starts in its own default (the board for My items, the list for all others). The layout is not part of a saved view and never makes a list unsaved; a link with `?layout=board` shows its layout first.
 
 ### List
 
@@ -191,7 +191,7 @@ Archived items stay out of every list, unless a condition on `archived` asks for
 
 ## State in the address
 
-Everything you change in a list stands in its address, as far as it differs from the saved view or the built-in list: `filter` (the conditions as JSON), `layout`, `group`, `sort` (`due_date:desc`), `fields` (comma-separated), `sub` (`0` hides child items) and, in the timeline, `zoom`. A link shows the same list to someone else, and reloading the page keeps it. **Discard** goes back to the saved state.
+Everything you change in a list stands in its address, as far as it differs from the saved view or the built-in list: `filter` (the conditions as JSON), `group`, `sort` (`due_date:desc`), `fields` (comma-separated), `sub` (`0` hides child items) and, in the timeline, `zoom`. A link shows the same list to someone else, and reloading the page keeps it. The layout is remembered instead (see Layouts); a `layout` in a link you open is read and wins. **Discard** goes back to the saved state.
 
 ## Keyboard
 
@@ -212,6 +212,8 @@ Everything you change in a list stands in its address, as far as it differs from
 | `f` | Add a condition |
 | `/` | Filter by title |
 | `1`, `2`, `3`, `4` | List, board, table, timeline |
+
+A click on the title of an item, or `space`, opens it in the **preview**, a window over the list; with a modifier or the middle button the browser opens its page in a new tab. While the preview is open, the list behind it waits: `j` and `k` (and `down`, `up`) go on to the next or previous item of the list, `escape` (out of a field first) or a click beside the window closes it, and the focus goes back to where it was. **Open as page** in its header leaves the list.
 
 The item shortcuts (`s` status, `a` assign, `i` assign to me, `p` priority, `l` labels, `t` type, `d` due date, `shift+d` start date, `shift+p` parent, `mod+backspace` archive or delete) act on the selection, or else on the item under the cursor. With several items selected, a bar above the list changes status, assignee, priority and labels of all of them at once, and archives them when all are closed. An action applies to a selection only when it is allowed for every selected item: when some of them are archived or belong to a project you only read (or, for archiving, some are still open), the bar leaves the action out, so does the palette, and its shortcut says why without changing anything. `mod+backspace` archives a selection only when all its items are closed and deletes it only when none is closed (open and archived items alike); when it would archive some and delete others, it does nothing and says why. What the server still refuses for one item, such as a transition its workflow forbids, is named in a single toast. `e` edits the title only in the preview and on the item page.
 
@@ -396,7 +398,6 @@ curl -X POST https://werkbuch.example.com/api/v1/views \
       { "field": "due_date", "op": "overdue" }
     ] },
     "display": {
-      "layout": "table",
       "group_by": "assignee",
       "sort": { "field": "due_date", "direction": "asc" },
       "fields": ["key", "title", "state", "assignee", "due_date", "property:customer"],
@@ -405,4 +406,4 @@ curl -X POST https://werkbuch.example.com/api/v1/views \
   }'
 ```
 
-All four parts are required, also for `PUT`, which replaces the view as a whole; sending back an answer unchanged changes nothing. `display` takes `layout` (`list`, `board`, `table`, `timeline`), `group_by` (`state`, `category`, `assignee`, `priority`, `type`, `label`, `project`, `parent`, `none`), `sort`, `fields` (up to 30: `key`, `title`, `state`, `assignee`, `priority`, `labels`, `start_date`, `due_date`, `project`, `created_at`, `updated_at` and `property:<key>`) and `show_sub_items`.
+All four parts are required, also for `PUT`, which replaces the view as a whole; sending back an answer unchanged changes nothing. `display` takes `group_by` (`state`, `category`, `assignee`, `priority`, `type`, `label`, `project`, `parent`, `none`), `sort`, `fields` (up to 30: `key`, `title`, `state`, `assignee`, `priority`, `labels`, `start_date`, `due_date`, `project`, `created_at`, `updated_at` and `property:<key>`) and `show_sub_items`. A `layout`, as older clients send it, is passed over; views have none.

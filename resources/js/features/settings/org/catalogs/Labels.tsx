@@ -27,7 +27,7 @@ import { Badge, FieldGroup, Loaded, Panel, Row, Rows, RowsSkeleton, SectionHeade
 import { useDialogRound } from '../../frame/useDialogRound';
 import { useRemoval } from '../../frame/useRemoval';
 import { UsageCount, UsageStatus, useGroupUsage } from '../../catalog/usage';
-import { ModelChoice } from '../../agents/ModelField';
+import { EffortField, ModelChoice } from '../../agents/ModelField';
 import type { SectionProps } from '../sections';
 
 /** The model of a model label in its row: "Modell für Agenten: haiku", with the CLI when it is not Claude Code. */
@@ -57,6 +57,7 @@ function LabelDialog({ open, onOpenChange, label, finalFocus }: LabelDialogProps
   const [name, setName] = useState(label?.name ?? '');
   const [tone, setTone] = useState<TypeTone>(label?.color ?? 'sky');
   const [model, setModel] = useState<string | null>(label?.agent_model ?? null);
+  const [effort, setEffort] = useState<string | null>(label?.agent_effort ?? null);
   const [attempted, setAttempted] = useState(false);
 
   // the name follows the model while it is empty or still the suggestion of the model before
@@ -72,7 +73,7 @@ function LabelDialog({ open, onOpenChange, label, finalFocus }: LabelDialogProps
       document.getElementById('label-name')?.focus();
       return;
     }
-    settle(save.mutateAsync({ id: label?.id, name, color: tone, agent_model: model }), {
+    settle(save.mutateAsync({ id: label?.id, name, color: tone, agent_model: model, agent_effort: effort }), {
       onSuccess: (saved) => {
         onOpenChange(false);
         toast({ title: label ? t('settings.labels.dialog.saved', { name: saved.name }) : t('settings.labels.dialog.created', { name: saved.name }), tone: 'success' });
@@ -88,7 +89,7 @@ function LabelDialog({ open, onOpenChange, label, finalFocus }: LabelDialogProps
       title={label ? t('settings.labels.edit', { name: label.name }) : t('settings.labels.create')}
       submitLabel={label ? t('settings.frame.save') : t('settings.catalog.submit_create')}
       pending={save.isPending}
-      notice={noticeOf(save.error, ['name', 'agent_model'])}
+      notice={noticeOf(save.error, ['name', 'agent_model', 'agent_effort'])}
       finalFocus={finalFocus}
       onSubmit={submit}
     >
@@ -109,6 +110,15 @@ function LabelDialog({ open, onOpenChange, label, finalFocus }: LabelDialogProps
         inherit={t('settings.labels.dialog.no_model')}
         hint={t('settings.labels.dialog.model_hint')}
         error={fieldMessage(save.error, 'agent_model')}
+      />
+      <EffortField
+        id="label-effort"
+        label={t('settings.labels.dialog.effort')}
+        value={effort}
+        onChange={setEffort}
+        inherit={t('settings.labels.dialog.no_effort')}
+        hint={t('settings.labels.dialog.effort_hint')}
+        error={fieldMessage(save.error, 'agent_effort')}
       />
     </FormDialog>
   );

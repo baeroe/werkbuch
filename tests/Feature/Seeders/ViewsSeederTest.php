@@ -45,7 +45,6 @@ $clickdummy = function (): array {
             ];
         $views[$name] = [
             'icon' => $field("/icon: '([\w-]+)'/"),
-            'layout' => $field("/layout: '(\w+)'/") ?? 'list',
             'creator' => $field('/created_by: USER_IDS\.(\w+)/'),
             'created_at' => $field("/created_at: at\('([^']+)'\)/"),
             'display' => $display,
@@ -89,7 +88,8 @@ it('seeds the six views of the clickdummy with their filters', function () use (
         $seeded = View::query()->where('name', $name)->sole();
 
         expect($seeded->icon)->toBe($view['icon'])
-            ->and($seeded->display['layout'])->toBe($view['layout'])
+            // the clickdummy names a layout per view; a view keeps none since WEBU-68
+            ->and($seeded->display)->not->toHaveKey('layout')
             ->and($seeded->creator->handle)->toBe($view['creator'])
             ->and(array_map(fn (array $c) => [$c['field'], $c['op']], $seeded->filter['conditions']))->toBe(array_map(fn (array $c) => [$c[0], $c[1]], $view['conditions']))
             ->and($seeded->filter['version'])->toBe(1)

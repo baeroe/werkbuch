@@ -1,5 +1,5 @@
 // Package claude runs Claude Code headless (spec 7.8): `claude -p --output-format stream-json --verbose`, the prompt on
-// standard input, the contract appended to the system prompt from a private file, `--model`, `--resume <session>`, the
+// standard input, the contract appended to the system prompt from a private file, `--model`, `--effort`, `--resume <session>`, the
 // server `werkbuch-run` through `--mcp-config` in addition to the machine's own servers (no `--strict-mcp-config`, spec
 // 8.1, 8.7). Runs that change code bypass the permission prompts; light runs (`review`, `comment`) only get reading
 // tools (A493).
@@ -40,6 +40,9 @@ func Args(job adapters.Job) []string {
 	}
 	if job.Run.Model != "" {
 		args = append(args, "--model", job.Run.Model)
+	}
+	if job.Run.Effort != nil {
+		args = append(args, "--effort", *job.Run.Effort)
 	}
 	if job.MCPConfig != "" {
 		args = append(args, "--mcp-config", job.MCPConfig)

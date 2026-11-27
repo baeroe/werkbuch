@@ -3,6 +3,7 @@
 namespace App\Actions\Labels;
 
 use App\Access\Authorize;
+use App\Domain\Agents\AgentCli;
 use App\Domain\Agents\AgentModel;
 use App\Domain\Catalog\Tone;
 use App\Enums\Catalog;
@@ -30,10 +31,10 @@ final class SaveLabel
     use AsAction;
 
     /** The keys of the input the action reads (the OpenAPI document holds its body against them). */
-    public const FIELDS = ['name', 'color', 'agent_model'];
+    public const FIELDS = ['name', 'color', 'agent_model', 'agent_effort'];
 
     /**
-     * @param  array<array-key, mixed>  $input  `name`, `color`, `agent_model` (`cli:model` or `null`, spec 7.7)
+     * @param  array<array-key, mixed>  $input  `name`, `color`, `agent_model` (`cli:model` or `null`, spec 7.7), `agent_effort` (an effort of Claude Code or `null`, WEBU-66)
      *
      * @throws ValidationException
      * @throws Problem 404 for a label deleted meanwhile
@@ -49,12 +50,14 @@ final class SaveLabel
 
             $current = $label === null ? null : Label::query()->find($label->id) ?? throw Problem::notFound();
 
-            /** @var array{name: string, color: string, agent_model?: ?string} $valid */
+            /** @var array{name: string, color: string, agent_model?: ?string, agent_effort?: ?string} $valid */
             $valid = Validator::make($input, [
                 'name' => CatalogInput::name('labels', $current),
                 'color' => CatalogInput::tone(),
                 'agent_model' => ['nullable', Rule::in(AgentModel::values())],
+                'agent_effort' => ['nullable', Rule::in(AgentCli::Claude->efforts())],
             ], [
+                'agent_effort' => __('field.effort.invalid', ['allowed' => implode(', ', AgentCli::Claude->efforts())]),
                 'agent_model' => __('field.agent_model.invalid', ['allowed' => implode(', ', AgentModel::values())]),
                 ...CatalogInput::messages(),
                 ...CatalogInput::required(['color']),
@@ -64,13 +67,15 @@ final class SaveLabel
 
             $saved = $current ?? new Label;
             $saved->fill(['name' => $valid['name'], 'color' => Tone::from($valid['color']), // a body without the key keeps the model (A590), `null` clears it
-                'agent_model' => array_key_exists('agent_model', $input) ? ($valid['agent_model'] ?? null) : $current?->agent_model])->save();
+                'agent_model' => array_key_exists('agent_model', $input) ? ($valid['agent_model'] ?? null) : $current?->agent_model,
+                'agent_effort' => array_key_exists('agent_effort', $input) ? ($valid['agent_effort'] ?? null) : $current?->agent_effort])->save();
 
             if ($before === null) {
                 EventRecorder::record(EventType::LabelCreated, $actor, $saved, null, [
                     'name' => ['old' => null, 'new' => $saved->name],
                     'color' => ['old' => null, 'new' => $saved->color->value],
                     ...($saved->agent_model === null ? [] : ['agent_model' => ['old' => null, 'new' => $saved->agent_model]]),
+                    ...($saved->agent_effort === null ? [] : ['agent_effort' => ['old' => null, 'new' => $saved->agent_effort]]),
                 ]);
 
                 return $saved;
@@ -89,10 +94,10 @@ final class SaveLabel
     /**
      * What an event compares.
      *
-     * @return array{name: string, color: string, agent_model: ?string}
+     * @return array{name: string, color: string, agent_model: ?string, agent_effort: ?string}
      */
     private static function snapshot(Label $label): array
     {
-        return ['name' => $label->name, 'color' => $label->color->value, 'agent_model' => $label->agent_model];
+        return ['name' => $label->name, 'color' => $label->color->value, 'agent_model' => $label->agent_model, 'agent_effort' => $label->agent_effort];
     }
 }

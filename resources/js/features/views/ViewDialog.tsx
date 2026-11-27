@@ -10,14 +10,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { FormDialog } from '@/components/ui/FormDialog';
-import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { ViewFields } from '@/features/items/save/ViewFields';
 import { useSettle } from '@/hooks/mutation';
 import { useSaveView } from '@/hooks/views';
 import { notifyError } from '@/lib/errors';
 import { t } from '@/lib/i18n';
-import type { Display, View, ViewInput } from '@/types';
-import { LAYOUT_ORDER, LAYOUTS, newView } from './viewForm';
+import type { View, ViewInput } from '@/types';
+import { newView } from './viewForm';
 
 type Errors = { name?: string | undefined; icon?: string | undefined };
 
@@ -35,7 +34,6 @@ export function ViewDialog({ open, onOpenChange, view = null, onSaved }: ViewDia
   const settle = useSettle();
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('layers');
-  const [layout, setLayout] = useState<Display['layout']>('list');
   const [errors, setErrors] = useState<Errors>({});
   const [notice, setNotice] = useState<string | null>(null);
   const nameField = useRef<HTMLInputElement>(null);
@@ -46,7 +44,6 @@ export function ViewDialog({ open, onOpenChange, view = null, onSaved }: ViewDia
     if (!open) return;
     setName(view?.name ?? '');
     setIcon(view?.icon ?? 'layers');
-    setLayout(view?.display.layout ?? 'list');
     setErrors({});
     setNotice(null);
   }, [open, view]);
@@ -61,8 +58,8 @@ export function ViewDialog({ open, onOpenChange, view = null, onSaved }: ViewDia
     }
     setErrors({});
     const input: ViewInput = view
-      ? { id: view.id, name: trimmed, icon, filter: view.filter, display: { ...view.display, layout } }
-      : newView(trimmed, icon, layout);
+      ? { id: view.id, name: trimmed, icon, filter: view.filter, display: view.display }
+      : newView(trimmed, icon);
     settle(save.mutateAsync(input), {
       onSuccess: (saved) => onSaved(saved, !editing),
       onError: (error) => {
@@ -103,15 +100,6 @@ export function ViewDialog({ open, onOpenChange, view = null, onSaved }: ViewDia
         errors={errors}
         nameRef={nameField}
       />
-      <div className="flex flex-col gap-1.5">
-        <p className="text-sm font-medium text-ink">{t('views.dialog.layout')}</p>
-        <SegmentedControl
-          label={t('views.dialog.layout')}
-          value={layout}
-          onValueChange={setLayout}
-          options={LAYOUT_ORDER.map((value) => ({ value, label: t(LAYOUTS[value].label), icon: LAYOUTS[value].icon }))}
-        />
-      </div>
     </FormDialog>
   );
 }

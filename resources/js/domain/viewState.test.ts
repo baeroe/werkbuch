@@ -28,7 +28,7 @@ const nordlicht: View = {
   name: 'Studio Nordlicht',
   icon: 'building-2',
   filter: { version: 1, conditions: [{ field: 'property:customer', op: 'is', value: 'opt_nordlicht' }] },
-  display: { layout: 'table', group_by: 'none', sort: { field: 'key', direction: 'asc' }, fields: ['key', 'title', 'state'], show_sub_items: true },
+  display: { group_by: 'none', sort: { field: 'key', direction: 'asc' }, fields: ['key', 'title', 'state'], show_sub_items: true },
   created_by: 'u_theo',
   created_at: '2026-10-01T09:15:00.000Z',
   updated_at: '2026-10-01T09:15:00.000Z',
@@ -37,22 +37,25 @@ const nordlicht: View = {
 describe('the view state in the URL', () => {
   it('encode/decode round-trips filter and display', () => {
     const search = encodeViewState({ filter, display });
-    expect(decodeViewState(search)).toEqual({ filter, display });
+    // the layout is the list's own, remembered and never written (WEBU-68)
+    const { layout: _layout, ...written } = display;
+    expect(decodeViewState(search)).toEqual({ filter, display: written });
     // location.search starts with "?"
-    expect(decodeViewState(`?${search}`)).toEqual({ filter, display });
+    expect(decodeViewState(`?${search}`)).toEqual({ filter, display: written });
   });
 
-  it('keeps the layout readable as ?layout=board, as links of other screens write it', () => {
+  it('keeps the layout readable as ?layout=board, as shared links write it, but never writes it (WEBU-68)', () => {
     expect(decodeViewState('?layout=board')).toEqual({ display: { layout: 'board' } });
-    expect(new URLSearchParams(encodeViewState({ display: { layout: 'board' } })).get('layout')).toBe('board');
+    expect(new URLSearchParams(encodeViewState({ display: { layout: 'board' } })).get('layout')).toBeNull();
   });
 
   it('writes only what differs from the base, and nothing when nothing does', () => {
     const base = viewStateOf(nordlicht);
     expect(encodeViewState(base, base)).toBe('');
 
-    const search = new URLSearchParams(encodeViewState({ filter: base.filter, display: { ...base.display, layout: 'list' } }, base));
-    expect([...search.keys()]).toEqual(['layout']);
+    expect(encodeViewState({ filter: base.filter, display: { ...base.display, layout: 'board' } }, base)).toBe('');
+    const search = new URLSearchParams(encodeViewState({ filter: base.filter, display: { ...base.display, group_by: 'priority' } }, base));
+    expect([...search.keys()]).toEqual(['group']);
 
     const emptied = new URLSearchParams(encodeViewState({ filter: { version: 1, conditions: [] }, display: base.display }, base));
     expect(emptied.get('filter')).toBe('[]');
@@ -84,7 +87,9 @@ describe('unsaved changes', () => {
 
   it('a changed display is an unsaved change as well', () => {
     const saved = viewStateOf(nordlicht);
-    expect(hasUnsavedChanges(saved, { ...saved, display: { ...saved.display, layout: 'list' } })).toBe(true);
+    expect(hasUnsavedChanges(saved, { ...saved, display: { ...saved.display, group_by: 'priority' } })).toBe(true);
+    // the layout is no part of a view (WEBU-68)
+    expect(hasUnsavedChanges(saved, { ...saved, display: { ...saved.display, layout: 'board' } })).toBe(false);
     expect(hasUnsavedChanges(saved, { ...saved, display: { ...saved.display, fields: ['title', 'key', 'state'] } })).toBe(true);
   });
 
@@ -104,7 +109,7 @@ describe('unsaved changes', () => {
   it('a view does not change by being shown: the base of a view is its saved state', () => {
     const base = viewStateOf(nordlicht);
     expect(base.filter).toEqual(nordlicht.filter);
-    expect(base.display).toEqual(nordlicht.display);
+    expect(base.display).toEqual({ ...nordlicht.display, layout: 'list' });
     // a copy: changing what is shown never touches the cached view
     expect(base.filter).not.toBe(nordlicht.filter);
   });

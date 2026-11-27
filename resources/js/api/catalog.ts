@@ -20,7 +20,7 @@ export function listLabels(args: PageArgs = {}): Promise<Page<Label>> {
   return getPage<Label>('/labels', { ...args });
 }
 
-export type LabelInput = Omit<SaveInput<Label>, 'agent_model'> & { agent_model?: string | null };
+export type LabelInput = Omit<SaveInput<Label>, 'agent_model' | 'agent_effort'> & { agent_model?: string | null; agent_effort?: string | null };
 
 /** `agent_model` left out stays as it is (A590); `null` makes a plain label. */
 export function saveLabel(input: LabelInput): Promise<Label> {

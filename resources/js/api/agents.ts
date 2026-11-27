@@ -15,7 +15,7 @@ export function getAgentConfig(botId: string): Promise<AgentConfig> {
   return one(get<{ data: AgentConfig }>(path(botId)));
 }
 
-export type AgentConfigInput = Pick<AgentConfig, 'enabled' | 'runner_ids' | 'cli' | 'model' | 'models'>;
+export type AgentConfigInput = Pick<AgentConfig, 'enabled' | 'runner_ids' | 'cli' | 'model' | 'models' | 'effort' | 'efforts'>;
 
 export function saveAgentConfig(botId: string, input: AgentConfigInput): Promise<AgentConfig> {
   return one(put<{ data: AgentConfig }>(path(botId), input));
@@ -38,7 +38,7 @@ export function getProjectAgents(projectId: string): Promise<ProjectAgents> {
 /** What `PUT /projects/{project}/agents` takes: every key, `null` where a text is empty. */
 export type ProjectAgentsInput = Pick<
   ProjectAgents,
-  'review_bot_id' | 'instructions' | 'models' | 'max_corrections' | 'max_conflicts' | 'review_person_prs' | 'comment_on_pr' | 'merge_method' | 'setup_command' | 'stop_command' | 'teardown_command'
+  'review_bot_id' | 'instructions' | 'models' | 'efforts' | 'max_corrections' | 'max_conflicts' | 'review_person_prs' | 'comment_on_pr' | 'merge_method' | 'setup_command' | 'stop_command' | 'teardown_command'
 >;
 
 export function saveProjectAgents(projectId: string, input: ProjectAgentsInput): Promise<ProjectAgents> {

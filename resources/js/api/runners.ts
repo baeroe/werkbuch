@@ -18,7 +18,7 @@ export function listRunners(): Promise<Page<Runner>> {
 }
 
 /** Renames a runner, sets its places, or both: only the keys sent change. */
-export function updateRunner(id: string, input: { name?: string; slots?: RunnerSlots }): Promise<Runner> {
+export function updateRunner(id: string, input: { name?: string; slots?: RunnerSlots; usage_limit?: number | null }): Promise<Runner> {
   return one(patch<{ data: Runner }>(path(id), input));
 }
 

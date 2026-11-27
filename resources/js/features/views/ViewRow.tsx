@@ -10,7 +10,6 @@ import { Link } from '@inertiajs/react';
 import { Copy, LoaderCircle, Pencil, Trash2 } from 'lucide-react';
 import { useUserMap } from '@/components/fields/itemData';
 import { Avatar } from '@/components/ui/Avatar';
-import { Chip } from '@/components/ui/Chip';
 import { cx } from '@/components/ui/cx';
 import { IconButton } from '@/components/ui/IconButton';
 import { ViewIcon } from '@/components/ui/ViewIcon';
@@ -19,7 +18,7 @@ import { t } from '@/lib/i18n';
 import { paths } from '@/lib/links';
 import { useUiStore } from '@/store/ui';
 import type { Project, View } from '@/types';
-import { groupingText, LAYOUTS, namedProjects } from './viewForm';
+import { groupingText, namedProjects } from './viewForm';
 
 /** The row shows the focus ring of its link, which covers the whole row; its own controls sit above the link. */
 const linkFocusRing =
@@ -47,14 +46,13 @@ function scopeText(view: View, projects: Project[] | undefined): string | null {
 export function ViewRow({ view, projects, copying, manageReason, onCopy, onEdit, onDelete }: ViewRowProps) {
   const creator = useUserMap().get(view.created_by);
   const flashing = useUiStore((state) => state.flashIds.includes(view.id));
-  const layout = LAYOUTS[view.display.layout];
   const scope = scopeText(view, projects);
 
   return (
     <li
       className={cx(
         'relative grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-ctl px-2 py-2 transition-colors duration-120',
-        'md:grid-cols-[2rem_minmax(0,1fr)_7rem_11.5rem_auto]',
+        'md:grid-cols-[2rem_minmax(0,1fr)_11.5rem_auto]',
         flashing ? 'bg-wash' : 'hover:bg-hover',
         linkFocusRing,
       )}
@@ -77,10 +75,7 @@ export function ViewRow({ view, projects, copying, manageReason, onCopy, onEdit,
         <p className="truncate text-sm text-muted">{scope ? `${scope} · ${groupingText(view.display.group_by)}` : groupingText(view.display.group_by)}</p>
       </div>
       <div className="col-start-2 flex flex-wrap items-center gap-x-3 gap-y-1 md:contents">
-        <Chip icon={<layout.icon className="size-3.5 text-muted" />} className="justify-self-start md:col-start-3">
-          {t(layout.label)}
-        </Chip>
-        <span className="inline-flex min-w-0 items-center gap-2 text-sm text-muted md:col-start-4">
+        <span className="inline-flex min-w-0 items-center gap-2 text-sm text-muted md:col-start-3">
           {creator && <Avatar user={creator} size="sm" decorative />}
           <span className="min-w-0 truncate">
             <span className="sr-only">{t('views.created_by')} </span>
@@ -88,7 +83,7 @@ export function ViewRow({ view, projects, copying, manageReason, onCopy, onEdit,
           </span>
         </span>
       </div>
-      <div className="relative z-10 col-start-2 flex items-center justify-end gap-0.5 md:col-start-5">
+      <div className="relative z-10 col-start-2 flex items-center justify-end gap-0.5 md:col-start-4">
         <FavoriteToggle kind="view" id={view.id} name={view.name} />
         <IconButton
           icon={copying ? LoaderCircle : Copy}

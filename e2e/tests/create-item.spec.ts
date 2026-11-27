@@ -306,7 +306,7 @@ test('opens the new item in the preview from the toast', async ({ page }) => {
     const toast = page.getByRole('status').filter({ has: created(page, `${identifier}-1`) });
     await tabTo(page, toast.getByRole('button', { name: tr('en', 'items.create.open'), exact: true }), { max: 80 });
     await page.keyboard.press('Enter');
-    const preview = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+    const preview = page.getByRole('dialog', { name: tr('en', 'items.peek.label') });
     await expect(preview.getByRole('heading', { name: 'E2E Footer anpassen' })).toBeVisible();
   } finally {
     await removeE2eProject(page, identifier);

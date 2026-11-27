@@ -31,7 +31,7 @@ import type { AgentRun, ItemAgentState, User, WorkItem } from '@/types';
 import { Actor, When } from '../activity/EventLine';
 import { RunLog } from './RunLog';
 import { focusNewRun, QUEUED_WATCH_MS, runIds } from './runFocus';
-import { canRetry, formatDuration, isActive, isBusy, modelOrigin, needsGiveBack, runDuration, RunStatusBadge, waitingText } from './runParts';
+import { canRetry, effortOrigin, formatDuration, isActive, isBusy, modelOrigin, needsGiveBack, runDuration, RunStatusBadge, waitingText } from './runParts';
 
 type Thread = ItemAgentState['thread'] | undefined;
 
@@ -182,6 +182,14 @@ export function RunLine({ run, runs, item, thread }: { run: AgentRun; runs: read
               </span>{' '}
               <span className="text-muted">{modelOrigin(run, labels)}</span>
             </Fact>
+            {run.effort && (
+              <Fact term={t('items.agents.run.effort')}>
+                <span className="font-medium" translate="no">
+                  {run.effort}
+                </span>{' '}
+                <span className="text-muted">{effortOrigin(run)}</span>
+              </Fact>
+            )}
             {run.runner_name && (
               <Fact term={t('items.agents.run.runner')}>
                 <span translate="no">{run.runner_name}</span>

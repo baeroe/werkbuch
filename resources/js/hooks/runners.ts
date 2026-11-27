@@ -26,7 +26,7 @@ export function useActiveRuns({ live = false }: { live?: boolean } = {}) {
 
 /** Variables: `{ id, name?, slots? }`. */
 export function useUpdateRunner() {
-  return useApiMutation(({ id, ...input }: { id: string; name?: string; slots?: RunnerSlots }) => updateRunner(id, input), [qk.runners.all, qk.agentConfigs.all]);
+  return useApiMutation(({ id, ...input }: { id: string; name?: string; slots?: RunnerSlots; usage_limit?: number | null }) => updateRunner(id, input), [qk.runners.all, qk.agentConfigs.all]);
 }
 
 /** Variable: the runner id. Its runs end, so the runs reload too. */

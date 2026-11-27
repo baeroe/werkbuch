@@ -11,7 +11,7 @@
 
 import { ROW_FIELDS } from '@/components/items/ItemRowBase';
 import type { TranslationKey } from '@/lib/i18n';
-import type { Display, Property, SortSpec } from '@/types';
+import type { Display, Property, SortSpec, ViewDisplay } from '@/types';
 import { PROPERTY_PREFIX } from '../filter/fieldOps';
 
 /** The core fields a list sorts by, in the order of the menu (`SortSpec::CORE`). */
@@ -59,9 +59,10 @@ export function listSort(sort: SortSpec, properties: readonly Property[] | undef
 
 /**
  * A display as it can be saved: without fields that are gone (a deleted property, a typo in a link), a sort on something
- * unknown is the manual order. While the properties are not known, every property field and sort stays.
+ * unknown is the manual order. While the properties are not known, every property field and sort stays. The layout
+ * stays behind: a view saves none (WEBU-68).
  */
-export function savableDisplay(display: Display, properties: readonly Property[] | undefined): Display {
+export function savableDisplay({ layout: _layout, ...display }: Display, properties: readonly Property[] | undefined): ViewDisplay {
   const known = (field: string) =>
     DISPLAY_FIELDS.includes(field) || (field.startsWith(PROPERTY_PREFIX) && (properties === undefined || propertyOf(field, properties) !== undefined));
   return { ...display, sort: listSort(display.sort, properties, true)!, fields: display.fields.filter(known) };

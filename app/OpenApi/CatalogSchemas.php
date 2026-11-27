@@ -3,6 +3,7 @@
 namespace App\OpenApi;
 
 use App\Access\ProjectRole;
+use App\Domain\Agents\AgentCli;
 use App\Domain\Agents\AgentModel;
 use App\Domain\Automations\AutomationKey;
 use App\Domain\Catalog\Tone;
@@ -469,11 +470,12 @@ final class CatalogSchemas
      */
     public static function label(): array
     {
-        return self::object('A label as a whole (a `PUT` replaces it).', [
+        return self::object('A label; a `PUT` replaces it.', [
             'id' => self::echoed('string'),
             'name' => self::name(),
             'color' => self::tone('label'),
-            'agent_model' => ['type' => ['string', 'null'], 'enum' => [...AgentModel::values(), null], 'description' => 'The model of runs at its items, `cli:model`; left out it stays, `null` clears it.'],
+            'agent_model' => ['type' => ['string', 'null'], 'enum' => [...AgentModel::values(), null], 'description' => 'Model (`cli:model`) and effort of its runs; left out stays, `null` clears.'],
+            'agent_effort' => ['type' => ['string', 'null'], 'enum' => [...AgentCli::Claude->efforts(), null]],
         ], ['name', 'color'], true);
     }
 

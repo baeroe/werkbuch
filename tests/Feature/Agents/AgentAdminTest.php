@@ -67,7 +67,7 @@ it('reads and sets the agent configuration of a bot as a whole', function () {
     $this->actingAs($this->admin);
 
     $this->getJson("/api/v1/bots/{$bot->id}/agent")->assertOk()->assertJsonPath('data', [
-        'bot_id' => $bot->id, 'enabled' => false, 'runner_ids' => [], 'cli' => 'claude', 'model' => 'sonnet', 'models' => [], 'updated_at' => null,
+        'bot_id' => $bot->id, 'enabled' => false, 'runner_ids' => [], 'cli' => 'claude', 'model' => 'sonnet', 'models' => [], 'effort' => null, 'efforts' => [], 'updated_at' => null,
     ]);
     $this->getJson("/api/v1/bots/{$this->admin->id}/agent")->assertNotFound();
     $this->putJson("/api/v1/bots/{$this->admin->id}/agent", [])->assertNotFound();

@@ -21,6 +21,6 @@ final class LabelResource extends JsonResource
         /** @var Label $label */
         $label = $this->resource;
 
-        return ['id' => $label->id, 'name' => $label->name, 'color' => $label->color->value, 'agent_model' => $label->agent_model];
+        return ['id' => $label->id, 'name' => $label->name, 'color' => $label->color->value, 'agent_model' => $label->agent_model, 'agent_effort' => $label->agent_effort];
     }
 }

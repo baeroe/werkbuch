@@ -94,10 +94,12 @@ test('creates a template with the keyboard and runs it now', async ({ page }) =>
     const toast = page.getByRole('status').filter({ hasText: tr('en', 'items.create.created', { key: `${project.identifier}-1` }) });
     await tabTo(page, toast.getByRole('button', { name: tr('en', 'items.create.open'), exact: true }), { max: 80 });
     await page.keyboard.press('Enter');
-    const peek = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+    const peek = page.getByRole('dialog', { name: tr('en', 'items.peek.label') });
     await expect(peek.getByRole('heading', { name: /^E2E report \d{4}$/ })).toBeVisible();
     await expect(peek.getByRole('list', { name: tr('en', 'items.activity.list') })).toContainText('Automation');
-    // the log of the template shows the run by hand
+    // the log of the template shows the run by hand, behind the modal preview (WEBU-67)
+    await page.keyboard.press('Escape');
+    await expect(peek).toHaveCount(0);
     await expect(page.getByRole('list', { name: tr('en', 'templates.runs.label') }).getByRole('listitem')).toHaveCount(1);
   } finally {
     await removeE2eProject(page, project.identifier);

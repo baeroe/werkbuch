@@ -23,6 +23,7 @@ import (
 	"github.com/baeroe/werkbuch/runner/internal/protocol"
 	"github.com/baeroe/werkbuch/runner/internal/socket"
 	"github.com/baeroe/werkbuch/runner/internal/update"
+	"github.com/baeroe/werkbuch/runner/internal/usage"
 )
 
 // Recent is how many ended runs the daemon remembers for the socket.
@@ -43,6 +44,7 @@ type Daemon struct {
 	Sampler   *load.Sampler
 	CLIs      *clis.Detector
 	Equipment *equipment.Collector
+	Usage     *usage.Reader // the Claude subscription (WEBU-65); nil reports none
 	Updater   Updater
 	Log       *slog.Logger
 	// Checks runs the checks of `doctor` in the environment of the daemon (`GET /doctor`, A500).
@@ -131,6 +133,9 @@ func (d *Daemon) refreshReport(ctx context.Context) {
 	if d.Equipment != nil {
 		eq := d.Equipment.Collect(ctx, false)
 		r.Equipment = &eq
+	}
+	if d.Usage != nil {
+		r.Usage = d.Usage.Current(ctx)
 	}
 	d.mu.Lock()
 	d.report, d.reportAt = r, time.Now()

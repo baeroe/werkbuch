@@ -250,7 +250,7 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
     path: () => '/projects/WEB',
     state: async (page) => {
       await onList(page, 'j', ' ');
-      await expect(page.getByRole('complementary', { name: en('items.peek.label') }).locator('[data-item-title]')).toBeVisible();
+      await expect(page.getByRole('dialog', { name: en('items.peek.label') }).locator('[data-item-title]')).toBeVisible();
     },
   }),
   state({

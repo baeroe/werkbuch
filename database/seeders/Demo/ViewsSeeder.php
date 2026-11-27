@@ -46,25 +46,25 @@ class ViewsSeeder extends Seeder
         $option = fn (string $key, string $option) => PropertyOption::query()->where('label', $label = DemoTexts::get("catalog.property.{$key}.option.{$option}"))
             ->whereIn('property_id', Property::query()->where('key', $key)->select('id'))->value('id') ?? throw new RuntimeException("No option {$label}.");
         $catalog = CatalogProperties::load();
-        $list = fn (string $groupBy, array $fields = self::FIELDS): array => ['layout' => 'list', 'group_by' => $groupBy, 'sort' => ['field' => 'rank', 'direction' => 'asc'], 'fields' => $fields, 'show_sub_items' => true];
+        $list = fn (string $groupBy, array $fields = self::FIELDS): array => ['group_by' => $groupBy, 'sort' => ['field' => 'rank', 'direction' => 'asc'], 'fields' => $fields, 'show_sub_items' => true];
 
         $views = [
             ['due_week', 'calendar-clock', '09-14 10:00', [
                 ['field' => 'state_category', 'op' => 'in', 'value' => self::OPEN],
                 ['field' => 'due_date', 'op' => 'is', 'value' => 'this_week'],
-            ], ['layout' => 'list', 'group_by' => 'project', 'sort' => ['field' => 'due_date', 'direction' => 'asc'], 'fields' => self::FIELDS, 'show_sub_items' => false]],
+            ], ['group_by' => 'project', 'sort' => ['field' => 'due_date', 'direction' => 'asc'], 'fields' => self::FIELDS, 'show_sub_items' => false]],
             ['prod_bugs', 'bug', '09-21 15:30', [
                 ['field' => 'type', 'op' => 'is', 'value' => $bug],
                 ['field' => 'property:environment', 'op' => 'is', 'value' => $option('environment', 'prod')],
-            ], ['layout' => 'board', 'group_by' => 'state', 'sort' => ['field' => 'priority', 'direction' => 'asc'], 'fields' => ['key', 'title', 'assignee', 'priority', 'labels'], 'show_sub_items' => false]],
+            ], ['group_by' => 'state', 'sort' => ['field' => 'priority', 'direction' => 'asc'], 'fields' => ['key', 'title', 'assignee', 'priority', 'labels'], 'show_sub_items' => false]],
             ['kira', 'bot', '10-05 14:00', [
                 ['field' => 'assignee', 'op' => 'is', 'value' => $people['kira']],
             ], $list('state')],
             ['nordlicht', 'building-2', '10-01 11:15', [
                 ['field' => 'property:customer', 'op' => 'is', 'value' => $option('customer', 'nordlicht')],
-            ], ['layout' => 'table', 'group_by' => 'none', 'sort' => ['field' => 'key', 'direction' => 'asc'], 'fields' => ['key', 'title', 'state', 'assignee', 'due_date', 'property:customer', 'property:effort'], 'show_sub_items' => true]],
+            ], ['group_by' => 'none', 'sort' => ['field' => 'key', 'direction' => 'asc'], 'fields' => ['key', 'title', 'state', 'assignee', 'due_date', 'property:customer', 'property:effort'], 'show_sub_items' => true]],
             ['roadmap', 'route', '09-28 09:45', [],
-                ['layout' => 'timeline', 'group_by' => 'project', 'sort' => ['field' => 'start_date', 'direction' => 'asc'], 'fields' => ['key', 'title'], 'show_sub_items' => false]],
+                ['group_by' => 'project', 'sort' => ['field' => 'start_date', 'direction' => 'asc'], 'fields' => ['key', 'title'], 'show_sub_items' => false]],
             ['blocked', 'octagon-alert', '10-12 16:20', [
                 ['field' => 'blocked', 'op' => 'is', 'value' => true],
             ], $list('state')],

@@ -162,7 +162,7 @@ test('keeps a draft over closing the preview', async ({ page }) => {
     await expect(row).toBeVisible();
     await tabTo(page, row, { max: 80 });
     await page.keyboard.press(' ');
-    const preview = page.getByRole('complementary', { name: tr('en', 'items.peek.label') });
+    const preview = page.getByRole('dialog', { name: tr('en', 'items.peek.label') });
     await expect(preview.getByRole('heading', { name: 'E2E Entwurf behalten' })).toBeVisible();
 
     await preview.getByRole('button', { name: tr('en', 'items.comments.write') }).click();

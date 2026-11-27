@@ -533,6 +533,8 @@ describe('Agents: settings (WEBU-32)', () => {
     expect(screen.getByText('Gilt nur für Agenten mit Claude Code.')).toBeTruthy();
     await choose(user, /^Antwort/, 'gpt-5-codex-mini');
     await choose(user, /^Antwort/, /Wie beim Bot/);
+    // the effort of Claude Code per kind (WEBU-66)
+    await choose(user, /^Effort für Umsetzen/, 'xhigh');
     await user.type(screen.getByRole('textbox', { name: /Projektinformationen und Regeln$/ }), 'Pest in DDEV.');
 
     await user.click(screen.getByRole('button', { name: 'Speichern' }));
@@ -542,6 +544,7 @@ describe('Agents: settings (WEBU-32)', () => {
       review_bot_id: 'u_kira',
       instructions: 'Pest in DDEV.',
       models: { review: 'claude:haiku' },
+      efforts: { task: 'xhigh' },
       max_corrections: 5,
       max_conflicts: 2,
       review_person_prs: true,

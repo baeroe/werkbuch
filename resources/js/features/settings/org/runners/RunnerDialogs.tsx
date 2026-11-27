@@ -1,7 +1,8 @@
 /*
  * The small dialogs of a runner (spec 8.4, 10.1; port of the clickdummy): its places, set here and not on the machine
- * (whole numbers from 1 to 16, per repo at most as many as in all; the server says so at the field), and its name, which
- * only werkbuch knows. Both send only their own key; a refusal stands at its field.
+ * (whole numbers from 1 to 16, per repo at most as many as in all; the server says so at the field) with the usage limit
+ * of the Claude subscription (1–100 percent, empty for none, WEBU-65), and its name, which only werkbuch knows. Both send
+ * only their own keys; a refusal stands at its field.
  */
 
 import { useState, type RefObject } from 'react';
@@ -42,15 +43,18 @@ export function PlacesDialog({ runner, open, onOpenChange, finalFocus }: DialogP
     per_repo: String(runner?.slots.per_repo ?? ''),
     light: String(runner?.slots.light ?? ''),
   });
+  const [limit, setLimit] = useState(runner?.usage_limit == null ? '' : String(runner.usage_limit));
   // a refusal at a field goes as soon as the person types there again; the next send shows them all anew
-  const [typed, setTyped] = useState<ReadonlySet<keyof RunnerSlots>>(new Set());
+  const [typed, setTyped] = useState<ReadonlySet<keyof RunnerSlots | 'usage_limit'>>(new Set());
 
   function send() {
     if (!runner) return;
     setTyped(new Set());
     // as typed: what is no whole number goes as null, and the server's sentence stands at the field
     const slots = { total: whole(values.total), per_repo: whole(values.per_repo), light: whole(values.light) } as unknown as RunnerSlots;
-    settle(save.mutateAsync({ id: runner.id, slots }), {
+    // empty is no limit; what is no whole number goes as typed, and the server's sentence stands at the field
+    const usage_limit = limit.trim() === '' ? null : (whole(limit) ?? (limit as unknown as number));
+    settle(save.mutateAsync({ id: runner.id, slots, usage_limit }), {
       onSuccess: (saved) => {
         onOpenChange(false);
         toast({ title: t('settings.runners.slots.done', { name: saved.name }), description: placesSummary(saved.slots), tone: 'success' });
@@ -70,7 +74,7 @@ export function PlacesDialog({ runner, open, onOpenChange, finalFocus }: DialogP
       description={t('settings.runners.slots.description')}
       submitLabel={t('settings.frame.save')}
       pending={save.isPending}
-      notice={isTransient(save.error) ? null : noticeOf(save.error, ['slots.total', 'slots.per_repo', 'slots.light'])}
+      notice={isTransient(save.error) ? null : noticeOf(save.error, ['slots.total', 'slots.per_repo', 'slots.light', 'usage_limit'])}
       finalFocus={finalFocus}
       onSubmit={send}
     >
@@ -90,6 +94,19 @@ export function PlacesDialog({ runner, open, onOpenChange, finalFocus }: DialogP
           }}
         />
       ))}
+      <Input
+        label={t('settings.runners.usage.limit_label')}
+        name="usage_limit"
+        inputMode="numeric"
+        autoComplete="off"
+        value={limit}
+        hint={t('settings.runners.usage.limit_hint')}
+        error={typed.has('usage_limit') ? undefined : fieldMessage(save.error, 'usage_limit')}
+        onChange={(event) => {
+          setLimit(event.target.value);
+          setTyped((current) => new Set(current).add('usage_limit'));
+        }}
+      />
     </FormDialog>
   );
 }

@@ -116,7 +116,7 @@ it('refuses a member who changes someone else\'s view', function () use ($web) {
     expect($created['isError'])->toBeFalse((string) json_encode($created))
         ->and($created['structuredContent']['data']['created_by'])->toBe($theo->id)
         ->and($changed['structuredContent']['data']['name'])->toBe('Theos Board')
-        ->and($read['structuredContent']['data']['display']['layout'])->toBe('board')
+        ->and($read['structuredContent']['data']['display'])->not->toHaveKey('layout')
         ->and($deleted['structuredContent'])->toBe(['done' => true])
         ->and(View::query()->whereKey($id)->exists())->toBeFalse();
 });

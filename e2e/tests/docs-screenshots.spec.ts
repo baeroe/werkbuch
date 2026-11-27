@@ -194,7 +194,8 @@ const SHOTS: Shot[] = [
     name: 'table',
     open: async (page, locale) => {
       await page.goto('/views');
-      await page.goto(`/views/${await idOf(page, 'views', DEMO[locale].table)}`);
+      // a view has no layout of its own (WEBU-68): the link names it
+      await page.goto(`/views/${await idOf(page, 'views', DEMO[locale].table)}?layout=table`);
       const grid = page.getByRole('grid');
       await expect(grid.getByRole('gridcell').filter({ hasText: 'WEB-47' })).toBeVisible();
     },
@@ -204,7 +205,7 @@ const SHOTS: Shot[] = [
     name: 'timeline',
     open: async (page, locale) => {
       await page.goto('/views');
-      await page.goto(`/views/${await idOf(page, 'views', DEMO[locale].timeline)}`);
+      await page.goto(`/views/${await idOf(page, 'views', DEMO[locale].timeline)}?layout=timeline`);
       await expect(page.locator('[data-timeline-scroller]').getByText('WEB-30').first()).toBeVisible();
       await expect(page.locator('[data-layout-skeleton]')).toHaveCount(0);
     },

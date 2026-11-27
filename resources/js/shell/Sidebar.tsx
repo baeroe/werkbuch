@@ -164,6 +164,7 @@ export function Sidebar() {
   if (collapsed) return <SidebarRail />;
   return (
     <nav
+      data-shell-chrome=""
       aria-label={t('shell.sidebar.label')}
       className="tracing fixed top-2 bottom-2 left-2 z-20 hidden w-[var(--side-w)] flex-col gap-4 rounded-card p-2 [--glass-shadow:var(--elev-1)] md:flex"
     >

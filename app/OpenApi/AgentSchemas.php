@@ -2,7 +2,6 @@
 
 namespace App\OpenApi;
 
-use App\Actions\Agents\SaveAgentConfig;
 use App\Actions\Agents\SaveAgentRule;
 use App\Actions\Agents\SaveProjectAgents;
 use App\Actions\Runners\UpdateRunner;
@@ -66,11 +65,12 @@ final class AgentSchemas
     {
         $slot = ['type' => 'integer', 'minimum' => 1, 'maximum' => Runner::MAX_SLOTS];
 
-        return self::object('Only the keys that are sent change (`'.implode('`, `', UpdateRunner::FIELDS).'`). Org admins and the default bot may write; every error comes in one 422.', [
+        return self::object('Only the keys sent change (`'.implode('`, `', UpdateRunner::FIELDS).'`); every error in one 422.', [
             'name' => ['type' => 'string', 'minLength' => 1, 'maxLength' => Runner::NAME_MAX, 'description' => 'Trimmed; no other active runner may have it (in any case).'],
-            'slots' => self::object('The places as a whole: code runs in all and per repo (at most as many as in all), light runs (`review`, `comment`) in a pot of their own.', [
+            'slots' => self::object('The places as a whole: code runs in all and per repo (at most all), light runs (`review`, `comment`) apart.', [
                 'total' => $slot, 'per_repo' => $slot, 'light' => $slot,
             ], ['total', 'per_repo', 'light'], false),
+            'usage_limit' => ['type' => ['integer', 'null'], 'minimum' => 1, 'maximum' => 100, 'description' => 'From this percent of the Claude subscription (session or week) no new `claude` runs; `null` none.'],
         ]);
     }
 
@@ -98,21 +98,33 @@ final class AgentSchemas
     }
 
     /**
+     * The efforts of Claude Code per kind of run (WEBU-66), in the bodies of a bot and a project.
+     *
+     * @return array<string, mixed>
+     */
+    public static function efforts(): array
+    {
+        return ['type' => ['object', 'array', 'null'], 'maxItems' => 0, 'propertyNames' => ['enum' => RunType::VALUES], 'additionalProperties' => ['enum' => AgentCli::Claude->efforts()], 'description' => 'Effort of `claude` per kind of run; left out it stays.'];
+    }
+
+    /**
      * `PUT /bots/{user}/agent`.
      *
      * @return array<string, mixed>
      */
     public static function agentConfig(): array
     {
-        return self::object('The configuration as a whole; all five keys are required. Org admins and the default bot may write; every error comes in one 422.', [
+        return self::object('The configuration as a whole; the first five keys are required. Org admins and the default bot may write; every error comes in one 422.', [
             'enabled' => ['type' => 'boolean', 'description' => 'Whether the bot works as an agent; on needs an active bot with a responsible person, not the default bot.'],
             'runner_ids' => ['type' => 'array', 'items' => ['type' => 'string', 'pattern' => self::ULID], 'description' => 'The runner pool: active runners; empty is every runner of the organization.'],
             'cli' => ['type' => 'string', 'enum' => AgentCli::VALUES],
             'model' => [...self::models(), 'description' => 'The default model, one of the CLI.'],
-            'models' => ['type' => ['object', 'array'], 'maxItems' => 0, 'properties' => array_fill_keys(RunType::VALUES, self::models()), 'additionalProperties' => false, 'description' => 'A model per kind of run; a kind left out takes `model`. An empty map may come as `[]`.'],
+            'models' => ['type' => ['object', 'array'], 'maxItems' => 0, 'propertyNames' => ['enum' => RunType::VALUES], 'additionalProperties' => self::models(), 'description' => 'A model per kind of run; a kind left out takes `model`. An empty map may come as `[]`.'],
+            'effort' => ['type' => ['string', 'null'], 'enum' => [...AgentCli::Claude->efforts(), null], 'description' => 'Effort of `claude`; `null`: the CLI\'s. Left out it stays.'],
+            'efforts' => ['$ref' => '#/components/schemas/Efforts'],
             'bot_id' => ['type' => 'string', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
             'updated_at' => ['type' => ['string', 'null'], 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
-        ], SaveAgentConfig::FIELDS);
+        ], ['enabled', 'runner_ids', 'cli', 'model', 'models']);
     }
 
     /**
@@ -181,7 +193,8 @@ final class AgentSchemas
         return self::object('The agent settings of the project as a whole (every key required); its admins write.', [
             'review_bot_id' => ['type' => ['string', 'null'], 'pattern' => self::ULID, 'description' => 'The review agent: a bot with a responsible person that may edit items of the project; `null`: the bot of the strand reviews, PRs of persons are not reviewed.'],
             'instructions' => $text(SaveProjectAgents::TEXT_MAX, 'Markdown for every run of the project (after the rules and the guidance of the type).'),
-            'models' => ['type' => ['object', 'array'], 'maxItems' => 0, 'properties' => array_fill_keys(RunType::VALUES, $model), 'additionalProperties' => false, 'description' => 'A model per kind of run, `cli:model`; it counts only for agents with that CLI. An empty map may come as `[]`.'],
+            'models' => ['type' => ['object', 'array'], 'maxItems' => 0, 'propertyNames' => ['enum' => RunType::VALUES], 'additionalProperties' => $model, 'description' => 'A model per kind of run, `cli:model`; it counts only for agents with that CLI. An empty map may come as `[]`.'],
+            'efforts' => ['$ref' => '#/components/schemas/Efforts'],
             'max_corrections' => $brake('Corrections per strand before it pauses.'),
             'max_conflicts' => $brake('Conflicts per strand before it pauses.'),
             'review_person_prs' => ['type' => 'boolean', 'description' => 'Whether PRs of persons get a review.'],
@@ -194,7 +207,7 @@ final class AgentSchemas
             'steps_complete' => ['type' => 'boolean', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
             'bots' => ['type' => 'array', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
             'updated_at' => ['type' => ['string', 'null'], 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
-        ], SaveProjectAgents::FIELDS);
+        ], array_values(array_diff(SaveProjectAgents::FIELDS, ['efforts'])));
     }
 
     /**
@@ -207,6 +220,9 @@ final class AgentSchemas
         $time = ['type' => 'string', 'format' => 'date-time'];
         $nullTime = ['type' => ['string', 'null'], 'format' => 'date-time'];
         $names = ['type' => 'array', 'items' => ['type' => 'string']];
+        $window = ['anyOf' => [self::object('A window: used in percent and when it resets.', [
+            'percent' => ['type' => 'number', 'minimum' => 0, 'maximum' => 100], 'resets_at' => $nullTime,
+        ], ['percent', 'resets_at'], false), ['type' => 'null']]];
 
         return [
             'RunnerResource' => [
@@ -229,6 +245,11 @@ final class AgentSchemas
                     'mcp_servers' => $names, 'skills' => $names, 'plugins' => $names,
                     'werkbuch_access' => [...$names, 'description' => 'MCP servers of the machine that reach werkbuch with a token of their own: a way past the run token.'],
                 ], ['mcp_servers', 'skills', 'plugins', 'werkbuch_access'], false), ['type' => 'null']]],
+                'usage' => ['anyOf' => [self::object('The used share of the Claude subscription, as the runner last read it from the sign-in of Claude Code.', [
+                    'session' => $window, 'week' => $window,
+                ], ['session', 'week'], false), ['type' => 'null']], 'description' => '`null` before a runner that reads it reported.'],
+                'usage_limit' => ['type' => ['integer', 'null'], 'description' => 'The percent from which it takes no new runs of `claude`; `null` for none.'],
+                'over_usage_limit' => ['type' => 'boolean', 'description' => 'The limit holds back new runs of `claude` now.'],
                 'created_at' => $nullTime, 'updated_at' => $nullTime,
             ],
             'RunnerPairingResource' => [
@@ -240,9 +261,11 @@ final class AgentSchemas
             'AgentRunResource' => [
                 'type' => ['type' => 'string', 'enum' => RunType::VALUES],
                 'status' => ['type' => 'string', 'enum' => RunStatus::VALUES],
-                'waiting_reason' => ['type' => ['string', 'null'], 'enum' => [...AgentRun::WAITING_REASONS, null], 'description' => '`agent_off`: the agent is switched off; `no_cli`: no runner of the pool has the CLI; `runner_offline`: the runner of its strand is offline (30 minutes, then another takes over).'],
+                'waiting_reason' => ['type' => ['string', 'null'], 'enum' => [...AgentRun::WAITING_REASONS, null], 'description' => '`agent_off`: the agent is switched off; `no_cli`: no runner of the pool has the CLI; `runner_offline`: the runner of its strand is offline (30 minutes, then another takes over); `usage_limit`: the runner it waits for reached its usage limit of the Claude subscription.'],
                 'cli' => ['type' => 'string', 'enum' => AgentCli::VALUES],
                 'model_source' => ['type' => 'string', 'enum' => AgentRun::MODEL_SOURCES],
+                'effort' => ['type' => ['string', 'null'], 'enum' => [...AgentCli::Claude->efforts(), null], 'description' => 'The effort the CLI gets; `null`: its own default.'],
+                'effort_source' => ['type' => ['string', 'null'], 'enum' => [...AgentRun::MODEL_SOURCES, null]],
                 'runner_last_seen_at' => [...$nullTime, 'description' => 'The last contact of the runner: how long a run waits for a runner that is offline.'],
                 'lease_expires_at' => $nullTime, 'started_at' => $nullTime, 'deadline_at' => $nullTime, 'finished_at' => $nullTime,
                 'result' => ['anyOf' => [self::object('What came of it, as the runner reported it.', [
@@ -260,6 +283,7 @@ final class AgentSchemas
             ],
             'AgentProjectSettingsResource' => [
                 'models' => ['type' => 'object', 'additionalProperties' => ['type' => 'string', 'enum' => AgentModel::values()], 'description' => 'A model per kind of run, `cli:model`.'],
+                'efforts' => ['type' => 'object', 'additionalProperties' => ['type' => 'string', 'enum' => AgentCli::Claude->efforts()], 'description' => 'The effort of `claude` per kind of run.'],
                 'merge_method' => ['type' => 'string', 'enum' => AgentProjectSettings::MERGE_METHODS],
                 'steps_complete' => ['type' => 'boolean', 'description' => 'Whether the workflow of the project names every step of the agents; without them no run starts.'],
                 'bots' => ['type' => 'array', 'description' => 'The active bots of the project and the active org admin bots (not the default bot) and the saved review agent, by name, with their agent (A621).', 'items' => self::object('A bot of the project.', [
@@ -276,6 +300,8 @@ final class AgentSchemas
             'AgentConfigResource' => [
                 'cli' => ['type' => 'string', 'enum' => AgentCli::VALUES],
                 'models' => ['type' => 'object', 'additionalProperties' => ['type' => 'string'], 'description' => 'A model per kind of run.'],
+                'effort' => ['type' => ['string', 'null'], 'enum' => [...AgentCli::Claude->efforts(), null], 'description' => 'The default effort; `null`: the CLI\'s own.'],
+                'efforts' => ['type' => 'object', 'additionalProperties' => ['type' => 'string', 'enum' => AgentCli::Claude->efforts()], 'description' => 'An effort per kind of run.'],
                 'updated_at' => $nullTime,
             ],
         ];

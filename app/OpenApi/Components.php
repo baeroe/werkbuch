@@ -44,6 +44,7 @@ final class Components implements DocumentTransformer
             'SortSpec' => Schemas::sortSpec(),
             'Display' => Schemas::display(),
             'Schedule' => OperationsSchemas::schedule(),
+            'Efforts' => AgentSchemas::efforts(),
         ];
     }
 

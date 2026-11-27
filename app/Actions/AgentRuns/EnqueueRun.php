@@ -60,6 +60,7 @@ final class EnqueueRun
             $repository = $context['repository_github_id'] ?? null;
             $number = $context['pr_number'] ?? null;
             $model = RunModels::for($config, $kind, $project->id, $item);
+            $effort = RunModels::effort($config, $kind, $project->id, $item);
             // the head of the PR when a run that changes code was queued: its end tells a push from none (A606)
             if ($thread !== null && in_array($kind, AgentFlow::CODE, true)) {
                 $context['start_head'] = $thread->head_sha;
@@ -73,6 +74,8 @@ final class EnqueueRun
                 'model' => $model['model'],
                 'model_source' => $model['source'],
                 'model_label_id' => $model['label_id'],
+                'effort' => $effort['effort'],
+                'effort_source' => $effort['source'],
                 'project_id' => $project->id,
                 'work_item_id' => $item?->id,
                 'thread_id' => $thread?->id,
