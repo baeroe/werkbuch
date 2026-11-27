@@ -41,7 +41,7 @@ final class StartReview
 
             $reviews = AgentRun::query()->lockForUpdate()->where('repository_github_id', $pr['repository_github_id'])->where('pr_number', $pr['number'])
                 ->where('type', RunType::Review->value)->whereNot('status', RunStatus::Canceled->value)->orderBy('id')->get();
-            if ($reviews->contains(fn (AgentRun $run) => $run->head_sha === $pr['head_sha'])) {
+            if ($reviews->contains(fn (AgentRun $run) => $run->head_sha === $pr['head_sha'] && ! ($run->context['superseded'] ?? false))) {
                 return null;
             }
 

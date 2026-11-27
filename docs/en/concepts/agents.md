@@ -46,7 +46,7 @@ Done comes only after the merge: done sets the resolution, closes a parent epic 
 
 A **conflict** with the base branch goes before CI and review: werkbuch checks the open pull requests of agents after every push to their base and before every merge, and starts a **conflict** run. The agent merges the base into the branch (no rebase, no force push), resolves the conflicts, runs the affected tests and pushes.
 
-While a run that changes code is waiting or running, CI and review decide nothing; their findings wait at the strand. If the run ends without a new commit, waiting findings become a correction, otherwise the strand pauses (no change). With a new commit they are void.
+While a run that changes code is waiting or running, CI and review decide nothing; their findings wait at the strand. If the run ends without a new commit, waiting findings become a correction, otherwise the strand pauses (no change), unless a correction only set the proof of the item (`resolution_proof`): then the same head commit is reviewed again. With a new commit they are void.
 
 ## Kinds of runs
 
