@@ -22,6 +22,37 @@ final class CiState
     public const PASSING = ['success', 'neutral', 'skipped'];
 
     /**
+     * Only the newest attempt of each check (WEBU-62): a job started again keeps its name and gets a higher id, and the
+     * attempt it replaces no longer counts, red or not; the same for the statuses of one context. Keys of a check are
+     * kind, app and name; the newest is the one with the highest `id`. Order as given.
+     *
+     * @template T of array{kind: string, app: ?string, name: string, id: int}
+     *
+     * @param  iterable<T>  $runs
+     * @return list<T>
+     */
+    public static function latest(iterable $runs): array
+    {
+        $newest = [];
+        foreach ($runs as $run) {
+            $key = $run['kind']."\0".($run['app'] ?? '')."\0".$run['name'];
+            if (! isset($newest[$key]) || $run['id'] > $newest[$key]['id']) {
+                $newest[$key] = $run;
+            }
+        }
+        $ids = array_map(fn (array $run) => $run['kind'].':'.$run['id'], $newest);
+
+        $kept = [];
+        foreach ($runs as $run) {
+            if (in_array($run['kind'].':'.$run['id'], $ids, true)) {
+                $kept[] = $run;
+            }
+        }
+
+        return $kept;
+    }
+
+    /**
      * @param  iterable<array{status: string, conclusion: ?string}>  $runs
      */
     public static function of(iterable $runs): string

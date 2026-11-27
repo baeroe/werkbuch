@@ -21,3 +21,13 @@ it('is red as soon as one run fails, even while others run', function () use ($r
         expect(CiState::of([$run('in_progress'), $run('completed', $conclusion)]))->toBe(CiState::FAILURE, $conclusion);
     }
 });
+
+it('keeps only the newest attempt of each check of a kind, app and name, in the order given (WEBU-62)', function () {
+    $row = fn (int $id, string $name, string $conclusion, string $kind = 'check', ?string $app = 'GitHub Actions') => ['kind' => $kind, 'app' => $app, 'name' => $name, 'id' => $id, 'status' => 'completed', 'conclusion' => $conclusion];
+    $runs = [$row(1, 'e2e', 'failure'), $row(2, 'lint', 'success'), $row(3, 'e2e', 'success'), $row(4, 'e2e', 'success', 'status', null), $row(5, 'e2e', 'failure', 'check', 'Other')];
+
+    expect(array_column(CiState::latest($runs), 'id'))->toBe([2, 3, 4, 5])
+        ->and(CiState::of(CiState::latest([$row(1, 'e2e', 'failure'), $row(3, 'e2e', 'success')])))->toBe(CiState::SUCCESS)
+        ->and(CiState::of(CiState::latest([$row(3, 'e2e', 'failure'), $row(1, 'e2e', 'success')])))->toBe(CiState::FAILURE)
+        ->and(CiState::latest([]))->toBe([]);
+});
