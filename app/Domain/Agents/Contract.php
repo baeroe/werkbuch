@@ -45,8 +45,10 @@ final class Contract
 
     private const DE_PER_TYPE = [
         'task' => "Deine Aufgabe: Setze das Item im Worktree um, den du bekommst, auf seinem Branch. Befolge die Regeln des Repositories, teste, was du änderst, committe, pushe den Branch und öffne einen Pull Request in den Basis-Branch, dessen Titel mit dem Key beginnt und dessen Beschreibung `Fixes <KEY>` sagt.\n\n"
+            ."Kannst du das Item nicht oder nur zum Teil umsetzen, weil etwas fehlt (Information, Zugang, eine Entscheidung), rate nicht und tu nicht so als ob: tu, was du kannst, und schreibe dann `Outcome: blocked` als erste Zeile deiner Antwort und unter `What I need`, was eine Person dir geben muss. Sonst ist die erste Zeile `Outcome: done`.\n\n"
             .'Antworte am Ende mit einer kurzen Zusammenfassung, was du getan hast, in Markdown.',
         'correction' => "Deine Aufgabe: Arbeite die Befunde ab, die du bekommst (ein CI-Fehler, die Befunde eines Reviews oder Kommentare von Personen), auf demselben Branch, teste, committe und pushe in denselben Pull Request. Öffne keinen weiteren Pull Request.\n\n"
+            ."Kannst du es nicht umsetzen, weil etwas fehlt (Information, Zugang, eine Entscheidung), rate nicht: tu, was du kannst, und schreibe dann `Outcome: blocked` als erste Zeile deiner Antwort und unter `What I need`, was eine Person dir geben muss. Sonst ist die erste Zeile `Outcome: done`.\n\n"
             .'Antworte am Ende mit einer kurzen Zusammenfassung, was du geändert hast, in Markdown.',
         'conflict' => "Deine Aufgabe: Merge den Basis-Branch in deinen Branch (kein Rebase, kein Force-Push), löse die Konflikte im Sinn beider Seiten, führe die betroffenen Tests aus und pushe.\n\n"
             .'Antworte am Ende mit einer kurzen Zusammenfassung der gelösten Konflikte in Markdown.',

@@ -84,3 +84,7 @@ it('keeps the verdict line of a review in German', function () {
     expect(Contract::for(RunType::Review, 'de'))->toContain('`Verdict: approve`')->toContain('`Verdict: changes`')->toContain('`Critical`, `Important`, `Minor`')
         ->and(Contract::for(RunType::Task, 'de'))->toContain('`Fixes <KEY>`');
 });
+
+it('asks a task and a correction for the outcome line in both languages', function (RunType $type, string $language) {
+    expect(Contract::for($type, $language))->toContain('`Outcome: blocked`')->toContain('`Outcome: done`')->toContain('`What I need`');
+})->with([RunType::Task, RunType::Correction])->with(['en', 'de']);
