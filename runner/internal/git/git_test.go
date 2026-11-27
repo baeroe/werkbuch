@@ -120,6 +120,28 @@ func TestReviewWorktreeAndSweep(t *testing.T) {
 	}
 }
 
+func TestRetireRemovesNamedWorktreesExceptBusyOnes(t *testing.T) {
+	ctx := context.Background()
+	origin := Origin(t)
+	m := &Manager{Data: t.TempDir()}
+	gone, _ := m.Prepare(ctx, Spec{Name: "gone", Repo: origin, Branch: "b1"})
+	busy, _ := m.Prepare(ctx, Spec{Name: "busy", Repo: origin, Branch: "b2"})
+	other, _ := m.Prepare(ctx, Spec{Name: "other", Repo: origin, Branch: "b3"})
+	taken := func(name string) (func(), bool) { return func() {}, name != "busy" }
+	removed := m.Retire(ctx, []string{"gone", "busy", "unknown", "../x"}, taken, nil)
+	if len(removed) != 1 {
+		t.Fatalf("removed %v", removed)
+	}
+	if _, err := os.Stat(gone.Dir); !os.IsNotExist(err) {
+		t.Fatal("gone stays")
+	}
+	for _, ws := range []*Workspace{busy, other} {
+		if _, err := os.Stat(ws.Dir); err != nil {
+			t.Fatal("a worktree that was not named went")
+		}
+	}
+}
+
 func TestNamesAndRefs(t *testing.T) {
 	for in, want := range map[string]string{"01abc": "01abc", "run-01x": "run-01x", "a b/c": "a-b-c"} {
 		if got, err := Name(in); err != nil || got != want {

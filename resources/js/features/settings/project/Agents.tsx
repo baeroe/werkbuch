@@ -91,6 +91,7 @@ interface Fields {
   review_person_prs: boolean;
   comment_on_pr: boolean;
   setup_command: string;
+  stop_command: string;
   teardown_command: string;
   max_corrections: string;
   max_conflicts: string;
@@ -109,6 +110,7 @@ const fieldsOf = (link: ProjectRepository | null, settings: ProjectAgents): Fiel
   review_person_prs: settings.review_person_prs,
   comment_on_pr: settings.comment_on_pr,
   setup_command: settings.setup_command ?? '',
+  stop_command: settings.stop_command ?? '',
   teardown_command: settings.teardown_command ?? '',
   max_corrections: String(settings.max_corrections),
   max_conflicts: String(settings.max_conflicts),
@@ -363,6 +365,7 @@ function AgentsForm({ project, canManage, readOnlyReason, link, settings, github
               comment_on_pr: value.comment_on_pr,
               merge_method: value.merge_method,
               setup_command: textOrNull(value.setup_command),
+              stop_command: textOrNull(value.stop_command),
               teardown_command: textOrNull(value.teardown_command),
             },
           });
@@ -440,7 +443,7 @@ function AgentsForm({ project, canManage, readOnlyReason, link, settings, github
     return t('settings.project.agents.models.as_bot_one', { model: named.map((entry) => `${nameOf(entry.bot_id)}: ${entry.model}`).join(', ') });
   }
 
-  const area = (name: 'setup_command' | 'teardown_command' | 'instructions') => ({
+  const area = (name: 'setup_command' | 'stop_command' | 'teardown_command' | 'instructions') => ({
     name,
     value: value[name],
     readOnly: !canManage,
@@ -585,6 +588,16 @@ function AgentsForm({ project, canManage, readOnlyReason, link, settings, github
             {...area('setup_command')}
           />
           <Textarea
+            label={t('settings.project.agents.worktree.stop')}
+            rows={2}
+            spellCheck={false}
+            translate="no"
+            autoCapitalize="none"
+            placeholder={t('settings.project.agents.worktree.none')}
+            hint={t('settings.project.agents.worktree.stop_hint')}
+            {...area('stop_command')}
+          />
+          <Textarea
             label={t('settings.project.agents.worktree.teardown')}
             rows={2}
             spellCheck={false}
@@ -682,7 +695,7 @@ function AgentsForm({ project, canManage, readOnlyReason, link, settings, github
 }
 
 /** The fields of `PUT …/agents` a 422 is shown at. */
-const SETTINGS_PLACED = ['review_bot_id', 'instructions', 'models', 'max_corrections', 'max_conflicts', 'merge_method', 'setup_command', 'teardown_command'];
+const SETTINGS_PLACED = ['review_bot_id', 'instructions', 'models', 'max_corrections', 'max_conflicts', 'merge_method', 'setup_command', 'stop_command', 'teardown_command'];
 
 export function Agents({ project, canManage, readOnlyReason }: ProjectSectionProps) {
   const link = useProjectRepository(project.id);

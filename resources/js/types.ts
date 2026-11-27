@@ -1026,6 +1026,7 @@ export interface ProjectAgents {
   comment_on_pr: boolean;
   merge_method: MergeMethod;
   setup_command: string | null;
+  stop_command: string | null;
   teardown_command: string | null;
   bots: ProjectAgentBot[];
   /** Whether the workflow of the project names every step of the agents. */

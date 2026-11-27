@@ -2811,6 +2811,8 @@
     "settings.project.agents.worktree.none": "keiner",
     "settings.project.agents.worktree.setup": "Setup-Befehl",
     "settings.project.agents.worktree.setup_hint": "Läuft vor jedem Code-Auftrag im Worktree (auch in einem vorhandenen), muss also wiederholbar sein. $WERKBUCH_WORKTREE ist sein Pfad, $WERKBUCH_STRAND sein Name als Projektname, etwa für ein eigenes DDEV-Projekt.",
+    "settings.project.agents.worktree.stop": "Stop-Befehl",
+    "settings.project.agents.worktree.stop_hint": "Läuft im Worktree nach jedem Code-Auftrag (auch nach einem fehlgeschlagenen oder abgebrochenen), etwa `ddev stop`: hält die App an, ohne Daten zu löschen; das nächste Setup startet sie wieder. Mit denselben Variablen.",
     "settings.project.agents.worktree.teardown": "Teardown-Befehl",
     "settings.project.agents.worktree.teardown_hint": "Läuft, bevor der Runner den Worktree entfernt (nach dem Merge oder wenn der Strang endet), mit denselben Variablen.",
     "settings.project.agents.worktree.title": "Worktree",

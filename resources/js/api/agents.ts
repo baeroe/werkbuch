@@ -38,7 +38,7 @@ export function getProjectAgents(projectId: string): Promise<ProjectAgents> {
 /** What `PUT /projects/{project}/agents` takes: every key, `null` where a text is empty. */
 export type ProjectAgentsInput = Pick<
   ProjectAgents,
-  'review_bot_id' | 'instructions' | 'models' | 'max_corrections' | 'max_conflicts' | 'review_person_prs' | 'comment_on_pr' | 'merge_method' | 'setup_command' | 'teardown_command'
+  'review_bot_id' | 'instructions' | 'models' | 'max_corrections' | 'max_conflicts' | 'review_person_prs' | 'comment_on_pr' | 'merge_method' | 'setup_command' | 'stop_command' | 'teardown_command'
 >;
 
 export function saveProjectAgents(projectId: string, input: ProjectAgentsInput): Promise<ProjectAgents> {

@@ -218,6 +218,9 @@ func (d *Daemon) claim(ctx context.Context, wg *sync.WaitGroup) bool {
 	if a.HeartbeatSeconds > 0 {
 		d.Executor.SetHeartbeat(time.Duration(a.HeartbeatSeconds) * time.Second)
 	}
+	if len(a.ClosedThreads) > 0 {
+		d.retireInBackground(ctx, wg, a.ClosedThreads)
+	}
 	if a.Run == nil {
 		return false
 	}
@@ -316,6 +319,22 @@ func (d *Daemon) sweepInBackground(ctx context.Context, wg *sync.WaitGroup) bool
 		d.sweep(ctx)
 	}()
 	return true
+}
+
+// retireInBackground removes the worktrees of ended strands (teardowns can take minutes); it shares the one-at-a-time
+// guard of the sweep, a later claim names them again.
+func (d *Daemon) retireInBackground(ctx context.Context, wg *sync.WaitGroup, names []string) {
+	if !d.sweeping.CompareAndSwap(false, true) {
+		return
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer d.sweeping.Store(false)
+		for _, dir := range d.Executor.Git.Retire(ctx, names, d.Executor.TrySlot, d.Executor.Teardown) {
+			d.Log.Info("removed the worktree of an ended strand", "dir", dir)
+		}
+	}()
 }
 
 func (d *Daemon) sweep(ctx context.Context) {

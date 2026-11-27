@@ -181,6 +181,7 @@ type Run struct {
 	HeadSHA         *string    `json:"head_sha"`
 	SetupCommand    *string    `json:"setup_command"`
 	TeardownCommand *string    `json:"teardown_command"`
+	StopCommand     *string    `json:"stop_command"`
 	CommitIdentity  Identity   `json:"commit_identity"`
 	SystemPrompt    string     `json:"system_prompt"`
 	Prompt          string     `json:"prompt"`
@@ -212,6 +213,8 @@ func (r Run) SessionID() string {
 type ClaimAnswer struct {
 	Answer
 	Run *Run `json:"run"`
+	// ClosedThreads are worktree names of strands that ended on this runner: the runner removes them at once (WEBU-61)
+	ClosedThreads []string `json:"closed_threads"`
 }
 
 // HeartbeatAnswer says whether the run was canceled and when lease and limit end.

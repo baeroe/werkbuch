@@ -1729,7 +1729,7 @@ return [
         'action' => SaveProjectAgents::class,
         'run' => fn (Actor $a, MatrixWorld $w, string $column) => SaveProjectAgents::run($a, $w->project($column), [
             'review_bot_id' => null, 'instructions' => "Matrix {$column}", 'models' => ['review' => 'claude:opus'], 'max_corrections' => 2, 'max_conflicts' => 1,
-            'review_person_prs' => false, 'comment_on_pr' => true, 'merge_method' => 'squash', 'setup_command' => null, 'teardown_command' => null,
+            'review_person_prs' => false, 'comment_on_pr' => true, 'merge_method' => 'squash', 'setup_command' => null, 'stop_command' => null, 'teardown_command' => null,
         ]),
         'allowed' => $projectAdmins,
         'hidden' => ['outsider_private'],

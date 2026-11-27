@@ -315,6 +315,37 @@ func (m *Manager) Remove(ctx context.Context, dir string, teardown Teardown) err
 // Take hands the sweep a folder for itself: it returns how to give it back, or false while a run has it.
 type Take func(name string) (release func(), ok bool)
 
+// Retire removes the named worktrees (strands that ended; with a repo or, without one, a plain folder) with their
+// teardown, each only when no run has it.
+func (m *Manager) Retire(ctx context.Context, names []string, take Take, teardown Teardown) []string {
+	var removed []string
+	for _, raw := range names {
+		name, err := Name(raw)
+		if err != nil {
+			continue
+		}
+		for _, area := range []string{"worktrees", "work"} {
+			dir := filepath.Join(m.Data, area, name)
+			if _, err := os.Stat(dir + ".json"); err != nil {
+				continue
+			}
+			release := func() {}
+			if take != nil {
+				r, ok := take(name)
+				if !ok {
+					break
+				}
+				release = r
+			}
+			if m.Remove(ctx, dir, teardown) == nil {
+				removed = append(removed, dir)
+			}
+			release()
+		}
+	}
+	return removed
+}
+
 // Sweep removes worktrees and folders whose last run is older than keep (A497). Each folder is taken first (take: the
 // turn of the runs, never one a run has); under it the last use is read again, and it is held over teardown and
 // removal, so a run that comes meanwhile waits at its folder and makes it anew afterwards.

@@ -183,6 +183,28 @@ func TestSweepRunsTheTeardown(t *testing.T) {
 	}
 }
 
+func TestAClaimThatNamesEndedStrandsRemovesTheirWorktrees(t *testing.T) {
+	fake := fakewerkbuch.New()
+	defer fake.Close()
+	fake.ClosedThreads = []string{"ended-strand", "unknown"}
+	d := newDaemon(t, fake)
+	d.defaults()
+	torn := filepath.Join(t.TempDir(), "torn")
+	ws, err := d.Executor.Git.Prepare(context.Background(), git.Spec{Name: "ended-strand", Teardown: "touch " + torn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	d.claim(context.Background(), &wg)
+	wg.Wait()
+	if _, err := os.Stat(torn); err != nil {
+		t.Fatal("the teardown did not run for the ended strand")
+	}
+	if _, err := os.Stat(ws.Dir); !os.IsNotExist(err) {
+		t.Fatal("the worktree of the ended strand stays")
+	}
+}
+
 func TestReportReadsTheCache(t *testing.T) {
 	fake := fakewerkbuch.New()
 	defer fake.Close()
