@@ -209,7 +209,7 @@ return [
     'show the agent settings of a project' => ['GET', '/api/v1/projects/{project}/agents', 'params' => fn (MatrixWorld $w) => ['project' => 'WEB']],
     'set the agent settings of a project' => ['PUT', '/api/v1/projects/{project}/agents', 'params' => fn (MatrixWorld $w) => ['project' => 'WEB'], 'body' => [
         'review_bot_id' => null, 'instructions' => null, 'models' => [], 'max_corrections' => 3, 'max_conflicts' => 2,
-        'review_person_prs' => true, 'comment_on_pr' => true, 'merge_method' => 'squash', 'setup_command' => null, 'teardown_command' => null,
+        'review_person_prs' => true, 'comment_on_pr' => true, 'merge_method' => 'squash', 'setup_command' => null, 'stop_command' => null, 'teardown_command' => null,
     ]],
     'list runs' => ['GET', '/api/v1/runs'],
     'show a run' => ['GET', '/api/v1/runs/{run}', 'params' => fn (MatrixWorld $w) => ['run' => $w->run('org_admin')->id]],

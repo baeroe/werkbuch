@@ -35,7 +35,7 @@ final class SaveProjectAgents
 {
     use AsAction;
 
-    public const FIELDS = ['review_bot_id', 'instructions', 'models', 'max_corrections', 'max_conflicts', 'review_person_prs', 'comment_on_pr', 'merge_method', 'setup_command', 'teardown_command'];
+    public const FIELDS = ['review_bot_id', 'instructions', 'models', 'max_corrections', 'max_conflicts', 'review_person_prs', 'comment_on_pr', 'merge_method', 'setup_command', 'stop_command', 'teardown_command'];
 
     public const TEXT_MAX = 20_000;
 
@@ -64,6 +64,7 @@ final class SaveProjectAgents
             'comment_on_pr' => ['required', 'boolean'],
             'merge_method' => ['required', Rule::in(AgentProjectSettings::MERGE_METHODS)],
             'setup_command' => ['present', 'nullable', 'string', 'max:'.self::COMMAND_MAX],
+            'stop_command' => ['present', 'nullable', 'string', 'max:'.self::COMMAND_MAX],
             'teardown_command' => ['present', 'nullable', 'string', 'max:'.self::COMMAND_MAX],
         ], [
             '*.present' => __('field.required'),
@@ -78,6 +79,7 @@ final class SaveProjectAgents
             'comment_on_pr' => __('field.boolean'),
             'merge_method' => __('field.merge_method.invalid', ['allowed' => implode(', ', AgentProjectSettings::MERGE_METHODS)]),
             'setup_command' => __('field.command.max', ['max' => self::COMMAND_MAX]),
+            'stop_command' => __('field.command.max', ['max' => self::COMMAND_MAX]),
             'teardown_command' => __('field.command.max', ['max' => self::COMMAND_MAX]),
         ])->validate();
 
@@ -94,6 +96,7 @@ final class SaveProjectAgents
             'comment_on_pr' => filter_var($valid['comment_on_pr'], FILTER_VALIDATE_BOOLEAN),
             'merge_method' => $valid['merge_method'],
             'setup_command' => $text($valid['setup_command']),
+            'stop_command' => $text($valid['stop_command']),
             'teardown_command' => $text($valid['teardown_command']),
         ];
 

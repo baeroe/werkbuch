@@ -43,7 +43,25 @@ it('answers 200 with run null, the places and the version when there is no run',
         'version' => config('werkbuch.version'),
         'protocol' => 1,
         'heartbeat_seconds' => 15,
+        'closed_threads' => [],
     ]);
+});
+
+it('names the worktrees of strands that ended on the runner, and no others', function () use ($claim) {
+    [$runner, $token] = AgentWorld::runner();
+    [$other] = AgentWorld::runner();
+    $item = WorkItem::factory()->create(['project_id' => $this->project->id]);
+    $make = fn (array $a) => AgentThread::factory()->create(['bot_id' => $this->agent->id, 'work_item_id' => $item->id, 'project_id' => $this->project->id, ...$a]);
+    $merged = $make(['runner_id' => $runner->id, 'status' => AgentThread::MERGED]);
+    $closed = $make(['runner_id' => $runner->id, 'status' => AgentThread::CLOSED, 'worktree' => 'wb-own']);
+    $make(['runner_id' => $runner->id, 'status' => AgentThread::OPEN]);
+    // a worktree an open strand still uses stays
+    $make(['runner_id' => $runner->id, 'status' => AgentThread::MERGED, 'worktree' => 'shared']);
+    $make(['runner_id' => $runner->id, 'status' => AgentThread::PAUSED, 'worktree' => 'shared']);
+    $make(['runner_id' => $other->id, 'status' => AgentThread::MERGED]);
+    $make(['runner_id' => $runner->id, 'status' => AgentThread::MERGED, 'updated_at' => now()->subDays(8)]);
+
+    expect($claim($token)->assertOk()->json('closed_threads'))->toEqualCanonicalizing([$merged->id, 'wb-own']);
 });
 
 it('hands a queued run with everything the runner needs and starts it', function () use ($claim, $system) {
@@ -63,7 +81,7 @@ it('hands a queued run with everything the runner needs and starts it', function
         'project' => ['id' => $this->project->id, 'identifier' => 'WEB'],
         'item' => ['id' => $item->id, 'key' => $item->key, 'title' => 'Login mit Passkey'],
         'thread' => ['id' => $thread->id, 'branch' => "agent/{$item->key}-login-mit-passkey", 'base_branch' => 'main', 'worktree' => null, 'session_id' => null],
-        'head_sha' => null, 'setup_command' => null, 'teardown_command' => null, 'git' => null,
+        'head_sha' => null, 'setup_command' => null, 'stop_command' => null, 'teardown_command' => null, 'git' => null,
         'commit_identity' => ['name' => 'Kira', 'email' => $this->agent->handle.'@users.noreply.'.parse_url(config('app.url'), PHP_URL_HOST)],
         'system_prompt' => RunPrompts::for($run)['system_prompt'],
         'prompt' => RunPrompts::for($run)['prompt'],

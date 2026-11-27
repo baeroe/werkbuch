@@ -53,6 +53,8 @@ type Server struct {
 	Lease time.Duration
 	// FailResults answers this many results with 503 first.
 	FailResults int
+	// ClosedThreads is what every claim names as worktrees of ended strands.
+	ClosedThreads []string
 	// RenewGit answers `git-token` of a running run in its attempt (n counts from 1): a token, or a problem with status
 	// and reason. Without it the fake answers 409 no_repository.
 	RenewGit func(id string, n int) (git *protocol.Git, status int, reason string)
@@ -207,6 +209,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		report()
 		a := s.answer()
 		a["run"] = nil
+		a["closed_threads"] = s.ClosedThreads
 		if len(s.queue) > 0 {
 			id := s.queue[0]
 			s.queue = s.queue[1:]

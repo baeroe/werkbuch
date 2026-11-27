@@ -37,6 +37,7 @@ final class AgentProjectSettingsResource extends JsonResource
             'comment_on_pr' => $settings->comment_on_pr,
             'merge_method' => $settings->merge_method,
             'setup_command' => $settings->setup_command,
+            'stop_command' => $settings->stop_command,
             'teardown_command' => $settings->teardown_command,
             'bots' => ProjectAgentBots::of($project, $settings->review_bot_id),
             'steps_complete' => Workflow::query()->find($project->workflow_id)?->agentStepsComplete() ?? false,

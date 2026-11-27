@@ -2811,6 +2811,8 @@
     "settings.project.agents.worktree.none": "none",
     "settings.project.agents.worktree.setup": "Setup command",
     "settings.project.agents.worktree.setup_hint": "Runs in the worktree before every code run (also in an existing one), so it has to be repeatable. $WERKBUCH_WORKTREE is its path, $WERKBUCH_STRAND its name as a project name, for example for a DDEV project of its own.",
+    "settings.project.agents.worktree.stop": "Stop command",
+    "settings.project.agents.worktree.stop_hint": "Runs in the worktree after every code run (also a failed or canceled one), for example `ddev stop`: it stops the app without deleting data, and the next setup starts it again. Same variables.",
     "settings.project.agents.worktree.teardown": "Teardown command",
     "settings.project.agents.worktree.teardown_hint": "Runs before the runner removes the worktree (after the merge or when the strand ends), with the same variables.",
     "settings.project.agents.worktree.title": "Worktree",

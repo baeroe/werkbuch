@@ -72,8 +72,10 @@ final class ClaimRun
             return [$run, $run === null ? null : RunTokens::issue($run), RunnerProtocol::answer($locked)];
         }, 3);
 
+        $closed = self::closedThreads($runner);
+
         if ($run === null || $token === null) {
-            return ['run' => null, ...$answer];
+            return ['run' => null, ...$answer, 'closed_threads' => $closed];
         }
 
         // the installation token after the commit: never HTTP under the locks of the claim (A511)
@@ -83,15 +85,37 @@ final class ClaimRun
             report($e);
             self::giveBack($run, $e);
 
-            return ['run' => null, ...$answer];
+            return ['run' => null, ...$answer, 'closed_threads' => $closed];
         }
 
         // the run may have been canceled while GitHub answered (the guard, a person): then it is not handed out
         if ($git !== null && AgentRun::query()->whereKey($run->id)->value('status') !== RunStatus::Running) {
-            return ['run' => null, ...$answer];
+            return ['run' => null, ...$answer, 'closed_threads' => $closed];
         }
 
-        return ['run' => self::payload($run, $token, $git), ...$answer];
+        return ['run' => self::payload($run, $token, $git), ...$answer, 'closed_threads' => $closed];
+    }
+
+    /**
+     * The worktree names of strands that ended on this runner lately: it removes them at once (WEBU-61); a name it no
+     * longer holds costs it nothing, a week later the list no longer names it (the sweep is the fallback).
+     *
+     * @return list<string>
+     */
+    private static function closedThreads(Runner $runner): array
+    {
+        $name = fn (AgentThread $thread) => $thread->worktree ?: $thread->id;
+        $names = AgentThread::query()->where('runner_id', $runner->id)->whereIn('status', [AgentThread::MERGED, AgentThread::CLOSED])
+            ->where('updated_at', '>=', now()->subDays(7))->orderByDesc('updated_at')->limit(50)->get(['id', 'worktree'])->map($name)->all();
+        if ($names === []) {
+            return [];
+        }
+
+        // a worktree name an open or paused strand of the runner still uses stays (a shared `worktree` setting)
+        $held = AgentThread::query()->where('runner_id', $runner->id)->whereIn('status', [AgentThread::OPEN, AgentThread::PAUSED])
+            ->get(['id', 'worktree'])->map($name)->all();
+
+        return array_values(array_unique(array_diff($names, $held)));
     }
 
     /**
@@ -300,6 +324,7 @@ final class ClaimRun
             ],
             'head_sha' => $run->head_sha,
             'setup_command' => $settings->setup_command,
+            'stop_command' => $settings->stop_command,
             'teardown_command' => $settings->teardown_command,
             'commit_identity' => ['name' => $bot->name, 'email' => $bot->handle.'@users.noreply.'.(is_string($host) ? $host : 'localhost')],
             ...RunPrompts::for($run),

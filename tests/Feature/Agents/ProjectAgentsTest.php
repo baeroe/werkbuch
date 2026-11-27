@@ -21,7 +21,7 @@ use Tests\Support\AgentWorld;
 
 $body = fn (array $changes = []) => [
     'review_bot_id' => null, 'instructions' => null, 'models' => [], 'max_corrections' => 3, 'max_conflicts' => 2,
-    'review_person_prs' => true, 'comment_on_pr' => true, 'merge_method' => 'squash', 'setup_command' => null, 'teardown_command' => null, ...$changes,
+    'review_person_prs' => true, 'comment_on_pr' => true, 'merge_method' => 'squash', 'setup_command' => null, 'stop_command' => null, 'teardown_command' => null, ...$changes,
 ];
 
 it('reads the defaults of a project without settings and whether its workflow names the steps of the agents', function () {
