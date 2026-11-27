@@ -66,7 +66,7 @@ final class EditComment
                 'author_id' => $fresh->author_id,
             ] + Mentions::meta($mentioned));
             UpdateWorkItem::announceBots($actor, $locked, $mentioned, $fresh->id, true);
-            // a bot's comment quotes code, logs and reviews: the keys there relate nothing (A795)
+            // a bot's comment quotes code, logs and reviews: the keys there relate nothing (A796)
             if ($actor->user->isPerson()) {
                 ItemReferences::queue($actor, $locked, ItemReferences::anew($locked, Document::fromJson($old)->itemRefs(), [$key => $body]));
             }

@@ -75,7 +75,7 @@ final class AddComment
 
             EventRecorder::record(EventType::CommentCreated, $actor, $locked, $locked->project, null, ['comment_id' => $comment->id] + ($runId === null ? [] : ['run_id' => $runId]) + Mentions::meta($mentioned));
             UpdateWorkItem::announceBots($actor, $locked, $mentioned, $comment->id);
-            // a bot's comment quotes code, logs and reviews: the keys there relate nothing (A795)
+            // a bot's comment quotes code, logs and reviews: the keys there relate nothing (A796)
             if ($actor->user->isPerson()) {
                 ItemReferences::queue($actor, $locked, ItemReferences::anew($locked, [], [$key => $body]));
             }

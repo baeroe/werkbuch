@@ -170,10 +170,10 @@ test('unfolds a group with → and goes from header to header with ↑ and ↓',
   await expect(row(page, `${identifier}-1`)).toBeFocused();
 });
 
-test('switches to the board with 2 and back with 1, also in the address', async ({ page }) => {
+test('switches to the board with 1 and back with 2, also in the address', async ({ page }) => {
   const { identifier } = shared;
   await openList(page, identifier);
-  await page.keyboard.press('2');
+  await page.keyboard.press('1');
   await expect(page).toHaveURL(new RegExp(`/projects/${identifier}\\?layout=board$`));
   const layouts = page.getByRole('group', { name: tr('en', 'items.screen.layout') }).filter({ visible: true });
   await expect(layouts.getByRole('button', { name: new RegExp(tr('en', 'items.layout.board')) })).toHaveAttribute('aria-pressed', 'true');
@@ -185,7 +185,7 @@ test('switches to the board with 2 and back with 1, also in the address', async 
   await expect(card).toBeVisible();
   await tabTo(page, card, { max: 80 });
 
-  await page.keyboard.press('1');
+  await page.keyboard.press('2');
   await expect(page).toHaveURL(new RegExp(`/projects/${identifier}$`));
   await expect(layouts.getByRole('button', { name: new RegExp(tr('en', 'items.layout.list')) })).toHaveAttribute('aria-pressed', 'true');
   await expect(row(page, `${identifier}-1`)).toBeFocused();
