@@ -3,7 +3,9 @@
 use App\Actions\WorkItems\RemoveRelation;
 use App\Actions\WorkItems\UpdateWorkItem;
 use App\Agents\AgentConsumer;
+use App\Domain\Workflow\StateCategory;
 use App\Models\AgentRun;
+use App\Models\AgentThread;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workflow;
@@ -63,4 +65,25 @@ it('skips a blocked child of an epic and takes the next one', function () {
     UpdateWorkItem::run(actor($this->mara), $epic, ['assignee_id' => $this->kira->id]);
 
     expect(AgentRun::query()->sole()->work_item_id)->toBe($free->id);
+});
+
+it('pauses the strand of a blocker a person cancels, and still frees what it blocked', function () {
+    UpdateWorkItem::run(actor($this->mara), $this->blocker, ['assignee_id' => $this->kira->id]);
+    $thread = AgentThread::query()->sole();
+    UpdateWorkItem::run(actor($this->mara), $this->item, ['assignee_id' => $this->kira->id]);
+    expect(AgentRun::query()->where('work_item_id', $this->item->id)->count())->toBe(0);
+
+    $canceled = Workflow::default()->states->first(fn ($s) => $s->category === StateCategory::Canceled);
+    UpdateWorkItem::run(actor($this->mara), $this->blocker, ['state_id' => $canceled->id]);
+
+    expect($thread->fresh()->status)->toBe(AgentThread::PAUSED)
+        ->and(AgentRun::query()->where('work_item_id', $this->item->id)->count())->toBe(1);
+});
+
+it('starts nothing when a relation other than blocks is removed', function () {
+    $relates = WorkItemRelation::factory()->create(['source_id' => $this->blocker->id, 'target_id' => $this->item->id]);
+    UpdateWorkItem::run(actor($this->mara), $this->item, ['assignee_id' => $this->kira->id]);
+    RemoveRelation::run(actor($this->mara), $relates);
+
+    expect(AgentRun::query()->count())->toBe(0);
 });

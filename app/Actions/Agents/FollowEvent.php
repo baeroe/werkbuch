@@ -11,6 +11,7 @@ use App\Models\AgentRun;
 use App\Models\AgentThread;
 use App\Models\Comment;
 use App\Models\Event;
+use App\Models\RelationType;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkflowState;
@@ -45,8 +46,14 @@ final class FollowEvent
             EventType::AgentRunStarted => self::ofRun($event, fn (AgentRun $run) => HandleRunStarted::run($actor, $run)) ?? 'started',
             EventType::AgentRunFinished => self::ofRun($event, fn (AgentRun $run) => HandleRunResult::run($actor, $run)) ?? 'finished',
             EventType::ProjectMergeGuardConfirmed => (string) ResumeAfterGuard::run($actor, array_values((array) ($event->meta['thread_ids'] ?? []))),
-            default => self::wake($actor, $event) ?? self::byPeople($actor, $event),
+            default => self::both(self::byPeople($actor, $event), self::wake($actor, $event)),
         };
+    }
+
+    /** A blocker leaving the way must not hide what the people's move did (a canceled strand pauses, A595): both run. */
+    private static function both(string $byPeople, ?string $woke): string
+    {
+        return $woke ?? $byPeople;
     }
 
     /**
@@ -62,6 +69,13 @@ final class FollowEvent
         }
 
         if ($event->type === EventType::WorkItemRelationRemoved) {
+            // only a `blocks` relation that the item was the target of frees it (not "relates", not the blocker's own end)
+            $old = $event->changes['relation']['old'] ?? null;
+            $blocks = is_array($old) && ($old['direction'] ?? null) === 'inward'
+                && RelationType::query()->whereKey($old['relation_type_id'] ?? null)->where('built_in', 'blocks')->exists();
+            if (! $blocks) {
+                return null;
+            }
             $freed = collect([$item]);
         } elseif ($event->type === EventType::WorkItemStateChanged && WorkflowState::query()->whereKey($event->changes['state_id']['new'] ?? null)->first()?->category->isClosed()) {
             $freed = WorkItem::query()->whereIn('id', fn ($q) => $q->select('blocks.target_id')->from('work_item_relations as blocks')
