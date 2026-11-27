@@ -675,3 +675,32 @@ it('reviews the same head again when a correction only set the proof of the item
     expect(AgentThread::query()->sole()->pause_reason)->toBeNull()
         ->and($heads('review'))->toBe([$b, $b]);
 });
+
+it('marks an epic ready again when the correction after giving up on it has nothing to push (WEBU-70)', function () use ($claim, $finish, $assign, $pr) {
+    $epic = WorkItem::factory()->for($this->project)->epic()->create(['state_id' => $this->states['Todo']]);
+    $form = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo']]);
+    $a = str_repeat('a', 40);
+
+    $assign($this, $epic, $this->kira);
+    $task = $claim($this);
+    $pr($this, 'opened', $a, ['draft' => true]);
+    $finish($this, $task, ['commit' => $a]);
+    expect($this->github->ready)->toBe(['PR_fake12']);
+
+    // GitHub refused: werkbuch gave up, the epic went to „Korrektur“
+    $this->github->ready = [];
+    expect(GiveUpOnThread::run($this->system, AgentThread::query()->sole()->id, 'ready'))->toBe('gave_up')
+        ->and($epic->fresh()->state_id)->toBe($this->states['Todo']);
+
+    // the epic given back to the bot: the correction pushes nothing, werkbuch marks the PR ready instead of pausing
+    $assign($this, $epic->fresh(), $this->mara);
+    $assign($this, $epic->fresh(), $this->kira);
+    $correction = $claim($this);
+    expect($correction['type'])->toBe('correction');
+    $finish($this, $correction, ['summary' => 'Nothing to change.']);
+
+    expect($this->github->ready)->toBe(['PR_fake12'])
+        ->and(AgentThread::query()->sole()->only(['status', 'pause_reason']))->toBe(['status' => 'open', 'pause_reason' => null])
+        ->and(AgentThread::query()->sole()->ready_requested_at)->not->toBeNull()
+        ->and($epic->fresh()->state_id)->toBe($this->states['Pending']);
+});
