@@ -75,7 +75,7 @@ final class ReadyEpic
     }
 
     /** Whether no child of the epic is open: the agent did its children in this strand, the others are closed. */
-    private static function done(AgentThread $thread, WorkItem $epic): bool
+    public static function done(AgentThread $thread, WorkItem $epic): bool
     {
         $did = AgentRun::query()->where('thread_id', $thread->id)->where('type', RunType::Task->value)->where('status', 'succeeded')->pluck('work_item_id')->all();
 
