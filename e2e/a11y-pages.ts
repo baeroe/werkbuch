@@ -370,7 +370,7 @@ export const A11Y_PAGES: readonly A11yEntry[] = [
     page: 'Projects/Show',
     path: () => '/projects/WEB',
     state: async (page) => {
-      await onList(page, '2');
+      await onList(page, '1');
       await expect(page.locator('[data-board-list]').first()).toBeVisible();
     },
   }),
