@@ -82,7 +82,7 @@ it('names the open or paused strand of the item with its counters', function () 
 
     expect($agent($item)['thread'])->toBe([
         'id' => $thread->id, 'bot_id' => $this->kira->id, 'status' => 'paused', 'pause_reason' => 'brake',
-        'corrections' => 3, 'conflicts' => 1, 'pr_number' => 24, 'branch' => 'agent/WEB-1-form', 'runner_id' => $runner->id,
+        'corrections' => 3, 'conflicts' => 1, 'pr_number' => 24, 'branch' => 'agent/WEB-1-form', 'runner_id' => $runner->id, 'child' => null,
     ]);
 });
 

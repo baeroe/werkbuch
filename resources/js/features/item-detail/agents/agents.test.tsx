@@ -419,6 +419,13 @@ describe('the ways back', () => {
     await waitFor(() => expect(lastToast()?.title).toBe('WEB-51 ist wieder bei Kira'));
   });
 
+  it('names the child an epic on its own branch works on now (WEBU-71)', async () => {
+    agent = state({ thread: openThread({ child: { id: 'wi_web_52', key: 'WEB-52' } }) });
+    renderItem();
+    expect(await screen.findByText('Kira arbeitet am Kind')).toBeTruthy();
+    expect(within(notice()!).getByRole('link', { name: 'WEB-52' }).getAttribute('href')).toBe('/items/WEB-52');
+  });
+
   it('resumes a strand GitHub paused once the project has its repo, and says when the brake stopped it', async () => {
     agent = state({ thread: openThread({ status: 'paused', pause_reason: 'github', pr_number: 214 }), repository: false });
     let answer: { status?: number; body?: unknown } = { status: 500, body: { reason: 'server_error' } };

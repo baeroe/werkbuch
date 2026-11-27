@@ -2,6 +2,7 @@
 
 namespace App\Actions\AgentRuns;
 
+use App\Actions\Agents\EnsureEpicBranch;
 use App\Domain\Agents\AgentCli;
 use App\Domain\Agents\Protocol;
 use App\Domain\Agents\RunStatus;
@@ -82,6 +83,10 @@ final class ClaimRun
         // the installation token after the commit: never HTTP under the locks of the claim (A511)
         try {
             $git = InstallationTokens::forRun($run);
+            // a child strand works from the branch of its epic: GitHub has it before the runner looks (WEBU-71)
+            if ($git !== null && $run->type !== RunType::Review && $run->thread?->parent_thread_id !== null) {
+                EnsureEpicBranch::run($actor, $run->thread);
+            }
         } catch (Throwable $e) {
             report($e);
             self::giveBack($run, $e);

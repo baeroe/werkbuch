@@ -58,8 +58,7 @@ it('goes on with the next child of an epic and does not make the epic ready whil
     $epic = WorkItem::factory()->for($this->project)->epic()->create(['state_id' => $this->states['Todo']]);
     $first = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo']]);
     $second = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo']]);
-    UpdateWorkItem::run(actor($this->mara), $epic, ['assignee_id' => $this->kira->id]);
-    $thread = AgentThread::query()->sole();
+    $thread = AgentWorld::ruleAEpic($this->kira, $epic);
 
     expect($finishBlocked($this, AgentRun::query()->sole()))->toBe('next_child');
     expect($first->fresh()->state_id)->toBe($this->states['Pending'])->and($thread->fresh()->status)->toBe(AgentThread::OPEN)
@@ -76,8 +75,7 @@ it('keeps the epic from being ready also without the step blocked at the workflo
     $workflow->forceFill(['agent_states' => [...$workflow->agentStates(), 'blocked' => null]])->save();
     $epic = WorkItem::factory()->for($this->project)->epic()->create(['state_id' => $this->states['Todo']]);
     $first = WorkItem::factory()->for($this->project)->childOf($epic)->create(['state_id' => $this->states['Todo']]);
-    UpdateWorkItem::run(actor($this->mara), $epic, ['assignee_id' => $this->kira->id]);
-    $thread = AgentThread::query()->sole();
+    $thread = AgentWorld::ruleAEpic($this->kira, $epic);
 
     $finishBlocked($this, AgentRun::query()->sole());
 

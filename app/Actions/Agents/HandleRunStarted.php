@@ -4,6 +4,7 @@ namespace App\Actions\Agents;
 
 use App\Domain\Workflow\AgentStep;
 use App\Models\AgentRun;
+use App\Models\AgentThread;
 use App\Models\WorkItem;
 use App\Support\Actor;
 use App\Support\AgentFlow;
@@ -30,13 +31,16 @@ final class HandleRunStarted
             $thread = $run->thread;
 
             // the child before its epic, as a move that closes a parent locks them (A592)
-            if ($item->assignee_id === null && $thread !== null && $thread->work_item_id !== $item->id) {
+            if ($item->assignee_id === null && $thread !== null && ($thread->work_item_id !== $item->id || $thread->parent_thread_id !== null)) {
                 AgentFlow::assign($run->bot, $item, $run->bot_id);
             }
             AgentFlow::move($run->bot, $item, AgentStep::Working);
 
-            if ($thread !== null && $thread->work_item_id !== null && $thread->work_item_id !== $item->id) {
-                AgentFlow::move($run->bot, WorkItem::query()->findOrFail($thread->work_item_id), AgentStep::Working);
+            // the epic of a child: of the strand by rule A, of the epic strand for a child on its branch (WEBU-71)
+            $epicId = $thread?->parent_thread_id !== null ? AgentThread::query()->whereKey($thread->parent_thread_id)->value('work_item_id')
+                : ($thread !== null && $thread->work_item_id !== $item->id ? $thread->work_item_id : null);
+            if (is_string($epicId)) {
+                AgentFlow::move($run->bot, WorkItem::query()->findOrFail($epicId), AgentStep::Working);
             }
         }, 3);
     }

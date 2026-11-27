@@ -97,8 +97,15 @@ final class RunPrompts
         $pr = self::t($locale, $thread->pr_number === null ? 'There is no pull request yet.' : "The pull request is #{$thread->pr_number}.",
             $thread->pr_number === null ? 'Es gibt noch keinen Pull Request.' : "Der Pull Request ist #{$thread->pr_number}.");
 
-        return self::t($locale, "Work on the branch `{$thread->branch}` (from the base branch `{$thread->base_branch}`). {$pr}\n\n",
+        $where = self::t($locale, "Work on the branch `{$thread->branch}` (from the base branch `{$thread->base_branch}`). {$pr}\n\n",
             "Arbeite auf dem Branch `{$thread->branch}` (vom Basis-Branch `{$thread->base_branch}`). {$pr}\n\n");
+        $epic = $thread->parent_thread_id === null ? null : AgentThread::query()->find($thread->parent_thread_id);
+        $key = $epic?->work_item_id === null ? null : WorkItem::query()->find($epic->work_item_id)?->key;
+
+        // a child of an epic on its own branch (WEBU-71): its PR goes into the branch of the epic, never into the base of the project
+        return $key === null ? $where : $where.self::t($locale,
+            "This item is a child of the epic {$key}: `{$thread->base_branch}` is the branch of the epic. Open your pull request into `{$thread->base_branch}`, never into the base branch of the project; werkbuch merges it into the branch of the epic and later the epic into the base.\n\n",
+            "Dieses Item ist ein Kind des Epics {$key}: `{$thread->base_branch}` ist der Branch des Epics. Öffne deinen Pull Request in `{$thread->base_branch}`, nie in den Basis-Branch des Projekts; werkbuch merged ihn in den Branch des Epics und später das Epic in die Basis.\n\n");
     }
 
     /** An epic worked child by child on one branch (spec 7.6, rule A). */

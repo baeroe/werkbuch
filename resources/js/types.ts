@@ -1166,6 +1166,8 @@ export interface ItemAgentState {
     pr_number: number | null;
     branch: string | null;
     runner_id: string | null;
+    /** Of an epic on its own branch: the child whose strand is at work now. */
+    child?: { id: string; key: string } | null;
   } | null;
   refusal: AgentRefusal | null;
   /** The state the item must reach before its agent begins it (`ready` step), else null. */

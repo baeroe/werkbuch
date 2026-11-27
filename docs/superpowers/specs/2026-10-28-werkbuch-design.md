@@ -519,7 +519,7 @@ Properties liegen zentral in der Organisation und werden Typen zugeordnet (abges
 
 **Mehrfachbearbeitung** (Spec): Mehrere Items auswählen und gemeinsam Status, Assignee, Priorität, Labels oder Archiv ändern. Für jedes Item gelten seine Übergangsregeln. Was abgelehnt wurde, nennt ein Toast.
 
-**Ansichten eines Items:** als Vorschau (seit 2026-11-27 ein Modal über der Seite, A797; vorher ein Seitenpanel) und als eigene Seite, die über den Key adressierbar ist.
+**Ansichten eines Items:** als Vorschau (seit 2026-11-27 ein Modal über der Seite, A799; vorher ein Seitenpanel) und als eigene Seite, die über den Key adressierbar ist.
 
 **Gleichzeitige Änderungen:**
 - Einzelne Felder (Status, Assignee …) überschreiben sich zuletzt-gewinnt, die History zeigt beide Stände.
@@ -790,7 +790,7 @@ Gemeinsam haben alle Stufen: `/`-Menü, Markdown-Kürzel beim Tippen, Code-Blöc
 
 - **Seitenleiste:** Inbox, Meine Items, Views (Favoriten, „Alle Views“), Projekte (Favoriten, „Alle Projekte“). Ein Projekt hat die Bereiche Items, Wiki, Vorlagen und Einstellungen. Dazu Einstellungen und Profil.
 - **Item-Listen:** Filterleiste, Anzeigeoptionen, Layoutwechsel.
-- **Item-Detail:** als Vorschau (Modal, Änderungen vom 2026-11-27, A797: j/k blättern darin durch die Liste) und als eigene Seite; die URL läuft über den Key.
+- **Item-Detail:** als Vorschau (Modal, Änderungen vom 2026-11-27, A799: j/k blättern darin durch die Liste) und als eigene Seite; die URL läuft über den Key.
 - **Anlegen-Dialog** (C): Projekt, Typ, Titel, Beschreibung, Properties, Vorlage. Mit „weitere anlegen“ legt man mehrere nacheinander an.
 - **Wiki:** Baum links, Seite rechts.
 - **Einstellungen:**

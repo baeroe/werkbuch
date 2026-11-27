@@ -1,6 +1,9 @@
 <?php
 
+use App\Actions\Agents\AdvanceEpic;
 use App\Actions\Agents\HandleRunResult;
+use App\Actions\Agents\MergeThread;
+use App\Actions\Agents\SweepAgentThreads;
 use App\Actions\Comments\AddComment;
 use App\Actions\Comments\EditComment;
 use App\Actions\WorkItems\UpdateWorkItem;
@@ -18,6 +21,7 @@ use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItem;
 use App\Models\WorkItemLink;
+use App\Models\WorkItemRelation;
 use App\Support\Actor;
 use App\Support\AgentFlow;
 use App\Support\OwnMerges;
@@ -304,13 +308,141 @@ it('reviews with the bot of the strand without a review agent and leaves PRs of 
     expect(AgentRun::query()->find($review['id'])->bot_id)->toBe($this->kira->id)->and($review['thread'])->toBeNull();
 });
 
-it('works an epic by rule A and leaves the child of a person to her', function () use ($claim, $finish, $assign, $pr, $ci) {
+it('works an epic on its own branch: a PR per child into it, Done at its merge, the epic ready and reviewed at the end', function () use ($claim, $finish, $assign, $pr, $ci) {
+    $epic = WorkItem::factory()->for($this->project)->epic()->create(['title' => 'Contact page', 'state_id' => $this->states['Todo']]);
+    $map = WorkItem::factory()->for($this->project)->childOf($epic)->create(['title' => 'Map', 'state_id' => $this->states['Todo']]);
+    $form = WorkItem::factory()->for($this->project)->childOf($epic)->create(['title' => 'Form', 'state_id' => $this->states['Todo']]);
+    $copy = WorkItem::factory()->for($this->project)->childOf($epic)->create(['title' => 'Copy', 'state_id' => $this->states['Todo']]);
+    // the form blocks the map: the map, first by rank, waits for it
+    WorkItemRelation::factory()->blocks()->create(['source_id' => $form->id, 'target_id' => $map->id]);
+
+    /** A child runs through task, CI, review and merge into the branch of the epic. */
+    $child = function (WorkItem $item, int $number, string $sha) use ($claim, $finish, $pr, $ci, $epic) {
+        $task = $claim($this);
+        $strand = AgentThread::query()->where('work_item_id', $item->id)->sole();
+        $epicBranch = AgentThread::query()->where('work_item_id', $epic->id)->sole()->branch;
+        expect($task['item']['key'])->toBe($item->key)
+            ->and($task['thread']['branch'])->toStartWith('agent/'.$item->key)->and($task['thread']['base_branch'])->toBe($epicBranch)
+            ->and($task['prompt'])->toContain("child of the epic {$epic->key}")->toContain("into `{$epicBranch}`")
+            ->and($item->fresh()->assignee_id)->toBe($this->kira->id)
+            ->and($epic->fresh()->state_id)->toBe($this->states['In Progress']);
+
+        $pr($this, 'opened', $sha, ['base' => ['ref' => $epicBranch, 'sha' => str_repeat('c', 40)]], $number);
+        $finish($this, $task, ['commit' => $sha]);
+        expect($item->fresh()->state_id)->toBe($this->states['Pending']);
+        $ci($this, $sha, 'success', 3_000_000 + $number);
+        $finish($this, $claim($this), ['verdict' => 'approve', 'text' => 'Verdict: approve']);
+
+        expect(collect($this->github->merges)->last())->toBe(['number' => $number, 'sha' => $sha, 'method' => 'squash'])
+            ->and($item->fresh()->state_id)->toBe($this->states['Done'])
+            ->and($strand->fresh()->status)->toBe(AgentThread::MERGED);
+    };
+
+    $assign($this, $epic, $this->kira);
+    $epicStrand = AgentThread::query()->where('work_item_id', $epic->id)->sole();
+    expect($epicStrand->per_child)->toBeTrue()->and($epicStrand->branch)->toStartWith('agent/'.$epic->key)->and($epicStrand->base_branch)->toBe('main');
+
+    $child($form, 12, str_repeat('a', 40));
+    // the branch of the epic came from main at the first claim; its draft PR once a child merged into it
+    expect($this->github->createdBranches)->toBe([['branch' => $epicStrand->branch, 'sha' => $this->github->branches['main']]])
+        ->and($this->github->openedPulls)->toBe([['number' => 100, 'head' => $epicStrand->branch, 'base' => 'main', 'title' => "{$epic->key}: Contact page", 'body' => "Fixes {$epic->key}", 'draft' => true]])
+        ->and($epicStrand->fresh()->only(['pr_number', 'pr_draft']))->toBe(['pr_number' => 100, 'pr_draft' => true]);
+
+    // the blocker is done: the map goes next, then the copy; never ready before
+    $child($map, 13, str_repeat('d', 40));
+    expect($this->github->ready)->toBe([])->and($epic->fresh()->state_id)->toBe($this->states['In Progress']);
+    // a new main meanwhile asks for no conflict of the epic PR (only at its end)
+    FakeGitHub::deliver($this, 'push', FakeGitHub::push(str_repeat('9', 40), 'main', 'mara-feldwerk'))->assertStatus(202);
+    $child($copy, 14, str_repeat('e', 40));
+
+    // every child done: the epic PR is ready, the epic „In Review“
+    expect($this->github->ready)->toBe(['PR_fake100'])->and($epic->fresh()->state_id)->toBe($this->states['Pending'])
+        ->and($this->github->openedPulls)->toHaveCount(1);
+
+    // ready for review: the review of the whole epic PR, then the merge into main
+    $head = str_repeat('f', 40);
+    FakeGitHub::deliver($this, 'pull_request', FakeGitHub::pullRequest('ready_for_review', 100, [
+        'author' => 'feldwerk-werkbuch[bot]', 'title' => "{$epic->key}: Contact page", 'body' => "Fixes {$epic->key}",
+        'head' => ['ref' => $epicStrand->branch, 'sha' => $head, 'label' => 'feldwerk:'.$epicStrand->branch],
+    ]))->assertStatus(202);
+    $this->github->pulls[100] = ['head' => ['sha' => $head, 'ref' => $epicStrand->branch]];
+    $ci($this, $head, 'success', 3_000_100);
+    $review = $claim($this);
+    expect($review['type'])->toBe('review')->and($review['prompt'])->toContain('#100')->toContain('base branch `main`');
+    $finish($this, $review, ['verdict' => 'approve', 'text' => 'Verdict: approve']);
+
+    expect(collect($this->github->merges)->pluck('number')->all())->toBe([12, 13, 14, 100])
+        ->and($epic->fresh()->state_id)->toBe($this->states['Done'])
+        ->and($epicStrand->fresh()->status)->toBe(AgentThread::MERGED)
+        ->and(AgentRun::query()->where('type', 'conflict')->exists())->toBeFalse();
+});
+
+it('never merges a child PR opened into main: werkbuch sends it to the branch of the epic first', function () use ($claim, $finish, $assign, $pr, $ci) {
+    $epic = WorkItem::factory()->for($this->project)->epic()->create(['title' => 'Contact page', 'state_id' => $this->states['Todo']]);
+    $form = WorkItem::factory()->for($this->project)->childOf($epic)->create(['title' => 'Form', 'state_id' => $this->states['Todo']]);
+    $assign($this, $epic, $this->kira);
+    $task = $claim($this);
+    $strand = AgentThread::query()->where('work_item_id', $form->id)->sole();
+    $sha = str_repeat('a', 40);
+
+    // the agent ignored its prompt and opened the PR into main
+    $pr($this, 'opened', $sha, ['base' => ['ref' => 'main', 'sha' => str_repeat('c', 40)]]);
+    $this->github->pulls[12] = ['base' => ['ref' => 'main'], 'head' => ['sha' => $sha, 'ref' => $strand->branch]];
+    $finish($this, $task, ['commit' => $sha]);
+    $ci($this, $sha, 'success');
+    $finish($this, $claim($this), ['verdict' => 'approve', 'text' => 'Verdict: approve']);
+
+    expect($this->github->retargets)->toBe([['number' => 12, 'base' => $strand->base_branch]])
+        ->and($this->github->merges)->toBe([])
+        ->and($form->fresh()->state_id)->not->toBe($this->states['Done']);
+
+    // GitHub computed the PR anew: the job looks again and merges into the branch of the epic
+    $this->github->pulls[12]['mergeable'] = true;
+    expect(MergeThread::run(Actor::system($this->kira, 'test'), $strand->id, $sha))->toBe('merged')
+        ->and($this->github->merges)->toBe([['number' => 12, 'sha' => $sha, 'method' => 'squash']])
+        ->and($form->fresh()->state_id)->toBe($this->states['Done']);
+});
+
+it('puts a child assigned alone on the branch of its epic and makes the epic strand first', function () use ($claim, $assign) {
+    $epic = WorkItem::factory()->for($this->project)->epic()->create(['title' => 'Contact page', 'state_id' => $this->states['Todo']]);
+    $form = WorkItem::factory()->for($this->project)->childOf($epic)->create(['title' => 'Form', 'state_id' => $this->states['Todo']]);
+    // a strand the child had of its own before (on main) ends
+    $old = AgentThread::factory()->create(['bot_id' => $this->kira->id, 'work_item_id' => $form->id, 'branch' => 'agent/old', 'status' => AgentThread::PAUSED]);
+
+    $assign($this, $form, $this->kira);
+    $task = $claim($this);
+    $epicStrand = AgentThread::query()->where('work_item_id', $epic->id)->sole();
+
+    expect($old->fresh()->status)->toBe(AgentThread::CLOSED)
+        ->and($epicStrand->per_child)->toBeTrue()
+        ->and($task['item']['key'])->toBe($form->key)->and($task['thread']['base_branch'])->toBe($epicStrand->branch)
+        ->and(AgentThread::query()->find($task['thread']['id'])->parent_thread_id)->toBe($epicStrand->id)
+        ->and($this->github->createdBranches)->toHaveCount(1);
+});
+
+it('says once at the epic what it waits for when no open child can begin', function () use ($assign) {
+    $epic = WorkItem::factory()->for($this->project)->epic()->create(['title' => 'Contact page', 'state_id' => $this->states['Todo']]);
+    $form = WorkItem::factory()->for($this->project)->childOf($epic)->create(['title' => 'Form', 'state_id' => $this->states['Todo'], 'assignee_id' => $this->mara->id]);
+
+    $assign($this, $epic, $this->kira);
+    $strand = AgentThread::query()->where('work_item_id', $epic->id)->sole();
+    expect(AdvanceEpic::run(Actor::system($this->kira, 'test'), $strand->id))->toBe('waiting')
+        ->and(AdvanceEpic::run(Actor::system($this->kira, 'test'), $strand->id))->toBe('waiting')
+        ->and(Comment::query()->where('work_item_id', $epic->id)->where('author_id', $this->kira->id)->count())->toBe(1);
+
+    // Mara closes her child: the sweep finds the epic done; no child merged, so no PR: a comment and „Korrektur“
+    UpdateWorkItem::run(actor($this->mara), $form, ['state_id' => $this->states['Done']]);
+    SweepAgentThreads::run(Actor::system($this->kira, 'test'));
+    expect($epic->fresh()->state_id)->toBe($this->states['Todo'])->and($this->github->openedPulls)->toBe([]);
+});
+
+it('works an epic of before WEBU-71 by rule A to its end and leaves the child of a person to her', function () use ($claim, $finish, $pr, $ci) {
     $epic = WorkItem::factory()->for($this->project)->epic()->create(['title' => 'Contact page', 'state_id' => $this->states['Todo']]);
     $form = WorkItem::factory()->for($this->project)->childOf($epic)->create(['title' => 'Form', 'state_id' => $this->states['Todo']]);
     $map = WorkItem::factory()->for($this->project)->childOf($epic)->create(['title' => 'Map', 'state_id' => $this->states['Todo']]);
     $copy = WorkItem::factory()->for($this->project)->childOf($epic)->create(['title' => 'Copy', 'state_id' => $this->states['Todo'], 'assignee_id' => $this->mara->id]);
 
-    $assign($this, $epic, $this->kira);
+    AgentWorld::ruleAEpic($this->kira, $epic);
     $first = $claim($this);
     expect($first['item']['key'])->toBe($form->key)->and($first['thread']['branch'])->toStartWith('agent/'.$epic->key)
         ->and($first['prompt'])->toContain("child of the epic {$epic->key}")->toContain('open a draft pull request')

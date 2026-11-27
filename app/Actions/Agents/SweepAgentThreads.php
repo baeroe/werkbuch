@@ -5,6 +5,7 @@ namespace App\Actions\Agents;
 use App\Domain\Workflow\AgentStep;
 use App\Jobs\LoadPullRequestChecks;
 use App\Models\AgentThread;
+use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemLink;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 /**
- * Every minute (spec 7.2): a strand whose task ended two minutes ago without a PR never got one (a comment and
+ * Every minute (spec 7.2): an epic on its own branch with no child at work goes on (AdvanceEpic, WEBU-71); a strand whose task ended two minutes ago without a PR never got one (a comment and
  * „Korrektur“), nor did a commit a run reported five minutes ago reach its PR (A610: committed, not pushed); for a PR whose head commit came two minutes ago without any check GitHub is asked for its check runs
  * (LoadPullRequestChecks, A591: only a commit GitHub has none for counts green), and again for one whose workflow runs or
  * commit statuses still waited when GitHub was last asked (A608). Looks back a day at most, the oldest first. Answers how
@@ -39,6 +40,15 @@ final class SweepAgentThreads
         foreach (AgentThread::query()->where('status', AgentThread::OPEN)->whereNotNull('pushed_sha')->where('pushed_at', '<=', now()->subMinutes(self::PUSH_MINUTES))
             ->orderBy('pushed_at')->orderBy('id')->limit(200)->get() as $thread) {
             $count += self::noPush($thread);
+        }
+
+        // an epic on its own branch with no child at work: its next child, its PR, or ready (WEBU-71)
+        foreach (AgentThread::query()->where('status', AgentThread::OPEN)->where('per_child', true)->whereNull('ready_requested_at')
+            ->whereIn('project_id', Project::query()->whereNull('deleting_at')->select('id'))
+            ->whereNotExists(fn ($child) => $child->selectRaw('1')->from('agent_threads as children')->whereColumn('children.parent_thread_id', 'agent_threads.id')
+                ->where('children.status', AgentThread::OPEN))
+            ->orderBy('id')->limit(200)->pluck('id') as $epic) {
+            $count += in_array(AdvanceEpic::run($actor, $epic), ['stale', 'working', 'waiting'], true) ? 0 : 1;
         }
 
         // a head without any check: GitHub is asked once more after it settled (A591), only that may count it green
