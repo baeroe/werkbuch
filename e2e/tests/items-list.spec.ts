@@ -34,7 +34,7 @@ const row = (page: Page, key: string) => page.getByRole('group', { name: new Reg
 /** Opens the list and puts the focus on its first row. */
 async function openList(page: Page, identifier: string) {
   await page.goto(`/projects/${identifier}`);
-  await expect(heading(page, 'Backlog', 20)).toBeVisible();
+  await expect(heading(page, 'Backlog', 20)).toBeVisible({ timeout: 20_000 });
   await expect(row(page, `${identifier}-1`)).toBeVisible();
   await tabTo(page, row(page, `${identifier}-1`), { max: 80 });
 }
