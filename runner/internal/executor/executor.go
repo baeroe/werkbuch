@@ -422,6 +422,10 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 		"GIT_AUTHOR_NAME="+run.CommitIdentity.Name, "GIT_AUTHOR_EMAIL="+run.CommitIdentity.Email,
 		"GIT_COMMITTER_NAME="+run.CommitIdentity.Name, "GIT_COMMITTER_EMAIL="+run.CommitIdentity.Email,
 	)
+	if run.CLI == "claude" {
+		// no background tasks (Bash in the background, Monitor): they wake the session after its result (WEBU-55)
+		cmd.Env = append(cmd.Env, "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1")
+	}
 	if job.TokenEnv != "" {
 		cmd.Env = append(cmd.Env, job.TokenEnv+"="+run.Werkbuch.Token)
 	}
@@ -460,6 +464,8 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 	log.Info("cli started", "cli", run.CLI, "model", run.Model, "dir", ws.Dir, "resume", run.SessionID() != "")
 
 	stream := adapter.Stream()
+	var finished sync.Once
+	finishedCh := make(chan struct{}) // the first result of the CLI is in: the run ends there
 	read := make(chan struct{})
 	readErr := make(chan struct{})
 	go func() {
@@ -468,6 +474,9 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 		sc.Buffer(make([]byte, 64*1024), 16*1024*1024)
 		for sc.Scan() {
 			s.add(stream.Feed(sc.Bytes())...)
+			if stream.Done() {
+				finished.Do(func() { close(finishedCh) })
+			}
 		}
 	}()
 	go func() {
@@ -496,8 +505,11 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 	// the reason is fixed when the CLI ends: a cancel or time limit after its own end changes nothing, only a run
 	// werkbuch gave away stays unreported
 	stoppedBy := ""
+	endedByResult := false
 	select {
 	case <-exited:
+	case <-finishedCh:
+		endedByResult = true
 	case <-l.decided:
 		stoppedBy = l.reason()
 		e.set("stopping")
@@ -513,6 +525,9 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 	// what the CLI left running in its group (a dev server started with &) goes with it
 	procs.Stop(pid, GroupGrace, func() bool { return syscall.Kill(-pid, 0) != nil })
 	exitErr := <-waited
+	if endedByResult {
+		exitErr = nil // also if the CLI had exited with a code by itself: a final result decides (outcome.IsError still fails the run); the signal that ended the CLI after its result is no failure
+	}
 	if l.reason() == replaced {
 		stoppedBy = replaced
 	}

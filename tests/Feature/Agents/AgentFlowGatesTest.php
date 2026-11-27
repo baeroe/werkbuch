@@ -26,6 +26,7 @@ use App\Models\Comment;
 use App\Models\Label;
 use App\Models\Project;
 use App\Models\ProjectRepository;
+use App\Models\Property;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkItem;
@@ -650,4 +651,27 @@ it('asks GitHub again for the workflow runs of a head when a suite of GitHub Act
     // nothing waits any more: the next suite asks GitHub nothing
     FakeGitHub::deliver($this, 'check_suite', FakeGitHub::checkSuite($a))->assertStatus(202);
     expect(count($this->github->checkRunCalls))->toBe($calls + 1);
+});
+
+it('reviews the same head again when a correction only set the proof of the item', function () use ($claim, $finish, $assign, $pr, $ci, $heads) {
+    $this->kira->forceFill(['owner_id' => $this->mara->id])->save();
+    $property = Property::factory()->create(['key' => 'resolution_proof', 'field_type' => 'rich_text', 'label' => 'Proof']);
+    $item = WorkItem::factory()->for($this->project)->create(['state_id' => $this->states['Todo']]);
+    $item->type->typeProperties()->create(['property_id' => $property->id, 'required' => false, 'position' => 0]);
+    $b = str_repeat('b', 40);
+    $assign($this, $item, $this->kira);
+    $task = $claim($this);
+    $pr($this, 'opened', $b);
+    $finish($this, $task, ['commit' => $b]);
+    $ci($this, $b, 'success');
+    $review = $claim($this);
+    $finish($this, $review, ['verdict' => 'changes', 'text' => 'Verdict: changes. Proof is thin.']);
+
+    $correction = $claim($this);
+    expect($correction['type'])->toBe('correction');
+    UpdateWorkItem::run(actor($this->kira), $item->fresh(), ['values' => ['resolution_proof' => 'Better proof']]);
+    $finish($this, $correction, ['summary' => 'Proof set.']);
+
+    expect(AgentThread::query()->sole()->pause_reason)->toBeNull()
+        ->and($heads('review'))->toBe([$b, $b]);
 });

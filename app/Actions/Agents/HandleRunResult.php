@@ -5,9 +5,11 @@ namespace App\Actions\Agents;
 use App\Domain\Agents\RunStatus;
 use App\Domain\Agents\RunType;
 use App\Domain\Workflow\AgentStep;
+use App\Events\EventType;
 use App\Jobs\PostReviewVerdict as PostReviewVerdictJob;
 use App\Models\AgentRun;
 use App\Models\AgentThread;
+use App\Models\Event;
 use App\Models\User;
 use App\Models\WorkItem;
 use App\Models\WorkItemLink;
@@ -282,10 +284,30 @@ final class HandleRunResult
                 return 'recheck';
             }
 
+            // a correction that only set the proof of the item changed nothing to review in the code: the head is judged
+            // again (the review of it no longer counts, so a new one may start)
+            if ($run->type === RunType::Correction && self::setProof($run, $item)) {
+                AgentRun::query()->where('repository_github_id', $locked->repository_github_id)->where('pr_number', $locked->pr_number)
+                    ->where('type', RunType::Review->value)->where('head_sha', $locked->head_sha)->get()
+                    ->each(fn (AgentRun $review) => $review->forceFill(['context' => [...($review->context ?? []), 'superseded' => true]])->save());
+                $locked->forceFill(['review_sha' => null, 'review_verdict' => null])->save();
+
+                return 'recheck';
+            }
+
             PauseThread::run($actor, $locked, 'no_change', isset($run->result['summary']) ? (string) $run->result['summary'] : null, $run->id);
 
             return 'no_change';
         }, 3);
+    }
+
+    /** Did the run set `resolution_proof` of the item (its token wrote the event while it ran)? */
+    private static function setProof(AgentRun $run, WorkItem $item): bool
+    {
+        return Event::query()->where('type', EventType::WorkItemUpdated->value)->where('actor_id', $run->bot_id)
+            ->where('subject_type', $item->getMorphClass())->where('subject_id', $item->id)
+            ->where('occurred_at', '>=', $run->started_at)->get()
+            ->contains(fn (Event $event) => isset($event->changes['values.resolution_proof']));
     }
 
     private static function coded(Actor $actor, AgentRun $run, AgentThread $thread, WorkItem $item): string

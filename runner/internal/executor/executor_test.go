@@ -554,3 +554,20 @@ func TestOutcome(t *testing.T) {
 		}
 	}
 }
+
+func TestTheRunEndsWithTheFirstResult(t *testing.T) {
+	w := newWorld(t)
+	envFile := filepath.Join(t.TempDir(), "env")
+	t.Setenv("FAKE_ENV", envFile)
+	start := time.Now()
+	_, status := w.execute(w.run("01lr", protocol.Task, "lateresult", func(*protocol.Run) {}))
+	if status != protocol.Succeeded || time.Since(start) > 20*time.Second {
+		t.Fatalf("%q after %s", status, time.Since(start))
+	}
+	if log := w.texts("01lr"); !strings.Contains(log, "result:Done: the change is pushed.") || strings.Contains(log, "late wake-up") {
+		t.Fatalf("the first result is not the one reported:\n%s", log)
+	}
+	if env, _ := os.ReadFile(envFile); !strings.Contains(string(env), "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1") {
+		t.Fatal("background tasks are not switched off for claude")
+	}
+}

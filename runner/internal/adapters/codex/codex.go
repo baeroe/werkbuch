@@ -151,4 +151,7 @@ func (s *stream) Feed(raw []byte) []protocol.Event {
 	return nil
 }
 
+// Done is false: Codex ends its run itself (no background tasks wake its session).
+func (s *stream) Done() bool { return false }
+
 func (s *stream) Outcome() adapters.Outcome { return s.out }
