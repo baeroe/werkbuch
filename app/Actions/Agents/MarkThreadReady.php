@@ -18,7 +18,8 @@ final class MarkThreadReady
 {
     use AsAction;
 
-    public const PERMISSIONS = ['pull_requests' => 'write'];
+    /** GraphQL `markPullRequestReadyForReview` answers FORBIDDEN without `contents: write` (tried 2026-11-27, A793). */
+    public const PERMISSIONS = ['contents' => 'write', 'pull_requests' => 'write'];
 
     /**
      * @throws GitHubUnavailable when GitHub does not answer or refuses (the job tries again)
