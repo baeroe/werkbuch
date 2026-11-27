@@ -186,6 +186,7 @@ type Run struct {
 	CLI             string     `json:"cli"`
 	Model           string     `json:"model"`
 	ModelSource     string     `json:"model_source"`
+	Effort          *string    `json:"effort"` // the effort of Claude Code (WEBU-66); nil: the CLI's own
 	TimeoutMinutes  int        `json:"timeout_minutes"`
 	DeadlineAt      *time.Time `json:"deadline_at"`
 	LeaseExpiresAt  *time.Time `json:"lease_expires_at"`

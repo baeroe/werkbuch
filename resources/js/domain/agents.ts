@@ -90,6 +90,9 @@ export const CLI_MODELS: Record<AgentCli, readonly string[]> = {
 /** The model a bot starts with per CLI, and what a change of CLI falls back to. */
 export const DEFAULT_MODELS: Record<AgentCli, string> = { claude: 'sonnet', codex: 'gpt-5-codex' };
 
+/** The effort levels of Claude Code (`claude --effort`, WEBU-66) as `AgentCli::efforts`; Codex has none here. */
+export const CLAUDE_EFFORTS: readonly string[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+
 export const CLI_NAMES: Record<AgentCli, string> = { claude: 'Claude Code', codex: 'Codex' };
 
 /** What a change of CLI leaves of a bot's models: those the CLI knows; `dropped` the ones it does not. */

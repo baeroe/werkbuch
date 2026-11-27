@@ -4,6 +4,7 @@ use App\Domain\Agents\AgentCli;
 use App\Domain\Agents\AgentModel;
 use App\Domain\Agents\Brakes;
 use App\Domain\Agents\Contract;
+use App\Domain\Agents\EffortChoice;
 use App\Domain\Agents\ModelChoice;
 use App\Domain\Agents\RunPrompt;
 use App\Domain\Agents\RunType;
@@ -32,6 +33,19 @@ it('skips a stage whose model the CLI does not know', function () {
     expect(ModelChoice::choose(AgentCli::Claude, RunType::Task, [$codex, ['id' => 'l2', 'model' => 'broken']], [], ['task' => 'codex:gpt-5-codex'], ['task' => 'gpt-5-codex'], 'gpt-5-codex'))
         ->toBe(['model' => 'sonnet', 'source' => 'default', 'label_id' => null])
         ->and(ModelChoice::choose(AgentCli::Codex, RunType::Task, [$codex], [], [], [], 'gpt-5-codex'))->toMatchArray(['model' => 'gpt-5-codex-mini', 'source' => 'label']);
+});
+
+it('chooses the effort by the stages of the model, none without one, and none for a CLI without levels (WEBU-66)', function () {
+    $choose = fn (array $labels = [], array $epic = [], array $project = [], array $bot = [], ?string $default = null, AgentCli $cli = AgentCli::Claude) => EffortChoice::choose($cli, RunType::Task, $labels, $epic, $project, $bot, $default);
+
+    expect($choose([['id' => 'l1', 'effort' => 'nope'], ['id' => 'l2', 'effort' => 'max']], [], ['task' => 'low'], ['task' => 'medium'], 'high'))->toBe(['effort' => 'max', 'source' => 'label'])
+        ->and($choose([], [['id' => 'l3', 'effort' => 'xhigh']]))->toBe(['effort' => 'xhigh', 'source' => 'label'])
+        ->and($choose([], [], ['task' => 'low', 'review' => 'max'], ['task' => 'medium']))->toBe(['effort' => 'low', 'source' => 'project'])
+        ->and($choose([], [], ['review' => 'max'], ['task' => 'medium'], 'high'))->toBe(['effort' => 'medium', 'source' => 'bot'])
+        ->and($choose([], [], [], [], 'high'))->toBe(['effort' => 'high', 'source' => 'default'])
+        ->and($choose())->toBe(['effort' => null, 'source' => null])
+        ->and($choose([['id' => 'l1', 'effort' => 'max']], [], [], [], 'high', AgentCli::Codex))->toBe(['effort' => null, 'source' => null])
+        ->and(AgentCli::Claude->efforts())->toBe(['low', 'medium', 'high', 'xhigh', 'max']);
 });
 
 it('reads a model of a label or a project as the CLI and one of its models', function () {

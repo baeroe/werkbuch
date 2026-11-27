@@ -25,7 +25,8 @@ use Lorisleiva\Actions\Concerns\AsAction;
 /**
  * Sets the agent configuration of a bot as a whole (spec 10.4, org admins, A485): on or off, the runner pool (active
  * runners; empty is every runner of the organization), the CLI and its models (the default and per kind of run, each
- * from the fixed list of the CLI, spec 7.7). Switching it on needs a bot that can be an agent (spec 7.2): active, with a
+ * from the fixed list of the CLI, spec 7.7) and the efforts (default and per kind, from the levels of the CLI, none for
+ * the default of the CLI; keys left out keep the saved ones, WEBU-66). Switching it on needs a bot that can be an agent (spec 7.2): active, with a
  * responsible person, not the default bot. No instruction, no places, no time limits per bot. Only a real change is
  * written and recorded; the keys of the answer sent back are passed over.
  */
@@ -33,10 +34,10 @@ final class SaveAgentConfig
 {
     use AsAction;
 
-    public const FIELDS = ['enabled', 'runner_ids', 'cli', 'model', 'models'];
+    public const FIELDS = ['enabled', 'runner_ids', 'cli', 'model', 'models', 'effort', 'efforts'];
 
     /**
-     * @param  array<array-key, mixed>  $input  `enabled`, `runner_ids`, `cli`, `model`, `models`
+     * @param  array<array-key, mixed>  $input  `enabled`, `runner_ids`, `cli`, `model`, `models`, `effort`, `efforts`
      *
      * @throws Problem 403, 404 for an account that is no bot
      * @throws ValidationException
@@ -53,6 +54,8 @@ final class SaveAgentConfig
         $cli = is_string($input['cli'] ?? null) ? AgentCli::tryFrom($input['cli']) : null;
         $models = $cli?->models() ?? [];
         $known = $cli === null ? '' : implode(', ', $models);
+        $efforts = $cli?->efforts() ?? [];
+        $levels = __('field.effort.invalid', ['allowed' => $efforts === [] ? '–' : implode(', ', $efforts)]);
 
         $valid = Validator::make($input, [
             'enabled' => ['required', 'boolean'],
@@ -62,6 +65,9 @@ final class SaveAgentConfig
             'model' => ['required', 'string', Rule::in($models)],
             'models' => ['present', 'array:'.implode(',', RunType::VALUES)],
             'models.*' => ['string', Rule::in($models)],
+            'effort' => ['sometimes', 'nullable', 'string', Rule::in($efforts)],
+            'efforts' => ['sometimes', 'nullable', 'array:'.implode(',', RunType::VALUES)],
+            'efforts.*' => ['string', Rule::in($efforts)],
         ], [
             'enabled' => __('field.boolean'),
             'runner_ids' => __('field.runner_ids.invalid'),
@@ -70,6 +76,9 @@ final class SaveAgentConfig
             'model' => __('field.model.invalid', ['allowed' => $known]),
             'models' => __('field.models.invalid', ['allowed' => implode(', ', RunType::VALUES)]),
             'models.*' => __('field.model.invalid', ['allowed' => $known]),
+            'effort' => $levels,
+            'efforts' => __('field.models.invalid', ['allowed' => implode(', ', RunType::VALUES)]),
+            'efforts.*' => $levels,
         ])->validate();
 
         $enabled = filter_var($valid['enabled'], FILTER_VALIDATE_BOOLEAN);
@@ -86,8 +95,13 @@ final class SaveAgentConfig
         ];
         ksort($next['models']);
 
-        $saved = DB::transaction(function () use ($actor, $bot, $next): AgentConfig {
+        $saved = DB::transaction(function () use ($actor, $bot, $next, $valid, $efforts): AgentConfig {
             $config = AgentConfig::query()->lockForUpdate()->where('bot_id', $bot->id)->first() ?? AgentConfig::unsaved($bot);
+            // a key left out keeps the saved efforts, as far as the CLI still takes them
+            $keep = fn (mixed $effort): bool => is_string($effort) && in_array($effort, $efforts, true);
+            $next['effort'] = array_key_exists('effort', $valid) ? $valid['effort'] : ($keep($config->effort) ? $config->effort : null);
+            $next['efforts'] = array_filter(array_key_exists('efforts', $valid) ? array_intersect_key($valid['efforts'] ?? [], array_flip(RunType::VALUES)) : ($config->efforts ?? []), $keep);
+            ksort($next['efforts']);
             $changes = CatalogInput::changes(self::snapshot($config), $next);
 
             if ($changes === []) {
@@ -121,13 +135,15 @@ final class SaveAgentConfig
     }
 
     /**
-     * @return array{enabled: bool, runner_ids: list<string>, cli: string, model: string, models: array<string, string>}
+     * @return array{enabled: bool, runner_ids: list<string>, cli: string, model: string, models: array<string, string>, effort: string|null, efforts: array<string, string>}
      */
     private static function snapshot(AgentConfig $config): array
     {
         $models = $config->models;
         ksort($models);
+        $efforts = $config->efforts ?? [];
+        ksort($efforts);
 
-        return ['enabled' => $config->enabled, 'runner_ids' => $config->runner_ids, 'cli' => $config->cli->value, 'model' => $config->model, 'models' => $models];
+        return ['enabled' => $config->enabled, 'runner_ids' => $config->runner_ids, 'cli' => $config->cli->value, 'model' => $config->model, 'models' => $models, 'effort' => $config->effort, 'efforts' => $efforts];
     }
 }

@@ -141,6 +141,10 @@ Not every run needs the strongest model. werkbuch picks the model when it queues
 
 The models come from a fixed list per CLI: Claude Code `haiku`, `sonnet` (default), `opus`, `fable`; Codex `gpt-5-codex` (default), `gpt-5-codex-mini`. A model of another CLI is skipped. The run shows the model and where it came from.
 
+### Effort
+
+For agents with Claude Code you also choose how much it thinks, the **effort** (`claude --effort`): `low`, `medium`, `high`, `xhigh` or `max`. It follows the same order as the model: a label with **Effort for agents**, then the project per kind of run, then the bot per kind of run and its **default effort**. Where none is set, werkbuch sends none and Claude Code takes its own default. Codex has no effort in werkbuch. The run shows the effort and where it came from.
+
 ## Places and order
 
 A runner takes as many runs as its places allow (**Settings → Runners**: 2 in all, 1 per repo, 2 light). Reviews and answers count only in their own pot. Conflicts, corrections and reviews go before implement runs and answers, then by priority of the item, then by age. A strand stays on its runner; a run of it waits while the runner is busy, and moves to another runner of the pool after 30 minutes offline. An epic always runs one child after the other.

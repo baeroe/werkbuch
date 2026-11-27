@@ -4,10 +4,11 @@
  * inherits, the first option says from what ("Wie Standard (sonnet)"). `ModelChoice` picks a model of any CLI, the lists
  * grouped by CLI, and gives `cli:model` (a label, a project per kind of run): it counts only for agents with that CLI,
  * and the line below the field says so; read only, it shows its value in the read-only look of the settings.
+ * `EffortField` picks an effort of Claude Code (WEBU-66) the same way; none inherits or leaves the CLI its own.
  */
 
 import { Select } from '@/components/ui/Select';
-import { CLI_MODELS, CLI_NAMES, parseModel } from '@/domain/agents';
+import { CLAUDE_EFFORTS, CLI_MODELS, CLI_NAMES, parseModel } from '@/domain/agents';
 import { t } from '@/lib/i18n';
 import type { AgentCli } from '@/types';
 import { ReadOnlyValue } from '../frame/parts';
@@ -87,6 +88,42 @@ export function ModelChoice({ label, value, onChange, inherit, hint, error, read
       id={id}
       label={label}
       hint={shownHint}
+      error={error}
+      className={className}
+      value={current}
+      options={options}
+      onValueChange={(next) => next !== null && onChange(next === INHERIT ? null : next)}
+    />
+  );
+}
+
+type EffortFieldProps = {
+  label: string;
+  /** An effort, or null for none. */
+  value: string | null;
+  onChange: (value: string | null) => void;
+  /** What no effort means, as the first option: "Standard der CLI", "Wie Standard (high)". */
+  inherit: string;
+  hint?: string;
+  error?: string;
+  readOnlyReason?: string | null;
+  className?: string;
+  id?: string;
+};
+
+export function EffortField({ label, value, onChange, inherit, hint, error, readOnlyReason = null, className, id }: EffortFieldProps) {
+  const options = [{ value: INHERIT, label: inherit }, ...CLAUDE_EFFORTS.map((effort) => ({ value: effort, label: effort }))];
+  // a level taken out of the list still shows what it is
+  if (value && !CLAUDE_EFFORTS.includes(value)) options.push({ value, label: t('settings.agents.model_unlisted', { model: value }) });
+  const current = value ?? INHERIT;
+  if (readOnlyReason !== null) {
+    return <ReadOnlyValue label={label} value={options.find((option) => option.value === current)!.label} reason={readOnlyReason} hint={hint} className={className} />;
+  }
+  return (
+    <Select
+      id={id}
+      label={label}
+      hint={hint}
       error={error}
       className={className}
       value={current}

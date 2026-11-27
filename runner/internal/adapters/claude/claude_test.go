@@ -27,6 +27,15 @@ func TestArgs(t *testing.T) {
 			t.Fatalf("%v lacks %v", args, want)
 		}
 	}
+	if slices.Contains(args, "--effort") {
+		t.Fatalf("an effort without one set: %v", args)
+	}
+	effort := job("task", nil)
+	high := "high"
+	effort.Run.Effort = &high
+	if e := Args(effort); e[slices.Index(e, "--effort")+1] != "high" {
+		t.Fatalf("%v lacks the effort", e)
+	}
 	if args[slices.Index(args, "--permission-mode")+1] != "bypassPermissions" || slices.Contains(args, "--allowedTools") {
 		t.Fatalf("a code run bypasses the prompts: %v", args)
 	}

@@ -21,6 +21,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $review_bot_id
  * @property string|null $instructions
  * @property array<string, string> $models
+ * @property array<string, string>|null $efforts
  * @property int $max_corrections
  * @property int $max_conflicts
  * @property bool $review_person_prs
@@ -33,7 +34,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read User|null $reviewBot
  */
-#[Fillable(['project_id', 'review_bot_id', 'instructions', 'models', 'max_corrections', 'max_conflicts', 'review_person_prs', 'comment_on_pr', 'merge_method', 'setup_command', 'stop_command', 'teardown_command'])]
+#[Fillable(['project_id', 'review_bot_id', 'instructions', 'models', 'efforts', 'max_corrections', 'max_conflicts', 'review_person_prs', 'comment_on_pr', 'merge_method', 'setup_command', 'stop_command', 'teardown_command'])]
 final class AgentProjectSettings extends Model
 {
     /** @use HasFactory<AgentProjectSettingsFactory> */
@@ -43,13 +44,13 @@ final class AgentProjectSettings extends Model
 
     /** The defaults of a project without a row. */
     public const DEFAULTS = [
-        'review_bot_id' => null, 'instructions' => null, 'models' => [], 'max_corrections' => 3, 'max_conflicts' => 2,
+        'review_bot_id' => null, 'instructions' => null, 'models' => [], 'efforts' => [], 'max_corrections' => 3, 'max_conflicts' => 2,
         'review_person_prs' => true, 'comment_on_pr' => true, 'merge_method' => 'squash', 'setup_command' => null, 'stop_command' => null, 'teardown_command' => null,
     ];
 
     protected function casts(): array
     {
-        return ['models' => 'array', 'max_corrections' => 'integer', 'max_conflicts' => 'integer', 'review_person_prs' => 'boolean', 'comment_on_pr' => 'boolean'];
+        return ['models' => 'array', 'efforts' => 'array', 'max_corrections' => 'integer', 'max_conflicts' => 'integer', 'review_person_prs' => 'boolean', 'comment_on_pr' => 'boolean'];
     }
 
     /** The settings of a project: its row, or the defaults unsaved. */

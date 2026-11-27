@@ -28,6 +28,8 @@ final class AgentConfigResource extends JsonResource
             'cli' => $config->cli->value,
             'model' => $config->model,
             'models' => (object) $config->models,
+            'effort' => $config->effort,
+            'efforts' => (object) ($config->efforts ?? []),
             'updated_at' => $config->updated_at?->toJSON(),
         ];
     }

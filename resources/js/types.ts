@@ -178,6 +178,8 @@ export interface Label {
   color: TypeTone;
   /** A model for agents, `cli:model` (spec 7.7): an item with the label runs its agent on it. Null: a plain label. */
   agent_model: string | null;
+  /** An effort of Claude Code (WEBU-66) for runs at its items; null: none. */
+  agent_effort?: string | null;
 }
 
 export interface RelationType {
@@ -993,6 +995,9 @@ export interface AgentConfig {
   model: string;
   /** A model per kind of run (WEBU-32 edits them; sent back as they are). */
   models: Partial<Record<RunType, string>>;
+  /** The effort of Claude Code (WEBU-66): the default and per kind; null: the CLI's own. */
+  effort?: string | null;
+  efforts?: Partial<Record<RunType, string>>;
   updated_at: string | null;
 }
 
@@ -1033,6 +1038,8 @@ export interface ProjectAgents {
   instructions: string | null;
   /** A model per kind of run, `cli:model`. */
   models: Partial<Record<RunType, string>>;
+  /** The effort of Claude Code per kind of run (WEBU-66). */
+  efforts?: Partial<Record<RunType, string>>;
   max_corrections: number;
   max_conflicts: number;
   review_person_prs: boolean;
@@ -1064,6 +1071,9 @@ export interface AgentRun {
   model: string;
   model_source?: ModelSource | null;
   model_label_id?: string | null;
+  /** The effort Claude Code got (WEBU-66) and where it came from; null: the CLI's own. */
+  effort?: string | null;
+  effort_source?: ModelSource | null;
   runner_id: string | null;
   runner_name: string | null;
   runner_online: boolean;

@@ -276,7 +276,7 @@ it('lets a client send every key the document names', function () use ($bodies, 
     $effort = Property::query()->where('key', 'effort')->firstOrFail();
 
     // catalogs: create with every key, then take the answer back with a PUT
-    $label = $this->postJson('/api/v1/labels', ['name' => 'Docs', 'color' => 'sky', 'agent_model' => 'claude:haiku'])->assertCreated()->json('data');
+    $label = $this->postJson('/api/v1/labels', ['name' => 'Docs', 'color' => 'sky', 'agent_model' => 'claude:haiku', 'agent_effort' => 'high'])->assertCreated()->json('data');
     $this->putJson("/api/v1/labels/{$label['id']}", $label)->assertOk();
     $relation = $this->postJson('/api/v1/relation-types', ['name' => 'Fixes', 'outward_label' => 'fixes', 'inward_label' => 'is fixed by'])->assertCreated()->json('data');
     $this->putJson("/api/v1/relation-types/{$relation['id']}", $relation)->assertOk();

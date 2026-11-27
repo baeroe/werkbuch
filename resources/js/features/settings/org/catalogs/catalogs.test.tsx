@@ -106,7 +106,7 @@ describe('Labels', () => {
     expect(name.value).toBe('Schnell');
     await user.click(within(dialog).getByRole('button', { name: 'Anlegen' }));
     await waitFor(() => expect(callsTo('POST', '/api/v1/labels')).toHaveLength(1));
-    expect(callsTo('POST', '/api/v1/labels')[0]!.body).toEqual({ name: 'Schnell', color: 'sky', agent_model: 'claude:opus' });
+    expect(callsTo('POST', '/api/v1/labels')[0]!.body).toEqual({ name: 'Schnell', color: 'sky', agent_model: 'claude:opus', agent_effort: null });
   });
 
   it('shows a refused model at its field and makes a model label plain again', async () => {
@@ -126,7 +126,7 @@ describe('Labels', () => {
     expect(await within(dialog).findByText('Kein Modell der Liste.')).toBeTruthy();
     refuse = false;
     await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
-    await waitFor(() => expect(callsTo('PUT', '/api/v1/labels/lb_haiku').at(-1)!.body).toEqual({ name: 'Haiku', color: 'sky', agent_model: null }));
+    await waitFor(() => expect(callsTo('PUT', '/api/v1/labels/lb_haiku').at(-1)!.body).toEqual({ name: 'Haiku', color: 'sky', agent_model: null, agent_effort: null }));
   });
 
   it('says when the labels could not be loaded, and loads them again', async () => {
@@ -166,7 +166,7 @@ describe('Labels', () => {
 
     expect(await screen.findByRole('heading', { name: 'Barrierefreiheit' })).toBeTruthy();
     expect(toastNamed('Label „Barrierefreiheit“ ist angelegt')).toBeDefined();
-    expect(callsTo('POST', '/api/v1/labels')[0]!.body).toEqual({ name: 'Barrierefreiheit', color: 'sky', agent_model: null });
+    expect(callsTo('POST', '/api/v1/labels')[0]!.body).toEqual({ name: 'Barrierefreiheit', color: 'sky', agent_model: null, agent_effort: null });
     await waitFor(() => expect(document.activeElement).toBe(header));
   });
 
@@ -198,7 +198,7 @@ describe('Labels', () => {
 
     expect(await within(dialog).findByText('Diesen Namen gibt es schon.')).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(name));
-    expect(callsTo('POST', '/api/v1/labels')[0]!.body).toEqual({ name: 'ux', color: 'moss', agent_model: null });
+    expect(callsTo('POST', '/api/v1/labels')[0]!.body).toEqual({ name: 'ux', color: 'moss', agent_model: null, agent_effort: null });
 
     refuse = false;
     await user.clear(name);
@@ -230,7 +230,7 @@ describe('Labels', () => {
     refuse = false;
     await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
     await waitFor(() => expect(toastNamed('Label „UX-Design“ gespeichert')).toBeDefined());
-    expect(callsTo('PUT', '/api/v1/labels/lb_ux').at(-1)!.body).toEqual({ name: 'UX-Design', color: 'sky', agent_model: null });
+    expect(callsTo('PUT', '/api/v1/labels/lb_ux').at(-1)!.body).toEqual({ name: 'UX-Design', color: 'sky', agent_model: null, agent_effort: null });
     // the button that opened the dialog is still there: the focus goes back to it
     await waitFor(() => expect(document.activeElement).toBe(edit));
   });

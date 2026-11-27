@@ -33,6 +33,8 @@ final class AgentRunResource extends JsonResource
             'model' => $run->model,
             'model_source' => $run->model_source,
             'model_label_id' => $run->model_label_id,
+            'effort' => $run->effort,
+            'effort_source' => $run->effort_source,
             'runner_id' => $run->runner_id,
             'runner_name' => $run->runner?->name,
             'runner_online' => $run->runner?->isOnline() ?? false,

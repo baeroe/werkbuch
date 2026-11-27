@@ -315,6 +315,7 @@ final class ClaimRun
             'cli' => $run->cli->value,
             'model' => $run->model,
             'model_source' => $run->model_source,
+            'effort' => $run->effort,
             'timeout_minutes' => $run->type->timeoutMinutes(),
             'deadline_at' => $run->deadline()?->toJSON(),
             'lease_expires_at' => $run->lease_expires_at?->toJSON(),

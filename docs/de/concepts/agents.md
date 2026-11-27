@@ -141,6 +141,10 @@ Nicht jeder Auftrag braucht das stärkste Modell. werkbuch wählt das Modell bei
 
 Die Modelle kommen aus einer festen Liste je CLI: Claude Code `haiku`, `sonnet` (Standard), `opus`, `fable`; Codex `gpt-5-codex` (Standard), `gpt-5-codex-mini`. Ein Modell eines anderen CLI wird übergangen. Der Auftrag zeigt das Modell und woher es kam.
 
+### Effort
+
+Für Agenten mit Claude Code wählst du außerdem, wie viel es nachdenkt, den **Effort** (`claude --effort`): `low`, `medium`, `high`, `xhigh` oder `max`. Er folgt derselben Reihenfolge wie das Modell: ein Label mit **Effort für Agenten**, dann das Projekt je Auftragstyp, dann der Bot je Auftragstyp und sein **Standard-Effort**. Wo keiner gesetzt ist, schickt werkbuch keinen, und Claude Code nimmt seinen eigenen Standard. Codex hat in werkbuch keinen Effort. Der Auftrag zeigt den Effort und woher er kam.
+
 ## Plätze und Reihenfolge
 
 Ein Runner nimmt so viele Aufträge, wie seine Plätze erlauben (**Einstellungen → Runner**: 2 gesamt, 1 je Repo, 2 leicht). Reviews und Antworten zählen nur in ihrem eigenen Topf. Konflikte, Korrekturen und Reviews kommen vor Umsetzen und Antworten; danach zählt die Priorität des Items, dann das Alter des Auftrags. Ein Strang bleibt auf seinem Runner; ein Auftrag des Strangs wartet, solange der Runner belegt ist, und zieht nach 30 Minuten offline auf einen anderen Runner des Pools um. Ein Epic läuft immer ein Kind nach dem anderen.

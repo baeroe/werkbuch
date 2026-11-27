@@ -31,6 +31,7 @@ final class AgentProjectSettingsResource extends JsonResource
             'review_bot_id' => $settings->review_bot_id,
             'instructions' => $settings->instructions,
             'models' => (object) $settings->models,
+            'efforts' => (object) ($settings->efforts ?? []),
             'max_corrections' => $settings->max_corrections,
             'max_conflicts' => $settings->max_conflicts,
             'review_person_prs' => $settings->review_person_prs,

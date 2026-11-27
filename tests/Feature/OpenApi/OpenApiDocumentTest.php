@@ -116,7 +116,7 @@ it('describes the problem shape', function () {
 it('puts the shared schemas under components as they are given', function () {
     $schemas = Document::get()['components']['schemas'];
 
-    expect(array_keys(Components::schemas()))->toBe(['Problem', 'RichTextDocument', 'ListLinks', 'ListMeta', 'Filter', 'SortSpec', 'Display', 'Schedule']);
+    expect(array_keys(Components::schemas()))->toBe(['Problem', 'RichTextDocument', 'ListLinks', 'ListMeta', 'Filter', 'SortSpec', 'Display', 'Schedule', 'Efforts']);
     foreach (Components::schemas() as $name => $schema) {
         // through a JSON round trip (the document holds `{}` as stdClass); Scramble adds the name as `title`
         $shown = json_decode((string) json_encode($schemas[$name]), true);

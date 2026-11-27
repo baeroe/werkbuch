@@ -56,6 +56,14 @@ export function modelOrigin(run: Pick<AgentRun, 'model_source' | 'model_label_id
   return t('items.agents.run.origin.default');
 }
 
+/** Where the effort of a run came from (WEBU-66); a label is not named (the run keeps no id of it). */
+export function effortOrigin(run: Pick<AgentRun, 'effort_source'>): string {
+  if (run.effort_source === 'label') return t('items.agents.run.origin.a_label');
+  if (run.effort_source === 'project') return t('items.agents.run.origin.project');
+  if (run.effort_source === 'bot') return t('items.agents.run.origin.bot');
+  return t('items.agents.run.origin.default');
+}
+
 /** "42 s", "4 min 12 s", "1 h 3 min". */
 export function formatDuration(ms: number): string {
   const seconds = Math.max(0, Math.round(ms / 1000));

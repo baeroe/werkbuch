@@ -22,11 +22,13 @@ use Illuminate\Support\Carbon;
  * @property AgentCli $cli
  * @property string $model
  * @property array<string, string> $models
+ * @property string|null $effort
+ * @property array<string, string>|null $efforts
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read User $bot
  */
-#[Fillable(['bot_id', 'enabled', 'runner_ids', 'cli', 'model', 'models'])]
+#[Fillable(['bot_id', 'enabled', 'runner_ids', 'cli', 'model', 'models', 'effort', 'efforts'])]
 final class AgentConfig extends Model
 {
     /** @use HasFactory<AgentConfigFactory> */
@@ -39,13 +41,14 @@ final class AgentConfig extends Model
             'runner_ids' => 'array',
             'cli' => AgentCli::class,
             'models' => 'array',
+            'efforts' => 'array',
         ];
     }
 
     /** The configuration a bot has without a row: off, every runner, Claude Code with its default model. */
     public static function unsaved(User $bot): self
     {
-        $config = new self(['enabled' => false, 'runner_ids' => [], 'cli' => AgentCli::Claude, 'model' => AgentCli::Claude->defaultModel(), 'models' => []]);
+        $config = new self(['enabled' => false, 'runner_ids' => [], 'cli' => AgentCli::Claude, 'model' => AgentCli::Claude->defaultModel(), 'models' => [], 'effort' => null, 'efforts' => []]);
         $config->bot_id = $bot->id;
 
         return $config;
