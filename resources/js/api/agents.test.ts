@@ -47,6 +47,7 @@ describe('agent rules and project agents', () => {
       comment_on_pr: true,
       merge_method: 'squash' as const,
       setup_command: null,
+      stop_command: null,
       teardown_command: null,
     };
     const settings = { project_id: 'p_web', ...input, bots: [], steps_complete: true, updated_at: null };

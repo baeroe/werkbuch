@@ -118,6 +118,7 @@ const defaults: ProjectAgents = {
   comment_on_pr: true,
   merge_method: 'squash',
   setup_command: null,
+  stop_command: null,
   teardown_command: null,
   bots: [
     { bot_id: 'u_kira', enabled: true, member: true, reviews: true, cli: 'claude', model: 'sonnet', models: { review: 'opus' } },
@@ -547,6 +548,7 @@ describe('Agents: settings (WEBU-32)', () => {
       comment_on_pr: false,
       merge_method: 'rebase',
       setup_command: 'ddev start',
+      stop_command: null,
       teardown_command: null,
     });
     await waitFor(() => expect(screen.queryByText('Nicht gespeicherte Änderungen')).toBeNull());

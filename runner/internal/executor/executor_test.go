@@ -530,6 +530,26 @@ func TestSetupRunsInEveryCodeRunOfAStrandAndTeardownStaysForLightOnes(t *testing
 	}
 }
 
+func TestStopRunsAfterEveryCodeRunAndNeverAfterALightOne(t *testing.T) {
+	w := newWorld(t)
+	counter := filepath.Join(t.TempDir(), "stops")
+	stop := func(r *protocol.Run) {
+		r.Thread.ID = "strand"
+		r.StopCommand = str("echo x >> " + counter)
+	}
+	w.execute(w.run("01a", protocol.Task, "answer", stop))
+	w.execute(w.run("01b", protocol.Correction, "fail", stop))
+	w.execute(w.run("01c", protocol.Comment, "answer", stop))
+	w.execute(w.run("01d", protocol.Review, "answer", stop))
+	data, _ := os.ReadFile(counter)
+	if strings.Count(string(data), "x") != 2 {
+		t.Fatalf("stop ran %q times for task, failed correction, comment and review", data)
+	}
+	if !strings.Contains(w.texts("01a"), "stop:") {
+		t.Fatalf("no stop in the log:\n%s", w.texts("01a"))
+	}
+}
+
 func TestAFailedSetupEndsTheRunWithItsMessage(t *testing.T) {
 	w := newWorld(t)
 	run := w.run("01bad", protocol.Task, "answer", func(r *protocol.Run) { r.SetupCommand = str("echo broken; exit 3") })

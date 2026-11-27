@@ -369,6 +369,18 @@ func (x *Executor) execute(l *lease, e *Execution, s *sender, tok *gitToken, log
 		defer x.Git.Remove(context.WithoutCancel(ctx), ws.Dir, x.Teardown)
 	}
 	s.add(protocol.Event{Kind: protocol.KindSystem, Text: "working in " + ws.Dir, At: time.Now().UTC()})
+	// after every code run (also a failed, canceled or timed-out one) the app of the worktree stops, so idle strands cost
+	// nothing; the folder is ours alone until `release` (one run per folder), the next setup starts the app again (WEBU-61)
+	if !protocol.Light(run.Type) && run.StopCommand != nil && *run.StopCommand != "" {
+		defer func() {
+			out, err := hooks.Run(context.WithoutCancel(ctx), ws.Dir, *run.StopCommand, ws.Env)
+			text := "stop: " + out
+			if err != nil {
+				text = "stop failed: " + err.Error()
+			}
+			s.add(protocol.Event{Kind: protocol.KindSystem, Text: adapters.Cut(redact.String(text), protocol.EventTextMax), At: time.Now().UTC()})
+		}()
+	}
 	// every code run sets up its folder again (also an existing worktree): the command has to be repeatable
 	if !protocol.Light(run.Type) && run.SetupCommand != nil && *run.SetupCommand != "" {
 		out, err := hooks.Run(ctx, ws.Dir, *run.SetupCommand, ws.Env)

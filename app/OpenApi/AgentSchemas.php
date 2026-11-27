@@ -188,6 +188,7 @@ final class AgentSchemas
             'comment_on_pr' => ['type' => 'boolean', 'description' => 'Whether the app comments the linked items at a PR.'],
             'merge_method' => ['type' => 'string', 'enum' => AgentProjectSettings::MERGE_METHODS],
             'setup_command' => $text(SaveProjectAgents::COMMAND_MAX, 'Run by the runner after it made a worktree.'),
+            'stop_command' => $text(SaveProjectAgents::COMMAND_MAX, 'Run in the worktree after every code run, e.g. `ddev stop`.'),
             'teardown_command' => $text(SaveProjectAgents::COMMAND_MAX, 'Run by the runner before it removes a worktree.'),
             'project_id' => ['type' => 'string', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
             'steps_complete' => ['type' => 'boolean', 'readOnly' => true, 'description' => 'Part of the answer; sent back, ignored.'],
