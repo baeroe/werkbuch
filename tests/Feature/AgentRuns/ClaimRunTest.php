@@ -55,6 +55,9 @@ it('names the worktrees of strands that ended on the runner, and no others', fun
     $merged = $make(['runner_id' => $runner->id, 'status' => AgentThread::MERGED]);
     $closed = $make(['runner_id' => $runner->id, 'status' => AgentThread::CLOSED, 'worktree' => 'wb-own']);
     $make(['runner_id' => $runner->id, 'status' => AgentThread::OPEN]);
+    // a worktree an open strand still uses stays
+    $make(['runner_id' => $runner->id, 'status' => AgentThread::MERGED, 'worktree' => 'shared']);
+    $make(['runner_id' => $runner->id, 'status' => AgentThread::PAUSED, 'worktree' => 'shared']);
     $make(['runner_id' => $other->id, 'status' => AgentThread::MERGED]);
     $make(['runner_id' => $runner->id, 'status' => AgentThread::MERGED, 'updated_at' => now()->subDays(8)]);
 

@@ -315,7 +315,8 @@ func (m *Manager) Remove(ctx context.Context, dir string, teardown Teardown) err
 // Take hands the sweep a folder for itself: it returns how to give it back, or false while a run has it.
 type Take func(name string) (release func(), ok bool)
 
-// Retire removes the named worktrees (strands that ended) with their teardown, each only when no run has it.
+// Retire removes the named worktrees (strands that ended; with a repo or, without one, a plain folder) with their
+// teardown, each only when no run has it.
 func (m *Manager) Retire(ctx context.Context, names []string, take Take, teardown Teardown) []string {
 	var removed []string
 	for _, raw := range names {
@@ -323,22 +324,24 @@ func (m *Manager) Retire(ctx context.Context, names []string, take Take, teardow
 		if err != nil {
 			continue
 		}
-		dir := filepath.Join(m.Data, "worktrees", name)
-		if _, err := os.Stat(dir + ".json"); err != nil {
-			continue
-		}
-		release := func() {}
-		if take != nil {
-			r, ok := take(name)
-			if !ok {
+		for _, area := range []string{"worktrees", "work"} {
+			dir := filepath.Join(m.Data, area, name)
+			if _, err := os.Stat(dir + ".json"); err != nil {
 				continue
 			}
-			release = r
+			release := func() {}
+			if take != nil {
+				r, ok := take(name)
+				if !ok {
+					break
+				}
+				release = r
+			}
+			if m.Remove(ctx, dir, teardown) == nil {
+				removed = append(removed, dir)
+			}
+			release()
 		}
-		if m.Remove(ctx, dir, teardown) == nil {
-			removed = append(removed, dir)
-		}
-		release()
 	}
 	return removed
 }

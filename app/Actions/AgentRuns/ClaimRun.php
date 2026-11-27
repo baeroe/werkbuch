@@ -104,11 +104,18 @@ final class ClaimRun
      */
     private static function closedThreads(Runner $runner): array
     {
+        $name = fn (AgentThread $thread) => $thread->worktree ?: $thread->id;
         $names = AgentThread::query()->where('runner_id', $runner->id)->whereIn('status', [AgentThread::MERGED, AgentThread::CLOSED])
-            ->where('updated_at', '>=', now()->subDays(7))->orderByDesc('updated_at')->limit(50)->get(['id', 'worktree'])
-            ->map(fn (AgentThread $thread) => $thread->worktree ?: $thread->id)->all();
+            ->where('updated_at', '>=', now()->subDays(7))->orderByDesc('updated_at')->limit(50)->get(['id', 'worktree'])->map($name)->all();
+        if ($names === []) {
+            return [];
+        }
 
-        return array_values($names);
+        // a worktree name an open or paused strand of the runner still uses stays (a shared `worktree` setting)
+        $held = AgentThread::query()->where('runner_id', $runner->id)->whereIn('status', [AgentThread::OPEN, AgentThread::PAUSED])
+            ->get(['id', 'worktree'])->map($name)->all();
+
+        return array_values(array_unique(array_diff($names, $held)));
     }
 
     /**
